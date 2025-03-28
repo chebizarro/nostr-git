@@ -1,6 +1,5 @@
 <script lang="ts">
-import Checkout  from '$lib/Checkout.svelte' 
-
+	import PermalinkTextarea from '$lib/PermalinkTextarea.svelte';
 </script>
 
-<Checkout></Checkout>
+<PermalinkTextarea />
