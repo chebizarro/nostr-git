@@ -2,6 +2,8 @@ import git from 'isomorphic-git';
 import http from 'isomorphic-git/http/web';
 import LightningFS from '@isomorphic-git/lightning-fs';
 import { Buffer } from 'buffer';
+import { fileTypeFromBuffer } from 'file-type';
+import { lookup as mimeLookup } from 'mime-types';
 
 export interface PermalinkData {
 	host: string;
@@ -145,7 +147,7 @@ export async function fetchSnippet(data: PermalinkData) {
 			const lines = content.split('\n');
 			const snippet = lines.slice(data.startLine - 1, data.endLine).join('\n');
 			content = snippet;
-		} else if(data.startLine !== undefined && data.endLine == undefined) {
+		} else if (data.startLine !== undefined && data.endLine == undefined) {
 			const lines = content.split('\n');
 			const snippet = lines.slice(data.startLine - 1, data.startLine).join('\n');
 			content = snippet;
@@ -172,4 +174,38 @@ async function isRepoCloned(fs: LightningFS, dir: string): Promise<boolean> {
 		// If it throws, there's no valid repo in `dir` => clone
 		return false;
 	}
+}
+
+
+/**
+ * Attempts to guess a file's MIME type from its bytes (accurate),
+ * then falls back to extension-based detection if either:
+ * 1) no match was found, or
+ * 2) no buffer was provided.
+ *
+ * @param data - The file data as Uint8Array (optional, but recommended).
+ * @param extension - The file extension, e.g. "png" or ".png" (optional).
+ * @returns e.g. "image/png", "text/markdown", or "application/octet-stream"
+ */
+export async function determineMimeType(data?: Uint8Array, extension?: string): Promise<string> {
+	// 1) Attempt to detect type from file bytes if data is provided
+	if (data) {
+		const ftResult = await fileTypeFromBuffer(data);
+		if (ftResult && ftResult.mime) {
+			return ftResult.mime;
+		}
+	}
+
+	// 2) Fallback: guess from file extension if present
+	if (extension) {
+		// Remove leading "." if user provided a dotted extension
+		const cleanedExt = extension.replace(/^\./, '');
+		const extBasedMime = mimeLookup(cleanedExt);
+		if (extBasedMime) {
+			return extBasedMime;
+		}
+	}
+
+	// 3) If all else fails, default to a generic type
+	return 'application/octet-stream';
 }

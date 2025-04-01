@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { createEventFromPermalink } from './event.js';
 	import { fetchSnippet, parsePermalink } from './parsePermalink.js';
 	import { Buffer } from 'buffer';
 
@@ -21,7 +22,8 @@
 			errorMessage = 'Not a valid GitHub/GitLab/Gitea permalink.';
 			return;
 		}
-
+		console.log(parsed);
+		await createEventFromPermalink(permalinkText.trim(), '');
 		loading = true;
 		try {
 			snippetContent = await fetchSnippet(parsed);
@@ -32,6 +34,7 @@
 				return `An unknown error ${err} occurred.`;
 			}
 		}
+
 		loading = false;
 	}
 </script>
