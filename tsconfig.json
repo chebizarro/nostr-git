@@ -12,5 +12,8 @@
 		"module": "NodeNext",
 		"moduleResolution": "NodeNext",
 		"types": ["vitest"]
-	}
+	},
+	"include": [
+		"src"
+	]
 }

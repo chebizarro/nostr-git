@@ -3,26 +3,20 @@ import { fetchSnippet, parsePermalink, type PermalinkData } from "./parsePermali
 
 type HexString = Uint8Array<ArrayBufferLike>;
 
-export async function createEventFromPermalink(permalink: string, sk: HexString) {
-
+export async function createEventFromPermalink(
+	permalink: string,
+	sk: HexString,
+	relays: string[]
+): Promise<NostrEvent> {
 	const linkData = parsePermalink(permalink);
-
-	const eventTemplate = await createEvent(linkData!);
-
-	const relays: string[] = ['wss://relay.damus.io'];
-	if (linkData?.repo) {
-		const repoEvent = fetchRepoEvent(linkData, relays);
-		if (repoEvent) {
-			const repoId = repoEvent?.tags.find(((t) => t[0] === 'd'));
-			eventTemplate.tags.push(['a', `30617:${repoEvent?.pubkey}:${repoId}`])
-		}
-	}
-
-	//const event = finalizeEvent(eventTemplate, sk);
-	console.log(eventTemplate);
+	const eventTemplate = await createEvent(linkData!, relays);
+	return finalizeEvent(eventTemplate, sk);
 }
 
-export async function createEvent(eventData: PermalinkData): Promise<EventTemplate> {
+export async function createEvent(
+	eventData: PermalinkData,
+	relays: string[]
+): Promise<EventTemplate> {
 
 	const content = await fetchSnippet(eventData);
 
@@ -30,9 +24,18 @@ export async function createEvent(eventData: PermalinkData): Promise<EventTempla
 		kind: 1623,
 		created_at: Math.floor(Date.now() / 1000),
 		tags: [
-			["repo", `https://${eventData.host}/${eventData.owner}/${eventData.repo}.git`],
-			["branch", eventData.branch],
-			["file", eventData.filePath],
+			[
+				"repo",
+				`https://${eventData.host}/${eventData.owner}/${eventData.repo}.git`
+			],
+			[
+				"branch",
+				eventData.branch
+			],
+			[
+				"file",
+				eventData.filePath
+			],
 		],
 		content: content
 	};
@@ -50,39 +53,57 @@ export async function createEvent(eventData: PermalinkData): Promise<EventTempla
 		]);
 	}
 
+	const r : string[] = relays.length > 0 ? relays : ['wss://relay.damus.io'];
+	if (eventData?.repo) {
+		const repoEvent = await fetchRepoEvent(eventData, r);
+		if (repoEvent) {
+			console.log(repoEvent);
+			const repoId = repoEvent?.tags.find((t) => t[0] === 'd');
+			eventTemplate.tags.push(
+				['a', `30617:${repoEvent?.pubkey}:${repoId![1]}`]
+			);
+		}
+	}
+
 	return eventTemplate;
 }
 
+function fetchRepoEvent(
+	linkData: PermalinkData,
+	relays: string[]
+): Promise<NostrEvent | undefined> {
+	return new Promise((resolve) => {
+		const pool = new SimplePool();
+		const repoEvents: NostrEvent[] = [];
 
-function fetchRepoEvent(linkData: PermalinkData, relays: string[]): (NostrEvent | undefined) {
-
-	const pool = new SimplePool()
-	const repoEvents: NostrEvent[] = []
-
-	const h = pool.subscribeMany(
-		relays,
-		[
+		// Subscribe
+		const subHandle = pool.subscribeMany(
+			relays,
+			[
+				{
+					kinds: [30617],
+					'#d': [linkData.repo],
+				},
+			],
 			{
-				kinds: [30617],
-				'#d': [linkData.repo],
-			},
-		],
-		{
-			onevent(event: NostrEvent) {
-				repoEvents.push(event);
-			},
-			oneose() {
-				h.close()
+				onevent(event: NostrEvent) {
+					repoEvents.push(event);
+				},
+				oneose() {
+					subHandle.close();
+
+					repoEvents.forEach((e) => console.log('DEBUG event:', e));
+
+					const found = repoEvents.find((e) =>
+						e.tags.some(
+							(t) =>
+								t[0] === 'clone' &&
+								t[1].includes(`${linkData.owner}/${linkData.repo}`)
+						)
+					);
+					resolve(found);
+				},
 			}
-		}
-	)
-
-	console.log(repoEvents);
-
-	return repoEvents.find((e) =>
-		e.tags.find((t) =>
-			t[0] === 'clone' &&
-			t[1].includes(`${linkData.owner}/${linkData.repo}`)
-		)
-	);
+		);
+	});
 }

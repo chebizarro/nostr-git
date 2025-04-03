@@ -37,6 +37,22 @@
 
 		loading = false;
 	}
+
+	async function handlePaste(e: ClipboardEvent) {
+		loading = true;
+		const pastedText = e.clipboardData?.getData('text/plain') ?? '';
+
+		e.preventDefault();
+
+		const parsed = parsePermalink(pastedText.trim());
+		if (parsed) {
+			console.log('Permalink recognized:', parsed);
+			permalinkText = await fetchSnippet(parsed);
+		} else {
+			permalinkText = pastedText;
+		}
+		loading = false;
+	}
 </script>
 
 <div class="container">
@@ -45,21 +61,17 @@
 		<textarea
 			rows="3"
 			bind:value={permalinkText}
+			on:paste={handlePaste}
 			placeholder="https://github.com/user/repo/blob/main/path/to/file.ts#L10-L20"
 		>
 		</textarea>
 	</label>
 
-	<div class="button-row">
-		<button on:click={handlePermalink} disabled={loading}>Fetch Snippet</button>
-	</div>
 
 	{#if loading}
 		<p>Loading...</p>
 	{:else if errorMessage}
 		<pre class="error">{errorMessage}</pre>
-	{:else if snippetContent}
-		<pre class="snippet">{snippetContent}</pre>
 	{/if}
 </div>
 
