@@ -1,109 +1,150 @@
-import { finalizeEvent, SimplePool, type EventTemplate, type NostrEvent } from "nostr-tools";
-import { fetchSnippet, parsePermalink, type PermalinkData } from "./parsePermalink.js";
+import { finalizeEvent, nip19, SimplePool, type EventTemplate, type NostrEvent } from 'nostr-tools';
+import { fetchSnippet, parsePermalink, type PermalinkData } from './parsePermalink.js';
+import type { S } from 'vitest/dist/chunks/config.d.DevWltVl.js';
 
-type HexString = Uint8Array<ArrayBufferLike>;
+export type HexString = Uint8Array<ArrayBufferLike>;
 
+/**
+ * Creates a NIP-34 permalink event from a URL
+ *
+ * @param permalink - The permalink, as copied directly from GitHub/Gitea/GitLab.
+ * @param sk - The secret key to sign the event with.
+ * @param relays - The relays to query for existing git repos
+ * @returns a signed permalink @NostrEvent
+ */
 export async function createEventFromPermalink(
 	permalink: string,
 	sk: HexString,
 	relays: string[]
 ): Promise<NostrEvent> {
 	const linkData = parsePermalink(permalink);
-	const eventTemplate = await createEvent(linkData!, relays);
+	if (!linkData) {
+		throw new Error(`Could not parse permalink: ${permalink}`);
+	}
+	const exists = await permalinkEventExists(linkData, relays);
+	if (exists) {
+		return exists;
+	}
+	const eventTemplate = await createEvent(linkData, relays);
 	return finalizeEvent(eventTemplate, sk);
 }
 
-export async function createEvent(
-	eventData: PermalinkData,
+export async function createNeventFromPermalink(
+	permalink: string,
+	sk: HexString,
 	relays: string[]
-): Promise<EventTemplate> {
+): Promise<string> {
 
+	const event = await createEventFromPermalink(permalink, sk, relays);
+
+	const nevent = nip19.neventEncode({
+		id: event.id,
+		relays,
+		author: event.pubkey,
+		kind: event.kind
+	});
+	return `nostr:${nevent}`;
+}
+
+async function createEvent(eventData: PermalinkData, relays: string[]): Promise<EventTemplate> {
 	const content = await fetchSnippet(eventData);
 
-	const eventTemplate = {
-		kind: 1623,
-		created_at: Math.floor(Date.now() / 1000),
-		tags: [
-			[
-				"repo",
-				`https://${eventData.host}/${eventData.owner}/${eventData.repo}.git`
-			],
-			[
-				"branch",
-				eventData.branch
-			],
-			[
-				"file",
-				eventData.filePath
-			],
-		],
-		content: content
-	};
+	const tags: string[][] = [
+		['repo', `https://${eventData.host}/${eventData.owner}/${eventData.repo}.git`],
+		['branch', eventData.branch],
+		['file', eventData.filePath]
+	];
 
-	if (eventData.endLine) {
-		eventTemplate.tags.push([
-			"lines",
-			`${eventData.startLine}`,
-			`${eventData.endLine}`
-		]);
-	} else {
-		eventTemplate.tags.push([
-			"lines",
-			`${eventData.startLine}`
-		]);
+	if (eventData.startLine) {
+		const lineTag = ['lines', `${eventData.startLine}`];
+		if (eventData.endLine) {
+			lineTag.push(`${eventData.endLine}`);
+		}
+		tags.push(lineTag);
 	}
 
-	const r : string[] = relays.length > 0 ? relays : ['wss://relay.damus.io'];
-	if (eventData?.repo) {
-		const repoEvent = await fetchRepoEvent(eventData, r);
+	// if we have a valid repo name, attempt to link the repository event (kind 30617)
+	// e.g. storing a reference to it in an 'a' tag if found
+	if (eventData.repo) {
+		const repoEvent = await fetchRepoEvent(eventData, relays);
 		if (repoEvent) {
-			console.log(repoEvent);
-			const repoId = repoEvent?.tags.find((t) => t[0] === 'd');
-			eventTemplate.tags.push(
-				['a', `30617:${repoEvent?.pubkey}:${repoId![1]}`]
-			);
+			// if there's a 'd' tag
+			const repoId = repoEvent.tags.find((t) => t[0] === 'd');
+			if (repoId) {
+				tags.push(['a', `30617:${repoEvent.pubkey}:${repoId[1]}`]);
+			}
 		}
 	}
 
-	return eventTemplate;
+	return {
+		kind: 1623,
+		created_at: Math.floor(Date.now() / 1000),
+		tags,
+		content
+	};
 }
 
-function fetchRepoEvent(
+async function fetchRepoEvent(
 	linkData: PermalinkData,
 	relays: string[]
 ): Promise<NostrEvent | undefined> {
-	return new Promise((resolve) => {
-		const pool = new SimplePool();
-		const repoEvents: NostrEvent[] = [];
-
-		// Subscribe
-		const subHandle = pool.subscribeMany(
-			relays,
-			[
-				{
-					kinds: [30617],
-					'#d': [linkData.repo],
-				},
-			],
-			{
-				onevent(event: NostrEvent) {
-					repoEvents.push(event);
-				},
-				oneose() {
-					subHandle.close();
-
-					repoEvents.forEach((e) => console.log('DEBUG event:', e));
-
-					const found = repoEvents.find((e) =>
-						e.tags.some(
-							(t) =>
-								t[0] === 'clone' &&
-								t[1].includes(`${linkData.owner}/${linkData.repo}`)
-						)
-					);
-					resolve(found);
-				},
-			}
+	const pool = new SimplePool();
+	try {
+		const events = await pool.querySync(relays, {
+			kinds: [30617],
+			'#d': [linkData.repo]
+		});
+		pool.close(relays);
+		// find event referencing a 'clone' tag that includes "owner/repo"
+		const found = events.find((evt) =>
+			evt.tags.some((t) => t[0] === 'clone' && t[1].includes(`${linkData.owner}/${linkData.repo}`))
 		);
-	});
+		return found;
+	} catch (err) {
+		console.error('fetchRepoEvent failed:', err);
+		return undefined;
+	}
+}
+
+async function permalinkEventExists(
+	linkData: PermalinkData,
+	relays: string[]
+): Promise<NostrEvent | undefined> {
+	const pool = new SimplePool();
+	try {
+		const events = await pool.querySync(relays, {
+			kinds: [1623],
+			'#a': [linkData.repo] // searching for 'a' tag that matches repo
+		});
+		pool.close(relays);
+
+		// filter or find an event that has matching branch, file, lines
+		const found = events.find((evt) => {
+			const hasBranch = evt.tags.some((t) => t[0] === 'branch' && t[1] === linkData.branch);
+			const hasFile = evt.tags.some((t) => t[0] === 'file' && t[1] === linkData.filePath);
+
+			// handle optional line range
+			if (linkData.startLine) {
+				const hasStart = evt.tags.some(
+					(t) => t[0] === 'lines' && t[1] === linkData.startLine!.toString()
+				);
+				if (!hasStart) return false;
+
+				// if endLine also present, check for lines[2] = linkData.endLine
+				if (linkData.endLine) {
+					// The "lines" tag might store them as [ 'lines', start, end ]
+					const hasEnd = evt.tags.some(
+						(t) => t[0] === 'lines' && t[2] === linkData.endLine!.toString()
+					);
+					if (!hasEnd) return false;
+				}
+			}
+
+			return hasBranch && hasFile;
+		});
+		return found;
+	} catch (err) {
+		console.error('permalinkEventExists error:', err);
+		return undefined;
+	}
 }
