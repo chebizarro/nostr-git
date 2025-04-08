@@ -1,9 +1,9 @@
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
-import { createNeventFromPermalink } from './event.js';
 import { type EventTemplate, type NostrEvent } from 'nostr-tools';
 import { isPermalink } from './parsePermalink.js';
 import { Buffer } from 'buffer';
+import { PermalinkNode } from './PermalinkNodeView.js';
 
 type WindowWithBuffer = Window &
   typeof globalThis & {
@@ -29,6 +29,15 @@ export const PermalinkExtension = Extension.create<PermalinkExtensionOptions>({
     };
   },
 
+  addExtensions() {
+    return [
+      PermalinkNode.configure({
+        signer: this.options.signer,
+        relays: this.options.relays
+      })
+    ];
+  },
+
   addProseMirrorPlugins() {
     return [
       new Plugin({
@@ -39,27 +48,25 @@ export const PermalinkExtension = Extension.create<PermalinkExtensionOptions>({
             if (!pastedText) {
               return false;
             }
-            createNeventFromPermalink(pastedText.trim(), this.options.signer, this.options.relays)
-              .then((snippet: string) => {
-                view.dispatch(
-                  view.state.tr.insertText(
-                    snippet,
-                    view.state.selection.from,
-                    view.state.selection.to
-                  )
-                );
-              })
-              .catch((error) => {
-                console.info('Error creating Nostr event from permalink:', error);
-              });
-            if (isPermalink(pastedText.trim())) {
-              // Prevent the default paste behavior
+
+            if (isPermalink(pastedText)) {
               event.preventDefault();
-              // Return true to indicate that the event was handled
+
+              const { state, dispatch } = view;
+              const permalinkNodeType = state.schema.nodes.permalinkNode;
+              if (!permalinkNodeType) {
+                console.warn('PermalinkNode type not found in schema.');
+                return false;
+              }
+
+              const node = permalinkNodeType.create({
+                permalink: pastedText,
+                isLoading: true
+              });
+
+              dispatch(state.tr.replaceSelectionWith(node));
               return true;
             } else {
-              // Allow the default paste behavior
-              // Return false to indicate that the event was not handled
               return false;
             }
           }

@@ -1,41 +1,170 @@
-import type { NodeViewProps } from '@tiptap/core';
-import type { Node } from '@tiptap/pm/model';
+import { mergeAttributes, Node, nodePasteRule, type PasteRuleMatch } from '@tiptap/core';
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import { createNeventFromPermalink } from './event.js';
+import type { EventTemplate, NostrEvent } from 'nostr-tools';
+import type { MarkdownSerializerState } from '@tiptap/pm/markdown';
 
-export const PermalinkNodeView = ({ node }: NodeViewProps) => {
-  const dom = document.createElement('div');
-  dom.classList.add('tiptap-nevent-wrapper');
+const PERMALINK_REGEX = /https?:\/\/(?:github\.com|gitlab\.com|gitea\.com)\/\S+/gi;
 
-  function render() {
-    dom.innerHTML = ''; 
+const createPasteRuleMatch = <T extends Record<string, unknown>>(
+  match: RegExpMatchArray,
+  data: T
+): PasteRuleMatch => ({ index: match.index!, replaceWith: match[2], text: match[0], match, data });
 
-    const label = document.createElement('span');
-    label.classList.add('nevent-label');
-    label.contentEditable = 'false';
+interface PermalinkNodeAttrs {
+  permalink?: string;
+  nevent?: string;
+  error?: string;
+}
 
-    if (node.attrs.kind === 1623) {
-      label.textContent = `Permalink (kind=1623): nostr:${node.attrs.bech32}`;
-      dom.classList.add('is-permalink');
-    } else {
-      label.textContent = `Nostr event: nostr:${node.attrs.bech32}`;
-      dom.classList.remove('is-permalink');
-    }
+export interface PermalinkNodeOptions {
+  signer: (event: EventTemplate) => Promise<NostrEvent>;
+  relays: string[];
+}
 
-    dom.appendChild(label);
-  }
+export const PermalinkNode = Node.create<PermalinkNodeOptions>({
+  name: 'permalinkNode',
 
-  render();
+  group: 'block',
 
-  return {
-    dom,
-    update(updatedNode: Node) {
-      if (updatedNode.type.name !== node.type.name) return false;
+  selectable: true,
 
-      node = updatedNode;
+  draggable: true,
+
+  addAttributes() {
+    return {
+      permalink: { default: null },
+      nevent: { default: '' }
+    };
+  },
+
+  addOptions() {
+    return {
+      signer: window.nostr.signEvent,
+      relays: ['wss://relay.damus.io']
+    };
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': this.name })];
+  },
+
+  renderText({ node }) {
+    const { nevent, permalink } = node.attrs;
+    return nevent || permalink || '';
+  },
+
+  parseHTML() {
+    return [{ tag: `div[data-type="${this.name}"]` }];
+  },
+
+  addStorage() {
+    return {
+      markdown: {
+        serialize(state: MarkdownSerializerState, node: ProseMirrorNode) {
+          const { nevent } = node.attrs;
+          state.write(nevent || '');
+        },
+        parse: {}
+      }
+    };
+  },
+
+  addCommands() {
+    return {
+      insertPermalink:
+        (url: string) =>
+        ({ commands }) => {
+          return commands.insertContent({
+            type: this.name,
+            attrs: {
+              permalink: url,
+              nevent: null
+            }
+          });
+        }
+    };
+  },
+
+  addPasteRules() {
+    return [
+      nodePasteRule({
+        type: this.type,
+        find: (text) => {
+          const matches = [];
+          for (const match of text.matchAll(PERMALINK_REGEX)) {
+            const rawLink = match[0];
+            matches.push(createPasteRuleMatch(match, { permalink: rawLink }));
+          }
+          return matches;
+        },
+        getAttributes: (match) => match.data
+      })
+    ];
+  },
+
+  addNodeView() {
+    return ({ editor, node, getPos }) => {
+      let currentNode = node;
+
+      const dom = document.createElement('div');
+      dom.classList.add('permalink-node');
+
+      function render() {
+        const { nevent, permalink } = currentNode.attrs;
+        dom.innerHTML = '';
+
+        if (nevent) {
+		  const bech32 = nevent.replace(/^nostr:/, '')
+          const shortNevent = bech32.slice(0, 16) + (bech32.length > 16 ? '…' : '');
+          dom.textContent = shortNevent;
+        } else if (permalink) {
+          dom.textContent = `Loading event for: ${permalink}`;
+		} else if (currentNode.attrs.error) {
+		  dom.textContent = `Error: ${currentNode.attrs.error}`;
+        } else {
+          dom.textContent = '(No link?)';
+        }
+      }
+
+      function updateNode(attrs: Partial<PermalinkNodeAttrs>) {
+        const pos = typeof getPos === 'function' ? getPos() : null;
+        if (pos == null) return;
+        editor.view.dispatch(
+          editor.view.state.tr.setNodeMarkup(pos, undefined, {
+            ...currentNode.attrs,
+            ...attrs
+          })
+        );
+      }
+
+      async function maybeFetch(options: PermalinkNodeOptions) {
+        if (!currentNode.attrs.nevent && currentNode.attrs.permalink) {
+          try {
+            const nevent = await createNeventFromPermalink(
+              currentNode.attrs.permalink,
+              options.signer,
+              options.relays
+            );
+            updateNode({ nevent });
+          } catch (err) {
+            updateNode({ error: `(Error: ${String(err)})` });
+          }
+        }
+      }
+
       render();
-      return true;
-    },
+      maybeFetch(this.options);
 
-    destroy() {
-    }
-  };
-};
+      return {
+        dom,
+        update(updatedNode) {
+          if (updatedNode.type.name !== currentNode.type.name) return false;
+          currentNode = updatedNode;
+          render();
+          return true;
+        }
+      };
+    };
+  }
+});

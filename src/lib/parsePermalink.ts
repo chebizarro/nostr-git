@@ -22,13 +22,18 @@ export interface PermalinkData {
  * @returns True if the URL is a valid permalink; otherwise, false.
  */
 export function isPermalink(url: string): boolean {
-  const parsed = new URL(url);
-  const { hostname, pathname } = parsed;
-  const pathParts = pathname.split('/').filter(Boolean);
-  const isGitHub = hostname.includes('github') && pathParts.length >= 4;
-  const isGitLab = hostname.includes('gitlab') && pathParts.includes('blob');
-  const isGitea = hostname.includes('gitea') && pathParts.length >= 5;
-  return isGitHub || isGitLab || isGitea;
+  try {
+    const parsed = new URL(url);
+    const { hostname, pathname } = parsed;
+    const pathParts = pathname.split('/').filter(Boolean);
+    const isGitHub = hostname.includes('github') && pathParts.length >= 4;
+    const isGitLab = hostname.includes('gitlab') && pathParts.includes('blob');
+    const isGitea = hostname.includes('gitea') && pathParts.length >= 5;
+    return isGitHub || isGitLab || isGitea;
+  } catch (err) {
+    console.log(err);
+    return false;
+  }
 }
 
 /**
