@@ -1,6 +1,5 @@
 import { finalizeEvent, nip19, SimplePool, type EventTemplate, type NostrEvent } from 'nostr-tools';
 import { fetchSnippet, parsePermalink, type PermalinkData } from './parsePermalink.js';
-import type { S } from 'vitest/dist/chunks/config.d.DevWltVl.js';
 
 export type HexString = Uint8Array<ArrayBufferLike>;
 
