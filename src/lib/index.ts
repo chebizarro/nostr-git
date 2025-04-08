@@ -1,1 +1,1 @@
-// Reexport your entry components here
+export { PermalinkExtension, type PermalinkExtensionOptions } from './PermalinkExtension.js';

@@ -1,4 +1,4 @@
-import { finalizeEvent, nip19, SimplePool, type EventTemplate, type NostrEvent } from 'nostr-tools';
+import { nip19, SimplePool, type EventTemplate, type NostrEvent } from 'nostr-tools';
 import { fetchSnippet, parsePermalink, type PermalinkData } from './parsePermalink.js';
 
 export type HexString = Uint8Array<ArrayBufferLike>;
@@ -13,7 +13,7 @@ export type HexString = Uint8Array<ArrayBufferLike>;
  */
 export async function createEventFromPermalink(
 	permalink: string,
-	sk: HexString,
+	signer: (event: EventTemplate) => Promise<NostrEvent>,
 	relays: string[]
 ): Promise<NostrEvent> {
 	const linkData = parsePermalink(permalink);
@@ -25,16 +25,20 @@ export async function createEventFromPermalink(
 		return exists;
 	}
 	const eventTemplate = await createEvent(linkData, relays);
-	return finalizeEvent(eventTemplate, sk);
+	return signer(eventTemplate);
 }
 
 export async function createNeventFromPermalink(
 	permalink: string,
-	sk: HexString,
+	signer: (event: EventTemplate) => Promise<NostrEvent>,
 	relays: string[]
 ): Promise<string> {
 
-	const event = await createEventFromPermalink(permalink, sk, relays);
+	const event = await createEventFromPermalink(permalink, signer, relays);
+
+	const pool = new SimplePool();
+
+	pool.publish(relays, event);
 
 	const nevent = nip19.neventEncode({
 		id: event.id,

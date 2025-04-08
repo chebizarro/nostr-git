@@ -1,11 +1,21 @@
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
-import { createNeventFromPermalink, type HexString } from './event.js';
-import { generateSecretKey } from 'nostr-tools';
+import { createNeventFromPermalink } from './event.js';
+import { type EventTemplate, type NostrEvent } from 'nostr-tools';
 import { isPermalink } from './parsePermalink.js';
+import { Buffer } from 'buffer';
+
+type WindowWithBuffer = Window &
+  typeof globalThis & {
+    Buffer?: typeof Buffer;
+  };
+
+if (typeof window !== 'undefined' && !(window as WindowWithBuffer).Buffer) {
+  (window as WindowWithBuffer).Buffer = Buffer;
+}
 
 export interface PermalinkExtensionOptions {
-  privateKey: HexString;
+  signer: (event: EventTemplate) => Promise<NostrEvent>;
   relays: string[];
 }
 
@@ -14,7 +24,7 @@ export const PermalinkExtension = Extension.create<PermalinkExtensionOptions>({
 
   addOptions() {
     return {
-      privateKey: generateSecretKey(),
+      signer: window.nostr.signEvent,
       relays: ['wss://relay.damus.io']
     };
   },
@@ -29,22 +39,15 @@ export const PermalinkExtension = Extension.create<PermalinkExtensionOptions>({
             if (!pastedText) {
               return false;
             }
-            createNeventFromPermalink(
-              pastedText.trim(),
-              this.options.privateKey,
-              this.options.relays
-            )
+            createNeventFromPermalink(pastedText.trim(), this.options.signer, this.options.relays)
               .then((snippet: string) => {
-                const { state, dispatch } = view;
-                const tr = state.tr;
-                const nodeType = state.schema.nodes.codeBlock;
-                const node = nodeType.create(
-                  {
-                    language: 'markdown'
-                  },
-                  state.schema.text(snippet)
+                view.dispatch(
+                  view.state.tr.insertText(
+                    snippet,
+                    view.state.selection.from,
+                    view.state.selection.to
+                  )
                 );
-                dispatch(tr.replaceSelectionWith(node).scrollIntoView());
               })
               .catch((error) => {
                 console.info('Error creating Nostr event from permalink:', error);
