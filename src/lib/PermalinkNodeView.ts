@@ -40,7 +40,7 @@ export const PermalinkNode = Node.create<PermalinkNodeOptions>({
 
   addOptions() {
     return {
-      signer: window.nostr.signEvent ?? null,
+      signer: window.nostr ? window.nostr.signEvent : null,
       relays: ['wss://relay.damus.io']
     };
   },
