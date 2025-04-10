@@ -24,7 +24,7 @@ export const PermalinkExtension = Extension.create<PermalinkExtensionOptions>({
 
   addOptions() {
     return {
-      signer: window.nostr.signEvent,
+      signer: window.nostr.signEvent ?? null,
       relays: ['wss://relay.damus.io']
     };
   },
