@@ -3,6 +3,9 @@ import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { createNeventFromPermalink } from './event.js';
 import type { EventTemplate, NostrEvent } from 'nostr-tools';
 import type { MarkdownSerializerState } from '@tiptap/pm/markdown';
+import { mount, unmount, type Component } from 'svelte';
+import PermalinkNodeViewWrapper from './PermalinkNodeViewWrapper.svelte';
+import Spinner from './Spinner.svelte';
 
 const PERMALINK_REGEX = /https?:\/\/(?:github\.com|gitlab\.com|gitea\.com)\/\S+/gi;
 
@@ -20,28 +23,29 @@ interface PermalinkNodeAttrs {
 export interface PermalinkNodeOptions {
   signer: (event: EventTemplate) => Promise<NostrEvent>;
   relays: string[];
+  spinnerComponent: Component;
 }
 
 export const PermalinkNode = Node.create<PermalinkNodeOptions>({
   name: 'permalinkNode',
 
   group: 'block',
-
   selectable: true,
-
   draggable: true,
 
   addAttributes() {
     return {
       permalink: { default: null },
-      nevent: { default: '' }
+      nevent: { default: '' },
+      error: { default: null }
     };
   },
 
   addOptions() {
     return {
       signer: window.nostr ? window.nostr.signEvent : null,
-      relays: ['wss://relay.damus.io']
+      relays: ['wss://relay.damus.io'],
+      spinnerComponent: Spinner
     };
   },
 
@@ -110,22 +114,17 @@ export const PermalinkNode = Node.create<PermalinkNodeOptions>({
       const dom = document.createElement('div');
       dom.classList.add('permalink-node');
 
-      function render() {
-        const { nevent, permalink } = currentNode.attrs;
-        dom.innerHTML = '';
-
-        if (nevent) {
-		  const bech32 = nevent.replace(/^nostr:/, '')
-          const shortNevent = bech32.slice(0, 16) + (bech32.length > 16 ? '…' : '');
-          dom.textContent = shortNevent;
-        } else if (permalink) {
-          dom.textContent = `Loading event for: ${permalink}`;
-		} else if (currentNode.attrs.error) {
-		  dom.textContent = `Error: ${currentNode.attrs.error}`;
-        } else {
-          dom.textContent = '(No link?)';
-        }
-      }
+      const props = $state({
+        Spinner: this.options.spinnerComponent,
+        loading: !currentNode.attrs.nevent && !currentNode.attrs.error,
+        nevent: currentNode.attrs.nevent,
+        permalink: currentNode.attrs.permalink,
+        error: currentNode.attrs.error
+      });
+      const component = mount(PermalinkNodeViewWrapper, {
+        target: dom,
+        props
+      });
 
       function updateNode(attrs: Partial<PermalinkNodeAttrs>) {
         const pos = typeof getPos === 'function' ? getPos() : null;
@@ -146,6 +145,7 @@ export const PermalinkNode = Node.create<PermalinkNodeOptions>({
               options.signer,
               options.relays
             );
+			console.log(nevent);
             updateNode({ nevent });
           } catch (err) {
             updateNode({ error: `(Error: ${String(err)})` });
@@ -153,7 +153,6 @@ export const PermalinkNode = Node.create<PermalinkNodeOptions>({
         }
       }
 
-      render();
       maybeFetch(this.options);
 
       return {
@@ -161,8 +160,14 @@ export const PermalinkNode = Node.create<PermalinkNodeOptions>({
         update(updatedNode) {
           if (updatedNode.type.name !== currentNode.type.name) return false;
           currentNode = updatedNode;
-          render();
+          props.loading = !currentNode.attrs.nevent && !currentNode.attrs.error;
+          props.nevent = currentNode.attrs.nevent;
+          props.permalink = currentNode.attrs.permalink;
+          props.error = currentNode.attrs.error;
           return true;
+        },
+        destroy() {
+          unmount(component);
         }
       };
     };

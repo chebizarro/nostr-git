@@ -26,6 +26,9 @@ importers:
       buffer:
         specifier: ^6.0.3
         version: 6.0.3
+      diff:
+        specifier: ^7.0.0
+        version: 7.0.0
       file-type:
         specifier: ^20.4.1
         version: 20.4.1
@@ -99,6 +102,9 @@ importers:
       '@testing-library/svelte':
         specifier: ^5.2.4
         version: 5.2.7(svelte@5.25.8)(vite@6.2.5(jiti@2.4.2)(lightningcss@1.29.2))(vitest@3.1.1)
+      '@types/diff':
+        specifier: ^7.0.2
+        version: 7.0.2
       '@types/mime-types':
         specifier: ^2.1.4
         version: 2.1.4
@@ -1149,6 +1155,9 @@ packages:
   '@types/cookie@0.6.0':
     resolution: {integrity: sha512-4Kh9a6B2bQciAhf7FSuMRRkUWecJgJu9nPnx3yzpsfXX/c50REIqpHY4C82bXP90qrLtXtkDxTZosYO3UpOwlA==}
 
+  '@types/diff@7.0.2':
+    resolution: {integrity: sha512-JSWRMozjFKsGlEjiiKajUjIJVKuKdE3oVy2DNtK+fUo8q82nhFZ2CPQwicAIkXrofahDXrWJ7mjelvZphMS98Q==}
+
   '@types/estree@1.0.7':
     resolution: {integrity: sha512-w28IoSUCJpidD/TGviZwwMJckNESJZXFu7NBZ5YJ4mEUnNraUn9Pm8HSZm/jDF1pDWYKspWE7oVphigUPRakIQ==}
 
@@ -1587,6 +1596,10 @@ packages:
 
   diff3@0.0.3:
     resolution: {integrity: sha512-iSq8ngPOt0K53A6eVr4d5Kn6GNrM2nQZtC740pzIriHtn4pOQ2lyzEXQMBeVcWERN0ye7fhBsk9PbLLQOnUx/g==}
+
+  diff@7.0.0:
+    resolution: {integrity: sha512-PJWHUb1RFevKCwaFA9RlG5tCd+FO5iRh9A8HEtkmBH2Li03iJriB6m6JIN4rGz3K3JLawI7/veA1xzRKP6ISBw==}
+    engines: {node: '>=0.3.1'}
 
   doctrine@3.0.0:
     resolution: {integrity: sha512-yS+Q5i3hBf7GBkd4KG8a7eBNNWNGLTaEwwYWUijIYM7zrlYDM0BFXHjjPWlWZ1Rg7UaddZeIDmi9jF3HmqiQ2w==}
@@ -4293,6 +4306,8 @@ snapshots:
 
   '@types/cookie@0.6.0': {}
 
+  '@types/diff@7.0.2': {}
+
   '@types/estree@1.0.7': {}
 
   '@types/json-schema@7.0.15': {}
@@ -4730,6 +4745,8 @@ snapshots:
   devalue@5.1.1: {}
 
   diff3@0.0.3: {}
+
+  diff@7.0.0: {}
 
   doctrine@3.0.0:
     dependencies:

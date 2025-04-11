@@ -1,8 +1,9 @@
 <script lang="ts">
   import { generateSecretKey } from 'nostr-tools';
   import { createEventFromPermalink } from './event.js';
-  import { fetchSnippet, parsePermalink } from './parsePermalink.js';
+  import { fetchPermalink } from './parsePermalink.js';
   import { Buffer } from 'buffer';
+    import { parsePermalink } from './permalink.js';
 
   if (typeof window !== 'undefined' && !window.Buffer) {
     (window as any).Buffer = Buffer;
@@ -28,7 +29,7 @@
     ]);
     loading = true;
     try {
-      snippetContent = await fetchSnippet(parsed);
+      snippetContent = await fetchPermalink(parsed);
     } catch (err) {
       if (err instanceof Error) {
         return `Error: ${err.message}`;
@@ -96,11 +97,5 @@
     color: red;
     background: #ffd3d3;
     padding: 0.5rem;
-  }
-  .snippet {
-    background-color: #f2f2f2;
-    padding: 1rem;
-    white-space: pre;
-    overflow: auto;
   }
 </style>

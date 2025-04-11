@@ -3,6 +3,7 @@
   import StarterKit from '@tiptap/starter-kit';
   import { PermalinkExtension } from './PermalinkExtension.js';
   import { onDestroy, onMount } from 'svelte';
+  import Spinner from './Spinner.svelte';
 
   let element: HTMLElement;
   let editor: Editor;
@@ -11,9 +12,16 @@
     editor = new Editor({
       element: element,
       extensions: [
-		StarterKit,
-		PermalinkExtension
-	],
+        StarterKit,
+        PermalinkExtension.configure({
+          signer:
+            window.nostr?.signEvent ||
+            (() => {
+              throw new Error('nostr.signEvent is not available');
+            }),
+          spinnerComponent: Spinner
+        })
+      ],
       content: '<p>Paste a link!</p>'
     });
   });
