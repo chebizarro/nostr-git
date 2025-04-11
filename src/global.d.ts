@@ -29,4 +29,9 @@ declare global {
   }
 }
 
+declare module '*.svelte' {
+	import { SvelteComponentTyped } from 'svelte';
+	export default class Component extends SvelteComponentTyped<any> {}
+}
+
 export {};

@@ -4,14 +4,16 @@
 		"allowJs": true,
 		"checkJs": true,
 		"esModuleInterop": true,
+		"allowSyntheticDefaultImports": true,
 		"forceConsistentCasingInFileNames": true,
 		"resolveJsonModule": true,
+		"isolatedModules": true,
 		"skipLibCheck": true,
 		"sourceMap": true,
 		"strict": true,
 		"module": "NodeNext",
 		"moduleResolution": "NodeNext",
-		"types": ["vitest"]
+		"types": ["vitest", "svelte"]
 	},
 	"include": [
 		"src"

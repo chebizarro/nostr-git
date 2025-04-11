@@ -5,6 +5,7 @@ import { Buffer } from 'buffer';
 import { PermalinkNode } from './PermalinkNodeView.svelte.js';
 import type { Component } from 'svelte';
 import { isPermalink } from './permalink.js';
+import Spinner from './Spinner.svelte';
 
 type WindowWithBuffer = Window &
   typeof globalThis & {
@@ -26,9 +27,12 @@ export const PermalinkExtension = Extension.create<PermalinkExtensionOptions>({
 
   addOptions() {
     return {
-      signer: window.nostr ? window.nostr.signEvent : null,
+      signer: window.nostr?.signEvent ||
+        (() => {
+          throw new Error('nostr.signEvent is not available');
+        }),
       relays: ['wss://relay.damus.io'],
-	  spinnerComponent: null,
+      spinnerComponent: Spinner,
     };
   },
 
@@ -37,7 +41,7 @@ export const PermalinkExtension = Extension.create<PermalinkExtensionOptions>({
       PermalinkNode.configure({
         signer: this.options.signer,
         relays: this.options.relays,
-		spinnerComponent: this.options.spinnerComponent,
+        spinnerComponent: this.options.spinnerComponent,
       })
     ];
   },

@@ -15,7 +15,7 @@
         StarterKit,
         PermalinkExtension.configure({
           signer:
-            window.nostr?.signEvent ||
+            window.window.nostr?.signEvent?.bind(window.nostr) ||
             (() => {
               throw new Error('nostr.signEvent is not available');
             }),

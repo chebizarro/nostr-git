@@ -1,11 +1,11 @@
-import { mergeAttributes, Node, nodePasteRule, type PasteRuleMatch } from '@tiptap/core';
+import { mergeAttributes, Node, nodePasteRule, type PasteRuleMatch, type RawCommands } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { createNeventFromPermalink } from './event.js';
 import type { EventTemplate, NostrEvent } from 'nostr-tools';
 import type { MarkdownSerializerState } from '@tiptap/pm/markdown';
 import { mount, unmount, type Component } from 'svelte';
-import PermalinkNodeViewWrapper from './PermalinkNodeViewWrapper.svelte';
 import Spinner from './Spinner.svelte';
+import PermalinkNodeViewWrapper from './PermalinkNodeViewWrapper.svelte'
 
 const PERMALINK_REGEX = /https?:\/\/(?:github\.com|gitlab\.com|gitea\.com)\/\S+/gi;
 
@@ -43,7 +43,10 @@ export const PermalinkNode = Node.create<PermalinkNodeOptions>({
 
   addOptions() {
     return {
-      signer: window.nostr ? window.nostr.signEvent : null,
+      signer: window.nostr?.signEvent ||
+        (() => {
+          throw new Error('nostr.signEvent is not available');
+        }),
       relays: ['wss://relay.damus.io'],
       spinnerComponent: Spinner
     };
@@ -78,16 +81,16 @@ export const PermalinkNode = Node.create<PermalinkNodeOptions>({
     return {
       insertPermalink:
         (url: string) =>
-        ({ commands }) => {
-          return commands.insertContent({
-            type: this.name,
-            attrs: {
-              permalink: url,
-              nevent: null
-            }
-          });
-        }
-    };
+          ({ commands }: { commands: any }) => {
+            return commands.insertContent({
+              type: this.name,
+              attrs: {
+                permalink: url,
+                nevent: null
+              }
+            });
+          }
+    } as Partial<RawCommands>;
   },
 
   addPasteRules() {
@@ -145,7 +148,7 @@ export const PermalinkNode = Node.create<PermalinkNodeOptions>({
               options.signer,
               options.relays
             );
-			console.log(nevent);
+            console.log(nevent);
             updateNode({ nevent });
           } catch (err) {
             updateNode({ error: `(Error: ${String(err)})` });
