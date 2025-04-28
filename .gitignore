@@ -1,4 +1,4 @@
-# Root-level .gitignore for git-nostr-monorepo
+# Root-level .gitignore for nostr-git-monorepo
 
 # Node
 node_modules/

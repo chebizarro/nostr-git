@@ -12,9 +12,9 @@
     "outDir": "dist",
     "baseUrl": ".",
     "paths": {
-      "@git-nostr/core": ["packages/core/src"],
-      "@git-nostr/ui": ["packages/ui/src/lib"],
-      "@git-nostr/types": ["packages/shared-types"]
+      "@nostr-git/core": ["packages/core/src"],
+      "@nostr-git/ui": ["packages/ui/src/lib"],
+      "@nostr-git/types": ["packages/shared-types"]
     }
   }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "@git-nostr/ui",
+  "name": "@nostr-git/ui",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
