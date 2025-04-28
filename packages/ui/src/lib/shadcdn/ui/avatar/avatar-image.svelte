@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Avatar as AvatarPrimitive } from "bits-ui";
+	import { AvatarImage } from "./index.js";
 	import { cn } from "$lib/utils.js";
 
 	type $$Props = AvatarPrimitive.ImageProps;
@@ -10,9 +10,9 @@
 	export { className as class };
 </script>
 
-<AvatarPrimitive.Image
+<AvatarImage
 	{src}
 	{alt}
 	class={cn("aspect-square h-full w-full", className)}
-	{...$$restProps}
+	{...$props()}
 />

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Button as ButtonPrimitive } from "bits-ui";
+	import { Button } from "./index.js";
 	import { type Events, type Props, buttonVariants } from "./index.js";
 	import { cn } from "$lib/utils.js";
 
@@ -7,19 +7,16 @@
 	type $$Events = Events;
 
 	let className: $$Props["class"] = undefined;
-	export let variant: $$Props["variant"] = "default";
-	export let size: $$Props["size"] = "default";
-	export let builders: $$Props["builders"] = [];
-	export { className as class };
+	// TODO: Refactor for runes mode: use $props() for variant, size, builders, and className if needed.
 </script>
 
-<ButtonPrimitive.Root
+<Button
 	{builders}
 	class={cn(buttonVariants({ variant, size, className }))}
 	type="button"
-	{...$$restProps}
+	{...$props()}
 	on:click
 	on:keydown
 >
 	<slot />
-</ButtonPrimitive.Root>
+</Button>

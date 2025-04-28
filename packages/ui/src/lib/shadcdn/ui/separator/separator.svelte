@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Separator as SeparatorPrimitive } from "bits-ui";
+	import { Separator } from "./index.js";
 	import { cn } from "$lib/utils.js";
 
 	type $$Props = SeparatorPrimitive.Props;
@@ -10,7 +10,7 @@
 	export { className as class };
 </script>
 
-<SeparatorPrimitive.Root
+<Separator
 	class={cn(
 		"bg-border shrink-0",
 		orientation === "horizontal" ? "h-[1px] w-full" : "min-h-full w-[1px]",
@@ -18,5 +18,5 @@
 	)}
 	{orientation}
 	{decorative}
-	{...$$restProps}
+	{...$props()}
 />

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Collapsible as CollapsiblePrimitive } from "bits-ui";
+	import { CollapsibleContent } from "./index.js";
 	import { slide } from "svelte/transition";
 
 	type $$Props = CollapsiblePrimitive.ContentProps;
@@ -10,6 +10,6 @@
 	};
 </script>
 
-<CollapsiblePrimitive.Content {transition} {transitionConfig} {...$$restProps}>
+<CollapsibleContent {transition} {transitionConfig} {...$props()}>
 	<slot />
-</CollapsiblePrimitive.Content>
+</CollapsibleContent>

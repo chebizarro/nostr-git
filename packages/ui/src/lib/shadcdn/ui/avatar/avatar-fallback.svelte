@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Avatar as AvatarPrimitive } from "bits-ui";
+	import { AvatarFallback } from "./index.js";
 	import { cn } from "$lib/utils.js";
 
 	type $$Props = AvatarPrimitive.FallbackProps;
@@ -8,9 +8,9 @@
 	export { className as class };
 </script>
 
-<AvatarPrimitive.Fallback
+<AvatarFallback
 	class={cn("bg-muted flex h-full w-full items-center justify-center rounded-full", className)}
-	{...$$restProps}
+	{...$props()}
 >
 	<slot />
-</AvatarPrimitive.Fallback>
+</AvatarFallback>

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Avatar as AvatarPrimitive } from "bits-ui";
+	import { Avatar } from "./index.js";
 	import { cn } from "$lib/utils.js";
 
 	type $$Props = AvatarPrimitive.Props;
@@ -9,10 +9,9 @@
 	export { className as class };
 </script>
 
-<AvatarPrimitive.Root
-	{delayMs}
+<Avatar
 	class={cn("relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full", className)}
-	{...$$restProps}
+	{...$props()}
 >
 	<slot />
-</AvatarPrimitive.Root>
+</Avatar>
