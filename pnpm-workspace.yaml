@@ -1,5 +1,2 @@
-ignoredBuiltDependencies:
-  - svelte-preprocess
-
-onlyBuiltDependencies:
-  - esbuild
+packages:
+  - 'packages/*'

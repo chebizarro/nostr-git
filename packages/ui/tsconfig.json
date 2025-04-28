@@ -1,0 +1,15 @@
+{
+    "compilerOptions": {
+      "types": ["svelte", "vite/client"],
+      "resolveJsonModule": true,
+      "allowSyntheticDefaultImports": true,
+      "target": "ESNext",
+      "module": "ESNext",
+      "moduleResolution": "bundler",
+      "baseUrl": ".",
+      "paths": {
+        "$lib/*": ["src/lib/*"]
+      }
+    },
+    "include": ["src"]
+  }
