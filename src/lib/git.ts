@@ -40,8 +40,7 @@ async function isRepoCloned(dir: string): Promise<boolean> {
 
 async function ensureRepo(data: PermalinkData, depth: number = 1) {
   const dir = `${rootDir}/${data.owner}/${data.repo}`;
-  const isCloned = await isRepoCloned(dir);
-  if (!isCloned || depth > 1) {
+  await isRepoCloned(dir);
     await git.clone({
       fs,
       http,
@@ -52,9 +51,7 @@ async function ensureRepo(data: PermalinkData, depth: number = 1) {
       singleBranch: true,
       depth,
       noCheckout: true,
-      noTags: true,
     });
-  }
 }
 
 /**

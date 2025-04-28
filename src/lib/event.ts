@@ -1,5 +1,5 @@
 import { nip19, SimplePool, type EventTemplate, type NostrEvent } from 'nostr-tools';
-import { fetchPermalink, produceGitDiffFromPermalink } from './parsePermalink.js';
+import { fetchPermalink, produceGitDiffFromPermalink } from './git.js';
 import { parsePermalink, type PermalinkData } from './permalink.js';
 
 export type HexString = Uint8Array<ArrayBufferLike>;

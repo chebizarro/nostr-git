@@ -1,7 +1,7 @@
 <script lang="ts">
   import { generateSecretKey } from 'nostr-tools';
   import { createEventFromPermalink } from './event.js';
-  import { fetchPermalink } from './parsePermalink.js';
+  import { fetchPermalink } from './git.js';
   import { Buffer } from 'buffer';
     import { parsePermalink } from './permalink.js';
 

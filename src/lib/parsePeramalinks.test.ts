@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
-import { fetchPermalink } from '$lib/parsePermalink.js';
+import { fetchPermalink } from '$lib/git.js';
 import git from 'isomorphic-git';
 import { Buffer } from 'buffer';
 import { parsePermalink, type PermalinkData } from './permalink.js';
