@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { Separator }  from '$lib/widgets/Separator.svelte';
+    import { Separator }  from '$lib/shadcdn';
     import ThreadMessage  from '$lib/components/thread/ThreadMessage.svelte';
     import ThreadCommit   from '$lib/components/thread/ThreadCommit.svelte';
     import ThreadPatch    from '$lib/components/thread/ThreadPatch.svelte';

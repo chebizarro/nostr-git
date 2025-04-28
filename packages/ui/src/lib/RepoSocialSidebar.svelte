@@ -1,9 +1,6 @@
 <script lang="ts">
-    import { Star, Eye, Users, MessageSquare } from 'lucide-svelte';
-    import Button     from '$lib/components/ui/Button.svelte';
-    import Card       from '$lib/components/ui/Card.svelte';
-    import Avatar     from '$lib/components/ui/Avatar.svelte';
-    import Separator  from '$lib/components/ui/Separator.svelte';
+    import { Star, Eye, Users, MessageSquare } from "@lucide/svelte";
+    import { Avatar, Button, Card, Separator } from "$lib/shadcdn";
   </script>
   
   <Card class="space-y-4">

@@ -1,10 +1,8 @@
 <script lang="ts">
-    import { Activity } from 'lucide-svelte';
+    import { Activity } from "@lucide/svelte";
     import { formatDistanceToNow } from 'date-fns';
   
-    import Button  from '$lib/widgets/Button.svelte';
-    import Avatar  from '$lib/widgets/Avatar.svelte';
-    import Card    from '$lib/widgets/Card.svelte';
+    import { Avatar, Button, Card } from "$lib/shadcdn";
   
     interface ActivityItem {
       id: string;

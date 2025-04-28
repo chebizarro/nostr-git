@@ -1,6 +1,6 @@
 <script lang="ts">
-    import { Plus } from 'lucide-svelte';
-    import Card      from '$lib/widgets/Card.svelte';
+    import { Plus } from "@lucide/svelte";
+    import { Card } from '$lib/shadcdn';
   
     export let pageName: string;
   

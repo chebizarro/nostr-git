@@ -1,120 +1,144 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
-    import { MessageSquare } from 'lucide-svelte';
-    import Button   from '$lib/widgets/Button.svelte';
-    import Textarea from '$lib/widgets/Textarea.svelte';
-    import Avatar   from '$lib/widgets/Avatar.svelte';
-    import { formatDistanceToNow } from 'date-fns';
-  
-    /** ——— Types ——— */
-    interface Comment {
-      id: string;
-      lineNumber: number;
-      content: string;
-      author: {
-        name: string;
-        avatar: string;
-      };
-      createdAt: string;
-    }
-  
-const {
-  diff,
-  showLineNumbers = true,
-  comments = []
-}: {
-  diff: string;
-  showLineNumbers?: boolean;
-  comments?: Comment[];
-} = $props();
+  import { MessageSquare } from "@lucide/svelte";
+  import { Button } from "$lib/shadcdn";
+  import { Textarea } from "$lib/shadcdn";
+  import { Avatar } from "$lib/shadcdn";
+  import { formatDistanceToNow } from "date-fns";
 
-let selectedLine = $state<number | null>(null);
-let newComment = $state('');
+  /** ——— Types ——— */
+  interface Comment {
+    id: string;
+    lineNumber: number;
+    content: string;
+    author: {
+      name: string;
+      avatar: string;
+    };
+    createdAt: string;
+  }
 
-let lines: string[] = diff.split('\n');
-const commentsByLine = $derived(() =>
-  comments.reduce((acc, c) => {
-    (acc[c.lineNumber] ??= []).push(c);
-    return acc;
-  }, {} as Record<number, Comment[]>)
-);
+  const {
+    diff,
+    showLineNumbers = true,
+    comments = [],
+  }: {
+    diff: string;
+    showLineNumbers?: boolean;
+    comments?: Comment[];
+  } = $props();
 
-function toggleCommentBox(line: number) {
-  selectedLine = selectedLine === line ? null : line;
-  newComment = '';
-}
+  let selectedLine = $state<number | null>(null);
+  let newComment = $state("");
 
-function submitComment(line: number) {
-  console.log(`New comment on line ${line}:`, newComment);
-  selectedLine = null;
-  newComment = '';
-}
+  let lines: string[] = diff.split("\n");
+  const commentsByLine = $derived(() =>
+    comments.reduce(
+      (acc, c) => {
+        (acc[c.lineNumber] ??= []).push(c);
+        return acc;
+      },
+      {} as Record<number, Comment[]>,
+    ),
+  );
+
+  function toggleCommentBox(line: number) {
+    selectedLine = selectedLine === line ? null : line;
+    newComment = "";
+  }
+
+  function submitComment(line: number) {
+    console.log(`New comment on line ${line}:`, newComment);
+    selectedLine = null;
+    newComment = "";
+  }
 </script>
 
-  <div class="git-diff-view border border-border rounded-md overflow-hidden">
-    {#each lines as line, i}
-  {@const ln = i + 1}
-  {@const lineComments = commentsByLine[ln] ?? []}
-  {@const hasComments = lineComments.length > 0}
-  {@const lineClass =
-    'py-1 pl-2' +
-    (line.startsWith('+') ? ' git-diff-line-add bg-green-500/10'
-    : line.startsWith('-') ? ' git-diff-line-remove bg-red-500/10'
-    : ' hover:bg-secondary/50')
-  }
-  <div>
-    <div class={`${lineClass} flex group`} >
-      {#if showLineNumbers}
-        <span class="inline-block w-10 text-muted-foreground select-none text-right pr-2 border-r border-border">
-          {ln}
-        </span>
-      {/if}
-      <span class="font-mono whitespace-pre px-2 flex-1">{line}</span>
-      <Button variant="ghost" size="icon"
-              class="opacity-0 group-hover:opacity-100 transition-opacity"
-              onclick={() => toggleCommentBox(ln)}>
-        <MessageSquare class="h-4 w-4"/>
-      </Button>
-    </div>
-    {#if hasComments}
-      <div class="bg-secondary/30 border-l-4 border-primary ml-10 pl-4 py-2 space-y-3">
-        {#each lineComments as c}
-          <div class="flex gap-2">
-            <Avatar size="sm" src={c.author.avatar} fallback={c.author.name.slice(0,2).toUpperCase()} />
-            <div class="flex-1">
-              <div class="flex items-center gap-2">
-                <span class="font-medium text-sm">{c.author.name}</span>
-                <span class="text-xs text-muted-foreground">
-                  {formatDistanceToNow(new Date(c.createdAt), { addSuffix: true })}
-                </span>
-              </div>
-              <p class="text-sm mt-1">{c.content}</p>
-            </div>
-          </div>
-        {/each}
+<div class="git-diff-view border border-border rounded-md overflow-hidden">
+  {#each lines as line, i}
+    {@const ln = i + 1}
+    {@const lineComments = commentsByLine[ln] ?? []}
+    {@const hasComments = lineComments.length > 0}
+    {@const lineClass =
+      "py-1 pl-2" +
+      (line.startsWith("+")
+        ? " git-diff-line-add bg-green-500/10"
+        : line.startsWith("-")
+          ? " git-diff-line-remove bg-red-500/10"
+          : " hover:bg-secondary/50")}
+    <div>
+      <div class={`${lineClass} flex group`}>
+        {#if showLineNumbers}
+          <span
+            class="inline-block w-10 text-muted-foreground select-none text-right pr-2 border-r border-border"
+          >
+            {ln}
+          </span>
+        {/if}
+        <span class="font-mono whitespace-pre px-2 flex-1">{line}</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          class="opacity-0 group-hover:opacity-100 transition-opacity"
+          onclick={() => toggleCommentBox(ln)}
+        >
+          <MessageSquare class="h-4 w-4" />
+        </Button>
       </div>
-    {/if}
-    {#if selectedLine === ln}
-      <div class="bg-secondary/20 border-l-4 border-primary ml-10 pl-4 py-2">
-        <div class="flex gap-2">
-          <Avatar size="sm" src="" fallback="ME" />
-          <div class="flex-1 space-y-2">
-            <Textarea bind:value={newComment}
-                      placeholder="Add a comment..."
-                      class="min-h-[60px] resize-none"/>
-            <div class="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onclick={() => selectedLine = null}>Cancel</Button>
-              <Button size="sm" class="gap-1 bg-git hover:bg-git-hover"
-                      disabled={!newComment.trim()}
-                      onclick={() => submitComment(ln)}>
-                <MessageSquare class="h-3.5 w-3.5"/> Comment
-              </Button>
+      {#if hasComments}
+        <div
+          class="bg-secondary/30 border-l-4 border-primary ml-10 pl-4 py-2 space-y-3"
+        >
+          {#each lineComments as c}
+            <div class="flex gap-2">
+              <Avatar
+                size="sm"
+                src={c.author.avatar}
+                fallback={c.author.name.slice(0, 2).toUpperCase()}
+              />
+              <div class="flex-1">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium text-sm">{c.author.name}</span>
+                  <span class="text-xs text-muted-foreground">
+                    {formatDistanceToNow(new Date(c.createdAt), {
+                      addSuffix: true,
+                    })}
+                  </span>
+                </div>
+                <p class="text-sm mt-1">{c.content}</p>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
+      {#if selectedLine === ln}
+        <div class="bg-secondary/20 border-l-4 border-primary ml-10 pl-4 py-2">
+          <div class="flex gap-2">
+            <Avatar size="sm" src="" fallback="ME" />
+            <div class="flex-1 space-y-2">
+              <Textarea
+                bind:value={newComment}
+                placeholder="Add a comment..."
+                class="min-h-[60px] resize-none"
+              />
+              <div class="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onclick={() => (selectedLine = null)}>Cancel</Button
+                >
+                <Button
+                  size="sm"
+                  class="gap-1 bg-git hover:bg-git-hover"
+                  disabled={!newComment.trim()}
+                  onclick={() => submitComment(ln)}
+                >
+                  <MessageSquare class="h-3.5 w-3.5" /> Comment
+                </Button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    {/if}
-  </div>
-{/each}
-  </div>
-  
+      {/if}
+    </div>
+  {/each}
+</div>

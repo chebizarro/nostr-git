@@ -1,7 +1,6 @@
 <script lang="ts">
-    import { Book, Search, ChevronDown, ChevronRight, Link as LinkIcon, List } from 'lucide-svelte';
-    import Input        from '$lib/widgets/Input.svelte';
-    import Collapsible  from '$lib/widgets/Collapsible.svelte';
+    import { Book, Search, ChevronDown, ChevronRight, Link as LinkIcon, List } from "@lucide/svelte";
+    import { Input, Collapsible }  from '$lib/shadcdn';
   
     interface WikiPage { id: string; title: string; children?: WikiPage[] }
   

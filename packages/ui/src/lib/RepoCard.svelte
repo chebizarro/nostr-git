@@ -1,8 +1,7 @@
 <script lang="ts">
     import { formatDistanceToNow } from 'date-fns';
-    import { GitBranch, Star, BookOpen, Circle } from 'lucide-svelte';
-    import Button  from '$lib/ui/Button.svelte';
-    import Avatar  from '$lib/ui/Avatar.svelte';
+    import { GitBranch, Star, BookOpen, Circle } from "@lucide/svelte";
+    import { Avatar, Button } from "$lib/shadcdn";
   
     const {
       id,

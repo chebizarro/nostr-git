@@ -8,16 +8,13 @@
     import { derived } from 'svelte/store';
   
     // Your UI primitives -------------------------------------------------------
-    import Button        from '$lib/components/ui/Button.svelte';
-    import Tabs          from '$lib/components/ui/Tabs/Tabs.svelte';
-    import TabsList      from '$lib/components/ui/Tabs/TabsList.svelte';
-    import TabsTrigger   from '$lib/components/ui/Tabs/TabsTrigger.svelte';
+    import { Button, Tabs, TabsList, TabsTrigger } from "$lib/shadcdn";
   
     // Icons (lucide-svelte) ----------------------------------------------------
     import { 
       GitBranch, Star, Eye, GitFork, FileCode, CircleAlert, 
       GitPullRequest, Book 
-    } from 'lucide-svelte';
+    } from "@lucide/svelte";
   
     /* Props ------------------------------------------------------------------ */
     const {
