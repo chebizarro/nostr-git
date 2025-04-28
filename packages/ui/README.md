@@ -1,4 +1,4 @@
-# @git-nostr/ui
+# @nostr-git/ui
 
 Svelte component library for rendering Git and Nostr events.
 
@@ -12,14 +12,14 @@ Svelte component library for rendering Git and Nostr events.
 ## Installation
 
 ```bash
-npm install @git-nostr/ui
+npm install @nostr-git/ui
 ```
 
 ## Usage
 
 ```svelte
 <script lang="ts">
-  import { GitEventCard } from '@git-nostr/ui';
+  import { GitEventCard } from '@nostr-git/ui';
 </script>
 
 <GitEventCard event={myEvent} />

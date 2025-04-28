@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: @git-nostr/actions@v1
+      - uses: @nostr-git/actions@v1
         with:
           nostr_private_key: ${{ secrets.NOSTR_PRIVATE_KEY }}
 ```

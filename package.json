@@ -1,5 +1,5 @@
 {
-  "name": "git-nostr-monorepo",
+  "name": "nostr-git-monorepo",
   "private": true,
   "workspaces": [
     "packages/*"

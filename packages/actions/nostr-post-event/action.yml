@@ -1,0 +1,32 @@
+name: "Nostr Post Event"
+description: "Create and publish Nostr events from GitHub metadata"
+author: "your-name"
+inputs:
+  nostr-use-remote-signer:
+    description: "Enable NIP-46 signing"
+    required: false
+    default: "false"
+  nostr-remote-signer-url:
+    description: "WebSocket URL for NIP-46 signer relay"
+    required: false
+  nostr-signing-pubkey:
+    description: "Remote signer's Nostr pubkey (hex)"
+    required: false
+  nostr-private-key:
+    description: "Nostr private key (hex)"
+    required: true
+  nostr-relay-url:
+    description: "Nostr relay WebSocket URL"
+    required: true
+  github-event-path:
+    description: "Path to the GitHub event payload"
+    required: false
+    default: ${{ github.event_path }}
+  github-event-name:
+    description: "GitHub event type"
+    required: false
+    default: ${{ github.event_name }}
+
+runs:
+  using: "node20"
+  main: "dist/index.js"

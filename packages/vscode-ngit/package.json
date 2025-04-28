@@ -1,0 +1,78 @@
+{
+  "name": "ngit-vscode",
+  "displayName": "Nostr Git Integration",
+  "description": "Interact with Nostr-backed Git repositories using ngit.",
+  "publisher": "biz",
+  "version": "0.0.1",
+  "icon": "icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "ngit.listPRs",
+        "title": "List Nostr PRs"
+      },
+      {
+        "command": "ngit.initRepo",
+        "title": "Initialize Nostr Repo"
+      },
+      {
+        "command": "ngit.copyCloneUrl",
+        "title": "Copy Clone URL"
+      },
+      {
+        "command": "ngit.copyWebUrl",
+        "title": "Copy Web URL"
+      },
+      {
+        "command": "ngit.announceRepo",
+        "title": "Generate Repo Announcement"
+      },
+      {
+        "command": "ngit.parseRepoEvent",
+        "title": "Parse Repo Announcement"
+      },
+      {
+        "command": "ngit.nip46Connect",
+        "title": "Connect to NIP-46 Signer"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "icon": "icon.png",
+          "id": "nostrRepos",
+          "name": "Nostr Repos"
+        }
+      ]
+    },
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "ngit.copyCloneUrl",
+          "when": "view == nostrRepos && viewItem == nostrRepo",
+          "group": "inline"
+        },
+        {
+          "command": "ngit.copyWebUrl",
+          "when": "view == nostrRepos && viewItem == nostrRepo",
+          "group": "inline"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "nostr-tools": "^2.12.0"
+  }
+}

@@ -1,20 +1,20 @@
-# @git-nostr/shared-types
+# @nostr-git/shared-types
 
 Shared TypeScript types for Git/Nostr event structures.
 
 ## Installation
 
 ```bash
-npm install @git-nostr/shared-types
+npm install @nostr-git/shared-types
 ```
 
 ## Usage
 
 ```ts
-import type { GitRepoMetadataEvent } from '@git-nostr/shared-types';
+import type { GitRepoMetadataEvent } from '@nostr-git/shared-types';
 ```
 
-These types are re-exported and used across `@git-nostr/core`, `@git-nostr/ui`, and other projects.
+These types are re-exported and used across `@nostr-git/core`, `@nostr-git/ui`, and other projects.
 
 ## License
 
