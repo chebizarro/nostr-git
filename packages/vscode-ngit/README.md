@@ -1,26 +1,34 @@
-# VS Code Extension: Nostr Git (`ngit`)
+# ngit VS Code Extension
 
-A VS Code extension for interacting with Git/Nostr (ngit).
+Interact with [Nostr](https://github.com/nostr-protocol/nostr)-backed Git repositories directly from Visual Studio Code using [`ngit`](https://gitworkshop.dev/ngit).
 
 ## Features
 
-- View repositories as Nostr spaces
-- Publish commits and issues to Nostr relays
-- Display Nostr Git events inline in the IDE
+- List open Nostr pull requests via `ngit list`
+- Announce repositories to Nostr with `ngit init`
+- Built-in NIP-34 event semantics (30617, 1622, 1623) through `ngit` CLI
 
-## Development
+## Requirements
 
-```bash
-pnpm install
-pnpm run build
-```
+- Git must be installed and available in your system PATH
+- `ngit` and `git-remote-nostr` binaries must be installed and available in PATH  
+  ([Installation guide](https://gitworkshop.dev/ngit))
 
-Package for VSCode Marketplace:
+## Usage
 
-```bash
-pnpm exec vsce package
-```
+1. Open a Git-enabled workspace
+2. Open the command palette (⇧⌘P / Ctrl+Shift+P)
+3. Run `List Nostr PRs` or `Announce Repo to Nostr`
 
-## License
+## Coming Soon
 
-MIT License
+- Tree view for Nostr-based PRs
+- Inline diff viewing from kind:1622 events
+- Remote patch submissions via Nostr
+- NIP-46 signer support
+
+## Resources
+
+- [gitworkshop.dev/repos](https://gitworkshop.dev/repos)
+- [NIP-34](https://github.com/nostr-protocol/nips/blob/master/34.md)
+- [NIP-95](https://github.com/nostr-protocol/nips/blob/master/95.md)
