@@ -1,8 +1,8 @@
 <script lang="ts">
   import { MessageSquare } from "@lucide/svelte";
-  import { Button } from "$lib/shadcdn";
-  import { Textarea } from "$lib/shadcdn";
-  import { Avatar } from "$lib/shadcdn";
+  import { Button } from "$lib/components";
+  import { Textarea } from "$lib/components/ui/textarea";
+  import { Avatar, AvatarFallback, AvatarImage } from "$lib/components/ui/avatar";
   import { formatDistanceToNow } from "date-fns";
 
   /** ——— Types ——— */
@@ -37,8 +37,8 @@
         (acc[c.lineNumber] ??= []).push(c);
         return acc;
       },
-      {} as Record<number, Comment[]>,
-    ),
+      {} as Record<number, Comment[]>
+    )
   );
 
   function toggleCommentBox(line: number) {
@@ -85,16 +85,13 @@
         </Button>
       </div>
       {#if hasComments}
-        <div
-          class="bg-secondary/30 border-l-4 border-primary ml-10 pl-4 py-2 space-y-3"
-        >
+        <div class="bg-secondary/30 border-l-4 border-primary ml-10 pl-4 py-2 space-y-3">
           {#each lineComments as c}
             <div class="flex gap-2">
-              <Avatar
-                size="sm"
-                src={c.author.avatar}
-                fallback={c.author.name.slice(0, 2).toUpperCase()}
-              />
+              <Avatar class="h-8 w-8">
+                <AvatarImage src={c.author.avatar} alt={c.author.name} />
+                <AvatarFallback>{c.author.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+              </Avatar>
               <div class="flex-1">
                 <div class="flex items-center gap-2">
                   <span class="font-medium text-sm">{c.author.name}</span>
@@ -113,7 +110,9 @@
       {#if selectedLine === ln}
         <div class="bg-secondary/20 border-l-4 border-primary ml-10 pl-4 py-2">
           <div class="flex gap-2">
-            <Avatar size="sm" src="" fallback="ME" />
+            <Avatar class="h-8 w-8">
+              <AvatarFallback>ME</AvatarFallback>
+            </Avatar>
             <div class="flex-1 space-y-2">
               <Textarea
                 bind:value={newComment}
@@ -121,10 +120,8 @@
                 class="min-h-[60px] resize-none"
               />
               <div class="flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onclick={() => (selectedLine = null)}>Cancel</Button
+                <Button variant="outline" size="sm" onclick={() => (selectedLine = null)}
+                  >Cancel</Button
                 >
                 <Button
                   size="sm"

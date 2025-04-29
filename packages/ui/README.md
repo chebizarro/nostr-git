@@ -19,7 +19,7 @@ npm install @nostr-git/ui
 
 ```svelte
 <script lang="ts">
-  import { GitEventCard } from '@nostr-git/ui';
+  import { GitEventCard } from "@nostr-git/ui";
 </script>
 
 <GitEventCard event={myEvent} />

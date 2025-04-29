@@ -1,6 +1,6 @@
 <script lang="ts">
   import { FileCode, Share, Download, Copy } from "@lucide/svelte";
-  import { Button } from "$lib/shadcdn";
+  import { Button } from "$lib/components";
   import { toast } from "$lib/stores/toast";
 
   const props = $props<{
@@ -71,28 +71,13 @@
     </div>
     {#if type === "file"}
       <div class="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          class="h-8 w-8 p-0"
-          onclick={shareLink}
-        >
+        <Button variant="ghost" size="sm" class="h-8 w-8 p-0" onclick={shareLink}>
           <Share class="h-4 w-4" />
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          class="h-8 w-8 p-0"
-          onclick={downloadFile}
-        >
+        <Button variant="ghost" size="sm" class="h-8 w-8 p-0" onclick={downloadFile}>
           <Download class="h-4 w-4" />
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          class="h-8 w-8 p-0"
-          onclick={copyContent}
-        >
+        <Button variant="ghost" size="sm" class="h-8 w-8 p-0" onclick={copyContent}>
           <Copy class="h-4 w-4" />
         </Button>
       </div>

@@ -1,9 +1,9 @@
-import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 
 export default {
   compilerOptions: {
     runes: true,
-    customElement: false
+    customElement: false,
   },
-  preprocess: vitePreprocess()
+  preprocess: vitePreprocess(),
 };

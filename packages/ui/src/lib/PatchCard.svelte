@@ -1,17 +1,14 @@
 <script lang="ts">
   import {
-    GitPullRequest,
     MessageSquare,
-    Check,
-    X,
     BookmarkPlus,
     BookmarkCheck,
     ChevronDown,
     ChevronUp,
   } from "@lucide/svelte";
   import { formatDistanceToNow } from "date-fns";
-  import { goto } from "$app/navigation";
-  import { Avatar, Button, Card } from "$lib/shadcdn";
+  import { navigate } from "svelte-routing";
+  import { Avatar, AvatarFallback, AvatarImage, Button, Card } from "$lib/components";
   import { toast } from "$lib/stores/toast";
 
   const {
@@ -47,26 +44,22 @@
         open: `<svg class='h-6 w-6 text-amber-500'><use href='#GitPullRequest'/></svg>`,
         merged: `<svg class='h-6 w-6 text-green-500'><use href='#Check'/></svg>`,
         closed: `<svg class='h-6 w-6 text-red-500'><use href='#X'/></svg>`,
-      })[status],
+      })[status]
   );
 
-  const timeAgo = $derived(() =>
-    formatDistanceToNow(new Date(createdAt), { addSuffix: true }),
-  );
+  const timeAgo = $derived(() => formatDistanceToNow(new Date(createdAt), { addSuffix: true }));
 
   function toggleBookmark() {
     isBookmarked = !isBookmarked;
     toast.push({
       title: isBookmarked ? "Added to bookmarks" : "Removed from bookmarks",
-      description: isBookmarked
-        ? "Patch added to your threads"
-        : "Patch removed from your threads",
+      description: isBookmarked ? "Patch added to your threads" : "Patch removed from your threads",
     });
   }
 
   function viewDiff(e?: MouseEvent) {
     e?.preventDefault();
-    goto(`/git/repo/${repoId}/patches/${id}`);
+    navigate(`/git/repo/${repoId}/patches/${id}`);
   }
 </script>
 
@@ -112,9 +105,7 @@
         </div>
       </div>
 
-      <div
-        class="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground"
-      >
+      <div class="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground">
         <span>#{id}</span><span>•</span>
         <span class="capitalize">{status}</span><span>•</span>
         <span
@@ -126,16 +117,13 @@
 
       <p
         id="patch-description"
-        class="text-sm text-muted-foreground mt-3 {isExpanded
-          ? ''
-          : 'line-clamp-2'}"
+        class="text-sm text-muted-foreground mt-3 {isExpanded ? '' : 'line-clamp-2'}"
       >
         {description}
       </p>
 
       <div class="mt-4 flex items-center justify-between">
-        <Button variant="outline" size="sm" onclick={viewDiff}>View diff</Button
-        >
+        <Button variant="outline" size="sm" onclick={viewDiff}>View diff</Button>
 
         <div class="flex items-center gap-1">
           <MessageSquare class="h-4 w-4 text-muted-foreground" />
@@ -144,10 +132,9 @@
       </div>
     </div>
 
-    <Avatar
-      size="md"
-      src={author.avatar}
-      fallback={author.name.slice(0, 2).toUpperCase()}
-    />
+    <Avatar class="h-8 w-8">
+      <AvatarImage src={author.avatar} alt={author.name} />
+      <AvatarFallback>{author.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+    </Avatar>
   </div>
 </Card>

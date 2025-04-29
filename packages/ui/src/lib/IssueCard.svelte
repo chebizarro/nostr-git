@@ -8,7 +8,7 @@
     BookmarkPlus,
     BookmarkCheck,
   } from "@lucide/svelte";
-  import { Avatar, Button } from "$lib/shadcdn";
+  import { Avatar, AvatarFallback, AvatarImage, Button } from "$lib/components";
   import IssueThread from "./IssueThread.svelte";
   import { toast } from "$lib/stores/toast";
 
@@ -39,17 +39,13 @@
   let isExpanded = $state(false);
   let isBookmarked = $state(false);
 
-  const timeAgo = $derived(() =>
-    formatDistanceToNow(new Date(createdAt), { addSuffix: true }),
-  );
+  const timeAgo = $derived(() => formatDistanceToNow(new Date(createdAt), { addSuffix: true }));
 
   function toggleBookmark() {
     isBookmarked = !isBookmarked;
     toast.push({
       title: isBookmarked ? "Added to bookmarks" : "Removed from bookmarks",
-      description: isBookmarked
-        ? "Issue added to your threads"
-        : "Issue removed from your threads",
+      description: isBookmarked ? "Issue added to your threads" : "Issue removed from your threads",
     });
   }
 
@@ -112,9 +108,7 @@
         </div>
       </div>
 
-      <div
-        class="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground"
-      >
+      <div class="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground">
         <span>#{id}</span><span>•</span><span>{status}</span><span>•</span>
         <span>{timeAgo} by {author.name}</span>
       </div>
@@ -136,11 +130,10 @@
       </div>
     </div>
 
-    <Avatar
-      size="md"
-      src={author.avatar}
-      fallback={author.name.slice(0, 2).toUpperCase()}
-    />
+    <Avatar class="h-8 w-8">
+      <AvatarImage src={author.avatar} alt={author.name} />
+      <AvatarFallback>{author.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+    </Avatar>
   </div>
 </div>
 

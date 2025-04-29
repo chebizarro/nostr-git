@@ -1,9 +1,9 @@
-import { writable } from 'svelte/store';
+import { writable } from "svelte/store";
 
 export interface Toast {
   title: string;
   description?: string;
-  variant?: 'default' | 'destructive' | string;
+  variant?: "default" | "destructive" | string;
   duration?: number;
 }
 
@@ -27,7 +27,7 @@ function createToastStore() {
   return {
     subscribe,
     push,
-    clear
+    clear,
   };
 }
 

@@ -1,9 +1,9 @@
 <script lang="ts">
   import { MessageSquare } from "@lucide/svelte";
   import { formatDistanceToNow } from "date-fns";
-  import { Avatar, Button } from "$lib/shadcdn";
-  import { Textarea } from "$lib/shadcdn";
-  import { Card  } from "$lib/shadcdn";
+  import { Avatar, AvatarFallback, AvatarImage, Button } from "$lib/components";
+  import { Textarea } from "$lib/components";
+  import { Card } from "$lib/components";
   import { toast } from "$lib/stores/toast";
 
   export interface Comment {
@@ -39,17 +39,22 @@
   <div class="space-y-4 p-4">
     {#each comments as c (c.id)}
       <div class="flex gap-3 group animate-fade-in">
-        <Avatar
-          size="sm"
-          src={c.author.avatar}
-          fallback={c.author.name.slice(0, 2).toUpperCase()}
-        />
+        <Avatar class="h-8 w-8">
+          <AvatarImage src={c.author.avatar} alt={c.author.name} />
+          <AvatarFallback>{c.author.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+        </Avatar>
         <div class="flex-1">
           <div class="flex items-center gap-2">
-            <span class="font-semibold text-sm">{c.author.name}</span>
-            <span class="text-xs text-muted-foreground">
+            <button class="font-semibold text-sm" onclick={() => console.log(c.author.name)}
+              >{c.author.name}</button
+            >
+            <button
+              class="text-xs text-muted-foreground"
+              onclick={() =>
+                console.log(formatDistanceToNow(new Date(c.createdAt), { addSuffix: true }))}
+            >
               {formatDistanceToNow(new Date(c.createdAt), { addSuffix: true })}
-            </span>
+            </button>
           </div>
           <p class="text-sm mt-1 whitespace-pre-wrap">{c.content}</p>
         </div>
@@ -57,7 +62,9 @@
     {/each}
 
     <form onsubmit={submit} class="flex gap-3 pt-4 border-t">
-      <Avatar size="sm" fallback="ME" />
+      <Avatar class="h-8 w-8">
+        <AvatarFallback>ME</AvatarFallback>
+      </Avatar>
       <div class="flex-1 space-y-2">
         <Textarea
           bind:value={newComment}
