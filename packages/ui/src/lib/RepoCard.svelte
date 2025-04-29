@@ -1,7 +1,7 @@
 <script lang="ts">
   import { formatDistanceToNow } from "date-fns";
   import { GitBranch, Star, BookOpen, Circle } from "@lucide/svelte";
-  import { useRegistry } from './useRegistry';
+  import { useRegistry } from "./useRegistry";
   const { Avatar, Button, AvatarImage, AvatarFallback } = useRegistry();
 
   const {
@@ -48,7 +48,12 @@
           <BookOpen class="h-4 w-4" /> Browse
         </Button>
 
-        <Button href={`/git/repo/${id}/issues`} variant="outline" size="sm" class="gap-2 text-git-issue">
+        <Button
+          href={`/git/repo/${id}/issues`}
+          variant="outline"
+          size="sm"
+          class="gap-2 text-git-issue"
+        >
           Issues ({issueCount})
         </Button>
       </div>

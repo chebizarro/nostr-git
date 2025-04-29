@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { useRegistry } from './useRegistry';
+  import { useRegistry } from "./useRegistry";
   const { Separator } = useRegistry();
   import ThreadMessage from "$lib/ThreadMessage.svelte";
   import ThreadCommit from "$lib/ThreadCommit.svelte";
@@ -67,13 +67,7 @@
     createdAt: string;
   };
 
-  type ThreadEvent =
-    | ThreadCommitEvent
-    | ThreadPatchEvent
-    | ThreadIssueEvent
-    | ThreadMessageEvent;
-
-
+  type ThreadEvent = ThreadCommitEvent | ThreadPatchEvent | ThreadIssueEvent | ThreadMessageEvent;
 
   const handleSubmit = (msg: string) => {
     console.log("New message:", msg);
@@ -85,11 +79,7 @@
   <div class="flex-1 overflow-y-auto px-4 py-2 space-y-2">
     {#each events as e (e.id)}
       {#if e.type === "message"}
-        <ThreadMessage
-          content={e.content}
-          author={e.author}
-          createdAt={e.createdAt}
-        />
+        <ThreadMessage content={e.content} author={e.author} createdAt={e.createdAt} />
       {:else if e.type === "commit" && e.metadata}
         <ThreadCommit
           content={e.content}

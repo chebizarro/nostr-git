@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Plus, Send } from "@lucide/svelte";
-  import { useRegistry } from './useRegistry';
+  import { useRegistry } from "./useRegistry";
   const { Button } = useRegistry();
   import { Textarea } from "$lib/components/ui/textarea";
 

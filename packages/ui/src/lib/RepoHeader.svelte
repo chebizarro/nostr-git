@@ -36,7 +36,6 @@
     // Add more fields as needed
   };
 
-
   const props = $props();
   const repo: Repo | undefined = props.repo;
   let activeTab = $state(props.activeTab ?? "code");
@@ -62,7 +61,7 @@
   <div class="flex items-center justify-between mb-4 flex-wrap gap-4">
     <h1 class="text-2xl font-bold flex items-center gap-2">
       <GitBranch class="h-6 w-6" />
-      {repo?.name ?? 'Unknown Repo'}
+      {repo?.name ?? "Unknown Repo"}
     </h1>
 
     <div class="flex items-center gap-2 shrink-0">
@@ -93,7 +92,8 @@
     class="w-full"
     onchange={(e) => {
       const target = e.target as HTMLInputElement | HTMLElement | null;
-      const value = (target as HTMLInputElement)?.value ?? target?.getAttribute?.('data-value') ?? undefined;
+      const value =
+        (target as HTMLInputElement)?.value ?? target?.getAttribute?.("data-value") ?? undefined;
       handleTabChange(value);
     }}
   >

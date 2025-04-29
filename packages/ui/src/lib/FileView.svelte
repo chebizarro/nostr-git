@@ -1,6 +1,6 @@
 <script lang="ts">
   import { FileCode, Share, Download, Copy } from "@lucide/svelte";
-  import { useRegistry } from './useRegistry';
+  import { useRegistry } from "./useRegistry";
   const { Button } = useRegistry();
   import { toast } from "$lib/stores/toast";
 

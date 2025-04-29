@@ -1,8 +1,8 @@
 <script lang="ts">
   import { Book, Search, ChevronDown, ChevronRight, Link as LinkIcon, List } from "@lucide/svelte";
-  import { useRegistry } from './useRegistry';
- import { Collapsible } from "./components";
-  const { Input} = useRegistry();
+  import { useRegistry } from "./useRegistry";
+  import { Collapsible } from "./components";
+  const { Input } = useRegistry();
 
   interface WikiPage {
     id: string;

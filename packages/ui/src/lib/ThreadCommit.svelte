@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { useRegistry } from './useRegistry';
+  import { useRegistry } from "./useRegistry";
   const { Avatar, AvatarFallback, AvatarImage } = useRegistry();
   import { GitCommit } from "@lucide/svelte";
   import { formatDistanceToNow } from "date-fns";

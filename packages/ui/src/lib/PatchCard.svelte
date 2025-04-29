@@ -8,7 +8,7 @@
   } from "@lucide/svelte";
   import { formatDistanceToNow } from "date-fns";
   import { navigate } from "svelte-routing";
-  import { useRegistry } from './useRegistry';
+  import { useRegistry } from "./useRegistry";
   const { Avatar, AvatarFallback, AvatarImage, Button, Card } = useRegistry();
   import { toast } from "$lib/stores/toast";
 

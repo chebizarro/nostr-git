@@ -1,7 +1,7 @@
 <script lang="ts">
   import { MessageSquare } from "@lucide/svelte";
   import { formatDistanceToNow } from "date-fns";
-  import { useRegistry } from './useRegistry';
+  import { useRegistry } from "./useRegistry";
   const { Avatar, AvatarFallback, AvatarImage, Button, Textarea, Card } = useRegistry();
   import { toast } from "$lib/stores/toast";
 

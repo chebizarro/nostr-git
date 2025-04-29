@@ -1,5 +1,5 @@
-import { getContext } from 'svelte';
-import { REGISTRY, defaultRegistry, type Registry } from './internal/component-registry';
+import { getContext } from "svelte";
+import { REGISTRY, defaultRegistry, type Registry } from "./internal/component-registry";
 
 // Svelte 5 runes mode compliant: use this function in your component <script> to get the current registry
 export function useRegistry(): Registry {

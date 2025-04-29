@@ -1,18 +1,18 @@
 <script lang="ts">
   import { Star, Eye, Users, MessageSquare } from "@lucide/svelte";
-  import { useRegistry } from './useRegistry';
+  import { useRegistry } from "./useRegistry";
   const { Avatar, AvatarFallback, AvatarImage, Button, Card, Separator } = useRegistry();
 
   // Accept props for sidebar data
   const props = $props();
   const watchers: number = props.watchers ?? 0;
   const contributors: { name: string; avatar: string }[] = props.contributors ?? [
-    { name: 'Alice', avatar: '' },
-    { name: 'Bob', avatar: '' },
-    { name: 'Carol', avatar: '' },
-    { name: 'Dave', avatar: '' },
-    { name: 'Eve', avatar: '' },
-    { name: 'Mallory', avatar: '' }
+    { name: "Alice", avatar: "" },
+    { name: "Bob", avatar: "" },
+    { name: "Carol", avatar: "" },
+    { name: "Dave", avatar: "" },
+    { name: "Eve", avatar: "" },
+    { name: "Mallory", avatar: "" },
   ];
 </script>
 
