@@ -1,7 +1,8 @@
 <script lang="ts">
   import { formatDistanceToNow } from "date-fns";
   import { GitBranch, Star, BookOpen, Circle } from "@lucide/svelte";
-  import { Avatar, Button, AvatarImage, AvatarFallback } from "$lib/components";
+  import { useRegistry } from './useRegistry';
+  const { Avatar, Button, AvatarImage, AvatarFallback } = useRegistry();
 
   const {
     id,

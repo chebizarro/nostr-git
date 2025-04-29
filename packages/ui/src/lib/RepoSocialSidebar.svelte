@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Star, Eye, Users, MessageSquare } from "@lucide/svelte";
-  import { Avatar, AvatarFallback, AvatarImage, Button, Card, Separator } from "$lib/components";
+  import { useRegistry } from './useRegistry';
+  const { Avatar, AvatarFallback, AvatarImage, Button, Card, Separator } = useRegistry();
 
   // Accept props for sidebar data
   const props = $props();

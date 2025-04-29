@@ -8,7 +8,8 @@
     BookmarkPlus,
     BookmarkCheck,
   } from "@lucide/svelte";
-  import { Avatar, AvatarFallback, AvatarImage, Button } from "$lib/components";
+  import { useRegistry } from './useRegistry';
+  const { Avatar, AvatarFallback, AvatarImage, Button } = useRegistry();
   import IssueThread from "./IssueThread.svelte";
   import { toast } from "$lib/stores/toast";
 

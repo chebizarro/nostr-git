@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Plus, Send } from "@lucide/svelte";
-  import { Button } from "$lib/components/ui/button";
+  import { useRegistry } from './useRegistry';
+  const { Button } = useRegistry();
   import { Textarea } from "$lib/components/ui/textarea";
 
   const { onSubmit }: { onSubmit: (message: string) => void } = $props();

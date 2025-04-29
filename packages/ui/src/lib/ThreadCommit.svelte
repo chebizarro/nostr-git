@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { Avatar, AvatarFallback, AvatarImage } from "$lib/components/ui/avatar";
+  import { useRegistry } from './useRegistry';
+  const { Avatar, AvatarFallback, AvatarImage } = useRegistry();
   import { GitCommit } from "@lucide/svelte";
   import { formatDistanceToNow } from "date-fns";
 

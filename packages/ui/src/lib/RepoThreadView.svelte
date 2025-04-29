@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { Separator } from "$lib/components";
+  import { useRegistry } from './useRegistry';
+  const { Separator } = useRegistry();
   import ThreadMessage from "$lib/ThreadMessage.svelte";
   import ThreadCommit from "$lib/ThreadCommit.svelte";
   import ThreadPatch from "$lib/ThreadPatch.svelte";

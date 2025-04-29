@@ -1,8 +1,7 @@
 <script lang="ts">
   import { MessageSquare } from "@lucide/svelte";
-  import { Button } from "$lib/components";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import { Avatar, AvatarFallback, AvatarImage } from "$lib/components/ui/avatar";
+  import { useRegistry } from './useRegistry';
+  const { Avatar, AvatarFallback, AvatarImage, Button, Textarea } = useRegistry();
   import { formatDistanceToNow } from "date-fns";
 
   /** ——— Types ——— */

@@ -2,7 +2,8 @@
   import { PlayCircle, Users } from "@lucide/svelte";
   import { formatDistanceToNow } from "date-fns";
   import { Link } from "svelte-routing";
-  import { Avatar, AvatarFallback, AvatarImage, Button } from "$lib/components";
+  import { useRegistry } from './useRegistry';
+  const { Avatar, AvatarFallback, AvatarImage, Button } = useRegistry();
 
   const {
     id,
