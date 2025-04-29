@@ -1,0 +1,51 @@
+{
+    "extends": "@tsconfig/svelte/tsconfig.json",
+  
+    "compilerOptions": {
+      /* language-level */
+      "target": "ES2020",
+      "module": "ESNext",
+      "moduleResolution": "NodeNext",
+      "lib": ["DOM", "ES2020"],
+  
+      /* tooling */
+      "strict": true,
+      "allowJs": true,
+      "checkJs": false,
+      "resolveJsonModule": true,
+      "isolatedModules": true,
+      "skipLibCheck": true,
+  
+      "baseUrl": ".",
+      "paths": {
+        "ui": ["../ui/src"],
+        "ui/*": ["../ui/src/*"]
+      },
+  
+      /* typings automatically injected */
+      "types": [
+        // Vite’s `import.meta` etc.
+        "vite/client",
+        // Storybook global types
+        "@storybook/addon-links",
+        "@storybook/addon-docs",
+        "@storybook/addon-actions",
+        // Svelte definitions (already via @tsconfig/svelte but explicit is OK)
+        "svelte"
+      ]
+    },
+  
+    "include": [
+      // local TS / stories / config
+      "./**/*.ts",
+      "./**/*.js",
+      "./.storybook/**/*",
+      "./stories/**/*",
+      // pick up Svelte components from the target package
+      "../ui/src/**/*.svelte"
+    ],
+  
+    // exclude any built output
+    "exclude": ["dist", "build"]
+  }
+  

@@ -1,0 +1,42 @@
+{
+  "name": "storybook",
+  "version": "1.0.0",
+  "description": "",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "storybook": "storybook dev -p 6006",
+    "build:dev": "storybook build",
+    "upgrade-storybook": "pnpx storybook@latest upgrade"
+  },
+  "devDependencies": {
+    "@chromatic-com/storybook": "^3",
+    "@storybook/addon-essentials": "^8.6.12",
+    "@storybook/addon-interactions": "^8.6.12",
+    "@storybook/addon-links": "^8.6.12",
+    "@storybook/addon-svelte-csf": "5.0.0-next.28",
+    "@storybook/addons": "^7.6.17",
+    "@storybook/cli": "^8.6.12",
+    "@storybook/manager-api": "^8.6.12",
+    "@storybook/preview-api": "^8.6.12",
+    "@storybook/svelte": "^8.6.12",
+    "@storybook/svelte-vite": "^8.6.12",
+    "@storybook/test": "^8.6.12",
+    "@storybook/theming": "^8.6.12",
+    "@sveltejs/vite-plugin-svelte": "5.0.3",
+    "@tsconfig/svelte": "5.0.4",
+    "storybook": "^8.6.12",
+    "svelte": "^5.28.2",
+    "svelte-check": "4.1.6",
+    "tslib": "2.8.1",
+    "typescript": "5.8.3",
+    "vite": "6.3.3"
+  },
+  "dependencies": {
+    "ui": "^0.2.4"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.8.0"
+}
