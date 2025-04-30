@@ -1,17 +1,17 @@
 <script module>
-  import { defineMeta } from '@storybook/addon-svelte-csf';
-  import WikiSidebar from './WikiSidebar.svelte';
+  import { defineMeta } from "@storybook/addon-svelte-csf";
+  import WikiSidebar from "./WikiSidebar.svelte";
   const { Story } = defineMeta({
-    title: 'WikiSidebar',
+    title: "WikiSidebar",
     component: WikiSidebar,
     argTypes: {
-      selectedPage: { control: 'text' },
-      onSelectPage: { action: 'selectPage' },
+      selectedPage: { control: "text" },
+      onSelectPage: { action: "selectPage" },
     },
     args: {
-      selectedPage: '1',
+      selectedPage: "1",
       onSelectPage: () => {},
-    }
+    },
   });
 </script>
 

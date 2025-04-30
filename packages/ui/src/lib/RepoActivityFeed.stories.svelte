@@ -1,30 +1,30 @@
 <script module>
-  import { defineMeta } from '@storybook/addon-svelte-csf';
-  import RepoActivityFeed from './RepoActivityFeed.svelte';
+  import { defineMeta } from "@storybook/addon-svelte-csf";
+  import RepoActivityFeed from "./RepoActivityFeed.svelte";
   const { Story } = defineMeta({
-    title: 'RepoActivityFeed',
+    title: "RepoActivityFeed",
     component: RepoActivityFeed,
     argTypes: {
-      activities: { control: 'object' },
+      activities: { control: "object" },
     },
     args: {
       activities: [
         {
-          id: 'a1',
-          type: 'commit',
-          title: 'Initial commit',
-          user: { name: 'Alice', avatar: 'https://i.pravatar.cc/40?u=alice' },
+          id: "a1",
+          type: "commit",
+          title: "Initial commit",
+          user: { name: "Alice", avatar: "https://i.pravatar.cc/40?u=alice" },
           timestamp: new Date().toISOString(),
         },
         {
-          id: 'a2',
-          type: 'star',
-          title: 'Starred by Bob',
-          user: { name: 'Bob', avatar: 'https://i.pravatar.cc/40?u=bob' },
+          id: "a2",
+          type: "star",
+          title: "Starred by Bob",
+          user: { name: "Bob", avatar: "https://i.pravatar.cc/40?u=bob" },
           timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
         },
       ],
-    }
+    },
   });
 </script>
 

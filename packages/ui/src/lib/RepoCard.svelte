@@ -19,8 +19,6 @@
     issueCount: number;
     lastUpdated: string;
   } = $props();
-
-
 </script>
 
 <div class="bg-card text-card-foreground rounded-lg border shadow-sm p-4">
@@ -36,23 +34,44 @@
         <span class="text-xs text-muted-foreground"><TimeAgo date={lastUpdated} /></span>
       </div>
       <a href={`/git/repo/${id}`} class="block">
-        <h3 class="text-base font-semibold mb-0.5 leading-tight hover:text-accent transition-colors">{name}</h3>
+        <h3
+          class="text-base font-semibold mb-0.5 leading-tight hover:text-accent transition-colors"
+        >
+          {name}
+        </h3>
       </a>
       <p class="text-xs text-muted-foreground mb-2">{description}</p>
       <div class="flex flex-wrap gap-2">
-        <Button href={`/git/repo/${id}/browse`} variant="outline" size="sm" class="h-8 px-3 py-0 text-xs font-medium rounded-md border bg-background hover:bg-muted transition">
+        <Button
+          href={`/git/repo/${id}/browse`}
+          variant="outline"
+          size="sm"
+          class="h-8 px-3 py-0 text-xs font-medium rounded-md border bg-background hover:bg-muted transition"
+        >
           <BookOpen class="h-4 w-4" /> Browse
         </Button>
-        <Button href={`/git/repo/${id}/issues`} variant="outline" size="sm" class="h-8 px-3 py-0 text-xs font-medium rounded-md border bg-background hover:bg-muted transition text-git-issue">
+        <Button
+          href={`/git/repo/${id}/issues`}
+          variant="outline"
+          size="sm"
+          class="h-8 px-3 py-0 text-xs font-medium rounded-md border bg-background hover:bg-muted transition text-git-issue"
+        >
           Issues ({issueCount})
         </Button>
       </div>
     </div>
     <div class="flex flex-col gap-2 items-end ml-2">
-      <Button variant="ghost" size="icon" class="h-8 w-8 p-0" onclick={() => console.log("Star button clicked")}
-        ><Star class="h-5 w-5" /></Button
+      <Button
+        variant="ghost"
+        size="icon"
+        class="h-8 w-8 p-0"
+        onclick={() => console.log("Star button clicked")}><Star class="h-5 w-5" /></Button
       >
-      <Button variant="ghost" size="icon" class="h-8 w-8 p-0" onclick={() => console.log("GitBranch button clicked")}
+      <Button
+        variant="ghost"
+        size="icon"
+        class="h-8 w-8 p-0"
+        onclick={() => console.log("GitBranch button clicked")}
         ><GitBranch class="h-5 w-5" /></Button
       >
     </div>
@@ -64,15 +83,25 @@
       <p>{description}</p>
     </div>
     <div class="flex flex-col items-end gap-1">
-      <button class="text-xs text-muted-foreground hover:text-accent underline-offset-2 hover:underline" onclick={() => console.log("View on Web button clicked")}>View on Web</button>
+      <button
+        class="text-xs text-muted-foreground hover:text-accent underline-offset-2 hover:underline"
+        onclick={() => console.log("View on Web button clicked")}>View on Web</button
+      >
       <div class="flex gap-4">
         <div class="flex flex-col items-start">
           <span class="text-xs font-medium">Recent Issues</span>
-          <button class="text-xs text-muted-foreground hover:text-accent underline-offset-2 hover:underline" onclick={() => console.log("View Wiki button clicked")}>View Wiki</button>
+          <button
+            class="text-xs text-muted-foreground hover:text-accent underline-offset-2 hover:underline"
+            onclick={() => console.log("View Wiki button clicked")}>View Wiki</button
+          >
         </div>
         <div class="flex flex-col items-end">
           <span class="text-xs font-medium">Recent Patches</span>
-          <button class="text-xs text-muted-foreground hover:text-green-400 underline-offset-2 hover:underline" onclick={() => console.log("Join Live Coding Session button clicked")}>Join Live Coding Session</button>
+          <button
+            class="text-xs text-muted-foreground hover:text-green-400 underline-offset-2 hover:underline"
+            onclick={() => console.log("Join Live Coding Session button clicked")}
+            >Join Live Coding Session</button
+          >
         </div>
       </div>
     </div>

@@ -40,8 +40,6 @@
   let isExpanded = $state(false);
   let isBookmarked = $state(false);
 
-
-
   function toggleBookmark() {
     isBookmarked = !isBookmarked;
     toast.push({
@@ -75,7 +73,9 @@
           aria-expanded={isExpanded}
           aria-controls="issue-thread"
         >
-          <h3 class="text-base font-semibold mb-0.5 leading-tight hover:text-accent transition-colors">
+          <h3
+            class="text-base font-semibold mb-0.5 leading-tight hover:text-accent transition-colors"
+          >
             {title}
           </h3>
         </button>
@@ -101,14 +101,20 @@
       </div>
       <p class="text-xs text-muted-foreground mb-2">{description}</p>
       {#if labels && labels.length}
-      <div class="inline-flex gap-1 mb-2">
-        {#each labels as label}
-          <span class="rounded bg-muted px-2 py-0.5 text-xs">{label}</span>
-        {/each}
-      </div>
+        <div class="inline-flex gap-1 mb-2">
+          {#each labels as label}
+            <span class="rounded bg-muted px-2 py-0.5 text-xs">{label}</span>
+          {/each}
+        </div>
       {/if}
       <div class="flex items-center gap-2">
-        <button type="button" aria-expanded={isExpanded} aria-controls="issue-thread" class="ml-auto" onclick={() => (isExpanded = !isExpanded)}>
+        <button
+          type="button"
+          aria-expanded={isExpanded}
+          aria-controls="issue-thread"
+          class="ml-auto"
+          onclick={() => (isExpanded = !isExpanded)}
+        >
           {#if isExpanded}
             <ChevronUp class="h-5 w-5 text-muted-foreground" />
           {:else}
@@ -117,7 +123,9 @@
         </button>
       </div>
     </div>
-    <Avatar class="h-8 w-8 rounded-full flex items-center justify-center font-medium bg-secondary text-secondary-foreground ml-3">
+    <Avatar
+      class="h-8 w-8 rounded-full flex items-center justify-center font-medium bg-secondary text-secondary-foreground ml-3"
+    >
       <AvatarImage src={author.avatar} alt={author.name} />
       <AvatarFallback>{author.name.slice(0, 2).toUpperCase()}</AvatarFallback>
     </Avatar>

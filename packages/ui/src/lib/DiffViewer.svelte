@@ -52,7 +52,10 @@
   }
 </script>
 
-<div class="border rounded-md p-4 overflow-x-auto font-mono text-sm bg-card" style="border-color: hsl(var(--border));">
+<div
+  class="border rounded-md p-4 overflow-x-auto font-mono text-sm bg-card"
+  style="border-color: hsl(var(--border));"
+>
   {#each lines as line, i}
     {@const ln = i + 1}
     {@const lineComments = commentsByLine[ln] ?? []}
@@ -68,7 +71,8 @@
       <div class={`${lineClass} flex group`}>
         {#if showLineNumbers}
           <span
-            class="inline-block w-10 select-none text-right pr-2 border-r" style="color: hsl(var(--muted-foreground)); border-color: hsl(var(--border));"
+            class="inline-block w-10 select-none text-right pr-2 border-r"
+            style="color: hsl(var(--muted-foreground)); border-color: hsl(var(--border));"
           >
             {ln}
           </span>
@@ -94,7 +98,7 @@
               <div class="flex-1">
                 <div class="flex items-center gap-2">
                   <span class="font-medium text-sm">{c.author.name}</span>
-                  <span class="text-xs " style="color: hsl(var(--muted-foreground));">
+                  <span class="text-xs" style="color: hsl(var(--muted-foreground));">
                     {formatDistanceToNow(new Date(c.createdAt), {
                       addSuffix: true,
                     })}

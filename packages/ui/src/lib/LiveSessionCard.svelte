@@ -24,8 +24,6 @@
     startedAt: string;
     isActive: boolean;
   } = $props();
-
-
 </script>
 
 <div class="bg-card text-card-foreground rounded-lg border shadow-sm p-4">
@@ -33,12 +31,16 @@
     <div class="relative">
       <PlayCircle class="h-5 w-5 {isActive ? 'text-green-500' : 'text-muted-foreground'}" />
       {#if isActive}
-        <span class="absolute -top-1 -right-1 h-3 w-3 bg-green-500 rounded-full animate-pulse border border-background"></span>
+        <span
+          class="absolute -top-1 -right-1 h-3 w-3 bg-green-500 rounded-full animate-pulse border border-background"
+        ></span>
       {/if}
     </div>
     <div class="flex-1">
       <Link to={`/git/repo/${repoId}/live/${id}`}>
-        <h3 class="text-base font-semibold mb-0.5 leading-tight hover:text-accent transition-colors">
+        <h3
+          class="text-base font-semibold mb-0.5 leading-tight hover:text-accent transition-colors"
+        >
           {title}
         </h3>
       </Link>
@@ -54,7 +56,12 @@
       </div>
       <div class="flex items-center justify-between mt-3">
         <Link to={`/git/repo/${repoId}/live/${id}`}>
-          <Button size="sm" class="h-8 px-3 py-0 text-xs font-medium rounded-md border bg-background hover:bg-muted transition {isActive ? 'bg-git hover:bg-git-hover' : ''}">
+          <Button
+            size="sm"
+            class="h-8 px-3 py-0 text-xs font-medium rounded-md border bg-background hover:bg-muted transition {isActive
+              ? 'bg-git hover:bg-git-hover'
+              : ''}"
+          >
             {isActive ? "Join session" : "View recording"}
           </Button>
         </Link>

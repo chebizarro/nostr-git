@@ -1,15 +1,15 @@
 <script module>
-  import { defineMeta } from '@storybook/addon-svelte-csf';
-  import ConfigProvider from './ConfigProvider.svelte';
+  import { defineMeta } from "@storybook/addon-svelte-csf";
+  import ConfigProvider from "./ConfigProvider.svelte";
   const { Story } = defineMeta({
-    title: 'ConfigProvider',
+    title: "ConfigProvider",
     component: ConfigProvider,
     argTypes: {
-      config: { control: 'object', defaultValue: { theme: 'light', language: 'en' } },
+      config: { control: "object", defaultValue: { theme: "light", language: "en" } },
     },
     args: {
-      config: { theme: 'light', language: 'en' },
-    }
+      config: { theme: "light", language: "en" },
+    },
   });
 </script>
 
@@ -20,5 +20,5 @@
 </Story>
 
 <Story name="Dark Theme">
-  <ConfigProvider config={{ theme: 'dark', language: 'en' }} />
+  <ConfigProvider config={{ theme: "dark", language: "en" }} />
 </Story>

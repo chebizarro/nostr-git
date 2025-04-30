@@ -1,25 +1,28 @@
 <script module>
-  import { defineMeta } from '@storybook/addon-svelte-csf';
-  import RepoHeader from './RepoHeader.svelte';
+  import { defineMeta } from "@storybook/addon-svelte-csf";
+  import RepoHeader from "./RepoHeader.svelte";
   const { Story } = defineMeta({
-    title: 'RepoHeader',
+    title: "RepoHeader",
     component: RepoHeader,
     argTypes: {
-      name: { control: 'text' },
-      owner: { control: 'object', defaultValue: { name: 'Alice', avatar: 'https://i.pravatar.cc/40?u=alice' } },
-      description: { control: 'text' },
-      stars: { control: 'number' },
-      forks: { control: 'number' },
-      lastUpdated: { control: 'date' },
+      name: { control: "text" },
+      owner: {
+        control: "object",
+        defaultValue: { name: "Alice", avatar: "https://i.pravatar.cc/40?u=alice" },
+      },
+      description: { control: "text" },
+      stars: { control: "number" },
+      forks: { control: "number" },
+      lastUpdated: { control: "date" },
     },
     args: {
-      name: 'nostr-git',
-      owner: { name: 'Alice', avatar: 'https://i.pravatar.cc/40?u=alice' },
-      description: 'A decentralized git collaboration platform.',
+      name: "nostr-git",
+      owner: { name: "Alice", avatar: "https://i.pravatar.cc/40?u=alice" },
+      description: "A decentralized git collaboration platform.",
       stars: 100,
       forks: 20,
       lastUpdated: new Date().toISOString(),
-    }
+    },
   });
 </script>
 
@@ -32,7 +35,7 @@
 <Story name="Minimal Repo">
   <RepoHeader
     name="tiny-repo"
-    owner={{ name: 'Bob', avatar: 'https://i.pravatar.cc/40?u=bob' }}
+    owner={{ name: "Bob", avatar: "https://i.pravatar.cc/40?u=bob" }}
     description="A minimal repo."
     stars={1}
     forks={0}

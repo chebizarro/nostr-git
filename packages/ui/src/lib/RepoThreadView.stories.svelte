@@ -1,19 +1,19 @@
 <script module>
-  import { defineMeta } from '@storybook/addon-svelte-csf';
-  import RepoThreadView from './RepoThreadView.svelte';
+  import { defineMeta } from "@storybook/addon-svelte-csf";
+  import RepoThreadView from "./RepoThreadView.svelte";
   const { Story } = defineMeta({
-    title: 'RepoThreadView',
+    title: "RepoThreadView",
     component: RepoThreadView,
     argTypes: {
-      threadId: { control: 'text' },
-      repoId: { control: 'text' },
-      type: { control: { type: 'select' }, options: ['issue', 'patch', 'discussion'] },
+      threadId: { control: "text" },
+      repoId: { control: "text" },
+      type: { control: { type: "select" }, options: ["issue", "patch", "discussion"] },
     },
     args: {
-      threadId: 't1',
-      repoId: 'repo-1',
-      type: 'issue',
-    }
+      threadId: "t1",
+      repoId: "repo-1",
+      type: "issue",
+    },
   });
 </script>
 

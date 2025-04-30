@@ -48,8 +48,6 @@
       })[status]
   );
 
-
-
   function toggleBookmark() {
     isBookmarked = !isBookmarked;
     toast.push({
@@ -70,14 +68,16 @@
     <div class="flex-1">
       <div class="flex items-center justify-between mb-1">
         <a href={`/git/repo/${repoId}/patches/${id}`} class="block">
-          <h3 class="text-base font-semibold mb-0.5 leading-tight hover:text-accent transition-colors">
+          <h3
+            class="text-base font-semibold mb-0.5 leading-tight hover:text-accent transition-colors"
+          >
             {title}
           </h3>
         </a>
         <Button
           variant="ghost"
           size="icon"
-          class={isBookmarked ? 'text-primary' : 'text-muted-foreground'}
+          class={isBookmarked ? "text-primary" : "text-muted-foreground"}
           onclick={toggleBookmark}
         >
           {#if isBookmarked}
@@ -96,13 +96,28 @@
       </div>
       <p class="text-xs text-muted-foreground mb-2">{description}</p>
       <div class="flex items-center gap-2">
-        <Button size="sm" class="h-8 px-3 py-0 text-xs font-medium rounded-md border bg-background hover:bg-muted transition" onclick={viewDiff}>
+        <Button
+          size="sm"
+          class="h-8 px-3 py-0 text-xs font-medium rounded-md border bg-background hover:bg-muted transition"
+          onclick={viewDiff}
+        >
           View Diff
         </Button>
-        <Button size="sm" class="h-8 px-3 py-0 text-xs font-medium rounded-md border bg-background hover:bg-muted transition" onclick={toggleBookmark}>
-          {isBookmarked ? 'Bookmarked' : 'Bookmark'}
+        <Button
+          size="sm"
+          class="h-8 px-3 py-0 text-xs font-medium rounded-md border bg-background hover:bg-muted transition"
+          onclick={toggleBookmark}
+        >
+          {isBookmarked ? "Bookmarked" : "Bookmark"}
         </Button>
-        <button type="button" aria-expanded={isExpanded} aria-controls="patch-description" class="ml-auto" style="border-color: hsl(var(--border))" onclick={() => (isExpanded = !isExpanded)}>
+        <button
+          type="button"
+          aria-expanded={isExpanded}
+          aria-controls="patch-description"
+          class="ml-auto"
+          style="border-color: hsl(var(--border))"
+          onclick={() => (isExpanded = !isExpanded)}
+        >
           {#if isExpanded}
             <ChevronUp class="h-5 w-5 text-muted-foreground" />
           {:else}
@@ -110,28 +125,30 @@
           {/if}
         </button>
       </div>
-      </div>
-
-      <p
-        id="patch-description"
-        class={`text-sm mt-3 ${!isExpanded ? 'line-clamp-2' : ''}`}
-        style="color: hsl(var(--muted-foreground));"
-      >
-        {description}
-      </p>
-
-      <div class="mt-4 flex items-center justify-between">
-        <Button variant="outline" size="sm" onclick={viewDiff}>View diff</Button>
-
-        <div class="flex items-center gap-1">
-          <MessageSquare class="h-4 w-4 " style="color: hsl(var(--muted-foreground));" />
-          <span class="text-sm " style="color: hsl(var(--muted-foreground));">{commentCount}</span>
-        </div>
-      </div>
     </div>
 
-    <Avatar class="h-8 w-8 rounded-full flex items-center justify-center font-medium bg-secondary text-secondary-foreground">
-      <AvatarImage src={author.avatar} alt={author.name} />
-      <AvatarFallback>{author.name.slice(0, 2).toUpperCase()}</AvatarFallback>
-    </Avatar>
+    <p
+      id="patch-description"
+      class={`text-sm mt-3 ${!isExpanded ? "line-clamp-2" : ""}`}
+      style="color: hsl(var(--muted-foreground));"
+    >
+      {description}
+    </p>
+
+    <div class="mt-4 flex items-center justify-between">
+      <Button variant="outline" size="sm" onclick={viewDiff}>View diff</Button>
+
+      <div class="flex items-center gap-1">
+        <MessageSquare class="h-4 w-4 " style="color: hsl(var(--muted-foreground));" />
+        <span class="text-sm" style="color: hsl(var(--muted-foreground));">{commentCount}</span>
+      </div>
+    </div>
+  </div>
+
+  <Avatar
+    class="h-8 w-8 rounded-full flex items-center justify-center font-medium bg-secondary text-secondary-foreground"
+  >
+    <AvatarImage src={author.avatar} alt={author.name} />
+    <AvatarFallback>{author.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+  </Avatar>
 </Card>

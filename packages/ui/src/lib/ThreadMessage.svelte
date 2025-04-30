@@ -7,8 +7,6 @@
   const content: string = props.content;
   const author: { name: string; avatar: string } = props.author;
   const createdAt: string = props.createdAt;
-
-
 </script>
 
 <div class="flex gap-3 group py-2">

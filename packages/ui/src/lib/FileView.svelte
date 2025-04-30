@@ -59,7 +59,7 @@
   }
 </script>
 
-<div class="border " style="border-color: hsl(var(--border)); rounded-lg mb-2">
+<div class="border" style="border-color: hsl(var(--border)); rounded-lg mb-2">
   <button
     type="button"
     class="flex items-center justify-between p-2 hover:bg-secondary/30 cursor-pointer w-full text-left"
@@ -86,7 +86,7 @@
   </button>
 
   {#if isExpanded && type === "file" && content}
-    <div class="p-4 border-t " style="border-color: hsl(var(--border));">
+    <div class="p-4 border-t" style="border-color: hsl(var(--border));">
       <pre class="bg-secondary/30 p-4 rounded-lg overflow-x-auto">
         <code>{content}</code>
       </pre>

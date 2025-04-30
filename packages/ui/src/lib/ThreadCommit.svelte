@@ -15,8 +15,6 @@
     createdAt: string;
     metadata: { hash: string };
   } = $props();
-
-
 </script>
 
 <div class="flex gap-3 group py-2">

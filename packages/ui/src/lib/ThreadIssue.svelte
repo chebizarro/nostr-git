@@ -16,8 +16,6 @@
     commentCount: number;
     status: "open" | "closed" | "resolved";
   } = props.metadata;
-
-
 </script>
 
 <div class="flex gap-3 group py-2">
