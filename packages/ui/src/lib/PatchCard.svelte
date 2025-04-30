@@ -6,7 +6,7 @@
     ChevronDown,
     ChevronUp,
   } from "@lucide/svelte";
-  import { formatDistanceToNow } from "date-fns";
+  import TimeAgo from "./TimeAgo.svelte";
   import { navigate } from "svelte-routing";
   import { useRegistry } from "./useRegistry";
   const { Avatar, AvatarFallback, AvatarImage, Button, Card } = useRegistry();
@@ -48,7 +48,7 @@
       })[status]
   );
 
-  const timeAgo = $derived(() => formatDistanceToNow(new Date(createdAt), { addSuffix: true }));
+
 
   function toggleBookmark() {
     isBookmarked = !isBookmarked;
@@ -66,7 +66,7 @@
 
 <Card class="git-card hover:bg-accent/50 transition-colors">
   <div class="flex items-start gap-3 p-4">
-    {@html statusIcon}
+    {@html statusIcon()}
 
     <div class="flex-1">
       <div class="flex items-center justify-between">
@@ -113,7 +113,7 @@
           >{commitCount} commit{commitCount !== 1 ? "s" : ""} to
           <code class="bg-secondary/50 px-1 rounded ml-1">{baseBranch}</code>
         </span><span>•</span>
-        <span>{timeAgo} by {author.name}</span>
+        <span><TimeAgo date={createdAt} /> by {author.name}</span>
       </div>
 
       <p

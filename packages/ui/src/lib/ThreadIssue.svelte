@@ -1,7 +1,7 @@
 <script lang="ts">
   import { useRegistry } from "./useRegistry";
   const { Avatar, AvatarFallback, AvatarImage } = useRegistry();
-  import { formatDistanceToNow } from "date-fns";
+  import TimeAgo from "./TimeAgo.svelte";
   import IssueCard from "$lib/IssueCard.svelte";
 
   const props = $props();
@@ -17,7 +17,7 @@
     status: "open" | "closed" | "resolved";
   } = props.metadata;
 
-  const timeAgo = $derived(() => formatDistanceToNow(new Date(createdAt), { addSuffix: true }));
+
 </script>
 
 <div class="flex gap-3 group py-2">
@@ -28,7 +28,7 @@
   <div class="flex-1">
     <div class="flex items-center gap-2">
       <span class="font-semibold text-sm">{author.name}</span>
-      <span class="text-xs text-muted-foreground">{timeAgo}</span>
+      <span class="text-xs text-muted-foreground"><TimeAgo date={createdAt} /></span>
     </div>
     <div class="mt-1">
       <IssueCard

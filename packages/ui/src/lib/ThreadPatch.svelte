@@ -1,7 +1,7 @@
 <script lang="ts">
   import { useRegistry } from "./useRegistry";
   const { Avatar, AvatarFallback, AvatarImage } = useRegistry();
-  import { formatDistanceToNow } from "date-fns";
+  import TimeAgo from "./TimeAgo.svelte";
   import PatchCard from "$lib/PatchCard.svelte";
 
   const {
@@ -24,7 +24,7 @@
     };
   } = $props();
 
-  const timeAgo = $derived(() => formatDistanceToNow(new Date(createdAt), { addSuffix: true }));
+
 </script>
 
 <div class="flex gap-3 group py-2">
@@ -35,7 +35,7 @@
   <div class="flex-1">
     <div class="flex items-center gap-2">
       <span class="font-semibold text-sm">{author.name}</span>
-      <span class="text-xs text-muted-foreground">{timeAgo}</span>
+      <span class="text-xs text-muted-foreground"><TimeAgo date={createdAt} /></span>
     </div>
     <div class="mt-1">
       <PatchCard

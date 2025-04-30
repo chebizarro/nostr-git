@@ -1,4 +1,4 @@
-import '../../ui/src/App.css';
+import '../../ui/src/app.css';
 import { Router } from 'svelte-routing';
 import type { Preview } from '@storybook/svelte'
 

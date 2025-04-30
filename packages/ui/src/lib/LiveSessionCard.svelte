@@ -1,6 +1,6 @@
 <script lang="ts">
   import { PlayCircle, Users } from "@lucide/svelte";
-  import { formatDistanceToNow } from "date-fns";
+  import TimeAgo from "./TimeAgo.svelte";
   import { Link } from "svelte-routing";
   import { useRegistry } from "./useRegistry";
   const { Avatar, AvatarFallback, AvatarImage, Button } = useRegistry();
@@ -25,7 +25,7 @@
     isActive: boolean;
   } = $props();
 
-  const timeAgo = $derived(() => formatDistanceToNow(new Date(startedAt), { addSuffix: true }));
+
 </script>
 
 <div
@@ -52,7 +52,7 @@
       <div class="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground">
         <span class="git-tag bg-git px-2 py-0.5 rounded-full">{language}</span>
         <span>•</span>
-        <span>Started {timeAgo} by {host.name}</span>
+        <span>Started <TimeAgo date={startedAt} /> by {host.name}</span>
         <span>•</span>
         <div class="flex items-center gap-1">
           <Users class="h-3 w-3" />

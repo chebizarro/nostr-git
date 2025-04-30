@@ -1,5 +1,4 @@
 import * as path from 'path';
-import { dirname, join } from 'path';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 const { resolve } = path;
 
@@ -19,7 +18,8 @@ export default {
 
   addons: [
     "@storybook/addon-essentials",
-    "@storybook/addon-svelte-csf"
+    "@storybook/addon-svelte-csf",
+    '@storybook/addon-postcss',
   ],
 
   viteFinal: async (config: any) => {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatDistanceToNow } from "date-fns";
+  import TimeAgo from "./TimeAgo.svelte";
   import {
     CircleAlert,
     MessageSquare,
@@ -40,7 +40,7 @@
   let isExpanded = $state(false);
   let isBookmarked = $state(false);
 
-  const timeAgo = $derived(() => formatDistanceToNow(new Date(createdAt), { addSuffix: true }));
+
 
   function toggleBookmark() {
     isBookmarked = !isBookmarked;
@@ -111,7 +111,7 @@
 
       <div class="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground">
         <span>#{id}</span><span>•</span><span>{status}</span><span>•</span>
-        <span>{timeAgo} by {author.name}</span>
+        <span><TimeAgo date={createdAt} /> by {author.name}</span>
       </div>
 
       <p class="text-sm text-muted-foreground mt-3 line-clamp-2">

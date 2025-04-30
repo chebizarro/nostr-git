@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatDistanceToNow } from "date-fns";
+  import TimeAgo from "./TimeAgo.svelte";
   import { GitBranch, Star, BookOpen, Circle } from "@lucide/svelte";
   import { useRegistry } from "./useRegistry";
   const { Avatar, Button, AvatarImage, AvatarFallback } = useRegistry();
@@ -20,7 +20,7 @@
     lastUpdated: string;
   } = $props();
 
-  const timeAgo = $derived(() => formatDistanceToNow(new Date(lastUpdated), { addSuffix: true }));
+
 </script>
 
 <div class="git-card">
@@ -34,7 +34,7 @@
       <div class="flex items-center gap-2">
         <Circle class="h-4 w-4 text-amber-500" />
         <span class="text-muted-foreground">{owner.name}</span>
-        <span class="text-muted-foreground text-xs">{timeAgo}</span>
+        <span class="text-muted-foreground text-xs"><TimeAgo date={lastUpdated} /></span>
       </div>
 
       <a href={`/git/repo/${id}`} class="inline-block">

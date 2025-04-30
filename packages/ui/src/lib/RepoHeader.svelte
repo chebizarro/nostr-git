@@ -3,9 +3,6 @@
    * RepoHeader – Git repository top bar
    * ------------------------------------------------------------------------------------------------*/
 
-  // SvelteKit helpers --------------------------------------------------------
-  // Removed SvelteKit-specific import of 'page' from '$app/stores'.
-  import { derived } from "svelte/store";
 
   // Your UI primitives -------------------------------------------------------
   import { Button, Tabs, TabsList, TabsTrigger } from "$lib/components";

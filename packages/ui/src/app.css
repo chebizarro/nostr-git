@@ -1,134 +1,70 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
-
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-
-    --destructive: 0 72.2% 50.6%;
-    --destructive-foreground: 0 0% 98%;
-
-    --ring: 240 10% 3.9%;
-
-    --radius: 0.5rem;
-  }
-
-  .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-
-    --ring: 240 4.9% 83.9%;
-  }
+/* === Tailwind v4 + Design Tokens (from flotilla-code-hub) === */
+@theme {
+  --background: 220 20% 14%;
+  --foreground: 220 10% 97%;
+  --card: 220 22% 18%;
+  --card-foreground: 220 10% 97%;
+  --popover: 220 22% 18%;
+  --popover-foreground: 220 10% 97%;
+  --primary: 265 84% 70%;
+  --primary-foreground: 240 10% 97%;
+  --secondary: 240 5% 25%;
+  --secondary-foreground: 210 10% 97%;
+  --muted: 240 5% 25%;
+  --muted-foreground: 240 5% 65%;
+  --accent: 265 84% 70%;
+  --accent-foreground: 210 10% 97%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 10% 97%;
+  --border: 240 5% 26%;
+  --input: 240 5% 25%;
+  --ring: 265 84% 70%;
+  --radius: 0.5rem;
+  --sidebar-background: 220 25% 12%;
+  --sidebar-foreground: 220 10% 90%;
+  --sidebar-primary: 265 84% 70%;
+  --sidebar-primary-foreground: 240 10% 97%;
+  --sidebar-accent: 240 15% 20%;
+  --sidebar-accent-foreground: 220 10% 90%;
+  --sidebar-border: 240 15% 22%;
+  --sidebar-ring: 265 84% 70%;
 }
 
 @layer base {
-  :root {
-    --background: 220 20% 14%;
-    --foreground: 220 10% 97%;
-
-    --card: 220 22% 18%;
-    --card-foreground: 220 10% 97%;
-
-    --popover: 220 22% 18%;
-    --popover-foreground: 220 10% 97%;
-
-    --primary: 265 84% 70%;
-    --primary-foreground: 240 10% 97%;
-
-    --secondary: 240 5% 25%;
-    --secondary-foreground: 210 10% 97%;
-
-    --muted: 240 5% 25%;
-    --muted-foreground: 240 5% 65%;
-
-    --accent: 265 84% 70%;
-    --accent-foreground: 210 10% 97%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 10% 97%;
-
-    --border: 240 5% 26%;
-    --input: 240 5% 25%;
-    --ring: 265 84% 70%;
-
-    --radius: 0.5rem;
-
-    --sidebar-background: 220 25% 12%;
-    --sidebar-foreground: 220 10% 90%;
-    --sidebar-primary: 265 84% 70%;
-    --sidebar-primary-foreground: 240 10% 97%;
-    --sidebar-accent: 240 15% 20%;
-    --sidebar-accent-foreground: 220 10% 90%;
-    --sidebar-border: 240 15% 22%;
-    --sidebar-ring: 265 84% 70%;
-  }
   * {
-    @apply border-border;
+    border-color: hsl(var(--border));
   }
   body {
-    @apply bg-background text-foreground;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
   }
 }
 
 @layer components {
   .git-menu-item {
-    @apply flex items-center gap-2 py-3 px-4 rounded-md text-muted-foreground hover:bg-accent/10 hover:text-foreground transition-colors font-medium;
+    @apply flex items-center gap-2 py-3 px-4 rounded-md transition-colors font-medium;
+    color: hsl(var(--muted-foreground));
+  }
+  .git-menu-item:hover {
+    background-color: hsl(var(--accent), 0.1);
+    color: hsl(var(--foreground));
   }
   .git-menu-item.active {
-    @apply bg-accent/20 text-accent;
+    background-color: hsl(var(--accent) / 0.2);
+    color: hsl(var(--accent));
   }
   .git-avatar {
-    @apply rounded-full bg-secondary flex items-center justify-center text-secondary-foreground font-medium;
+    @apply rounded-full flex items-center justify-center font-medium;
+    background-color: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
   }
   .git-card {
-    @apply bg-card border border-border rounded-md p-5 hover:border-accent/50 transition-colors;
+    @apply border rounded-md p-5 transition-colors;
+    border-color: hsl(var(--border));
+    background-color: hsl(var(--card));
+    color: hsl(var(--card-foreground));
   }
   .git-tag {
     @apply rounded-full px-2.5 py-0.5 text-xs font-medium;
@@ -137,16 +73,36 @@
     @apply px-4 py-2 rounded-md font-medium transition-colors flex items-center gap-2;
   }
   .git-btn-primary {
-    @apply bg-git hover:bg-git-hover text-primary-foreground;
+    /* TODO: Define --git and --git-hover in your theme if needed */
+    background-color: hsl(var(--git, var(--primary)));
+    color: hsl(var(--primary-foreground));
+    transition: background 0.2s;
+  }
+  .git-btn-primary:hover {
+    background-color: hsl(var(--git-hover, var(--primary)));
+
   }
   .git-btn-secondary {
-    @apply bg-secondary hover:bg-secondary/80 text-secondary-foreground;
+    background-color: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+    transition: background 0.2s;
+  }
+  .git-btn-secondary:hover {
+    background-color: hsl(var(--secondary));
+    opacity: 0.8;
   }
   .git-btn-outline {
-    @apply border border-border hover:border-accent/50 bg-transparent;
+    @apply border bg-transparent;
+    border-color: hsl(var(--border));
+    transition: border-color 0.2s;
+  }
+  .git-btn-outline:hover {
+    border-color: hsl(var(--accent) / 0.5);
   }
   .git-diff-view {
-    @apply font-mono text-sm bg-card border border-border rounded-md p-4 overflow-x-auto;
+    @apply font-mono text-sm border rounded-md p-4 overflow-x-auto;
+    background-color: hsl(var(--card));
+    border-color: hsl(var(--border));
   }
   .git-diff-line-add {
     @apply bg-green-950/30 border-l-4 border-green-500 pl-2;
@@ -155,6 +111,212 @@
     @apply bg-red-950/30 border-l-4 border-red-500 pl-2;
   }
   .git-separator {
-    @apply border-t border-border my-4;
+    @apply border-t my-4;
+    border-color: hsl(var(--border));
   }
+}
+
+/* === Base Styles === */
+body {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+*, ::before, ::after {
+  border-color: hsl(var(--border));
+}
+
+/* === Dark Mode === */
+.dark {
+  --background: 240 10% 3.9%;
+  --foreground: 0 0% 98%;
+  --muted: 240 3.7% 15.9%;
+  --muted-foreground: 240 5% 64.9%;
+  --popover: 240 10% 3.9%;
+  --popover-foreground: 0 0% 98%;
+  --card: 240 10% 3.9%;
+  --card-foreground: 0 0% 98%;
+  --border: 240 3.7% 15.9%;
+  --input: 240 3.7% 15.9%;
+  --primary: 0 0% 98%;
+  --primary-foreground: 240 5.9% 10%;
+  --secondary: 240 3.7% 15.9%;
+  --secondary-foreground: 0 0% 98%;
+  --accent: 240 3.7% 15.9%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 0% 98%;
+  --ring: 240 4.9% 83.9%;
+}
+
+/* === Dark Mode === */
+.dark {
+  --background: 220 20% 14%;
+  --foreground: 220 10% 97%;
+  --card: 220 22% 18%;
+  --card-foreground: 220 10% 97%;
+  --popover: 220 22% 18%;
+  --popover-foreground: 220 10% 97%;
+  --primary: 265 84% 70%;
+  --primary-foreground: 240 10% 97%;
+  --secondary: 240 5% 25%;
+  --secondary-foreground: 210 10% 97%;
+  --muted: 240 5% 25%;
+  --muted-foreground: 240 5% 65%;
+  --accent: 265 84% 70%;
+  --accent-foreground: 210 10% 97%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 10% 97%;
+  --border: 240 5% 26%;
+  --input: 240 5% 25%;
+  --ring: 265 84% 70%;
+  --radius: 0.5rem;
+  --sidebar-background: 220 25% 12%;
+  --sidebar-foreground: 220 10% 90%;
+  --sidebar-primary: 265 84% 70%;
+  --sidebar-primary-foreground: 240 10% 97%;
+  --sidebar-accent: 240 15% 20%;
+  --sidebar-accent-foreground: 220 10% 90%;
+  --sidebar-border: 240 15% 22%;
+  --sidebar-ring: 265 84% 70%;
+}
+
+/* === Custom Utilities & Components === */
+
+@utility git-menu-item {
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform;
+  transition-duration: 150ms;
+}
+
+@utility git-avatar {
+  border-radius: 9999px;
+  width: 2rem;
+  height: 2rem;
+  object-fit: cover;
+}
+
+@utility git-card {
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  border-radius: var(--radius);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  border: 1px solid hsl(var(--border));
+  padding: 1rem;
+}
+
+@utility git-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  font-weight: 500;
+  transition-property: background-color, color, border-color;
+  transition-duration: 150ms;
+  padding: 0.5rem 1rem;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+/* Continue converting other custom classes as needed */
+
+@utility git-menu-item-active {
+  background: hsl(var(--accent) / 0.2);
+  color: hsl(var(--accent));
+}
+
+@utility git-avatar-utility {
+  border-radius: 9999px;
+  background: hsl(var(--secondary));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: hsl(var(--secondary-foreground));
+  font-weight: 500;
+}
+
+@utility git-card-utility {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  color: hsl(var(--card-foreground));
+  transition: border-color 150ms;
+}
+.git-card-utility:hover {
+  border-color: hsl(var(--accent) / 0.5);
+}
+
+@utility git-tag {
+  border-radius: 9999px;
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+@utility git-btn-utility {
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: color 150ms, background-color 150ms;
+}
+
+@utility git-btn-primary {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.git-btn-primary:hover {
+  background: hsl(var(--primary) / 0.8);
+}
+
+@utility git-btn-secondary {
+  background: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+}
+.git-btn-secondary:hover {
+  background: hsl(var(--secondary) / 0.8);
+}
+
+@utility git-btn-outline {
+  border: 1px solid hsl(var(--border));
+  background: transparent;
+}
+.git-btn-outline:hover {
+  border-color: hsl(var(--accent) / 0.5);
+}
+
+@utility git-diff-view {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.875rem;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+@utility git-diff-line-add {
+  background: color-mix(in srgb, #166534 30%, transparent);
+  border-left: 4px solid #22c55e;
+  padding-left: 0.5rem;
+}
+
+@utility git-diff-line-remove {
+  background: color-mix(in srgb, #881337 30%, transparent);
+  border-left: 4px solid #ef4444;
+  padding-left: 0.5rem;
+}
+
+@utility git-separator {
+  border-top: 1px solid hsl(var(--border));
+  margin-top: 1rem;
+  margin-bottom: 1rem;
 }
