@@ -52,7 +52,7 @@
   }
 </script>
 
-<div class="git-diff-view border border-border rounded-md overflow-hidden">
+<div class="border rounded-md p-4 overflow-x-auto font-mono text-sm bg-card" style="border-color: hsl(var(--border));">
   {#each lines as line, i}
     {@const ln = i + 1}
     {@const lineComments = commentsByLine[ln] ?? []}
@@ -60,15 +60,15 @@
     {@const lineClass =
       "py-1 pl-2" +
       (line.startsWith("+")
-        ? " git-diff-line-add bg-green-500/10"
+        ? " bg-green-950/30 border-l-4 border-green-500 pl-2"
         : line.startsWith("-")
-          ? " git-diff-line-remove bg-red-500/10"
+          ? " bg-red-950/30 border-l-4 border-red-500 pl-2"
           : " hover:bg-secondary/50")}
     <div>
       <div class={`${lineClass} flex group`}>
         {#if showLineNumbers}
           <span
-            class="inline-block w-10 text-muted-foreground select-none text-right pr-2 border-r border-border"
+            class="inline-block w-10 select-none text-right pr-2 border-r" style="color: hsl(var(--muted-foreground)); border-color: hsl(var(--border));"
           >
             {ln}
           </span>
@@ -94,7 +94,7 @@
               <div class="flex-1">
                 <div class="flex items-center gap-2">
                   <span class="font-medium text-sm">{c.author.name}</span>
-                  <span class="text-xs text-muted-foreground">
+                  <span class="text-xs " style="color: hsl(var(--muted-foreground));">
                     {formatDistanceToNow(new Date(c.createdAt), {
                       addSuffix: true,
                     })}

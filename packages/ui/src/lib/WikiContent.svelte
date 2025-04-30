@@ -20,7 +20,7 @@
     <div class="flex flex-col items-center justify-center py-12">
       <div class="text-6xl mb-4">📝</div>
       <h2 class="text-xl font-semibold mb-2">Page not found</h2>
-      <p class="text-muted-foreground mb-6">
+      <p class="" style="color: hsl(var(--muted-foreground)); mb-6">
         The wiki page "{pageName}" does not exist yet.
       </p>
       <Button variant="default" class="flex items-center gap-2">

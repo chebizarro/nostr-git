@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
-  "svelte": "dist/index.js",
+  "svelte": "./dist/index.js",
   "exports": {
     ".": {
       "svelte": "./dist/index.js",
@@ -20,29 +20,32 @@
     "format": "prettier --write .",
     "build": "svelte-package"
   },
+  "peerDependencies": {
+    "svelte": "^5.28.2"
+  },
   "devDependencies": {
-    "prettier": "^3.2.5",
-    "prettier-plugin-svelte": "^3.0.0",
     "@sveltejs/package": "^2.3.11",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tailwindcss/postcss": "^4.1.4",
     "@tailwindcss/typography": "^0.5.16",
+    "@tailwindcss/vite": "^4.1.4",
     "autoprefixer": "^10.4.21",
     "bits-ui": "^1.3.19",
     "clsx": "^2.1.1",
     "postcss": "^8.5.3",
-    "svelte": "^5.28.2",
+    "prettier": "^3.2.5",
+    "prettier-plugin-svelte": "^3.0.0",
     "svelte-check": "^4.1.6",
     "svelte-routing": "^2.13.0",
     "tailwind-merge": "^3.2.0",
     "tailwind-variants": "^1.0.0",
     "tailwindcss": "^4.1.4",
     "tailwindcss-animate": "^1.0.7",
+    "tw-animate-css": "^1.2.8",
     "vite": "^6.3.3"
   },
   "dependencies": {
     "@lucide/svelte": "^0.503.0",
-    "@tailwindcss/vite": "^4.1.4",
     "date-fns": "^4.1.0"
   }
 }

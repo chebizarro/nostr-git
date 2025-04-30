@@ -59,7 +59,7 @@
   }
 </script>
 
-<div class="border border-border rounded-lg mb-2">
+<div class="border " style="border-color: hsl(var(--border)); rounded-lg mb-2">
   <button
     type="button"
     class="flex items-center justify-between p-2 hover:bg-secondary/30 cursor-pointer w-full text-left"
@@ -67,7 +67,7 @@
     aria-expanded={type === "file" ? isExpanded : undefined}
   >
     <div class="flex items-center">
-      <FileCode class="h-4 w-4 mr-2 text-muted-foreground" />
+      <FileCode class="h-4 w-4 mr-2 " style="color: hsl(var(--muted-foreground));" />
       <span>{name}</span>
     </div>
     {#if type === "file"}
@@ -86,7 +86,7 @@
   </button>
 
   {#if isExpanded && type === "file" && content}
-    <div class="p-4 border-t border-border">
+    <div class="p-4 border-t " style="border-color: hsl(var(--border));">
       <pre class="bg-secondary/30 p-4 rounded-lg overflow-x-auto">
         <code>{content}</code>
       </pre>

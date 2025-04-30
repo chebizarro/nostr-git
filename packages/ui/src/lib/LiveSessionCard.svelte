@@ -28,29 +28,22 @@
 
 </script>
 
-<div
-  class="git-card border border-border rounded-lg bg-card p-4 hover:border-primary/50 transition-all"
->
+<div class="bg-card text-card-foreground rounded-lg border shadow-sm p-4">
   <div class="flex items-start gap-3">
     <div class="relative">
-      <PlayCircle class="h-6 w-6 {isActive ? 'text-green-500' : 'text-muted-foreground'}" />
+      <PlayCircle class="h-5 w-5 {isActive ? 'text-green-500' : 'text-muted-foreground'}" />
       {#if isActive}
-        <span
-          class="absolute -top-1 -right-1 h-3 w-3 bg-green-500 rounded-full animate-pulse border border-background"
-        ></span>
+        <span class="absolute -top-1 -right-1 h-3 w-3 bg-green-500 rounded-full animate-pulse border border-background"></span>
       {/if}
     </div>
-
-    <!-- details -->
     <div class="flex-1">
       <Link to={`/git/repo/${repoId}/live/${id}`}>
-        <h3 class="text-lg font-medium hover:text-primary transition-colors">
+        <h3 class="text-base font-semibold mb-0.5 leading-tight hover:text-accent transition-colors">
           {title}
         </h3>
       </Link>
-
-      <div class="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground">
-        <span class="git-tag bg-git px-2 py-0.5 rounded-full">{language}</span>
+      <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mb-1">
+        <span class="rounded bg-muted px-2 py-0.5">{language}</span>
         <span>•</span>
         <span>Started <TimeAgo date={startedAt} /> by {host.name}</span>
         <span>•</span>
@@ -59,19 +52,13 @@
           <span>{participantCount} participant{participantCount !== 1 ? "s" : ""}</span>
         </div>
       </div>
-
-      <div class="mt-4 flex items-center justify-between">
+      <div class="flex items-center justify-between mt-3">
         <Link to={`/git/repo/${repoId}/live/${id}`}>
-          <Button
-            size="sm"
-            variant={isActive ? "default" : "outline"}
-            class={isActive ? "bg-git hover:bg-git-hover" : ""}
-          >
+          <Button size="sm" class="h-8 px-3 py-0 text-xs font-medium rounded-md border bg-background hover:bg-muted transition {isActive ? 'bg-git hover:bg-git-hover' : ''}">
             {isActive ? "Join session" : "View recording"}
           </Button>
         </Link>
-
-        <Avatar class="h-8 w-8">
+        <Avatar class="size-8 border bg-muted text-muted-foreground ml-2">
           <AvatarImage src={host.avatar} alt={host.name} />
           <AvatarFallback>{host.name.slice(0, 2).toUpperCase()}</AvatarFallback>
         </Avatar>

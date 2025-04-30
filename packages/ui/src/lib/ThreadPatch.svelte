@@ -35,7 +35,7 @@
   <div class="flex-1">
     <div class="flex items-center gap-2">
       <span class="font-semibold text-sm">{author.name}</span>
-      <span class="text-xs text-muted-foreground"><TimeAgo date={createdAt} /></span>
+      <span class="text-xs " style="color: hsl(var(--muted-foreground));"><TimeAgo date={createdAt} /></span>
     </div>
     <div class="mt-1">
       <PatchCard

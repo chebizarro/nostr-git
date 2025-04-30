@@ -19,7 +19,7 @@ export default {
   addons: [
     "@storybook/addon-essentials",
     "@storybook/addon-svelte-csf",
-    '@storybook/addon-postcss',
+    '@storybook/addon-themes',
   ],
 
   viteFinal: async (config: any) => {

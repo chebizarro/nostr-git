@@ -23,79 +23,56 @@
 
 </script>
 
-<div class="git-card">
-  <div class="flex items-start gap-4">
-    <Avatar class="h-10 w-10">
+<div class="bg-card text-card-foreground rounded-lg border shadow-sm p-4">
+  <div class="flex items-start gap-3">
+    <Avatar class="size-8 border bg-muted text-muted-foreground">
       <AvatarImage src={owner.avatar} alt={owner.name} />
       <AvatarFallback>{owner.name.slice(0, 2).toUpperCase()}</AvatarFallback>
     </Avatar>
-
-    <div class="flex-1 space-y-2">
-      <div class="flex items-center gap-2">
-        <Circle class="h-4 w-4 text-amber-500" />
-        <span class="text-muted-foreground">{owner.name}</span>
-        <span class="text-muted-foreground text-xs"><TimeAgo date={lastUpdated} /></span>
+    <div class="flex-1">
+      <div class="flex items-center gap-1 mb-1">
+        <Circle class="h-3 w-3 text-amber-500" />
+        <span class="text-xs text-muted-foreground">{owner.name}</span>
+        <span class="text-xs text-muted-foreground"><TimeAgo date={lastUpdated} /></span>
       </div>
-
-      <a href={`/git/repo/${id}`} class="inline-block">
-        <h3 class="text-lg font-medium hover:text-accent transition-colors">{name}</h3>
+      <a href={`/git/repo/${id}`} class="block">
+        <h3 class="text-base font-semibold mb-0.5 leading-tight hover:text-accent transition-colors">{name}</h3>
       </a>
-
-      <p class="text-muted-foreground">{description}</p>
-
-      <div class="flex flex-wrap gap-2 pt-2">
-        <Button href={`/git/repo/${id}/browse`} variant="outline" size="sm" class="gap-2">
+      <p class="text-xs text-muted-foreground mb-2">{description}</p>
+      <div class="flex flex-wrap gap-2">
+        <Button href={`/git/repo/${id}/browse`} variant="outline" size="sm" class="h-8 px-3 py-0 text-xs font-medium rounded-md border bg-background hover:bg-muted transition">
           <BookOpen class="h-4 w-4" /> Browse
         </Button>
-
-        <Button
-          href={`/git/repo/${id}/issues`}
-          variant="outline"
-          size="sm"
-          class="gap-2 text-git-issue"
-        >
+        <Button href={`/git/repo/${id}/issues`} variant="outline" size="sm" class="h-8 px-3 py-0 text-xs font-medium rounded-md border bg-background hover:bg-muted transition text-git-issue">
           Issues ({issueCount})
         </Button>
       </div>
     </div>
-
-    <div class="flex space-x-2">
-      <Button variant="ghost" size="icon" onclick={() => console.log("Star button clicked")}
+    <div class="flex flex-col gap-2 items-end ml-2">
+      <Button variant="ghost" size="icon" class="h-8 w-8 p-0" onclick={() => console.log("Star button clicked")}
         ><Star class="h-5 w-5" /></Button
       >
-      <Button variant="ghost" size="icon" onclick={() => console.log("GitBranch button clicked")}
+      <Button variant="ghost" size="icon" class="h-8 w-8 p-0" onclick={() => console.log("GitBranch button clicked")}
         ><GitBranch class="h-5 w-5" /></Button
       >
     </div>
   </div>
-
-  <div class="mt-4 pt-4 border-t border-border">
-    <div class="flex justify-between">
-      <div class="text-sm text-muted-foreground">
-        <p>{name}</p>
-        <p>{description}</p>
-      </div>
-      <div class="flex flex-col items-end gap-2">
-        <button
-          class="text-xs text-purple-400 hover:underline"
-          onclick={() => console.log("View on Web button clicked")}>View on Web</button
-        >
-        <div class="flex justify-between w-full gap-6">
-          <div class="flex flex-col">
-            <span class="text-sm font-medium">Recent Issues</span>
-            <button
-              class="text-xs text-purple-400 hover:underline"
-              onclick={() => console.log("View Wiki button clicked")}>View Wiki</button
-            >
-          </div>
-          <div class="flex flex-col items-end">
-            <span class="text-sm font-medium">Recent Patches</span>
-            <button
-              class="text-xs text-green-400 hover:underline"
-              onclick={() => console.log("Join Live Coding Session button clicked")}
-              >Join Live Coding Session</button
-            >
-          </div>
+  <div class="border-t border-border mt-3 mb-2"></div>
+  <div class="flex justify-between items-end gap-2 py-2">
+    <div class="text-xs text-muted-foreground">
+      <p class="font-semibold">{name}</p>
+      <p>{description}</p>
+    </div>
+    <div class="flex flex-col items-end gap-1">
+      <button class="text-xs text-muted-foreground hover:text-accent underline-offset-2 hover:underline" onclick={() => console.log("View on Web button clicked")}>View on Web</button>
+      <div class="flex gap-4">
+        <div class="flex flex-col items-start">
+          <span class="text-xs font-medium">Recent Issues</span>
+          <button class="text-xs text-muted-foreground hover:text-accent underline-offset-2 hover:underline" onclick={() => console.log("View Wiki button clicked")}>View Wiki</button>
+        </div>
+        <div class="flex flex-col items-end">
+          <span class="text-xs font-medium">Recent Patches</span>
+          <button class="text-xs text-muted-foreground hover:text-green-400 underline-offset-2 hover:underline" onclick={() => console.log("Join Live Coding Session button clicked")}>Join Live Coding Session</button>
         </div>
       </div>
     </div>
