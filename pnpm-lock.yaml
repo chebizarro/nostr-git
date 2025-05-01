@@ -209,6 +209,15 @@ importers:
         specifier: ^5.8.2
         version: 5.8.3
 
+  packages/shared-types:
+    dependencies:
+      nostr-tools:
+        specifier: ^2.12.0
+        version: 2.12.0(typescript@5.8.3)
+      typescript:
+        specifier: '>=4.7.0'
+        version: 5.8.3
+
   packages/storybook:
     dependencies:
       ui:

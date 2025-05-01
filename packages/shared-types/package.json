@@ -1,0 +1,40 @@
+{
+  "name": "@nostr-git/shared-types",
+  "version": "0.1.0",
+  "description": "Shared TypeScript types for nostr-git, including NIP-34 event types.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --declaration --emitDeclarationOnly false --outDir dist",
+    "clean": "rm -rf dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chebizarro/nostr-git.git"
+  },
+  "author": "chebizarro",
+  "license": "MIT",
+  "keywords": [
+    "nostr",
+    "nip-34",
+    "types",
+    "typescript",
+    "shared"
+  ],
+  "peerDependencies": {
+    "typescript": ">=4.7.0"
+  },
+  "dependencies": {
+    "nostr-tools": "^2.12.0"
+  }
+}

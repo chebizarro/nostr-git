@@ -1,6 +1,6 @@
 <script module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
-  import IssueCard from "../IssueCard.svelte";
+  import IssueCard from "./IssueCard.svelte";
   const { Story } = defineMeta({
     title: "IssueCard",
     component: IssueCard,

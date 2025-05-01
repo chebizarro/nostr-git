@@ -1,6 +1,6 @@
 <script module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
-  import DiffViewer from "../DiffViewer.svelte";
+  import DiffViewer from "./DiffViewer.svelte";
   const { Story } = defineMeta({
     title: "DiffViewer",
     component: DiffViewer,
