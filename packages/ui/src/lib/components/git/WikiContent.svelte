@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Plus } from "@lucide/svelte";
-  import { useRegistry } from "./useRegistry";
+  import { useRegistry } from "../../useRegistry";
   const { Card, Button } = useRegistry();
 
   // Accept content (string | SvelteComponent | undefined) and pageName as props

@@ -6,9 +6,8 @@
     ChevronDown,
     ChevronUp,
   } from "@lucide/svelte";
-  import TimeAgo from "./TimeAgo.svelte";
   import { navigate } from "svelte-routing";
-  import { useRegistry } from "./useRegistry";
+  import { useRegistry } from "../../useRegistry";
   const { Avatar, AvatarFallback, AvatarImage, Button, Card } = useRegistry();
   import { toast } from "$lib/stores/toast";
 

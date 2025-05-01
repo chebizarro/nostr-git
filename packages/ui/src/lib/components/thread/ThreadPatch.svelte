@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { useRegistry } from "./useRegistry";
+  import { useRegistry } from "../../useRegistry";
   const { Avatar, AvatarFallback, AvatarImage } = useRegistry();
-  import TimeAgo from "./TimeAgo.svelte";
-  import PatchCard from "$lib/PatchCard.svelte";
+  import TimeAgo from "../../TimeAgo.svelte";
+  import PatchCard from "$lib/components/git/PatchCard.svelte";
 
   const {
     repoId,

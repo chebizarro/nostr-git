@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { useRegistry } from "./useRegistry";
+  import { useRegistry } from "../../useRegistry";
   const { Separator } = useRegistry();
-  import ThreadMessage from "$lib/ThreadMessage.svelte";
-  import ThreadCommit from "$lib/ThreadCommit.svelte";
-  import ThreadPatch from "$lib/ThreadPatch.svelte";
-  import ThreadIssue from "$lib/ThreadIssue.svelte";
-  import ThreadComposer from "$lib/ThreadComposer.svelte";
+  import ThreadMessage from "$lib/components/thread/ThreadMessage.svelte";
+  import ThreadCommit from "$lib/components/thread/ThreadCommit.svelte";
+  import ThreadPatch from "$lib/components/thread/ThreadPatch.svelte";
+  import ThreadIssue from "$lib/components/thread/ThreadIssue.svelte";
+  import ThreadComposer from "$lib/components/thread/ThreadComposer.svelte";
 
   // Expect all props to be destructured at once (Svelte 5: only one $props() call allowed)
   const {

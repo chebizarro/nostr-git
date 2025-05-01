@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { useRegistry } from "./useRegistry";
+  import { useRegistry } from "../../useRegistry";
   const { Avatar, AvatarFallback, AvatarImage } = useRegistry();
-  import TimeAgo from "./TimeAgo.svelte";
-  import IssueCard from "$lib/IssueCard.svelte";
+  import TimeAgo from "../../TimeAgo.svelte";
+  import IssueCard from "$lib/components/git/IssueCard.svelte";
 
   const props = $props();
   const repoId: string = props.repoId;

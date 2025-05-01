@@ -2,7 +2,7 @@
   import { Activity } from "@lucide/svelte";
   import { formatDistanceToNow } from "date-fns";
 
-  import { useRegistry } from "./useRegistry";
+  import { useRegistry } from "../../useRegistry";
   const { Avatar, Button, Card, AvatarImage, AvatarFallback } = useRegistry();
 
   interface ActivityItem {

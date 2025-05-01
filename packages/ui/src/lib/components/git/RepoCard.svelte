@@ -1,7 +1,7 @@
 <script lang="ts">
-  import TimeAgo from "./TimeAgo.svelte";
+  import TimeAgo from "../../TimeAgo.svelte";
   import { GitBranch, Star, BookOpen, Circle } from "@lucide/svelte";
-  import { useRegistry } from "./useRegistry";
+  import { useRegistry } from "../../useRegistry";
   const { Avatar, Button, AvatarImage, AvatarFallback } = useRegistry();
 
   const {

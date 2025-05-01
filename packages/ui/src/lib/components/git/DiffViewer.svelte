@@ -1,10 +1,9 @@
 <script lang="ts">
   import { MessageSquare } from "@lucide/svelte";
-  import { useRegistry } from "./useRegistry";
+  import { useRegistry } from "../../useRegistry";
   const { Avatar, AvatarFallback, AvatarImage, Button, Textarea } = useRegistry();
   import { formatDistanceToNow } from "date-fns";
 
-  /** ——— Types ——— */
   interface Comment {
     id: string;
     lineNumber: number;

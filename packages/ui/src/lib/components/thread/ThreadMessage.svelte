@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { useRegistry } from "./useRegistry";
+  import { useRegistry } from "../../useRegistry";
   const { Avatar, AvatarFallback, AvatarImage } = useRegistry();
-  import TimeAgo from "./TimeAgo.svelte";
+  import TimeAgo from "../../TimeAgo.svelte";
 
   const props = $props();
   const content: string = props.content;
