@@ -1,4 +1,4 @@
-import type { Nip34Event, RepoAnnouncementEvent, RepoStateEvent, PatchEvent, IssueEvent, StatusEvent } from './nip34';
+import type { Nip34Event, RepoAnnouncementEvent, RepoStateEvent, PatchEvent, IssueEvent, StatusEvent, NostrTag } from './nip34';
 
 /**
  * Type guard for RepoAnnouncementEvent (kind: 30617)
@@ -59,4 +59,213 @@ export function getNip34KindLabel(kind: number): string {
     default:
       return 'Unknown';
   }
+}
+
+/**
+ * Get the first tag of a given type (e.g. 'committer')
+ */
+export function getTag<T extends string>(event: { tags: NostrTag[] }, tagType: T): Extract<NostrTag, [T, ...string[]]> | undefined {
+  return event.tags.find((tag): tag is Extract<NostrTag, [T, ...string[]]> => tag[0] === tagType);
+}
+
+/**
+ * Get all tags of a given type (e.g. 'p')
+ */
+export function getTags<T extends string>(event: { tags: NostrTag[] }, tagType: T): Extract<NostrTag, [T, ...string[]]>[] {
+  return event.tags.filter((tag): tag is Extract<NostrTag, [T, ...string[]]> => tag[0] === tagType);
+}
+
+/**
+ * Get the first value (after the tag type) for a given tag type
+ */
+export function getTagValue<T extends string>(event: { tags: NostrTag[] }, tagType: T): string | undefined {
+  const tag = getTag(event, tagType);
+  return tag ? tag[1] : undefined;
+}
+
+// -------------------
+// Event Creation Helpers
+// -------------------
+import type {
+  RepoAnnouncementTag,
+  RepoStateTag,
+  PatchTag,
+  IssueTag,
+  StatusTag,
+} from './nip34';
+
+/**
+ * Create a repo announcement event (kind 30617)
+ */
+export function createRepoAnnouncementEvent(opts: {
+  repoId: string;
+  name?: string;
+  description?: string;
+  web?: string[];
+  clone?: string[];
+  relays?: string[];
+  maintainers?: string[];
+  hashtags?: string[];
+  earliestUniqueCommit?: string;
+  created_at?: number;
+}): RepoAnnouncementEvent {
+  const tags: RepoAnnouncementTag[] = [
+    ["d", opts.repoId],
+  ];
+  if (opts.name) tags.push(["name", opts.name]);
+  if (opts.description) tags.push(["description", opts.description]);
+  if (opts.web && opts.web.length) tags.push(["web", ...opts.web]);
+  if (opts.clone && opts.clone.length) tags.push(["clone", ...opts.clone]);
+  if (opts.relays && opts.relays.length) tags.push(["relays", ...opts.relays]);
+  if (opts.maintainers && opts.maintainers.length) tags.push(["maintainers", ...opts.maintainers]);
+  if (opts.hashtags) opts.hashtags.forEach(t => tags.push(["t", t]));
+  if (opts.earliestUniqueCommit) tags.push(["r", opts.earliestUniqueCommit, "euc"]);
+  return {
+    kind: 30617,
+    content: "",
+    tags,
+    created_at: opts.created_at ?? Math.floor(Date.now() / 1000),
+  } as RepoAnnouncementEvent;
+}
+
+/**
+ * Create a repo state event (kind 30618)
+ */
+export function createRepoStateEvent(opts: {
+  repoId: string;
+  refs?: Array<{ type: "heads" | "tags", name: string, commit: string, ancestry?: string[] }>;
+  head?: string;
+  created_at?: number;
+}): RepoStateEvent {
+  const tags: RepoStateTag[] = [["d", opts.repoId]];
+  if (opts.refs) {
+    for (const ref of opts.refs) {
+      tags.push([
+        `refs/${ref.type}/${ref.name}`,
+        ref.commit,
+        ...(ref.ancestry ?? [])
+      ]);
+    }
+  }
+  if (opts.head) tags.push(["HEAD", `ref: refs/heads/${opts.head}`]);
+  return {
+    kind: 30618,
+    content: "",
+    tags,
+    created_at: opts.created_at ?? Math.floor(Date.now() / 1000),
+  } as RepoStateEvent;
+}
+
+/**
+ * Create a patch event (kind 1617)
+ */
+export function createPatchEvent(opts: {
+  content: string;
+  repoAddr: string;
+  earliestUniqueCommit?: string;
+  commit?: string;
+  parentCommit?: string;
+  committer?: { name: string; email: string; timestamp: string; tzOffset: string };
+  pgpSig?: string;
+  recipients?: string[];
+  tags?: PatchTag[];
+  created_at?: number;
+}): PatchEvent {
+  const tags: PatchTag[] = [["a", opts.repoAddr]];
+  if (opts.earliestUniqueCommit) tags.push(["r", opts.earliestUniqueCommit]);
+  if (opts.commit) tags.push(["commit", opts.commit]);
+  if (opts.parentCommit) tags.push(["parent-commit", opts.parentCommit]);
+  if (opts.pgpSig) tags.push(["commit-pgp-sig", opts.pgpSig]);
+  if (opts.committer) tags.push(["committer", opts.committer.name, opts.committer.email, opts.committer.timestamp, opts.committer.tzOffset]);
+  if (opts.recipients) opts.recipients.forEach(p => tags.push(["p", p]));
+  if (opts.tags) tags.push(...opts.tags);
+  return {
+    kind: 1617,
+    content: opts.content,
+    tags,
+    created_at: opts.created_at ?? Math.floor(Date.now() / 1000),
+  } as PatchEvent;
+}
+
+/**
+ * Create an issue event (kind 1621)
+ */
+export function createIssueEvent(opts: {
+  content: string;
+  repoAddr: string;
+  recipients?: string[];
+  subject?: string;
+  labels?: string[];
+  tags?: IssueTag[];
+  created_at?: number;
+}): IssueEvent {
+  const tags: IssueTag[] = [["a", opts.repoAddr]];
+  if (opts.recipients) opts.recipients.forEach(p => tags.push(["p", p]));
+  if (opts.subject) tags.push(["subject", opts.subject]);
+  if (opts.labels) opts.labels.forEach(l => tags.push(["t", l]));
+  if (opts.tags) tags.push(...opts.tags);
+  return {
+    kind: 1621,
+    content: opts.content,
+    tags,
+    created_at: opts.created_at ?? Math.floor(Date.now() / 1000),
+  } as IssueEvent;
+}
+
+/**
+ * Create a status event (kinds 1630-1633)
+ */
+export function createStatusEvent(opts: {
+  kind: 1630 | 1631 | 1632 | 1633;
+  content: string;
+  rootId: string;
+  replyId?: string;
+  recipients?: string[];
+  repoAddr?: string;
+  relays?: string[];
+  appliedCommits?: string[];
+  mergedCommit?: string;
+  tags?: StatusTag[];
+  created_at?: number;
+}): StatusEvent {
+  const tags: StatusTag[] = [["e", opts.rootId, "", "root"]];
+  if (opts.replyId) tags.push(["e", opts.replyId, "", "reply"]);
+  if (opts.recipients) opts.recipients.forEach(p => tags.push(["p", p]));
+  if (opts.repoAddr) tags.push(["a", opts.repoAddr]);
+  if (opts.relays) tags.push(["r", opts.relays[0]]);
+  if (opts.mergedCommit) tags.push(["merge-commit", opts.mergedCommit]);
+  if (opts.appliedCommits) tags.push(["applied-as-commits", opts.appliedCommits[0]]);
+  if (opts.tags) tags.push(...opts.tags);
+  return {
+    kind: opts.kind,
+    content: opts.content,
+    tags,
+    created_at: opts.created_at ?? Math.floor(Date.now() / 1000),
+  } as StatusEvent;
+}
+
+// -------------------
+// Tag Mutation Utilities (immutable)
+// -------------------
+
+/**
+ * Add a tag (does not replace existing tags of the same type)
+ */
+export function addTag<E extends { tags: NostrTag[] }>(event: E, tag: NostrTag): E {
+  return { ...event, tags: [...event.tags, tag] };
+}
+
+/**
+ * Set (add or replace) a tag by type (removes all existing tags of that type, then adds the new one)
+ */
+export function setTag<E extends { tags: NostrTag[] }>(event: E, tag: NostrTag): E {
+  const tags = event.tags.filter(t => t[0] !== tag[0]);
+  return { ...event, tags: [...tags, tag] };
+}
+
+/**
+ * Remove all tags of a given type
+ */
+export function removeTag<E extends { tags: NostrTag[] }>(event: E, tagType: string): E {
+  return { ...event, tags: event.tags.filter(t => t[0] !== tagType) };
 }
