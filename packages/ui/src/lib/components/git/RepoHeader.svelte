@@ -1,6 +1,4 @@
 <script lang="ts">
-  let { name, description, activeTab, repoId } = $props();
-
   import { Button, Tabs, TabsList, TabsTrigger } from "$lib/components";
   import {
     GitBranch,
@@ -12,11 +10,17 @@
     GitPullRequest,
     Book,
   } from "@lucide/svelte";
+  import type { RepoAnnouncementEvent, Profile } from '@nostr-git/shared-types';
+  import { parseRepoAnnouncementEvent } from '@nostr-git/shared-types';
+
+  // Accept props: event (NIP-34 RepoAnnouncementEvent), owner (Profile), activeTab
+  const { event, owner = {}, activeTab = "overview" }: { event: RepoAnnouncementEvent, owner?: Profile, activeTab?: string } = $props();
+  const parsed = parseRepoAnnouncementEvent(event);
+  const name = parsed.name ?? "";
+  const description = parsed.description ?? "";
+  const repoId = parsed.repoId ?? "";
 </script>
 
-<!-- -------------------------------------------------------------------------------------------------
-       MARKUP
-  --------------------------------------------------------------------------------------------------- -->
 <div class="border-b border-border pb-4">
   <div class="flex items-center justify-between mb-4">
     <h1 class="text-2xl font-bold flex items-center gap-2">

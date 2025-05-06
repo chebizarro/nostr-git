@@ -1,5 +1,5 @@
 {
-	"name": "nostr-git",
+	"name": "@nostr-git/core",
 	"version": "0.0.1",
 	"scripts": {
 		"dev": "vite dev",
@@ -11,8 +11,6 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"format": "prettier --write .",
 		"lint": "prettier --check . && eslint .",
-		"storybook": "storybook dev -p 6006",
-		"build-storybook": "storybook build",
 		"test:unit": "vitest",
 		"test": "npm run test:unit -- --run"
 	},
@@ -40,13 +38,6 @@
 		"@chromatic-com/storybook": "^3",
 		"@eslint/compat": "^1.2.5",
 		"@eslint/js": "^9.18.0",
-		"@storybook/addon-essentials": "^8.6.10",
-		"@storybook/addon-svelte-csf": "^5.0.0-next.0",
-		"@storybook/blocks": "^8.6.10",
-		"@storybook/experimental-addon-test": "^8.6.10",
-		"@storybook/svelte": "^8.6.10",
-		"@storybook/sveltekit": "^8.6.10",
-		"@storybook/test": "^8.6.10",
 		"@sveltejs/adapter-auto": "^4.0.0",
 		"@sveltejs/kit": "^2.16.0",
 		"@sveltejs/package": "^2.0.0",

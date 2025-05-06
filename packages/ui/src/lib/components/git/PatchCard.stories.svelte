@@ -6,6 +6,7 @@
     component: PatchCard,
     argTypes: {
       event: { control: "object" },
+      owner: { control: "object" },
     },
     args: {
       event: {
@@ -17,7 +18,6 @@
         tags: [
           ["a", "repo1"],
           ["subject", "Add dark mode"],
-          ["name", "Dave", "picture", "https://i.pravatar.cc/40?u=dave", "display_name", "Dave Grohl", "nip05", "dave@example.com"],
           ["base-branch", "main"],
           ["commit", "abc123"],
           ["commit", "def456"],
@@ -27,17 +27,24 @@
         ],
         sig: "testsig",
       },
+      owner: {
+        name: "Dave",
+        display_name: "Dave Grohl",
+        picture: "https://i.pravatar.cc/40?u=dave",
+        nip05: "dave@example.com"
+      }
     },
   });
 </script>
 
 <Story name="Controls">
   <svelte:fragment slot="controls" let:args>
-    <PatchCard event={args.event} />
+    <PatchCard event={args.event} owner={args.owner} />
   </svelte:fragment>
 </Story>
 
 <Story name="Merged Patch">
+
   <PatchCard event={{
     id: "patch2",
     pubkey: "npub1evepubkey",
@@ -47,7 +54,6 @@
     tags: [
       ["a", "repo2"],
       ["subject", "Refactor backend"],
-      ["name", "Eve", "picture", "https://i.pravatar.cc/40?u=eve", "display_name", "Eve Adams", "nip05", "eve@example.com"],
       ["base-branch", "dev"],
       ["commit", "xyz111"],
       ["commit", "xyz222"],
@@ -67,5 +73,11 @@
       ["t", "merged"]
     ],
     sig: "testsig2",
+  }}
+  owner={{
+    name: "Eve",
+    display_name: "Eve Adams",
+    picture: "https://i.pravatar.cc/40?u=eve",
+    nip05: "eve@example.com"
   }} />
 </Story>

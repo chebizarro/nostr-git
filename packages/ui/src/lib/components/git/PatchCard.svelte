@@ -13,10 +13,13 @@
   import type { PatchEvent, Profile } from '@nostr-git/shared-types';
   import { parsePatchEvent } from '@nostr-git/shared-types';
 
-  const { event }: { event: PatchEvent } = $props();
+  // Accept event and optional owner (Profile)
+  const { event, owner = {} }: { event: PatchEvent, owner?: Profile } = $props();
 
   const parsed = parsePatchEvent(event);
-  const { id, repoId, title, description, author, baseBranch, commitCount, commentCount, createdAt, status } = parsed as typeof parsed & { author: Profile };
+  // Prefer owner for author fields if provided
+  const author: Profile = { ...parsed.author, ...owner };
+  const { id, repoId, title, description, baseBranch, commitCount, commentCount, createdAt, status } = parsed;
 
   let isExpanded = $state(false);
   let isBookmarked = $state(false);
@@ -130,7 +133,7 @@
   <Avatar
     class="h-8 w-8 rounded-full flex items-center justify-center font-medium bg-secondary text-secondary-foreground"
   >
-    <AvatarImage src={author?.avatar ?? author?.picture ?? ''} alt={author?.name ?? author?.display_name ?? ''} />
+    <AvatarImage src={author.picture ?? ''} alt={author?.name ?? author?.display_name ?? ''} />
     <AvatarFallback>{(author?.name ?? author?.display_name ?? '').slice(0, 2).toUpperCase()}</AvatarFallback>
   </Avatar>
 </Card>

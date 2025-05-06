@@ -31,7 +31,11 @@
 
 <Story name="Controls">
   <svelte:fragment slot="controls" let:args>
-    <IssueCard {...args} />
+    <IssueCard {...args} author={{
+    name: "Alice",
+    display_name: "Alice A.",
+    picture: "https://i.pravatar.cc/40?u=alice"
+  }} />
   </svelte:fragment>
 </Story>
 
@@ -52,6 +56,11 @@
         ["e", "comment2"],
       ],
       sig: "testsig1",
+    }}
+    author={{
+      name: "Alice",
+      display_name: "Alice A.",
+      picture: "https://i.pravatar.cc/40?u=alice"
     }}
   />
 </Story>
@@ -78,6 +87,11 @@
       ],
       sig: "testsig2",
     }}
+    author={{
+      name: "Bob",
+      display_name: "Bob B.",
+      picture: "https://i.pravatar.cc/40?u=bob"
+    }}
   />
 </Story>
 
@@ -96,6 +110,11 @@
         ["e", "comment1"],
       ],
       sig: "testsig3",
+    }}
+    author={{
+      name: "Carol",
+      display_name: "Carol C.",
+      picture: "https://i.pravatar.cc/40?u=carol"
     }}
   />
 </Story>
@@ -130,6 +149,11 @@
       ],
       sig: "testsig4",
     }}
+    author={{
+      name: "Dave",
+      display_name: "Dave D.",
+      picture: "https://i.pravatar.cc/40?u=dave"
+    }}
   />
 </Story>
 
@@ -147,6 +171,7 @@
       ],
       sig: "testsig5",
     }}
+    author={{}}
   />
 </Story>
 
@@ -155,7 +180,7 @@
     event={{
       id: "issue7",
       pubkey: "npub1gracepubkey",
-      created_at: Math.floor(Date.now() / 1000) - 60 * 60 * 2,
+      created_at: Math.floor(Date.now() / 1000) - 60 * 60 * 96,
       kind: 1621,
       content: "Profile: Full Data\nThis story uses a full Profile object with all fields.",
       tags: [
@@ -163,18 +188,20 @@
         ["subject", "Profile: Full Data"],
         ["t", "profile"],
         ["t", "test"],
-        ["name", "Grace"],
-        ["picture", "https://i.pravatar.cc/40?u=grace"],
-        ["display_name", "Grace Hopper"],
-        ["nip05", "grace@nostr.com"],
-        ["lud16", "grace@getalby.com"],
-        ["about", "Pioneer of computing."],
-        ["website", "https://gracehopper.com"],
         ["e", "comment1"],
         ["e", "comment2"],
         ["e", "comment3"],
       ],
       sig: "testsig7",
+    }}
+    author={{
+      name: "Grace",
+      display_name: "Grace Hopper",
+      picture: "https://i.pravatar.cc/40?u=grace",
+      nip05: "grace@nostr.com",
+      lud16: "grace@getalby.com",
+      about: "Pioneer of computing.",
+      website: "https://gracehopper.com"
     }}
   />
 </Story>
@@ -192,12 +219,12 @@
         ["subject", "Edge Case: No avatar"],
         ["t", "edge"],
         ["e", "comment1"],
-        ["name", "Frank"],
-        ["picture", ""],
-        ["display_name", "Frank Ocean"],
-        ["nip05", "frank@example.com"],
       ],
       sig: "testsig6",
+    }}
+    author={{
+      name: "Frank"
+      // picture intentionally omitted to simulate missing avatar
     }}
   />
 </Story>

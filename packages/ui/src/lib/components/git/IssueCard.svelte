@@ -2,7 +2,6 @@
   import TimeAgo from "../../TimeAgo.svelte";
   import {
     CircleAlert,
-    MessageSquare,
     ChevronDown,
     ChevronUp,
     BookmarkPlus,
@@ -16,17 +15,26 @@
   import type { IssueEvent, Profile } from '@nostr-git/shared-types';
   import { parseIssueEvent } from '@nostr-git/shared-types';
 
-  const { event }: { event: IssueEvent } = $props();
+  // Accept event and optional author (Profile)
+  const { event, author = {} }: { event: IssueEvent, author?: Partial<Profile> } = $props();
   const parsed = parseIssueEvent(event);
   const {
     id,
     repoId,
     subject: title,
     content: description,
-    author,
     labels,
-    createdAt
-  } = parsed as typeof parsed & { author: Profile };
+    createdAt,
+    author: parsedAuthor
+  } = parsed;
+  // Compose display author: prefer passed Profile, fallback to parsed pubkey
+  const displayAuthor = {
+    name: author.name,
+    display_name: author.display_name,
+    picture: author.picture,
+    pubkey: parsedAuthor?.pubkey
+  };
+
   // For commentCount and status, you may want to compute based on event.tags or extend the parser as needed.
   // Here, we'll default to 0 and 'open' for now:
   let commentCount = event.tags.filter(t => t[0] === 'e').length;
@@ -92,7 +100,7 @@
       <div class="flex items-center gap-2 text-xs text-muted-foreground mb-1">
         <span>Opened <TimeAgo date={createdAt} /></span>
         <span>•</span>
-        <span>by {author.pubkey}</span>
+        <span>by {displayAuthor.display_name || displayAuthor.name || displayAuthor.pubkey || 'Unknown'}</span>
         <span>•</span>
         <span>{commentCount} comments</span>
       </div>
@@ -123,8 +131,8 @@
     <Avatar
       class="h-8 w-8 rounded-full flex items-center justify-center font-medium bg-secondary text-secondary-foreground ml-3"
     >
-      <AvatarImage src={author?.avatar ?? author?.picture ?? ''} alt={author?.name ?? author?.display_name ?? ''} />
-      <AvatarFallback>{(author?.name ?? author?.display_name ?? '').slice(0, 2).toUpperCase()}</AvatarFallback>
+      <AvatarImage src={displayAuthor.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayAuthor.display_name || displayAuthor.name || displayAuthor.pubkey || 'Unknown')}&background=random`} alt={displayAuthor.display_name || displayAuthor.name || displayAuthor.pubkey || 'Unknown'} />
+      <AvatarFallback>{((displayAuthor.display_name || displayAuthor.name || displayAuthor.pubkey || 'U').slice(0, 2).toUpperCase())}</AvatarFallback>
     </Avatar>
   </div>
 </div>
