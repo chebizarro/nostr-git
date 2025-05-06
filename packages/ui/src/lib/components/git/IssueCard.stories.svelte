@@ -5,31 +5,28 @@
     title: "IssueCard",
     component: IssueCard,
     argTypes: {
-      id: { control: "text", description: "Issue ID" },
-      repoId: { control: "text", description: "Repo ID" },
-      title: { control: "text" },
-      description: { control: "text" },
-      author: {
-        control: "object",
-        defaultValue: { name: "Alice", avatar: "https://i.pravatar.cc/40?u=alice" },
-      },
-      labels: { control: "object" },
-      commentCount: { control: "number" },
-      createdAt: { control: "date" },
-      status: { control: { type: "select" }, options: ["open", "closed", "resolved"] },
+      event: { control: "object" },
     },
     args: {
-      id: "demo",
-      repoId: "repo-demo",
-      title: "Demo Issue",
-      description: "This is a demo issue for controls.",
-      author: { name: "Alice", avatar: "https://i.pravatar.cc/40?u=alice" },
-      labels: ["demo"],
-      commentCount: 0,
-      createdAt: new Date().toISOString(),
-      status: "open",
+      event: {
+        id: "issue1",
+        pubkey: "npub1alicepubkey",
+        created_at: Math.floor(Date.now() / 1000),
+        kind: 1621,
+        content: "This is a demo issue for controls.",
+        tags: [
+          ["a", "repo-demo"],
+          ["subject", "Demo Issue"],
+          ["t", "demo"],
+          ["committer", "npub1alicepubkey", "https://i.pravatar.cc/40?u=alice"],
+          ["e", "comment1"],
+          ["e", "comment2"],
+        ],
+        sig: "testsig",
+      },
     },
   });
+
 </script>
 
 <Story name="Controls">
@@ -40,84 +37,167 @@
 
 <Story name="Open Issue">
   <IssueCard
-    id="1"
-    repoId="repo-1"
-    title="Bug: Save button not working"
-    description="When clicking save, nothing happens. Expected to persist changes."
-    author={{ name: "Alice", avatar: "https://i.pravatar.cc/40?u=alice" }}
-    labels={["bug", "urgent"]}
-    commentCount={2}
-    createdAt={new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString()}
-    status="open"
+    event={{
+      id: "issue1",
+      pubkey: "npub1alicepubkey",
+      created_at: Math.floor(Date.now() / 1000) - 60 * 60 * 3,
+      kind: 1621,
+      content: "Bug: Save button not working\nWhen clicking save, nothing happens. Expected to persist changes.",
+      tags: [
+        ["a", "repo-1"],
+        ["subject", "Bug: Save button not working"],
+        ["t", "bug"],
+        ["t", "urgent"],
+        ["e", "comment1"],
+        ["e", "comment2"],
+      ],
+      sig: "testsig1",
+    }}
   />
 </Story>
 
 <Story name="Closed Issue with Labels">
   <IssueCard
-    id="2"
-    repoId="repo-2"
-    title="Feature: Add dark mode"
-    description="Users have requested a dark theme for better night-time usability."
-    author={{ name: "Bob", avatar: "https://i.pravatar.cc/40?u=bob" }}
-    labels={["feature", "enhancement"]}
-    commentCount={5}
-    createdAt={new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString()}
-    status="closed"
+    event={{
+      id: "issue2",
+      pubkey: "npub1bobpubkey",
+      created_at: Math.floor(Date.now() / 1000) - 60 * 60 * 24,
+      kind: 1621,
+      content: "Feature: Add dark mode\nUsers have requested a dark theme for better night-time usability.",
+      tags: [
+        ["a", "repo-2"],
+        ["subject", "Feature: Add dark mode"],
+        ["t", "feature"],
+        ["t", "enhancement"],
+        ["e", "comment1"],
+        ["e", "comment2"],
+        ["e", "comment3"],
+        ["e", "comment4"],
+        ["e", "comment5"],
+        ["t", "closed"],
+      ],
+      sig: "testsig2",
+    }}
   />
 </Story>
 
 <Story name="Resolved, Bookmarked">
   <IssueCard
-    id="3"
-    repoId="repo-3"
-    title="Refactor: Simplify reducer logic"
-    description="Refactored the main reducer for improved readability."
-    author={{ name: "Carol", avatar: "https://i.pravatar.cc/40?u=carol" }}
-    labels={[]}
-    commentCount={1}
-    createdAt={new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString()}
-    status="resolved"
+    event={{
+      id: "issue3",
+      pubkey: "npub1carolpubkey",
+      created_at: Math.floor(Date.now() / 1000) - 60 * 60 * 48,
+      kind: 1621,
+      content: "Refactor: Simplify reducer logic\nRefactored the main reducer for improved readability.",
+      tags: [
+        ["a", "repo-3"],
+        ["subject", "Refactor: Simplify reducer logic"],
+        ["t", "resolved"],
+        ["e", "comment1"],
+      ],
+      sig: "testsig3",
+    }}
   />
 </Story>
 
 <Story name="Long Description & Many Labels">
   <IssueCard
-    id="4"
-    repoId="repo-4"
-    title="Epic: Overhaul onboarding flow"
-    description="This is a very long description meant to test how the card handles lots of text. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque euismod, nisi vel consectetur euismod, nisl nisi consectetur nisi, euismod euismod nisi nisi euismod nisi."
-    author={{ name: "Dave", avatar: "https://i.pravatar.cc/40?u=dave" }}
-    labels={["epic", "UX", "frontend", "high-priority", "needs-design", "discussion"]}
-    commentCount={10}
-    createdAt={new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString()}
-    status="open"
+    event={{
+      id: "issue4",
+      pubkey: "npub1davepubkey",
+      created_at: Math.floor(Date.now() / 1000) - 60 * 60 * 72,
+      kind: 1621,
+      content: "Epic: Overhaul onboarding flow\nThis is a very long description meant to test how the card handles lots of text. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque euismod, nisi vel consectetur euismod, nisl nisi consectetur nisi, euismod euismod nisi nisi euismod nisi.",
+      tags: [
+        ["a", "repo-4"],
+        ["subject", "Epic: Overhaul onboarding flow"],
+        ["t", "epic"],
+        ["t", "UX"],
+        ["t", "frontend"],
+        ["t", "high-priority"],
+        ["t", "needs-design"],
+        ["t", "discussion"],
+        ["e", "comment1"],
+        ["e", "comment2"],
+        ["e", "comment3"],
+        ["e", "comment4"],
+        ["e", "comment5"],
+        ["e", "comment6"],
+        ["e", "comment7"],
+        ["e", "comment8"],
+        ["e", "comment9"],
+        ["e", "comment10"],
+      ],
+      sig: "testsig4",
+    }}
   />
 </Story>
 
 <Story name="No Labels, No Comments">
   <IssueCard
-    id="5"
-    repoId="repo-5"
-    title="Chore: Update dependencies"
-    description="Routine dependency update."
-    author={{ name: "Eve", avatar: "https://i.pravatar.cc/40?u=eve" }}
-    labels={[]}
-    commentCount={0}
-    createdAt={new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString()}
-    status="open"
+    event={{
+      id: "issue5",
+      pubkey: "npub1evepubkey",
+      created_at: Math.floor(Date.now() / 1000) - 60 * 60 * 5,
+      kind: 1621,
+      content: "Chore: Update dependencies\nRoutine dependency update.",
+      tags: [
+        ["a", "repo-5"],
+        ["subject", "Chore: Update dependencies"],
+      ],
+      sig: "testsig5",
+    }}
+  />
+</Story>
+
+<Story name="Full Profile Object">
+  <IssueCard
+    event={{
+      id: "issue7",
+      pubkey: "npub1gracepubkey",
+      created_at: Math.floor(Date.now() / 1000) - 60 * 60 * 2,
+      kind: 1621,
+      content: "Profile: Full Data\nThis story uses a full Profile object with all fields.",
+      tags: [
+        ["a", "repo-7"],
+        ["subject", "Profile: Full Data"],
+        ["t", "profile"],
+        ["t", "test"],
+        ["name", "Grace"],
+        ["picture", "https://i.pravatar.cc/40?u=grace"],
+        ["display_name", "Grace Hopper"],
+        ["nip05", "grace@nostr.com"],
+        ["lud16", "grace@getalby.com"],
+        ["about", "Pioneer of computing."],
+        ["website", "https://gracehopper.com"],
+        ["e", "comment1"],
+        ["e", "comment2"],
+        ["e", "comment3"],
+      ],
+      sig: "testsig7",
+    }}
   />
 </Story>
 
 <Story name="Edge: Missing Avatar">
   <IssueCard
-    id="6"
-    repoId="repo-6"
-    title="Edge Case: No avatar"
-    description="This issue has no avatar set for the author."
-    author={{ name: "Frank", avatar: "" }}
-    labels={["edge"]}
-    commentCount={1}
-    createdAt={new Date(Date.now() - 1000 * 60 * 60 * 10).toISOString()}
-    status="open"
+    event={{
+      id: "issue6",
+      pubkey: "npub1frankpubkey",
+      created_at: Math.floor(Date.now() / 1000) - 60 * 60 * 10,
+      kind: 1621,
+      content: "Edge Case: No avatar\nThis issue has no avatar set for the author.",
+      tags: [
+        ["a", "repo-6"],
+        ["subject", "Edge Case: No avatar"],
+        ["t", "edge"],
+        ["e", "comment1"],
+        ["name", "Frank"],
+        ["picture", ""],
+        ["display_name", "Frank Ocean"],
+        ["nip05", "frank@example.com"],
+      ],
+      sig: "testsig6",
+    }}
   />
 </Story>

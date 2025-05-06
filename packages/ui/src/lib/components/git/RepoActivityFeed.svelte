@@ -5,11 +5,12 @@
   import { useRegistry } from "../../useRegistry";
   const { Avatar, Button, Card, AvatarImage, AvatarFallback } = useRegistry();
 
+  import type { Profile } from '@nostr-git/shared-types';
   interface ActivityItem {
     id: string;
     type: "commit" | "discussion" | "star";
     title: string;
-    user: { name: string; avatar: string };
+    user: Profile;
     timestamp: Date;
   }
 
@@ -41,14 +42,14 @@
       <Card>
         <div class="p-4 flex items-start gap-3">
           <Avatar class="h-8 w-8">
-            <AvatarImage src={a.user.avatar} alt={a.user.name} />
-            <AvatarFallback>{a.user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+            <AvatarImage src={a.user?.avatar ?? a.user?.picture ?? ''} alt={a.user?.name ?? a.user?.display_name ?? ''} />
+            <AvatarFallback>{(a.user?.name ?? a.user?.display_name ?? '').slice(0, 2).toUpperCase()}</AvatarFallback>
           </Avatar>
 
           <div class="flex-1 space-y-1">
             <p class="text-sm">
               <button class="font-medium" onclick={() => console.log("User name clicked")}
-                >{a.user.name}</button
+                >{a.user?.name ?? a.user?.display_name ?? ''}</button
               >&nbsp;{a.title}
             </p>
             <p class="text-xs text-muted-foreground">

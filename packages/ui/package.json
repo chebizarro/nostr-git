@@ -44,6 +44,7 @@
   },
   "dependencies": {
     "@lucide/svelte": "^0.503.0",
-    "date-fns": "^4.1.0"
+    "date-fns": "^4.1.0",
+    "@nostr-git/shared-types": "workspace:*"
   }
 }

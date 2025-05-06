@@ -10,30 +10,13 @@
   import { useRegistry } from "../../useRegistry";
   const { Avatar, AvatarFallback, AvatarImage, Button, Card } = useRegistry();
   import { toast } from "$lib/stores/toast";
+  import type { PatchEvent, Profile } from '@nostr-git/shared-types';
+  import { parsePatchEvent } from '@nostr-git/shared-types';
 
-  const {
-    id,
-    repoId,
-    title,
-    description,
-    author,
-    baseBranch,
-    commitCount,
-    commentCount,
-    createdAt,
-    status = "open",
-  }: {
-    id: string;
-    repoId: string;
-    title: string;
-    description: string;
-    author: { name: string; avatar: string };
-    baseBranch: string;
-    commitCount: number;
-    commentCount: number;
-    createdAt: string;
-    status?: "open" | "merged" | "closed";
-  } = $props();
+  const { event }: { event: PatchEvent } = $props();
+
+  const parsed = parsePatchEvent(event);
+  const { id, repoId, title, description, author, baseBranch, commitCount, commentCount, createdAt, status } = parsed as typeof parsed & { author: Profile };
 
   let isExpanded = $state(false);
   let isBookmarked = $state(false);
@@ -147,7 +130,7 @@
   <Avatar
     class="h-8 w-8 rounded-full flex items-center justify-center font-medium bg-secondary text-secondary-foreground"
   >
-    <AvatarImage src={author.avatar} alt={author.name} />
-    <AvatarFallback>{author.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+    <AvatarImage src={author?.avatar ?? author?.picture ?? ''} alt={author?.name ?? author?.display_name ?? ''} />
+    <AvatarFallback>{(author?.name ?? author?.display_name ?? '').slice(0, 2).toUpperCase()}</AvatarFallback>
   </Avatar>
 </Card>

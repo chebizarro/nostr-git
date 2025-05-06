@@ -4,6 +4,7 @@
   import { useRegistry } from "../../useRegistry";
   const { Avatar, Button, AvatarImage, AvatarFallback } = useRegistry();
 
+  import type { Profile } from '@nostr-git/shared-types';
   const {
     id,
     name,
@@ -15,7 +16,7 @@
     id: string;
     name: string;
     description: string;
-    owner: { name: string; avatar: string; email: string };
+    owner: Profile;
     issueCount: number;
     lastUpdated: string;
   } = $props();
@@ -24,8 +25,8 @@
 <div class="bg-card text-card-foreground rounded-lg border shadow-sm p-4">
   <div class="flex items-start gap-3">
     <Avatar class="size-8 border bg-muted text-muted-foreground">
-      <AvatarImage src={owner.avatar} alt={owner.name} />
-      <AvatarFallback>{owner.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+      <AvatarImage src={owner?.avatar ?? owner?.picture ?? ''} alt={owner?.name ?? owner?.display_name ?? ''} />
+      <AvatarFallback>{(owner?.name ?? owner?.display_name ?? '').slice(0, 2).toUpperCase()}</AvatarFallback>
     </Avatar>
     <div class="flex-1">
       <div class="flex items-center gap-1 mb-1">

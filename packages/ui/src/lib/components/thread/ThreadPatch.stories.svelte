@@ -26,7 +26,7 @@
     },
     args: {
       repoId: "repo-1",
-      author: { name: "Alice", avatar: "https://i.pravatar.cc/40?u=alice" },
+      author: { name: "Alice", picture: "https://i.pravatar.cc/40?u=alice", display_name: "Alice Cooper", nip05: "alice@example.com" },
       createdAt: new Date().toISOString(),
       metadata: {
         patchId: "p1",
@@ -47,10 +47,26 @@
   </svelte:fragment>
 </Story>
 
+<Story name="Full Profile Author">
+  <ThreadPatch
+    repoId="repo-3"
+    author={{ name: "Grace", picture: "https://i.pravatar.cc/40?u=grace", display_name: "Grace Hopper", nip05: "grace@nostr.com", lud16: "grace@getalby.com", about: "Pioneer of computing.", website: "https://gracehopper.com" }}
+    createdAt={new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString()}
+    metadata={{
+      patchId: "3",
+      title: "Profile Patch",
+      description: "This patch uses a full Profile object for the author.",
+      labels: ["profile", "test"],
+      commentCount: 2,
+      status: "open",
+    }}
+  />
+</Story>
+
 <Story name="Merged Patch">
   <ThreadPatch
     repoId="repo-2"
-    author={{ name: "Bob", avatar: "https://i.pravatar.cc/40?u=bob" }}
+    author={{ name: "Bob", picture: "https://i.pravatar.cc/40?u=bob", display_name: "Bob Marley", nip05: "bob@example.com" }}
     createdAt={new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString()}
     metadata={{
       patchId: "p2",

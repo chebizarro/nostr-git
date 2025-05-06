@@ -1,13 +1,13 @@
 // NIP-34: Git Collaboration Event Types for Nostr
 // https://github.com/nostr-protocol/nips/blob/master/34.md
 
-import type { Event as NostrToolsEvent } from 'nostr-tools';
+import type { Event } from 'nostr-tools';
 
 /**
  * Canonical Nostr event type from nostr-tools.
  * https://jsr.io/@nostr/tools/doc/Event
  */
-export type NostrEvent = NostrToolsEvent;
+export type NostrEvent = Event;
 
 /**
  * Generic Nostr tag: [tagName, ...values]
@@ -76,7 +76,8 @@ export type IssueTag =
   | ["a", string]
   | ["p", string]
   | ["subject", string]
-  | ["t", string];
+  | ["t", string]
+  | ["e", string];
 
 export interface IssueEvent extends NostrEvent {
   kind: 1621;
@@ -114,4 +115,24 @@ export type Nip34Event =
   | StatusEvent;
 
 // Utility: kind to type mapping
+
+// -------------------
+// Profile Type for Avatars and User Metadata
+// -------------------
+
+export type TrustedEvent = NostrEvent;
+
+export type Profile = {
+  name?: string;
+  nip05?: string;
+  lud06?: string;
+  lud16?: string;
+  lnurl?: string;
+  about?: string;
+  banner?: string;
+  picture?: string;
+  website?: string;
+  display_name?: string;
+  event?: TrustedEvent;
+};
 export type Nip34EventByKind<K extends Nip34Event["kind"]> = Extract<Nip34Event, { kind: K }>;

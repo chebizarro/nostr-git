@@ -36,7 +36,8 @@
     "vite": "6.3.3"
   },
   "dependencies": {
-    "ui": "^0.2.4"
+    "ui": "^0.2.4",
+    "@nostr-git/shared-types": "workspace:*"
   },
   "keywords": [],
   "author": "",

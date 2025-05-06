@@ -13,29 +13,26 @@
   import IssueThread from "./IssueThread.svelte";
   import { toast } from "$lib/stores/toast";
 
-  type Status = "open" | "closed" | "resolved";
+  import type { IssueEvent, Profile } from '@nostr-git/shared-types';
+  import { parseIssueEvent } from '@nostr-git/shared-types';
 
+  const { event }: { event: IssueEvent } = $props();
+  const parsed = parseIssueEvent(event);
   const {
     id,
     repoId,
-    title,
-    description,
+    subject: title,
+    content: description,
     author,
-    labels = [],
-    commentCount,
-    createdAt,
-    status,
-  }: {
-    id: string;
-    repoId: string;
-    title: string;
-    description: string;
-    author: { name: string; avatar: string };
-    labels?: string[];
-    commentCount: number;
-    createdAt: string;
-    status: Status;
-  } = $props();
+    labels,
+    createdAt
+  } = parsed as typeof parsed & { author: Profile };
+  // For commentCount and status, you may want to compute based on event.tags or extend the parser as needed.
+  // Here, we'll default to 0 and 'open' for now:
+  let commentCount = event.tags.filter(t => t[0] === 'e').length;
+  let status: 'open' | 'closed' | 'resolved' = $state('open');
+  if (event.tags.some(t => t[0] === 't' && t[1] === 'closed')) status = 'closed';
+  else if (event.tags.some(t => t[0] === 't' && t[1] === 'resolved')) status = 'resolved';
 
   let isExpanded = $state(false);
   let isBookmarked = $state(false);
@@ -95,7 +92,7 @@
       <div class="flex items-center gap-2 text-xs text-muted-foreground mb-1">
         <span>Opened <TimeAgo date={createdAt} /></span>
         <span>•</span>
-        <span>by {author.name}</span>
+        <span>by {author.pubkey}</span>
         <span>•</span>
         <span>{commentCount} comments</span>
       </div>
@@ -126,8 +123,8 @@
     <Avatar
       class="h-8 w-8 rounded-full flex items-center justify-center font-medium bg-secondary text-secondary-foreground ml-3"
     >
-      <AvatarImage src={author.avatar} alt={author.name} />
-      <AvatarFallback>{author.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+      <AvatarImage src={author?.avatar ?? author?.picture ?? ''} alt={author?.name ?? author?.display_name ?? ''} />
+      <AvatarFallback>{(author?.name ?? author?.display_name ?? '').slice(0, 2).toUpperCase()}</AvatarFallback>
     </Avatar>
   </div>
 </div>

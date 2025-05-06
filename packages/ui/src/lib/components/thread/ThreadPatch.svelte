@@ -11,7 +11,7 @@
     metadata,
   }: {
     repoId: string;
-    author: { name: string; avatar: string };
+    author: import('@nostr-git/shared-types').Profile;
     createdAt: string;
     metadata: {
       patchId: string;
@@ -27,8 +27,8 @@
 
 <div class="flex gap-3 group py-2">
   <Avatar class="h-8 w-8 mt-0.5">
-    <AvatarImage src={author.avatar} alt={author.name} />
-    <AvatarFallback>{author.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+    <AvatarImage src={author?.avatar ?? author?.picture ?? ''} alt={author?.name ?? author?.display_name ?? ''} />
+    <AvatarFallback>{(author?.name ?? author?.display_name ?? '').slice(0, 2).toUpperCase()}</AvatarFallback>
   </Avatar>
   <div class="flex-1">
     <div class="flex items-center gap-2">

@@ -269,3 +269,161 @@ export function setTag<E extends { tags: NostrTag[] }>(event: E, tag: NostrTag):
 export function removeTag<E extends { tags: NostrTag[] }>(event: E, tagType: string): E {
   return { ...event, tags: event.tags.filter(t => t[0] !== tagType) };
 }
+
+// -------------------
+// Parsing Utilities for NIP-34 Events
+// -------------------
+
+export interface ParsedPatchEvent {
+  id: string;
+  repoId: string;
+  title: string;
+  description: string;
+  author: { pubkey: string; name?: string; avatar?: string };
+  baseBranch: string;
+  commitCount: number;
+  commentCount: number;
+  createdAt: string;
+  status: "open" | "merged" | "closed";
+  raw: PatchEvent;
+}
+
+export function parsePatchEvent(event: PatchEvent): ParsedPatchEvent {
+  const getTag = (name: string) => event.tags.find(t => t[0] === name)?.[1];
+  const getAllTags = (name: string) => event.tags.filter(t => t[0] === name).map(t => t[1]);
+  const authorTag = event.tags.find(t => t[0] === "committer");
+  const author = {
+    pubkey: event.pubkey,
+    name: authorTag?.[1],
+    avatar: authorTag?.[2]
+  };
+  let status: "open" | "merged" | "closed" = "open";
+  if (event.tags.some(t => t[0] === "t" && t[1] === "merged")) status = "merged";
+  else if (event.tags.some(t => t[0] === "t" && t[1] === "closed")) status = "closed";
+  return {
+    id: event.id,
+    repoId: getTag("a") || "",
+    title: getTag("subject") || "",
+    description: event.content,
+    author,
+    baseBranch: getTag("base-branch") || "",
+    commitCount: getAllTags("commit").length,
+    commentCount: getAllTags("e").length,
+    createdAt: new Date(event.created_at * 1000).toISOString(),
+    status,
+    raw: event
+  };
+}
+
+export interface ParsedIssueEvent {
+  id: string;
+  repoId: string;
+  subject: string;
+  content: string;
+  author: { pubkey: string };
+  labels: string[];
+  createdAt: string;
+  raw: IssueEvent;
+}
+
+export function parseIssueEvent(event: IssueEvent): ParsedIssueEvent {
+  const getTag = (name: string) => event.tags.find(t => t[0] === name)?.[1];
+  const getAllTags = (name: string) => event.tags.filter(t => t[0] === name).map(t => t[1]);
+  return {
+    id: event.id,
+    repoId: getTag("a") || "",
+    subject: getTag("subject") || "",
+    content: event.content,
+    author: { pubkey: event.pubkey },
+    labels: getAllTags("t"),
+    createdAt: new Date(event.created_at * 1000).toISOString(),
+    raw: event
+  };
+}
+
+export interface ParsedRepoAnnouncementEvent {
+  id: string;
+  repoId: string;
+  name?: string;
+  description?: string;
+  web?: string[];
+  clone?: string[];
+  relays?: string[];
+  maintainers?: string[];
+  hashtags?: string[];
+  createdAt: string;
+  raw: RepoAnnouncementEvent;
+}
+
+export function parseRepoAnnouncementEvent(event: RepoAnnouncementEvent): ParsedRepoAnnouncementEvent {
+  const getTag = (name: string) => event.tags.find(t => t[0] === name)?.[1];
+  const getAllTags = (name: string) => event.tags.filter(t => t[0] === name).map(t => t[1]);
+  const getMultiTag = (name: string) => event.tags.filter(t => t[0] === name).flatMap(t => t.slice(1));
+  return {
+    id: event.id,
+    repoId: getTag("d") || "",
+    name: getTag("name"),
+    description: getTag("description"),
+    web: getMultiTag("web"),
+    clone: getMultiTag("clone"),
+    relays: getMultiTag("relays"),
+    maintainers: getMultiTag("maintainers"),
+    hashtags: getAllTags("t"),
+    createdAt: new Date(event.created_at * 1000).toISOString(),
+    raw: event
+  };
+}
+
+export interface ParsedRepoStateEvent {
+  id: string;
+  repoId: string;
+  refs: Array<{ ref: string; commit: string; lineage?: string[] }>;
+  head?: string;
+  createdAt: string;
+  raw: RepoStateEvent;
+}
+
+export function parseRepoStateEvent(event: RepoStateEvent): ParsedRepoStateEvent {
+  const getTag = (name: string) => event.tags.find(t => t[0] === name)?.[1];
+  const refs = event.tags
+    .filter(t => t[0].startsWith("refs/"))
+    .map(t => ({
+      ref: t[0],
+      commit: t[1],
+      lineage: t.length > 2 ? t.slice(2) : undefined
+    }));
+  const head = getTag("HEAD");
+  return {
+    id: event.id,
+    repoId: getTag("d") || "",
+    refs,
+    head,
+    createdAt: new Date(event.created_at * 1000).toISOString(),
+    raw: event
+  };
+}
+
+export interface ParsedStatusEvent {
+  id: string;
+  status: "open" | "applied" | "closed" | "draft";
+  relatedIds: string[];
+  author: { pubkey: string };
+  createdAt: string;
+  raw: StatusEvent;
+}
+
+export function parseStatusEvent(event: StatusEvent): ParsedStatusEvent {
+  let status: ParsedStatusEvent["status"] = "open";
+  if (event.kind === 1631) status = "applied";
+  else if (event.kind === 1632) status = "closed";
+  else if (event.kind === 1633) status = "draft";
+  const relatedIds = event.tags.filter(t => t[0] === "e").map(t => t[1]);
+  return {
+    id: event.id,
+    status,
+    relatedIds,
+    author: { pubkey: event.pubkey },
+    createdAt: new Date(event.created_at * 1000).toISOString(),
+    raw: event
+  };
+}
