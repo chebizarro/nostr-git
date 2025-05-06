@@ -17,5 +17,5 @@
 	},
 	"include": [
 		"src"
-	]
+, "../ui/src/lib/components/editor/PermalinkExtension.ts", "../ui/src/lib/components/editor/PermalinkExtension.ts", "../ui/src/lib/components/editor/PermalinkNodeView.svelte.ts", "../ui/src/lib/components/editor/index.ts"	]
 }

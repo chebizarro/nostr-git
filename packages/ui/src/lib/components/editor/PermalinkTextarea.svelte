@@ -1,31 +1,31 @@
 <script lang="ts">
-  import { generateSecretKey } from 'nostr-tools';
-  import { createEventFromPermalink } from './event.js';
-  import { fetchPermalink } from './git.js';
-  import { Buffer } from 'buffer';
-    import { parsePermalink } from './permalink.js';
+  import { generateSecretKey } from "nostr-tools";
+  import { createEventFromPermalink } from "./event.js";
+  import { fetchPermalink } from "./git.js";
+  import { Buffer } from "buffer";
+  import { parsePermalink } from "./permalink.js";
 
-  if (typeof window !== 'undefined' && !window.Buffer) {
+  if (typeof window !== "undefined" && !window.Buffer) {
     (window as any).Buffer = Buffer;
   }
 
-  let permalinkText = '';
-  let snippetContent = '';
-  let errorMessage = '';
+  let permalinkText = "";
+  let snippetContent = "";
+  let errorMessage = "";
   let loading = false;
 
   async function handlePermalink() {
-    snippetContent = '';
-    errorMessage = '';
+    snippetContent = "";
+    errorMessage = "";
 
     const parsed = parsePermalink(permalinkText.trim());
     if (!parsed) {
-      errorMessage = 'Not a valid GitHub/GitLab/Gitea permalink.';
+      errorMessage = "Not a valid GitHub/GitLab/Gitea permalink.";
       return;
     }
     console.log(parsed);
     await createEventFromPermalink(permalinkText.trim(), generateSecretKey(), [
-      'wss://relay.damus.io'
+      "wss://relay.damus.io",
     ]);
     loading = true;
     try {
@@ -43,15 +43,15 @@
 
   async function handlePaste(e: ClipboardEvent) {
     loading = true;
-    const pastedText = e.clipboardData?.getData('text/plain') ?? '';
+    const pastedText = e.clipboardData?.getData("text/plain") ?? "";
 
     e.preventDefault();
 
     const parsed = parsePermalink(pastedText.trim());
     if (parsed) {
-      console.log('Permalink recognized:', parsed);
+      console.log("Permalink recognized:", parsed);
       const event = await createEventFromPermalink(pastedText.trim(), generateSecretKey(), [
-        'wss://relay.damus.io'
+        "wss://relay.damus.io",
       ]);
 
       permalinkText = event.content;

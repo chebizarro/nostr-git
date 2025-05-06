@@ -2,9 +2,9 @@ import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { type EventTemplate, type NostrEvent } from 'nostr-tools';
 import { Buffer } from 'buffer';
-import { PermalinkNode } from './PermalinkNodeView.svelte.js';
+import { PermalinkNode } from './PermalinkNodeView.svelte';
 import type { Component } from 'svelte';
-import { isPermalink } from './permalink.js';
+import { isPermalink } from '../../../../../core/src/lib/permalink.js';
 import Spinner from './Spinner.svelte';
 
 type WindowWithBuffer = Window &
