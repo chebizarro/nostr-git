@@ -4,3 +4,6 @@ packages:
 onlyBuiltDependencies:
   - esbuild
   - svelte-preprocess
+
+overrides:
+  '@nostr-git/ui': link:packages/ui

@@ -11,14 +11,17 @@
       "svelte": "./dist/index.js",
       "import": "./dist/index.js",
       "require": "./dist/index.js"
-    }
+    },
+    "./tailwind.preset.js": "./tailwind.preset.js",
+    "./index.css": "./dist/index.css"
   },
   "files": [
-    "dist"
+    "dist",
+    "tailwind.preset.js"
   ],
   "scripts": {
     "format": "prettier --write .",
-    "build": "svelte-package"
+    "build": "svelte-package && cp src/index.css dist/index.css"
   },
   "peerDependencies": {
     "svelte": "^5.28.2"
@@ -44,7 +47,12 @@
   },
   "dependencies": {
     "@lucide/svelte": "^0.503.0",
-    "date-fns": "^4.1.0",
-    "@nostr-git/shared-types": "workspace:*"
+    "@nostr-git/shared-types": "workspace:*",
+    "@tiptap/core": "^2.11.7",
+    "@tiptap/extension-code-block": "^2.11.7",
+    "@tiptap/pm": "^2.11.7",
+    "@tiptap/starter-kit": "^2.11.7",
+    "buffer": "^6.0.3",
+    "date-fns": "^4.1.0"
   }
 }
