@@ -42,7 +42,7 @@
       <Card>
         <div class="p-4 flex items-start gap-3">
           <Avatar class="h-8 w-8">
-            <AvatarImage src={a.user?.avatar ?? a.user?.picture ?? ''} alt={a.user?.name ?? a.user?.display_name ?? ''} />
+            <AvatarImage src={a.user?.picture ?? ''} alt={a.user?.name ?? a.user?.display_name ?? ''} />
             <AvatarFallback>{(a.user?.name ?? a.user?.display_name ?? '').slice(0, 2).toUpperCase()}</AvatarFallback>
           </Avatar>
 

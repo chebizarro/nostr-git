@@ -12,6 +12,7 @@ export { default as RepoSocialSidebar } from "./git/RepoSocialSidebar.svelte";
 export { default as RepoThreadView } from "./git/RepoThreadView.svelte";
 export { default as WikiContent } from "./git/WikiContent.svelte";
 export { default as WikiSidebar } from "./git/WikiSidebar.svelte";
+export { default as RepoTab } from "./git/RepoTab.svelte";
 
 // Export all Svelte components from thread/
 export { default as ThreadCommit } from "./thread/ThreadCommit.svelte";

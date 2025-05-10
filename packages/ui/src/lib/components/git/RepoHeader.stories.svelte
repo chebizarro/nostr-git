@@ -1,37 +1,67 @@
 <script module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
   import RepoHeader from "./RepoHeader.svelte";
+  import RepoTab from "./RepoTab.svelte";
+  import { FileCode, GitBranch, CircleAlert, GitPullRequest, Book } from "@lucide/svelte";
   const { Story } = defineMeta({
-  title: "RepoHeader",
-  component: RepoHeader,
-  argTypes: {
-    event: { control: "object" },
-    owner: { control: "object" },
-    activeTab: { control: "text", defaultValue: "overview" },
-  },
-  args: {
-    event: {
-      id: "repo1",
-      pubkey: "npub1bobpubkey",
-      created_at: Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 30,
-      kind: 30617,
-      content: "A minimal repo.",
-      tags: [
-        ["d", "tiny-repo"],
-        ["name", "tiny-repo"],
-        ["description", "A minimal repo."],
-      ],
-      sig: "testsig1",
+    title: "RepoHeader",
+    component: RepoHeader,
+    argTypes: {
+      event: { control: "object" },
+      owner: { control: "object" },
+      activeTab: { control: "text", defaultValue: "overview" },
     },
-    owner: { name: "Bob", picture: "https://i.pravatar.cc/40?u=bob" },
-    activeTab: "overview",
-  },
-});
+    args: {
+      event: {
+        id: "repo1",
+        pubkey: "npub1bobpubkey",
+        created_at: Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 30,
+        kind: 30617,
+        content: "A minimal repo.",
+        tags: [
+          ["d", "tiny-repo"],
+          ["name", "tiny-repo"],
+          ["description", "A minimal repo."],
+        ],
+        sig: "testsig1",
+      },
+      owner: { name: "Bob", picture: "https://i.pravatar.cc/40?u=bob" },
+      activeTab: "overview",
+    },
+  });
 </script>
 
 <Story name="Controls">
   <svelte:fragment slot="controls" let:args>
-    <RepoHeader {...args} />
+    <RepoHeader {...args}>
+      {#snippet children()}
+        <RepoTab tabValue="overview" label="Overview" href="/repo/overview">
+          {#snippet icon()}
+            <FileCode class="h-4 w-4" />
+          {/snippet}
+        </RepoTab>
+        <RepoTab tabValue="code" label="Code" href="/repo/code">
+          {#snippet icon()}
+            <GitBranch class="h-4 w-4" />
+          {/snippet}
+        </RepoTab>
+        <RepoTab tabValue="issues" label="Issues" href="/repo/issues">
+          {#snippet icon()}
+            <CircleAlert class="h-4 w-4" />
+          {/snippet}
+        </RepoTab>
+        <RepoTab tabValue="patches" label="Patches" href="/repo/patches">
+          {#snippet icon()}
+            <GitPullRequest class="h-4 w-4" />
+          {/snippet}
+        </RepoTab>
+        <RepoTab tabValue="wiki" label="Wiki" href="/repo/wiki">
+          {#snippet icon()}
+            <Book class="h-4 w-4" />
+          {/snippet}
+        </RepoTab>
+      {/snippet}
+    </RepoHeader>
   </svelte:fragment>
 </Story>
 
@@ -64,10 +94,38 @@
       nip05: "alice@example.com",
       lud16: "alice@getalby.com",
       about: "Lead maintainer of nostr-git.",
-      website: "https://alice.com"
+      website: "https://alice.com",
     }}
     activeTab="overview"
-  />
+  >
+    {#snippet children(activeTab)}
+      <RepoTab tabValue="overview" label="Overview" href="/repo/overview" {activeTab}>
+        {#snippet icon()}
+          <FileCode class="h-4 w-4" />
+        {/snippet}
+      </RepoTab>
+      <RepoTab tabValue="code" label="Code" href="/repo/code" {activeTab}>
+        {#snippet icon()}
+          <GitBranch class="h-4 w-4" />
+        {/snippet}
+      </RepoTab>
+      <RepoTab tabValue="issues" label="Issues" href="/repo/issues" {activeTab}>
+        {#snippet icon()}
+          <CircleAlert class="h-4 w-4" />
+        {/snippet}
+      </RepoTab>
+      <RepoTab tabValue="patches" label="Patches" href="/repo/patches" {activeTab}>
+        {#snippet icon()}
+          <GitPullRequest class="h-4 w-4" />
+        {/snippet}
+      </RepoTab>
+      <RepoTab tabValue="wiki" label="Wiki" href="/repo/wiki">
+        {#snippet icon()}
+          <Book class="h-4 w-4" />
+        {/snippet}
+      </RepoTab>
+    {/snippet}
+  </RepoHeader>
 </Story>
 
 <Story name="Minimal Repo">
@@ -87,5 +145,23 @@
     }}
     owner={{ name: "Bob", picture: "https://i.pravatar.cc/40?u=bob" }}
     activeTab="overview"
-  />
+  >
+    {#snippet children()}
+      <RepoTab tabValue="overview" label="Overview" href="/repo/overview">
+        {#snippet icon()}
+          <FileCode class="h-4 w-4" />
+        {/snippet}
+      </RepoTab>
+      <RepoTab tabValue="code" label="Code" href="/repo/code">
+        {#snippet icon()}
+          <GitBranch class="h-4 w-4" />
+        {/snippet}
+      </RepoTab>
+      <RepoTab tabValue="issues" label="Issues" href="/repo/issues">
+        {#snippet icon()}
+          <CircleAlert class="h-4 w-4" />
+        {/snippet}
+      </RepoTab>
+    {/snippet}
+  </RepoHeader>
 </Story>

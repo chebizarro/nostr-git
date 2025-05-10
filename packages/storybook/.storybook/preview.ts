@@ -11,7 +11,6 @@ export const decorators = [(Story: () => any) => ({
   },
 }), withThemeByClassName({
     themes: {
-        // nameOfTheme: 'classNameForTheme',
         light: '',
         dark: 'dark',
     },

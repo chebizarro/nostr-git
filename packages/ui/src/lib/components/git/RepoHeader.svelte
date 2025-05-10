@@ -1,24 +1,25 @@
 <script lang="ts">
-  import { Button, Tabs, TabsList, TabsTrigger } from "$lib/components";
-  import {
-    GitBranch,
-    Star,
-    Eye,
-    GitFork,
-    FileCode,
-    CircleAlert,
-    GitPullRequest,
-    Book,
-  } from "@lucide/svelte";
-  import type { RepoAnnouncementEvent, Profile } from '@nostr-git/shared-types';
-  import { parseRepoAnnouncementEvent } from '@nostr-git/shared-types';
+  import { Button } from "$lib/components";
+  import { cn } from "$lib/utils";
+  import { GitBranch, Star, Eye, GitFork } from "@lucide/svelte";
+  import type { RepoAnnouncementEvent, Profile } from "@nostr-git/shared-types";
+  import { parseRepoAnnouncementEvent } from "@nostr-git/shared-types";
 
   // Accept props: event (NIP-34 RepoAnnouncementEvent), owner (Profile), activeTab
-  const { event, owner = {}, activeTab = "overview" }: { event: RepoAnnouncementEvent, owner?: Profile, activeTab?: string } = $props();
+  const {
+    event,
+    owner = {},
+    activeTab = "overview",
+    children,
+  }: {
+    event: RepoAnnouncementEvent;
+    owner?: Profile;
+    activeTab?: string;
+    children?: any;
+  } = $props();
   const parsed = parseRepoAnnouncementEvent(event);
   const name = parsed.name ?? "";
   const description = parsed.description ?? "";
-  const repoId = parsed.repoId ?? "";
 </script>
 
 <div class="border-b border-border pb-4">
@@ -43,47 +44,14 @@
     </div>
   </div>
   <p class="text-muted-foreground mb-4">{description}</p>
-  <Tabs value={activeTab} class="w-full">
-    <TabsList class="grid grid-cols-6 mb-0">
-      <TabsTrigger value="overview">
-        <a href={`/git/repo/${repoId}/overview`} class="flex items-center gap-2">
-          <FileCode class="h-4 w-4" />
-          Overview
-        </a>
-      </TabsTrigger>
-      <TabsTrigger value="code">
-        <a href={`/git/repo/${repoId}/code`} class="flex items-center gap-2">
-          <GitBranch class="h-4 w-4" />
-          Code
-        </a>
-      </TabsTrigger>
-      <TabsTrigger value="issues">
-        <a href={`/git/repo/${repoId}/issues`} class="flex items-center gap-2">
-          <CircleAlert class="h-4 w-4" />
-          Issues
-        </a>
-      </TabsTrigger>
-      <TabsTrigger value="patches">
-        <a href={`/git/repo/${repoId}/patches`} class="flex items-center gap-2">
-          <GitPullRequest class="h-4 w-4" />
-          Patches
-        </a>
-      </TabsTrigger>
-      <TabsTrigger value="wiki">
-        <a href={`/git/repo/${repoId}/wiki`} class="flex items-center gap-2">
-          <Book class="h-4 w-4" />
-          Wiki
-        </a>
-      </TabsTrigger>
-      <TabsTrigger value="live">
-        <a href={`/git/repo/${repoId}/live`} class="flex items-center gap-2">
-          <span class="relative flex h-2 w-2 mr-1">
-            <span class="animate-pulse-git absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-            <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-          </span>
-          Live Session
-        </a>
-      </TabsTrigger>
-    </TabsList>
-  </Tabs>
+
+  <nav
+    class={cn(
+      "bg-muted text-muted-foreground inline-flex h-10 items-center justify-center rounded-md p-1"
+    )}
+  >
+    <div class="grid grid-cols-6 mb-0">
+      {@render children?.(activeTab)}
+    </div>
+  </nav>
 </div>
