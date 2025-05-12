@@ -15,8 +15,8 @@
   import type { IssueEvent, Profile } from '@nostr-git/shared-types';
   import { parseIssueEvent } from '@nostr-git/shared-types';
 
-  // Accept event and optional author (Profile)
-  const { event, author = {} }: { event: IssueEvent, author?: Partial<Profile> } = $props();
+  // Accept event and optional author (Profile store)
+  const { event, author }: { event: IssueEvent, author?: import('svelte/store').Readable<Profile|undefined> } = $props();
   const parsed = parseIssueEvent(event);
   const {
     id,
@@ -27,13 +27,23 @@
     createdAt,
     author: parsedAuthor
   } = parsed;
-  // Compose display author: prefer passed Profile, fallback to parsed pubkey
-  const displayAuthor = {
-    name: author.name,
-    display_name: author.display_name,
-    picture: author.picture,
-    pubkey: parsedAuthor?.pubkey
-  };
+
+  // Use $author store if available, fallback to parsedAuthor
+  let displayAuthor = $state<Partial<Profile> & { pubkey?: string }>({});
+  $effect(() => {
+    const a = typeof author !== 'undefined' ? $author : undefined;
+    if (a) {
+      displayAuthor.name = a.name;
+      displayAuthor.display_name = a.display_name;
+      displayAuthor.picture = a.picture;
+      displayAuthor.pubkey = (a as any).pubkey ?? parsedAuthor?.pubkey;
+    } else {
+      displayAuthor.name = undefined;
+      displayAuthor.display_name = undefined;
+      displayAuthor.picture = undefined;
+      displayAuthor.pubkey = parsedAuthor?.pubkey;
+    }
+  });
 
   // For commentCount and status, you may want to compute based on event.tags or extend the parser as needed.
   // Here, we'll default to 0 and 'open' for now:

@@ -1,6 +1,7 @@
 <script module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
   import IssueCard from "./IssueCard.svelte";
+  import { readable } from 'svelte/store';
   const { Story } = defineMeta({
     title: "IssueCard",
     component: IssueCard,
@@ -31,11 +32,11 @@
 
 <Story name="Controls">
   <svelte:fragment slot="controls" let:args>
-    <IssueCard {...args} author={{
-    name: "Alice",
-    display_name: "Alice A.",
-    picture: "https://i.pravatar.cc/40?u=alice"
-  }} />
+    <IssueCard {...args} author={readable({
+      name: "Alice",
+      display_name: "Alice A.",
+      picture: "https://i.pravatar.cc/40?u=alice"
+    })} />
   </svelte:fragment>
 </Story>
 
@@ -57,11 +58,11 @@
       ],
       sig: "testsig1",
     }}
-    author={{
+    author={readable({
       name: "Alice",
       display_name: "Alice A.",
       picture: "https://i.pravatar.cc/40?u=alice"
-    }}
+    })}
   />
 </Story>
 
@@ -87,11 +88,11 @@
       ],
       sig: "testsig2",
     }}
-    author={{
+    author={readable({
       name: "Bob",
       display_name: "Bob B.",
       picture: "https://i.pravatar.cc/40?u=bob"
-    }}
+    })}
   />
 </Story>
 
@@ -111,11 +112,11 @@
       ],
       sig: "testsig3",
     }}
-    author={{
+    author={readable({
       name: "Carol",
       display_name: "Carol C.",
       picture: "https://i.pravatar.cc/40?u=carol"
-    }}
+    })}
   />
 </Story>
 
@@ -149,11 +150,11 @@
       ],
       sig: "testsig4",
     }}
-    author={{
+    author={readable({
       name: "Dave",
       display_name: "Dave D.",
       picture: "https://i.pravatar.cc/40?u=dave"
-    }}
+    })}
   />
 </Story>
 
@@ -194,7 +195,7 @@
       ],
       sig: "testsig7",
     }}
-    author={{
+    author={readable({
       name: "Grace",
       display_name: "Grace Hopper",
       picture: "https://i.pravatar.cc/40?u=grace",
@@ -202,7 +203,7 @@
       lud16: "grace@getalby.com",
       about: "Pioneer of computing.",
       website: "https://gracehopper.com"
-    }}
+    })}
   />
 </Story>
 
@@ -222,9 +223,9 @@
       ],
       sig: "testsig6",
     }}
-    author={{
+    author={readable({
       name: "Frank"
       // picture intentionally omitted to simulate missing avatar
-    }}
+    })}
   />
 </Story>
