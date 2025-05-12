@@ -1,5 +1,5 @@
 {
-	"extends": "./.svelte-kit/tsconfig.json",
+
 	"compilerOptions": {
 		"allowJs": true,
 		"checkJs": true,
@@ -13,9 +13,10 @@
 		"strict": true,
 		"module": "NodeNext",
 		"moduleResolution": "NodeNext",
-		"types": ["vitest", "svelte"]
+		"outDir": "./dist",
+		"rootDir": "./src"
 	},
 	"include": [
 		"src"
-, "../ui/src/lib/components/editor/PermalinkExtension.ts", "../ui/src/lib/components/editor/PermalinkExtension.ts", "../ui/src/lib/components/editor/PermalinkNodeView.svelte.ts", "../ui/src/lib/components/editor/index.ts"	]
+	]
 }

@@ -11,7 +11,7 @@ export interface ForkOptions {
 }
 
 export async function forkViaWorker(opts: ForkOptions): Promise<string> {
-  const { api } = await getGitWorker();
-  const url = await api(opts);
+  const { api } = getGitWorker();
+  const url = await api.cloneAndFork(opts);
   return url;
 }

@@ -1,5 +1,5 @@
-import { GitProvider } from './provider';
-import { NostrClient, NostrEvent } from './nostr-client';
+import { GitProvider } from './provider.js';
+import { NostrClient, NostrEvent } from './nostr-client.js';
 
 /**
  * A GitProvider implementation that coordinates between an underlying git backend
@@ -12,6 +12,9 @@ export class NostrGitProvider implements GitProvider {
   ) {}
 
   // --- GitProvider methods ---
+  TREE(options: { ref: string }) {
+    return this.git.TREE(options);
+  }
   async clone(options: any): Promise<any> {
     // Discover repo state/location via Nostr, then clone via backend
     throw new Error('Not implemented: clone via Nostr');

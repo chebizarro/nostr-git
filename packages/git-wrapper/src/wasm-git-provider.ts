@@ -1,4 +1,4 @@
-import { GitProvider } from './provider';
+import { GitProvider } from './provider.js';
 
 /**
  * Placeholder for a wasm-git implementation of the GitProvider interface.
@@ -6,6 +6,9 @@ import { GitProvider } from './provider';
  */
 export class WasmGitProvider implements GitProvider {
   // Repository
+  TREE(options: { ref: string }) {
+    throw new Error('Not implemented: TREE (wasm-git)');
+  }
   async clone(options: any): Promise<any> { throw new Error('Not implemented: clone (wasm-git)'); }
   async commit(options: any): Promise<any> { throw new Error('Not implemented: commit (wasm-git)'); }
   async fetch(options: any): Promise<any> { throw new Error('Not implemented: fetch (wasm-git)'); }

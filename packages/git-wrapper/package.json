@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "description": "Pluggable git implementation wrapper with nostr extensions.",
   "main": "dist/index.js",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
+	"type": "module",
   "exports": {
     ".": {
       "import": "./dist/index.js",

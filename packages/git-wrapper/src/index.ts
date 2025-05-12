@@ -1,2 +1,2 @@
-export * from './provider';
-export * from './isomorphic-git-provider';
+export * from './provider.js';
+export * from './isomorphic-git-provider.js';

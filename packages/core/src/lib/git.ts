@@ -1,5 +1,4 @@
-import git from 'isomorphic-git';
-import http from 'isomorphic-git/http/web';
+import { getGitProvider } from './git-provider.js';
 import LightningFS from '@isomorphic-git/lightning-fs';
 import { Buffer } from 'buffer';
 import { fileTypeFromBuffer } from 'file-type';
@@ -7,13 +6,14 @@ import { lookup as mimeLookup } from 'mime-types';
 import { createPatch } from 'diff';
 import type { PermalinkData } from './permalink.js';
 
-const fs = new LightningFS('nostr-git');
-const rootDir = '/repos';
+const fs: any = new LightningFS('nostr-git');
+export const rootDir = '/repos';
 
 export async function fetchPermalink(data: PermalinkData) {
   const dir = `${rootDir}/${data.owner}/${data.repo}`;
   try {
-    await ensureRepo(data);
+    await ensureRepo({ host: data.host, owner: data.owner, repo: data.repo, branch: data.branch });
+    const git = getGitProvider();
     const commitOid = await git.resolveRef({ fs, dir, ref: data.branch });
     const { blob } = await git.readBlob({ fs, dir, oid: commitOid, filepath: data.filePath });
     let content = Buffer.from(blob).toString('utf8');
@@ -29,29 +29,32 @@ export async function fetchPermalink(data: PermalinkData) {
   }
 }
 
-async function isRepoCloned(dir: string): Promise<boolean> {
+async function isRepoCloned(dir: string, fsOverride?: any): Promise<boolean> {
+  const git = getGitProvider();
   try {
-    await git.resolveRef({ fs, dir, ref: 'HEAD' });
+    await git.resolveRef({ fs: fsOverride || fs, dir, ref: 'HEAD' });
     return true;
   } catch {
     return false;
   }
 }
 
-async function ensureRepo(data: PermalinkData, depth: number = 1) {
-  const dir = `${rootDir}/${data.owner}/${data.repo}`;
-  await isRepoCloned(dir);
+export async function ensureRepo(opts: { host: string; owner: string; repo: string; branch: string }, depth: number = 1) {
+  const git = getGitProvider();
+  const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
+  if (!(await isRepoCloned(dir))) {
     await git.clone({
       fs,
-      http,
+      http: (git as any).http || undefined,
       dir,
       corsProxy: 'https://cors.isomorphic-git.org',
-      url: `https://${data.host}/${data.owner}/${data.repo}.git`,
-      ref: data.branch,
+      url: `https://${opts.host}/${opts.owner}/${opts.repo}.git`,
+      ref: opts.branch,
       singleBranch: true,
       depth,
       noCheckout: true,
     });
+  }
 }
 
 /**
@@ -82,6 +85,7 @@ export async function determineMimeType(data?: Uint8Array, extension?: string): 
  * @returns The entire patch as a string (unified diff) or the error message.
  */
 export async function produceGitDiffFromPermalink(data: PermalinkData): Promise<string> {
+  const git = getGitProvider();
   const dir = `${rootDir}/${data.owner}/${data.repo}`;
   try {
     await ensureRepo(data);
@@ -97,7 +101,7 @@ export async function produceGitDiffFromPermalink(data: PermalinkData): Promise<
   const changes = await getFileChanges(dir, parentOid || '', newOid);
 
   if (data.diffFileHash && changes.length) {
-    const match = findDiffMatch(changes, data.diffFileHash);
+    const match = await findDiffMatch(changes, data.diffFileHash);
     if (match) {
       return await createFilePatch(dir, parentOid || '', newOid, match.filepath, match.type);
     }
@@ -110,11 +114,14 @@ export async function produceGitDiffFromPermalink(data: PermalinkData): Promise<
   return await generateMultiFilePatch(dir, parentOid, newOid, changes);
 }
 
-function findDiffMatch(
+async function findDiffMatch(
   changes: { filepath: string; type: 'add' | 'remove' | 'modify' }[],
   diffFileHash: string
 ) {
-  return changes.find(async c => await githubPermalinkDiffId(c.filepath) === diffFileHash) || null;
+  for (const c of changes) {
+    if ((await githubPermalinkDiffId(c.filepath)) === diffFileHash) return c;
+  }
+  return null;
 }
 
 async function generateMultiFilePatch(
@@ -135,12 +142,17 @@ async function generateMultiFilePatch(
 /**
  * Return an array describing how files changed between two commits.
  */
-async function getFileChanges(dir: string, oldOid: string, newOid: string) {
+async function getFileChanges(
+  dir: string,
+  oldOid: string,
+  newOid: string
+): Promise<Array<{ filepath: string; type: 'add' | 'remove' | 'modify'; Aoid?: string; Boid?: string }>> {
+  const git = getGitProvider();
   const results = await git.walk({
     fs,
     dir,
     trees: [git.TREE({ ref: oldOid }), git.TREE({ ref: newOid })],
-    map: async (filepath, [A, B]) => {
+    map: async (filepath: string, [A, B]: [any, any]) => {
       if (filepath === '.') return;
       const Atype = await A?.type();
       const Btype = await B?.type();
@@ -148,13 +160,11 @@ async function getFileChanges(dir: string, oldOid: string, newOid: string) {
       const Aoid = await A?.oid();
       const Boid = await B?.oid();
       if (Aoid === Boid) return;
-
       let type: 'add' | 'remove' | 'modify' = 'modify';
       if (Aoid === undefined) type = 'add';
       if (Boid === undefined) type = 'remove';
-
       return { filepath, type, Aoid, Boid };
-    }
+    },
   });
   return results.filter(Boolean);
 }
@@ -169,19 +179,16 @@ async function createFilePatch(
   filepath: string,
   changeType: 'add' | 'remove' | 'modify'
 ) {
-  let oldContent = '', newContent = '';
-  try {
-    if (changeType !== 'add') {
-      const { blob } = await git.readBlob({ fs, dir, oid: oldOid, filepath });
-      oldContent = Buffer.from(blob).toString('utf8');
-    }
-    if (changeType !== 'remove') {
-      const { blob } = await git.readBlob({ fs, dir, oid: newOid, filepath });
-      newContent = Buffer.from(blob).toString('utf8');
-    }
-  } catch (err) {
-    console.log(`Error reading ${filepath}: ${err}`);
-  }
+  const git = getGitProvider();
+  const oldContent = oldOid
+    ? (await git.readBlob({ fs, dir, oid: oldOid, filepath })).blob
+    : Buffer.from('');
+  const newContent = newOid
+    ? (await git.readBlob({ fs, dir, oid: newOid, filepath })).blob
+    : Buffer.from('');
+
+  const oldBuf = Buffer.from(oldContent);
+  const newBuf = Buffer.from(newContent);
 
   return createPatch(
     filepath,

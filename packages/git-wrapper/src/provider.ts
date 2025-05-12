@@ -1,6 +1,8 @@
 // Defines the interface for a pluggable Git provider
 
 export interface GitProvider {
+  // Return a tree walker for the given ref (commit-ish)
+  TREE(options: { ref: string }): any;
   // Repository
   clone(options: any): Promise<any>;
   commit(options: any): Promise<any>;

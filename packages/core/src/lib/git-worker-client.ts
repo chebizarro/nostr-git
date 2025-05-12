@@ -1,8 +1,7 @@
-import { wrap } from 'magic-portal';
+import { wrap } from 'comlink';
 
-export async function getGitWorker() {
+export function getGitWorker() {
   const worker = new Worker(new URL('./workers/git-worker.ts', import.meta.url), { type: 'module' });
-  const portal = new wrap(worker);
-  const api = await portal.get('cloneAndFork');
+  const api = wrap<any>(worker);
   return { api, worker };
 }

@@ -1,7 +1,13 @@
 import * as isogit from 'isomorphic-git';
-import { GitProvider } from './provider';
+import { GitProvider } from './provider.js';
 
 export class IsomorphicGitProvider implements GitProvider {
+  // Return a tree walker for the given ref (commit-ish)
+  TREE(options: { ref: string }) {
+    // isomorphic-git exposes TREE as a function for tree-walking
+    // https://isomorphic-git.org/docs/en/TREE
+    return (isogit as any).TREE(options);
+  }
   // Repository
   async clone(options: any) { return isogit.clone(options); }
   async commit(options: any) { return isogit.commit(options); }

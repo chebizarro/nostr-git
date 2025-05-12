@@ -1,4 +1,4 @@
-import { expose } from 'magic-portal';
+import { expose } from 'comlink';
 import LightningFS from '@isomorphic-git/lightning-fs';
 import http from 'isomorphic-git/http/web';
 import git from 'isomorphic-git';
@@ -49,7 +49,7 @@ const cloneAndFork = async ({
   }, nostrPrivateKey);
 
   const pool = new SimplePool();
-  await Promise.all(relays.map(url => pool.publish(url, event)));
+  await Promise.all(pool.publish(relays, event));
 
   return remoteUrl;
 };
