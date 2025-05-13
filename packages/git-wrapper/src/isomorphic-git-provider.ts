@@ -25,6 +25,7 @@ export class IsomorphicGitProvider implements GitProvider {
   async deleteBranch(options: any) { return isogit.deleteBranch(options); }
   async listBranches(options: any) { return isogit.listBranches(options); }
   async renameBranch(options: any) { return isogit.renameBranch(options); }
+  async branch(options: any) { return isogit.branch(options); }
 
   // Tags
   async deleteTag(options: any) { return isogit.deleteTag(options); }

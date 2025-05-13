@@ -24,6 +24,7 @@ export class WasmGitProvider implements GitProvider {
   async deleteBranch(options: any): Promise<any> { throw new Error('Not implemented: deleteBranch (wasm-git)'); }
   async listBranches(options: any): Promise<any> { throw new Error('Not implemented: listBranches (wasm-git)'); }
   async renameBranch(options: any): Promise<any> { throw new Error('Not implemented: renameBranch (wasm-git)'); }
+  async branch(options: any): Promise<any> { throw new Error('Not implemented: branch (wasm-git)'); }
 
   // Tags
   async deleteTag(options: any): Promise<any> { throw new Error('Not implemented: deleteTag (wasm-git)'); }

@@ -19,6 +19,7 @@ export interface GitProvider {
   deleteBranch(options: any): Promise<any>;
   listBranches(options: any): Promise<any>;
   renameBranch(options: any): Promise<any>;
+  branch(options: any): Promise<any>;
   
   // Tags
   deleteTag(options: any): Promise<any>;

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { FileCode, Share, Download, Copy } from "@lucide/svelte";
+  import { FileCode, Folder, Share, Download, Copy } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
   const { Button } = useRegistry();
   import { toast } from "$lib/stores/toast";
@@ -67,7 +67,11 @@
     aria-expanded={type === "file" ? isExpanded : undefined}
   >
     <div class="flex items-center">
-      <FileCode class="h-4 w-4 mr-2 " style="color: hsl(var(--muted-foreground));" />
+      {#if type === "directory"}
+        <Folder class="h-4 w-4 mr-2" style="color: hsl(var(--muted-foreground));" />
+      {:else}
+        <FileCode class="h-4 w-4 mr-2" style="color: hsl(var(--muted-foreground));" />
+      {/if}
       <span>{name}</span>
     </div>
     {#if type === "file"}

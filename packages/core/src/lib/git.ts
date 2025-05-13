@@ -1,10 +1,16 @@
 import { getGitProvider } from './git-provider.js';
 import LightningFS from '@isomorphic-git/lightning-fs';
+import http from 'isomorphic-git/http/web';
 import { Buffer } from 'buffer';
 import { fileTypeFromBuffer } from 'file-type';
 import { lookup as mimeLookup } from 'mime-types';
 import { createPatch } from 'diff';
+import type { ParsedRepoAnnouncementEvent } from '@nostr-git/shared-types';
 import type { PermalinkData } from './permalink.js';
+
+if (typeof window.Buffer === 'undefined') {
+  (window as any).Buffer = Buffer;
+}
 
 const fs: any = new LightningFS('nostr-git');
 export const rootDir = '/repos';
@@ -45,10 +51,28 @@ export async function ensureRepo(opts: { host: string; owner: string; repo: stri
   if (!(await isRepoCloned(dir))) {
     await git.clone({
       fs,
-      http: (git as any).http || undefined,
+      http,
       dir,
       corsProxy: 'https://cors.isomorphic-git.org',
       url: `https://${opts.host}/${opts.owner}/${opts.repo}.git`,
+      ref: opts.branch,
+      singleBranch: true,
+      depth,
+      noCheckout: true,
+    });
+  }
+}
+
+export async function ensureRepoFromEvent(opts: { repoEvent: ParsedRepoAnnouncementEvent; branch: string }, depth: number = 1) {
+  const git = getGitProvider();
+  const dir = `${rootDir}/${opts.repoEvent.id}`;
+  if (!(await isRepoCloned(dir))) {
+    await git.clone({
+      fs,
+      http,
+      dir,
+      corsProxy: 'https://cors.isomorphic-git.org',
+      url: `${opts.repoEvent.clone?.[0]}`,
       ref: opts.branch,
       singleBranch: true,
       depth,

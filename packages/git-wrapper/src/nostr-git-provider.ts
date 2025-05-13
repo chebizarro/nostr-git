@@ -32,6 +32,7 @@ export class NostrGitProvider implements GitProvider {
   async deleteBranch(options: any): Promise<any> { return this.git.deleteBranch(options); }
   async listBranches(options: any): Promise<any> { return this.git.listBranches(options); }
   async renameBranch(options: any): Promise<any> { return this.git.renameBranch(options); }
+  async branch(options: any): Promise<any> { return this.git.branch(options); }
 
   async deleteTag(options: any): Promise<any> { return this.git.deleteTag(options); }
   async listTags(options: any): Promise<any> { return this.git.listTags(options); }
