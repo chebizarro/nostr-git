@@ -274,7 +274,7 @@ export function removeTag<E extends { tags: NostrTag[] }>(event: E, tagType: str
 // Parsing Utilities for NIP-34 Events
 // -------------------
 
-export interface ParsedPatchEvent {
+export interface Patch {
   id: string;
   repoId: string;
   title: string;
@@ -288,7 +288,7 @@ export interface ParsedPatchEvent {
   raw: PatchEvent;
 }
 
-export function parsePatchEvent(event: PatchEvent): ParsedPatchEvent {
+export function parsePatchEvent(event: PatchEvent): Patch {
   const getTag = (name: string) => event.tags.find(t => t[0] === name)?.[1];
   const getAllTags = (name: string) => event.tags.filter(t => t[0] === name).map(t => t[1]);
   const authorTag = event.tags.find(t => t[0] === "committer");
@@ -315,7 +315,7 @@ export function parsePatchEvent(event: PatchEvent): ParsedPatchEvent {
   };
 }
 
-export interface ParsedIssueEvent {
+export interface Issue {
   id: string;
   repoId: string;
   subject: string;
@@ -326,7 +326,7 @@ export interface ParsedIssueEvent {
   raw: IssueEvent;
 }
 
-export function parseIssueEvent(event: IssueEvent): ParsedIssueEvent {
+export function parseIssueEvent(event: IssueEvent): Issue {
   const getTag = (name: string) => event.tags.find(t => t[0] === name)?.[1];
   const getAllTags = (name: string) => event.tags.filter(t => t[0] === name).map(t => t[1]);
   return {
@@ -341,7 +341,7 @@ export function parseIssueEvent(event: IssueEvent): ParsedIssueEvent {
   };
 }
 
-export interface ParsedRepoAnnouncementEvent {
+export interface RepoAnnouncement {
   id: string;
   repoId: string;
   name?: string;
@@ -355,7 +355,7 @@ export interface ParsedRepoAnnouncementEvent {
   raw: RepoAnnouncementEvent;
 }
 
-export function parseRepoAnnouncementEvent(event: RepoAnnouncementEvent): ParsedRepoAnnouncementEvent {
+export function parseRepoAnnouncementEvent(event: RepoAnnouncementEvent): RepoAnnouncement {
   const getTag = (name: string) => event.tags.find(t => t[0] === name)?.[1];
   const getAllTags = (name: string) => event.tags.filter(t => t[0] === name).map(t => t[1]);
   const getMultiTag = (name: string) => event.tags.filter(t => t[0] === name).flatMap(t => t.slice(1));
@@ -374,7 +374,7 @@ export function parseRepoAnnouncementEvent(event: RepoAnnouncementEvent): Parsed
   };
 }
 
-export interface ParsedRepoStateEvent {
+export interface RepoState {
   id: string;
   repoId: string;
   refs: Array<{ ref: string; commit: string; lineage?: string[] }>;
@@ -383,7 +383,7 @@ export interface ParsedRepoStateEvent {
   raw: RepoStateEvent;
 }
 
-export function parseRepoStateEvent(event: RepoStateEvent): ParsedRepoStateEvent {
+export function parseRepoStateEvent(event: RepoStateEvent): RepoState {
   const getTag = (name: string) => event.tags.find(t => t[0] === name)?.[1];
   const refs = event.tags
     .filter(t => t[0].startsWith("refs/"))
@@ -403,7 +403,7 @@ export function parseRepoStateEvent(event: RepoStateEvent): ParsedRepoStateEvent
   };
 }
 
-export interface ParsedStatusEvent {
+export interface Status {
   id: string;
   status: "open" | "applied" | "closed" | "draft";
   relatedIds: string[];
@@ -412,8 +412,8 @@ export interface ParsedStatusEvent {
   raw: StatusEvent;
 }
 
-export function parseStatusEvent(event: StatusEvent): ParsedStatusEvent {
-  let status: ParsedStatusEvent["status"] = "open";
+export function parseStatusEvent(event: StatusEvent): Status {
+  let status: Status["status"] = "open";
   if (event.kind === 1631) status = "applied";
   else if (event.kind === 1632) status = "closed";
   else if (event.kind === 1633) status = "draft";
