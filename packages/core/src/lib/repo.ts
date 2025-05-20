@@ -1,16 +1,16 @@
 import type {
   RepoAnnouncementEvent,
   RepoStateEvent,
-  ParsedRepoAnnouncementEvent,
-  ParsedRepoStateEvent,
+  RepoAnnouncement,
+  RepoState,
 } from '@nostr-git/shared-types';
 import type { GitProvider } from '@nostr-git/git-wrapper';
 import { parseRepoAnnouncementEvent, parseRepoStateEvent } from '@nostr-git/shared-types';
 
 export interface RepoHandle {
   repo: any; // Provider-specific repo handle (e.g., FS path, object, etc.)
-  announcement: ParsedRepoAnnouncementEvent;
-  state?: ParsedRepoStateEvent;
+  announcement: RepoAnnouncement;
+  state?: RepoState;
 }
 
 /**

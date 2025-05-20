@@ -1,4 +1,4 @@
-import type { ParsedRepoAnnouncementEvent } from '@nostr-git/shared-types';
+import type { RepoAnnouncement } from '@nostr-git/shared-types';
 import type { PermalinkData } from './permalink.js';
 export declare const rootDir = "/repos";
 export declare function fetchPermalink(data: PermalinkData): Promise<string>;
@@ -9,7 +9,7 @@ export declare function ensureRepo(opts: {
     branch: string;
 }, depth?: number): Promise<void>;
 export declare function ensureRepoFromEvent(opts: {
-    repoEvent: ParsedRepoAnnouncementEvent;
+    repoEvent: RepoAnnouncement;
     branch: string;
 }, depth?: number): Promise<void>;
 /**

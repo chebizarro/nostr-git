@@ -5,7 +5,7 @@ import { Buffer } from 'buffer';
 import { fileTypeFromBuffer } from 'file-type';
 import { lookup as mimeLookup } from 'mime-types';
 import { createPatch } from 'diff';
-import type { ParsedRepoAnnouncementEvent } from '@nostr-git/shared-types';
+import type { RepoAnnouncement } from '@nostr-git/shared-types';
 import type { PermalinkData } from './permalink.js';
 
 if (typeof window.Buffer === 'undefined') {
@@ -63,7 +63,7 @@ export async function ensureRepo(opts: { host: string; owner: string; repo: stri
   }
 }
 
-export async function ensureRepoFromEvent(opts: { repoEvent: ParsedRepoAnnouncementEvent; branch: string }, depth: number = 1) {
+export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; branch: string }, depth: number = 1) {
   const git = getGitProvider();
   const dir = `${rootDir}/${opts.repoEvent.id}`;
   if (!(await isRepoCloned(dir))) {
