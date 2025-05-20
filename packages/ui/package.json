@@ -21,7 +21,8 @@
   ],
   "scripts": {
     "format": "prettier --write .",
-    "build": "svelte-package && cp src/index.css dist/index.css"
+    "build": "svelte-package && cp src/index.css dist/index.css",
+    "prepare": "npm run build"
   },
   "peerDependencies": {
     "svelte": "^5.28.2"

@@ -16,7 +16,8 @@
   ],
   "scripts": {
     "build": "tsc --declaration --emitDeclarationOnly false --outDir dist",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "prepare": "npm run build"
   },
   "repository": {
     "type": "git",

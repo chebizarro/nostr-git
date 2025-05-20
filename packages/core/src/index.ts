@@ -8,3 +8,6 @@ export * from './lib/fork-handler.js';
 export * from './lib/git-provider.js';
 export * from './lib/git-worker-client.js';
 export * from './lib/files.js';
+export * from './lib/repo.js';
+export * from './lib/workers/git-worker.js';
+export * from './lib/files.js';
