@@ -1,4 +1,3 @@
-// Branch-related git functions for @nostr-git/core
 import { getGitProvider } from './git-provider.js';
 import LightningFS from '@isomorphic-git/lightning-fs';
 import { rootDir } from './git.js';

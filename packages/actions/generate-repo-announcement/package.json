@@ -1,0 +1,12 @@
+{
+  "name": "@nostr-git/generate-repo-announcement",
+  "version": "1.0.0",
+  "description": "GitHub Action to generate repo announcement JSON for Nostr integrations.",
+  "keywords": ["github-action", "nostr", "repo-announcement"],
+  "author": "nostr-git contributors",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "test": "bash entrypoint.sh test-output.json && cat test-output.json"
+  }
+}

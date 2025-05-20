@@ -12,6 +12,7 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "@nostr-git/ui": "link:packages/ui"
+    "@nostr-git/ui": "link:packages/ui",
+    "svelte-routing": "^2.13.0"
   }
 }

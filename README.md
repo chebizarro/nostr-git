@@ -15,8 +15,8 @@ This is the Git-Nostr monorepo containing shared packages and apps for integrati
 
 ```bash
 pnpm install
-pnpm -F @nostr-git/ui dev
-pnpm -F extension build
+cd packages/storybook
+pnpm storybook
 ```
 
 ## Publish

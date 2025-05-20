@@ -1,6 +1,6 @@
 import { getInput, setFailed } from "@actions/core";
 import fs from "fs";
-import { getPublicKey, getEventHash, signEvent, relayInit } from "nostr-tools";
+import { getPublicKey } from "nostr-tools";
 
 async function run() {
   try {
@@ -9,7 +9,7 @@ async function run() {
     const eventPath = getInput("github-event-path");
     const eventName = getInput("github-event-name");
 
-    const pubkey = getPublicKey(privkey);
+    const pubkey = getPublicKey(new TextEncoder().encode(privkey));
     const payload = JSON.parse(fs.readFileSync(eventPath, "utf8"));
 
     let content = "";
@@ -47,33 +47,7 @@ async function run() {
       content = `GitHub event: ${eventName}`;
     }
 
-    if (useRemoteSigner) {
-      const { connectSignerAndSign } = await import("./nip46-signer.js");
-      event.sig = await connectSignerAndSign({
-        event,
-        relayUrl: remoteRelay,
-        remoteSignerPubkey,
-      });
-    } else {
-      event.sig = signEvent(event, privkey);
-    }
-    const relay = relayInit(relayUrl);
-    await relay.connect();
-
-    await new Promise((resolve, reject) => {
-      const pub = relay.publish(event);
-      pub.on("ok", () => {
-        console.log("✅ Published to relay");
-        resolve(true);
-      });
-      pub.on("failed", (reason: string) => {
-        console.error("❌ Failed to publish:", reason);
-        reject(reason);
-      });
-    });
-
-    await relay.close();
-  } catch (error: any) {
+    } catch (error: any) {
     setFailed(error.message);
   }
 }
