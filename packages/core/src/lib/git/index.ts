@@ -1,5 +1,3 @@
-// Central entry point for git domain logic in @nostr-git/core
-
 export * from '../files.js';
 export * from '../git.js';
 export * from '../branches.js';
@@ -7,7 +5,7 @@ export * from '../commits.js';
 export * from '../remotes.js';
 export * from '../status.js';
 export * from '../nip34.js';
-// As you add more domains (tags, submodules, etc.), add them here:
+export * from '../repo.js';
 
 import * as files from '../files.js';
 import * as core from '../git.js';
@@ -16,6 +14,7 @@ import * as commits from '../commits.js';
 import * as remotes from '../remotes.js';
 import * as status from '../status.js';
 import * as nip34 from '../nip34.js';
+import * as repo from '../repo.js';
 
 export const git = {
   files,
@@ -25,4 +24,5 @@ export const git = {
   remotes,
   status,
   nip34,
+  repo,
 };

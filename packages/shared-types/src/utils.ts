@@ -345,6 +345,7 @@ export interface RepoAnnouncement {
   id: string;
   repoId: string;
   name?: string;
+  owner: string;
   description?: string;
   web?: string[];
   clone?: string[];
@@ -363,6 +364,7 @@ export function parseRepoAnnouncementEvent(event: RepoAnnouncementEvent): RepoAn
     id: event.id,
     repoId: getTag("d") || "",
     name: getTag("name"),
+    owner: event.pubkey,
     description: getTag("description"),
     web: getMultiTag("web"),
     clone: getMultiTag("clone"),

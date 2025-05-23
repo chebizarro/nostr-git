@@ -6,16 +6,16 @@ const fs: any = new LightningFS('nostr-git');
 
 export interface Branch {
   name: string;
-  oid?: string;
+  oid?: string; // commit hash
+  isHead: boolean;
 }
 
 /**
  * List all branches in a repo.
  */
-export async function listBranches(opts: { owner: string; repo: string; }): Promise<Branch[]> {
-  const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
+export async function listBranches(opts: { url: string; dir: string; }): Promise<Branch[]> {
   const git = getGitProvider();
-  const branches = await git.listBranches({ fs, dir });
+  const branches = await git.listBranches({dir: opts.dir, url: opts.url });
   return branches.map((name: string) => ({ name }));
 }
 

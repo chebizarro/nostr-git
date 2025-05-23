@@ -6,6 +6,9 @@ import type {
 } from '@nostr-git/shared-types';
 import type { GitProvider } from '@nostr-git/git-wrapper';
 import { parseRepoAnnouncementEvent, parseRepoStateEvent } from '@nostr-git/shared-types';
+import { getGitProvider } from './git-provider.js';
+import { Branch, listBranches } from './branches.js';
+import { rootDir } from './git.js';
 
 export interface RepoHandle {
   repo: any; // Provider-specific repo handle (e.g., FS path, object, etc.)
@@ -28,9 +31,7 @@ export async function fetchRepo(
   const parsedState = state ? parseRepoStateEvent(state) : undefined;
   const url = parsedAnnouncement.clone?.[0];
   if (!url) throw new Error('No clone URL found in announcement event');
-  // Default to first available provider if not supplied
   if (!provider) throw new Error('No GitProvider supplied');
-  // Clone the repo (options are provider-specific)
   const repo = await provider.clone({ url });
   return {
     repo,
@@ -38,3 +39,44 @@ export async function fetchRepo(
     state: parsedState,
   };
 }
+
+export class GitRepository {
+  announcement: RepoAnnouncement;
+  state?: RepoState;
+  dir: string;
+  constructor(announcement: RepoAnnouncementEvent, state?: RepoStateEvent) {
+    this.announcement = parseRepoAnnouncementEvent(announcement);
+    this.state = state ? parseRepoStateEvent(state) : undefined;
+    this.dir = `${rootDir}/${this.announcement.owner}/${this.announcement.repoId}`;
+  }
+
+  async getBranches(): Promise<Branch[]> {
+    if (this.state)
+      return this.state.refs.map((b) => ({ name: b.ref, oid: b.commit, isHead: b.ref === this.state?.head }));
+    
+    const url = this.announcement.clone?.find((u) => u.startsWith('https://'));
+    if (!url) throw new Error('No clone URL found in announcement event');
+    
+    return await listBranches({ url, dir: this.dir });
+  }
+
+  async clone() {
+    const url = this.announcement.clone?.[0];
+    if (!url) throw new Error('No clone URL found in announcement event');
+    const git = getGitProvider();
+    const repo = await git.clone({
+      dir: this.dir,
+      corsProxy: 'https://cors.isomorphic-git.org',
+      url,
+      ref: this.state?.head,
+      singleBranch: true,
+      depth: 1,
+      noCheckout: true,
+    });
+    return {
+      repo,
+      announcement: this.announcement,
+      state: this.state,
+    };
+  }
+} 
