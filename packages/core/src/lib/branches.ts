@@ -1,6 +1,7 @@
 import { getGitProvider } from './git-provider.js';
 import LightningFS from '@isomorphic-git/lightning-fs';
-import { rootDir } from './git.js';
+import { ensureRepoFromEvent, rootDir } from './git.js';
+import { parseRepoAnnouncementEvent, RepoAnnouncementEvent } from '@nostr-git/shared-types';
 
 const fs: any = new LightningFS('nostr-git');
 
@@ -8,6 +9,14 @@ export interface Branch {
   name: string;
   oid?: string; // commit hash
   isHead: boolean;
+}
+
+export async function listBranchesFromEvent(opts: { repoEvent: RepoAnnouncementEvent; }): Promise<Branch[]> {
+  const event = parseRepoAnnouncementEvent(opts.repoEvent);
+  const dir = `${rootDir}/${opts.repoEvent.id}`;
+  const git = getGitProvider();
+  const branches = await git.listBranches({dir});
+  return branches.map((name: string) => ({ name }));
 }
 
 /**
