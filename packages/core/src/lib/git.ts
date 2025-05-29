@@ -63,16 +63,47 @@ export async function ensureRepo(opts: { host: string; owner: string; repo: stri
   }
 }
 
+function sshToHttps(sshUrl: string): string | null {
+  // Match git@host:user/repo(.git)
+  const match = sshUrl.match(/^git@([^:]+):(.+?)(\.git)?$/);
+  if (match) {
+    const [, host, path] = match;
+    return `https://${host}/${path}.git`;
+  }
+  return null;
+}
+
 export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; branch: string }, depth: number = 1) {
   const git = getGitProvider();
   const dir = `${rootDir}/${opts.repoEvent.id}`;
+
+  // Prefer HTTPS clone URL
+  let cloneUrl = opts.repoEvent.clone?.find((url) => url.startsWith("https://"));
+
+  // If not found, try to convert SSH to HTTPS
+  if (!cloneUrl && opts.repoEvent.clone?.length) {
+    for (const url of opts.repoEvent.clone) {
+      if (url.startsWith("git@")) {
+        const httpsUrl = sshToHttps(url);
+        if (httpsUrl) {
+          cloneUrl = httpsUrl;
+          break;
+        }
+      }
+    }
+  }
+
+  if (!cloneUrl) {
+    throw new Error("No supported clone URL found in repo announcement");
+  }
+
   if (!(await isRepoCloned(dir))) {
     await git.clone({
       fs,
       http,
       dir,
       corsProxy: 'https://cors.isomorphic-git.org',
-      url: `${opts.repoEvent.clone?.[0]}`,
+      url: cloneUrl,
       ref: opts.branch,
       singleBranch: true,
       depth,
