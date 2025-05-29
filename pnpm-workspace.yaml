@@ -1,6 +1,6 @@
 packages:
   - packages/*
-  - 'packages/actions/*'
+  - packages/actions/*
 
 onlyBuiltDependencies:
   - esbuild
@@ -8,3 +8,6 @@ onlyBuiltDependencies:
 
 overrides:
   '@nostr-git/ui': link:packages/ui
+  '@nostr-git/core': link:packages/core
+  '@nostr-git/git-wrapper': link:packages/git-wrapper
+  '@nostr-git/shared-types': link:packages/shared-types

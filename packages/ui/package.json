@@ -48,6 +48,7 @@
   },
   "dependencies": {
     "@lucide/svelte": "^0.503.0",
+    "@nostr-git/core": "workspace:*",
     "@nostr-git/shared-types": "workspace:*",
     "@tiptap/core": "^2.11.7",
     "@tiptap/extension-code-block": "^2.11.7",

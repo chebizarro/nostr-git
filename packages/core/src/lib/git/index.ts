@@ -6,6 +6,7 @@ export * from '../remotes.js';
 export * from '../status.js';
 export * from '../nip34.js';
 export * from '../repo.js';
+export * from '../patches.js';
 
 import * as files from '../files.js';
 import * as core from '../git.js';
@@ -15,6 +16,7 @@ import * as remotes from '../remotes.js';
 import * as status from '../status.js';
 import * as nip34 from '../nip34.js';
 import * as repo from '../repo.js';
+import * as patches from '../patches.js';
 
 export const git = {
   files,

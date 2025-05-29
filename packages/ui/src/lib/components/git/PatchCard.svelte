@@ -10,16 +10,17 @@
   import { useRegistry } from "../../useRegistry";
   const { Avatar, AvatarFallback, AvatarImage, Button, Card } = useRegistry();
   import { toast } from "$lib/stores/toast";
-  import type { PatchEvent, Profile } from '@nostr-git/shared-types';
-  import { parsePatchEvent } from '@nostr-git/shared-types';
+  import type { PatchEvent, Profile, StatusEvent } from '@nostr-git/shared-types';  import { parsePatchEvent } from '@nostr-git/shared-types';
+  import { parseGitPatchFromEvent } from '@nostr-git/core';
 
   // Accept event and optional owner (Profile)
-  const { event, owner = {} }: { event: PatchEvent, owner?: Profile } = $props();
+  const { event, owner = {}, status }: { event: PatchEvent, owner?: Profile, status?: StatusEvent } = $props();
 
-  const parsed = parsePatchEvent(event);
+  const parsed = parseGitPatchFromEvent(event);
+
   // Prefer owner for author fields if provided
   const author: Profile = { ...parsed.author, ...owner };
-  const { id, repoId, title, description, baseBranch, commitCount, commentCount, createdAt, status } = parsed;
+  const { id, repoId, title, description, baseBranch, commitCount, commentCount, createdAt } = parsed;
 
   let isExpanded = $state(false);
   let isBookmarked = $state(false);
@@ -27,10 +28,10 @@
   const statusIcon = $derived(
     () =>
       ({
-        open: `<svg class='h-6 w-6 text-amber-500'><use href='#GitPullRequest'/></svg>`,
-        merged: `<svg class='h-6 w-6 text-green-500'><use href='#Check'/></svg>`,
-        closed: `<svg class='h-6 w-6 text-red-500'><use href='#X'/></svg>`,
-      })[status]
+        GIT_STATUS_OPEN: `<svg class='h-6 w-6 text-amber-500'><use href='#GitPullRequest'/></svg>`,
+        GIT_STATUS_MERGED: `<svg class='h-6 w-6 text-green-500'><use href='#Check'/></svg>`,
+        GIT_STATUS_CLOSED: `<svg class='h-6 w-6 text-red-500'><use href='#X'/></svg>`,
+      })[status?.kind]
   );
 
   function toggleBookmark() {
@@ -54,7 +55,8 @@
       <div class="flex items-center justify-between mb-1">
         <a href={`/git/repo/${repoId}/patches/${id}`} class="block">
           <h3
-            class="text-base font-semibold mb-0.5 leading-tight hover:text-accent transition-colors"
+            class="text-base font-semibold mb-0.5 leading-tight hover:text-accent transition-colors truncate max-w-xs"
+            title={title}
           >
             {title}
           </h3>

@@ -6,6 +6,9 @@ settings:
 
 overrides:
   '@nostr-git/ui': link:packages/ui
+  '@nostr-git/core': link:packages/core
+  '@nostr-git/git-wrapper': link:packages/git-wrapper
+  '@nostr-git/shared-types': link:packages/shared-types
 
 importers:
 
@@ -36,7 +39,7 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
       '@nostr-git/core':
-        specifier: workspace:*
+        specifier: link:../../core
         version: link:../../core
       nostr-tools:
         specifier: ^2.12.0
@@ -55,10 +58,10 @@ importers:
         specifier: ^4.6.0
         version: 4.6.2
       '@nostr-git/git-wrapper':
-        specifier: workspace:*
+        specifier: link:../git-wrapper
         version: link:../git-wrapper
       '@nostr-git/shared-types':
-        specifier: workspace:*
+        specifier: link:../shared-types
         version: link:../shared-types
       axios:
         specifier: ^1.9.0
@@ -84,6 +87,9 @@ importers:
       nostr-tools:
         specifier: ^2.11.0
         version: 2.13.0(typescript@5.8.3)
+      parse-patch:
+        specifier: ^0.1.4
+        version: 0.1.4
     devDependencies:
       '@eslint/compat':
         specifier: ^1.2.5
@@ -169,7 +175,7 @@ importers:
   packages/storybook:
     dependencies:
       '@nostr-git/shared-types':
-        specifier: workspace:*
+        specifier: link:../shared-types
         version: link:../shared-types
       ui:
         specifier: ^0.2.4
@@ -253,8 +259,11 @@ importers:
       '@lucide/svelte':
         specifier: ^0.503.0
         version: 0.503.0(svelte@5.31.1)
+      '@nostr-git/core':
+        specifier: link:../core
+        version: link:../core
       '@nostr-git/shared-types':
-        specifier: workspace:*
+        specifier: link:../shared-types
         version: link:../shared-types
       '@tiptap/core':
         specifier: ^2.11.7
@@ -3300,6 +3309,9 @@ packages:
   parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
     engines: {node: '>=6'}
+
+  parse-patch@0.1.4:
+    resolution: {integrity: sha512-SuQuWFP6n3lut7gANT3ZKDGTCi9ZN9o/QPJNSdmZcLEa5C2+vnFBuyk9dkCoQ/Cwkc8hF8Uvwjlj708RurT5sA==}
 
   parse5@7.3.0:
     resolution: {integrity: sha512-IInvU7fabl34qmi9gY8XOVxhYyMyuH2xUNpb2q8/Y+7552KlejkRvqvD19nMoUW/uQGGbqNpA6Tufu5FL5BZgw==}
@@ -7590,6 +7602,8 @@ snapshots:
   parent-module@1.0.1:
     dependencies:
       callsites: 3.1.0
+
+  parse-patch@0.1.4: {}
 
   parse5@7.3.0:
     dependencies:

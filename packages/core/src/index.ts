@@ -11,3 +11,4 @@ export * from './lib/files.js';
 export * from './lib/repo.js';
 export * from './lib/workers/git-worker.js';
 export * from './lib/branches.js';
+export * from './lib/patches.js';
