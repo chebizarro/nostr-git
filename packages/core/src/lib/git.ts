@@ -56,7 +56,6 @@ export async function ensureRepo(opts: { host: string; owner: string; repo: stri
       corsProxy: 'https://cors.isomorphic-git.org',
       url: `https://${opts.host}/${opts.owner}/${opts.repo}.git`,
       ref: opts.branch,
-      singleBranch: true,
       depth,
       noCheckout: true,
     });
@@ -97,7 +96,7 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
     throw new Error("No supported clone URL found in repo announcement");
   }
 
-  if (!(await isRepoCloned(dir))) {
+  //if (!(await isRepoCloned(dir))) {
     await git.clone({
       fs,
       http,
@@ -109,7 +108,7 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
       depth,
       noCheckout: true,
     });
-  }
+  //}
 }
 
 /**
