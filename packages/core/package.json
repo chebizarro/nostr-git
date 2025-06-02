@@ -57,6 +57,7 @@
 		"isomorphic-git": "^1.30.1",
 		"mime-types": "^3.0.1",
 		"nostr-tools": "^2.11.0",
+		"parse-git-diff": "^0.0.19",
 		"parse-patch": "^0.1.4"
 	}
 }

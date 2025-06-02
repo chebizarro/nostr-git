@@ -284,6 +284,7 @@ export interface Patch {
   commitCount: number;
   commentCount: number;
   createdAt: string;
+  diff: any[];
   status: "open" | "merged" | "closed";
   raw: PatchEvent;
 }
@@ -310,6 +311,7 @@ export function parsePatchEvent(event: PatchEvent): Patch {
     commitCount: getAllTags("commit").length,
     commentCount: getAllTags("e").length,
     createdAt: new Date(event.created_at * 1000).toISOString(),
+    diff: [],
     status,
     raw: event
   };

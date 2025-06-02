@@ -4,6 +4,10 @@ import LightningFS from '@isomorphic-git/lightning-fs';
 import { Buffer } from 'buffer';
 import { parseRepoAnnouncementEvent, type RepoAnnouncementEvent } from '@nostr-git/shared-types';
 
+if (typeof window.Buffer === 'undefined') {
+  (window as any).Buffer = Buffer;
+}
+
 const fs: any = new LightningFS('nostr-git');
 
 export interface FileEntry {

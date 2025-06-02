@@ -123,6 +123,7 @@ export type Nip34Event =
 export type TrustedEvent = NostrEvent;
 
 export type Profile = {
+  pubkey: string;
   name?: string;
   nip05?: string;
   lud06?: string;

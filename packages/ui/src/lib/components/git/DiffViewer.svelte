@@ -16,7 +16,7 @@
   }
 
   const {
-    diff,
+    diff = "",
     showLineNumbers = true,
     comments = [],
   }: {

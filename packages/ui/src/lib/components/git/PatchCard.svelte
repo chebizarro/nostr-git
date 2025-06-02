@@ -44,7 +44,7 @@
 
   function viewDiff(e?: MouseEvent) {
     e?.preventDefault();
-    navigate(`/git/repo/${repoId}/patches/${id}`);
+    navigate(`/git/${repoId}/patches/${id}`);
   }
 </script>
 
@@ -53,7 +53,7 @@
     {@html statusIcon()}
     <div class="flex-1">
       <div class="flex items-center justify-between mb-1">
-        <a href={`/git/repo/${repoId}/patches/${id}`} class="block">
+        <a href={`patches/${id}`} class="block">
           <h3
             class="text-base font-semibold mb-0.5 leading-tight hover:text-accent transition-colors truncate max-w-xs"
             title={title}

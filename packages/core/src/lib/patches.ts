@@ -1,16 +1,19 @@
-import { Patch, PatchEvent } from "@nostr-git/shared-types";
+import { Patch, PatchEvent, Profile } from "@nostr-git/shared-types";
 import { parseGitPatch } from "parse-patch";
+import parseGitDiff from "parse-git-diff";
 
 export function parseGitPatchFromEvent(event: PatchEvent): Patch {
   const header = parseGitPatch(event.content);
   const getTag = (name: string) => event.tags.find(t => t[0] === name)?.[1];
   const getAllTags = (name: string) => event.tags.filter(t => t[0] === name).map(t => t[1]);
   const authorTag = event.tags.find(t => t[0] === "committer");
-  const author = {
+  const author: Profile = {
     pubkey: event.pubkey,
     name: authorTag?.[1],
-    avatar: authorTag?.[2]
+    picture: authorTag?.[2]
   };
+  const gitDiff = parseGitDiff(event.content);
+  const diff = gitDiff["files"];
   let status: "open" | "merged" | "closed" = "open";
   if (event.tags.some(t => t[0] === "t" && t[1] === "merged")) status = "merged";
   else if (event.tags.some(t => t[0] === "t" && t[1] === "closed")) status = "closed";
@@ -26,6 +29,7 @@ export function parseGitPatchFromEvent(event: PatchEvent): Patch {
     commentCount: getAllTags("e").length,
     createdAt: new Date(event.created_at * 1000).toISOString(),
     status,
-    raw: event
+    raw: event,
+    diff
   };
 }
