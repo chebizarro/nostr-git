@@ -47,10 +47,10 @@
 
   <nav
     class={cn(
-      "bg-muted text-muted-foreground inline-flex h-10 items-center justify-center rounded-md p-1"
+      "bg-muted text-muted-foreground inline-flex h-10 items-center justify-center rounded-md p-1 w-full"
     )}
   >
-    <div class="grid grid-cols-6 mb-0">
+    <div class="grid grid-cols-6 justify-between m-2 w-full">
       {@render children?.(activeTab)}
     </div>
   </nav>

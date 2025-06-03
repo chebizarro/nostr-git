@@ -5,34 +5,60 @@
     BookmarkCheck,
     ChevronDown,
     ChevronUp,
+    GitPullRequest,
+    Check,
+    X,
+    FileCode,
   } from "@lucide/svelte";
-  import { navigate } from "svelte-routing";
   import { useRegistry } from "../../useRegistry";
   const { Avatar, AvatarFallback, AvatarImage, Button, Card } = useRegistry();
   import { toast } from "$lib/stores/toast";
-  import type { PatchEvent, Profile, StatusEvent } from '@nostr-git/shared-types';  import { parsePatchEvent } from '@nostr-git/shared-types';
-  import { parseGitPatchFromEvent } from '@nostr-git/core';
+  import type { PatchEvent, Profile, StatusEvent } from "@nostr-git/shared-types";
+  import { parseGitPatchFromEvent } from "@nostr-git/core";
 
   // Accept event and optional owner (Profile)
-  const { event, owner = {}, status }: { event: PatchEvent, owner?: Profile, status?: StatusEvent } = $props();
+  const {
+    event,
+    author,
+    status,
+  }: { event: PatchEvent; author?: import('svelte/store').Readable<Profile|undefined>; status?: StatusEvent } = $props();
 
   const parsed = parseGitPatchFromEvent(event);
 
-  // Prefer owner for author fields if provided
-  const author: Profile = { ...parsed.author, ...owner };
-  const { id, repoId, title, description, baseBranch, commitCount, commentCount, createdAt } = parsed;
+  let displayAuthor = $state<Partial<Profile> & { pubkey?: string }>({});
+  $effect(() => {
+    const a = typeof author !== 'undefined' ? $author : undefined;
+    if (a) {
+      displayAuthor.name = a.name;
+      displayAuthor.display_name = a.display_name;
+      displayAuthor.picture = a.picture;
+      displayAuthor.pubkey = (a as any).pubkey;
+    }
+  });
+
+  const { id, title, description, baseBranch, commitCount, commentCount } = parsed;
 
   let isExpanded = $state(false);
   let isBookmarked = $state(false);
 
-  const statusIcon = $derived(
-    () =>
-      ({
-        GIT_STATUS_OPEN: `<svg class='h-6 w-6 text-amber-500'><use href='#GitPullRequest'/></svg>`,
-        GIT_STATUS_MERGED: `<svg class='h-6 w-6 text-green-500'><use href='#Check'/></svg>`,
-        GIT_STATUS_CLOSED: `<svg class='h-6 w-6 text-red-500'><use href='#X'/></svg>`,
-      })[status?.kind]
-  );
+  console.log(status);
+
+  const statusIcon = $derived(() => getStatusIcon(status?.kind));
+
+  function getStatusIcon(kind: number | undefined) {
+    switch (kind) {
+      case 1630:
+        return { icon: GitPullRequest, color: "text-amber-500" };
+      case 1631:
+        return { icon: Check, color: "text-green-500" };
+      case 1632:
+        return { icon: X, color: "text-red-500" };
+      case 1633:
+        return { icon: FileCode, color: "text-gray-500" };
+      default:
+        return { icon: GitPullRequest, color: "text-gray-400" };
+    }
+  }
 
   function toggleBookmark() {
     isBookmarked = !isBookmarked;
@@ -42,38 +68,58 @@
     });
   }
 
-  function viewDiff(e?: MouseEvent) {
-    e?.preventDefault();
-    navigate(`/git/${repoId}/patches/${id}`);
-  }
 </script>
 
-<Card class="bg-card text-card-foreground rounded-lg border shadow-sm p-4">
-  <div class="flex items-start gap-3">
-    {@html statusIcon()}
+<Card class="git-card hover:bg-accent/50 transition-colors">
+  <div class="flex items-start gap-3 p-4">
+    {#if statusIcon}
+      {@const { icon: Icon, color } = statusIcon()}
+      <Icon class={`h-6 w-6 ${color}`} />
+    {/if}
     <div class="flex-1">
-      <div class="flex items-center justify-between mb-1">
-        <a href={`patches/${id}`} class="block">
-          <h3
-            class="text-base font-semibold mb-0.5 leading-tight hover:text-accent transition-colors truncate max-w-xs"
-            title={title}
+      <div class="flex items-center justify-between">
+        <div class="flex-1">
+          <a href={`patches/${id}`} class="block">
+            <h3
+              class="text-lg font-medium hover:text-accent transition-colors truncate max-w-xs"
+              title={title}
+            >
+              {title}
+            </h3>
+          </a>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            class={isBookmarked ? "text-primary" : "text-muted-foreground"}
+            onclick={toggleBookmark}
           >
-            {title}
-          </h3>
-        </a>
-        <Button
-          variant="ghost"
-          size="icon"
-          class={isBookmarked ? "text-primary" : "text-muted-foreground"}
-          onclick={toggleBookmark}
-        >
-          {#if isBookmarked}
-            <BookmarkCheck class="h-4 w-4" />
-          {:else}
-            <BookmarkPlus class="h-4 w-4" />
-          {/if}
-        </Button>
+            {#if isBookmarked}
+              <BookmarkCheck class="h-4 w-4" />
+            {:else}
+              <BookmarkPlus class="h-4 w-4" />
+            {/if}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-expanded={isExpanded}
+            aria-controls="patch-description"
+            class="ml-auto"
+            style="border-color: hsl(var(--border))"
+            onclick={() => (isExpanded = !isExpanded)}
+          >
+            {#if isExpanded}
+              <ChevronUp class="h-5 w-5 text-muted-foreground" />
+            {:else}
+              <ChevronDown class="h-5 w-5 text-muted-foreground" />
+            {/if}
+          </Button>
+        </div>
       </div>
+
       <div class="flex items-center gap-2 text-xs text-muted-foreground mb-1">
         <span>Base: {baseBranch}</span>
         <span>•</span>
@@ -81,61 +127,38 @@
         <span>•</span>
         <span>{commentCount} comments</span>
       </div>
-      <p class="text-xs text-muted-foreground mb-2">{description}</p>
-      <div class="flex items-center gap-2">
-        <Button
-          size="sm"
-          class="h-8 px-3 py-0 text-xs font-medium rounded-md border bg-background hover:bg-muted transition"
-          onclick={viewDiff}
-        >
-          View Diff
-        </Button>
-        <Button
-          size="sm"
-          class="h-8 px-3 py-0 text-xs font-medium rounded-md border bg-background hover:bg-muted transition"
-          onclick={toggleBookmark}
-        >
-          {isBookmarked ? "Bookmarked" : "Bookmark"}
-        </Button>
-        <button
-          type="button"
-          aria-expanded={isExpanded}
-          aria-controls="patch-description"
-          class="ml-auto"
-          style="border-color: hsl(var(--border))"
-          onclick={() => (isExpanded = !isExpanded)}
-        >
-          {#if isExpanded}
-            <ChevronUp class="h-5 w-5 text-muted-foreground" />
-          {:else}
-            <ChevronDown class="h-5 w-5 text-muted-foreground" />
-          {/if}
-        </button>
-      </div>
+
+      {#if isExpanded}
+        <p class="text-sm text-muted-foreground mt-3">{description}</p>
+        <div class="mt-4 flex items-center justify-between">
+          <Button size="sm" variant="outline">
+            <a href={`patches/${id}`}>View Diff</a>
+          </Button>
+          <div class="flex items-center gap-1">
+            <MessageSquare class="h-4 w-4 text-muted-foreground" />
+            <span class="text-sm text-muted-foreground">{commentCount}</span>
+          </div>
+        </div>
+      {:else}
+        <p id="patch-description" class="text-sm text-muted-foreground mt-3 line-clamp-2">
+          {description}
+        </p>
+        <div class="mt-4 flex items-center justify-between">
+          <Button variant="outline" size="sm">
+            <a href={`patches/${id}`}>View Diff</a>
+          </Button>
+          <div class="flex items-center gap-1">
+            <MessageSquare class="h-4 w-4 text-muted-foreground" />
+            <span class="text-sm text-muted-foreground">{commentCount}</span>
+          </div>
+        </div>
+      {/if}
     </div>
-
-    <p
-      id="patch-description"
-      class={`text-sm mt-3 ${!isExpanded ? "line-clamp-2" : ""}`}
-      style="color: hsl(var(--muted-foreground));"
-    >
-      {description}
-    </p>
-
-    <div class="mt-4 flex items-center justify-between">
-      <Button variant="outline" size="sm" onclick={viewDiff}>View diff</Button>
-
-      <div class="flex items-center gap-1">
-        <MessageSquare class="h-4 w-4 " style="color: hsl(var(--muted-foreground));" />
-        <span class="text-sm" style="color: hsl(var(--muted-foreground));">{commentCount}</span>
-      </div>
-    </div>
+    <Avatar class="h-8 w-8">
+      <AvatarImage src={displayAuthor.picture ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(displayAuthor.display_name || displayAuthor.name || displayAuthor.pubkey || 'Unknown')}&background=random`} alt={displayAuthor?.name ?? displayAuthor?.display_name ?? ""} />
+      <AvatarFallback
+        >{(displayAuthor?.name ?? displayAuthor?.display_name ?? "").slice(0, 2).toUpperCase()}</AvatarFallback
+      >
+    </Avatar>
   </div>
-
-  <Avatar
-    class="h-8 w-8 rounded-full flex items-center justify-center font-medium bg-secondary text-secondary-foreground"
-  >
-    <AvatarImage src={author.picture ?? ''} alt={author?.name ?? author?.display_name ?? ''} />
-    <AvatarFallback>{(author?.name ?? author?.display_name ?? '').slice(0, 2).toUpperCase()}</AvatarFallback>
-  </Avatar>
 </Card>

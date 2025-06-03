@@ -1,9 +1,6 @@
 // Commit-related git functions for @nostr-git/core
 import { getGitProvider } from './git-provider.js';
-import LightningFS from '@isomorphic-git/lightning-fs';
 import { rootDir } from './git.js';
-
-const fs: any = new LightningFS('nostr-git');
 
 export interface Commit {
   oid: string;
@@ -12,6 +9,7 @@ export interface Commit {
   committer?: { name: string; email: string; timestamp?: number };
   parent?: string[];
   tree?: string;
+  date?: number;
 }
 
 /**
@@ -21,7 +19,7 @@ export async function logCommits(opts: { owner: string; repo: string; branch?: s
   const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
   const git = getGitProvider();
   const ref = opts.branch || 'HEAD';
-  const log = await git.log({ fs, dir, ref, depth: opts.depth });
+  const log = await git.log({ dir, ref, depth: opts.depth });
   return log.map((entry: any) => ({
     oid: entry.oid,
     message: entry.commit.message,
@@ -29,6 +27,7 @@ export async function logCommits(opts: { owner: string; repo: string; branch?: s
     committer: entry.commit.committer,
     parent: entry.commit.parent,
     tree: entry.commit.tree,
+    date: entry.commit.committer?.timestamp,
   }));
 }
 
@@ -38,7 +37,7 @@ export async function logCommits(opts: { owner: string; repo: string; branch?: s
 export async function readCommit(opts: { owner: string; repo: string; oid: string }): Promise<Commit> {
   const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
   const git = getGitProvider();
-  const { commit } = await git.readCommit({ fs, dir, oid: opts.oid });
+  const { commit } = await git.readCommit({ dir, oid: opts.oid });
   return {
     oid: opts.oid,
     message: commit.message,
@@ -46,6 +45,7 @@ export async function readCommit(opts: { owner: string; repo: string; oid: strin
     committer: commit.committer,
     parent: commit.parent,
     tree: commit.tree,
+    date: commit.committer?.timestamp,
   };
 }
 
@@ -56,7 +56,6 @@ export async function createCommit(opts: { owner: string; repo: string; message:
   const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
   const git = getGitProvider();
   const oid = await git.commit({
-    fs,
     dir,
     message: opts.message,
     author: opts.author,

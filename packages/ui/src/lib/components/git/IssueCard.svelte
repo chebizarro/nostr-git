@@ -11,7 +11,6 @@
   const { Avatar, AvatarFallback, AvatarImage, Button } = useRegistry();
   import IssueThread from "./IssueThread.svelte";
   import { toast } from "$lib/stores/toast";
-
   import type { IssueEvent, Profile } from '@nostr-git/shared-types';
   import { parseIssueEvent } from '@nostr-git/shared-types';
 
@@ -20,7 +19,6 @@
   const parsed = parseIssueEvent(event);
   const {
     id,
-    repoId,
     subject: title,
     content: description,
     labels,

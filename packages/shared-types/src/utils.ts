@@ -283,6 +283,7 @@ export interface Patch {
   baseBranch: string;
   commitCount: number;
   commentCount: number;
+  commits: any[];
   createdAt: string;
   diff: any[];
   status: "open" | "merged" | "closed";
@@ -313,7 +314,8 @@ export function parsePatchEvent(event: PatchEvent): Patch {
     createdAt: new Date(event.created_at * 1000).toISOString(),
     diff: [],
     status,
-    raw: event
+    raw: event,
+    commits: [],
   };
 }
 
