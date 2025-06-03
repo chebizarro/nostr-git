@@ -1,6 +1,24 @@
 <script module>
   import { defineMeta } from "@storybook/addon-svelte-csf";
   import DiffViewer from "./DiffViewer.svelte";
+  import parseGitDiff from "parse-git-diff";
+  import { parseGitPatch } from "parse-patch";
+
+  const patch =
+`diff --git a/newfile.md b/newfile.md
+deleted file mode 100644
+index aa39060..0000000
+--- a/newfile.md
++++ /dev/null
+@@ -1 +0,0 @@
+-newfile
+`;
+
+  const parsed = parseGitPatch(patch);
+  const diff = parsed[0].diff;
+
+  console.log(parsed);
+
   const { Story } = defineMeta({
     title: "DiffViewer",
     component: DiffViewer,
@@ -10,7 +28,7 @@
       comments: { control: "object" },
     },
     args: {
-      diff: "+ Added a new feature!\n- Removed old line",
+      diff: parseGitDiff(diff),
       showLineNumbers: true,
       comments: [
         {
@@ -33,7 +51,7 @@
 
 <Story name="Single Line Addition">
   <DiffViewer
-    diff={"+ Added a new feature!"}
+    diff={parseGitDiff("+ Added a new feature!")}
     comments={[
       {
         id: "c1",
@@ -49,7 +67,9 @@
 
 <Story name="Massive Refactor">
   <DiffViewer
-    diff={`- old line 1\n- old line 2\n+ new line 1\n+ new line 2\n context line\n+ added line\n- removed line\n context again`}
+    diff={parseGitDiff(
+      `- old line 1\n- old line 2\n+ new line 1\n+ new line 2\n context line\n+ added line\n- removed line\n context again`
+    )}
     comments={[
       {
         id: "c2",
@@ -72,7 +92,9 @@
 
 <Story name="Mixed Changes">
   <DiffViewer
-    diff={` context\n- removed\n+ added\n unchanged\n+ another addition\n- another removal`}
+    diff={parseGitDiff(
+      ` context\n- removed\n+ added\n unchanged\n+ another addition\n- another removal`
+    )}
     comments={[]}
     showLineNumbers={true}
   />

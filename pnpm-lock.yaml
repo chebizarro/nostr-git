@@ -286,6 +286,12 @@ importers:
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
+      parse-git-diff:
+        specifier: ^0.0.19
+        version: 0.0.19
+      parse-patch:
+        specifier: ^0.1.4
+        version: 0.1.4
       svelte:
         specifier: ^5.28.2
         version: 5.31.1

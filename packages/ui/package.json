@@ -55,6 +55,8 @@
     "@tiptap/pm": "^2.11.7",
     "@tiptap/starter-kit": "^2.11.7",
     "buffer": "^6.0.3",
-    "date-fns": "^4.1.0"
+    "date-fns": "^4.1.0",
+    "parse-git-diff": "^0.0.19",
+    "parse-patch": "^0.1.4"
   }
 }
