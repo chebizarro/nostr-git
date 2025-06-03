@@ -3,6 +3,8 @@
   import { useRegistry } from "../../useRegistry";
   const { Avatar, AvatarFallback, AvatarImage, Button, Textarea } = useRegistry();
   import { formatDistanceToNow } from "date-fns";
+  import parseGitDiff from "parse-git-diff";
+  import { ChevronDown, ChevronUp } from "@lucide/svelte";
 
   interface Comment {
     id: string;
@@ -15,7 +17,6 @@
     createdAt: string;
   }
 
-  import parseGitDiff from "parse-git-diff";
 
   // Derive AnyFileChange from GitDiff as it's not directly exported in a way Storybook/Vite can consume
   type AnyFileChange = ReturnType<typeof parseGitDiff>["files"][number];
@@ -40,38 +41,43 @@
   const {
     diff = undefined,
     showLineNumbers = true,
+    expandAll = false,
     comments = [],
   }: {
-    diff: ReturnType<typeof parseGitDiff> | string | undefined;
+    diff: AnyFileChange[] | string | undefined;
     showLineNumbers?: boolean;
+    expandAll?: boolean;
     comments?: Comment[];
   } = $props();
 
   let selectedLine = $state<number | null>(null);
   let newComment = $state("");
-
-  $inspect(diff);
+  let expandedFiles = $state(new Set<string>());
 
   // Accept both AST and raw string for dev ergonomics
-  let parsed = $state<ReturnType<typeof parseGitDiff>>({ type: "GitDiff", files: [] });
+  let parsed = $state<AnyFileChange[]>([]);
   $effect(() => {
+    let initialExpanded = new Set<string>();
     if (typeof diff === "string") {
       try {
         parsed = parseGitDiff(diff);
       } catch (e) {
-        parsed = { type: "GitDiff", files: [] };
+        parsed = [];
       }
     } else if (
       diff &&
-      typeof diff === "object" &&
-      diff.type === "GitDiff" &&
-      Array.isArray(diff.files)
+      Array.isArray(diff)
     ) {
       // If diff is already the correct, fully-typed object
       parsed = diff;
     } else {
-      parsed = { type: "GitDiff", files: [] };
+      parsed = [];
     }
+    // Initially expand all files
+    if (expandAll) {
+      parsed.forEach(file => initialExpanded.add(getFileLabel(file)));
+    }
+    expandedFiles = initialExpanded;
   });
 
   // Comments by file/hunk/line
@@ -99,57 +105,100 @@
   class="border rounded-md p-4 overflow-x-auto font-mono text-sm bg-card"
   style="border-color: hsl(var(--border));"
 >
-  {#if parsed.files.length === 0}
+  {#if parsed.length === 0}
     <div class="text-muted-foreground italic">No diff to display.</div>
   {/if}
-  {#each parsed.files as file, fileIdx (getFileLabel(file))}
+  {#each parsed as file, fileIdx (getFileLabel(file))}
+    {@const fileId = getFileLabel(file)}
+    {@const isExpanded = expandedFiles.has(fileId)}
     <div class="mb-4">
-      <div class="font-bold mb-1">
-        {getFileLabel(file)}
-        {#if getFileIsBinary(file)}
-          <span class="ml-2 text-xs text-orange-400">[binary]</span>
+      <button
+        type="button"
+        class="font-bold mb-1 flex items-center w-full text-left hover:bg-muted/50 p-1 rounded"
+        onclick={() => {
+          const newSet = new Set(expandedFiles);
+          if (isExpanded) {
+            newSet.delete(fileId);
+          } else {
+            newSet.add(fileId);
+          }
+          expandedFiles = newSet;
+        }}
+        aria-expanded={isExpanded}
+        aria-controls={`file-diff-${fileIdx}`}
+      >
+        {#if isExpanded}
+          <ChevronUp class="h-4 w-4 mr-2 shrink-0" />
+        {:else}
+          <ChevronDown class="h-4 w-4 mr-2 shrink-0" />
         {/if}
-      </div>
-      {#if "chunks" in file && file.chunks}
-        {#each file.chunks as chunk, chunkIdx}
+        <span class="truncate">{fileId}</span>
+        {#if getFileIsBinary(file)}
+          <span class="ml-2 text-xs text-orange-400 shrink-0">[binary]</span>
+        {/if}
+      </button>
+      {#if isExpanded && "chunks" in file && file.chunks}
+        <div id={`file-diff-${fileIdx}`}>
+          {#each file.chunks as chunk, chunkIdx}
           <div class="mb-2">
-            {#if "content" in chunk && "changes" in chunk}
+            {#if "changes" in chunk}
               <div class="text-xs text-muted-foreground mb-1">{chunk.content}</div>
               {#each chunk.changes as change, i}
                 {@const ln = i + 1}
                 {@const lineKey = `${fileIdx}:${chunkIdx}:${ln}`}
                 {@const lineComments = getCommentsForLine(lineKey)}
                 {@const hasComments = lineComments.length > 0}
-                {@const lineClass =
-                  "py-1 pl-2" +
-                  (change.type === "AddedLine"
-                    ? " bg-green-950/30 border-l-4 border-green-500 pl-2"
-                    : change.type === "DeletedLine"
-                      ? " bg-red-950/30 border-l-4 border-red-500 pl-2"
-                      : change.type === "UnchangedLine"
-                        ? " hover:bg-secondary/50"
-                        : " hover:bg-secondary/50")}
+                {@const isMessageLine = change.type === "MessageLine"}
+                {@const lineDisplayData = (() => {
+                  if (isMessageLine) {
+                    return { bgClass: "py-1 px-2 text-muted-foreground italic", contentClass: "" };
+                  }
+
+                  let bgClass = "py-1";
+                  let contentClass = "pl-2"; // Default padding for content
+
+                  if (change.type === "AddedLine") {
+                    bgClass += " bg-green-950/30";
+                    contentClass = "border-l-4 border-green-500 pl-2";
+                  } else if (change.type === "DeletedLine") {
+                    bgClass += " bg-red-950/30";
+                    contentClass = "border-l-4 border-red-500 pl-2";
+                  } else if (change.type === "UnchangedLine") {
+                    bgClass += " hover:bg-secondary/50";
+                  }
+                  return { bgClass, contentClass };
+                })()}
+
                 <div>
-                  <div class={`${lineClass} flex group`}>
-                    {#if showLineNumbers}
-                      <span
-                        class="inline-block w-10 select-none text-right pr-2 border-r"
-                        style="color: hsl(var(--muted-foreground)); border-color: hsl(var(--border));"
+                  {#if isMessageLine}
+                    <div class="{lineDisplayData.bgClass}">{change.content}</div>
+                  {:else}
+                    <div class={`flex group ${lineDisplayData.bgClass}`}>
+                      <div class="flex shrink-0 text-muted-foreground items-center">
+                        {#if showLineNumbers}
+                          <span class="w-8 select-none text-right pr-1">
+                            {'lineBefore' in change && change.lineBefore !== undefined ? change.lineBefore : ''}
+                          </span>
+                          <span class="w-8 select-none text-right pr-2 border-r border-border mr-2">
+                            {'lineAfter' in change && change.lineAfter !== undefined ? change.lineAfter : ''}
+                          </span>
+                        {/if}
+                      </div>
+                      <div class={`flex-1 ${lineDisplayData.contentClass}`}>
+                        <span class="font-mono whitespace-pre">{change.content}</span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto"
+                        onclick={() => toggleCommentBox(ln)}
                       >
-                        {ln}
-                      </span>
-                    {/if}
-                    <span class="font-mono whitespace-pre px-2 flex-1">{change.content}</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      class="opacity-0 group-hover:opacity-100 transition-opacity"
-                      onclick={() => toggleCommentBox(ln)}
-                    >
-                      <MessageSquare class="h-4 w-4" />
-                    </Button>
-                  </div>
-                  {#if hasComments}
+                        <MessageSquare class="h-4 w-4" />
+                      </Button>
+                    </div>
+                  {/if}
+
+                  {#if !isMessageLine && hasComments}
                     <div
                       class="bg-secondary/30 border-l-4 border-primary ml-10 pl-4 py-2 space-y-3"
                     >
@@ -176,7 +225,7 @@
                       {/each}
                     </div>
                   {/if}
-                  {#if selectedLine === ln}
+                  {#if !isMessageLine && selectedLine === ln}
                     <div class="bg-secondary/20 border-l-4 border-primary ml-10 pl-4 py-2">
                       <div class="flex gap-2">
                         <Avatar class="h-8 w-8">
@@ -214,6 +263,7 @@
             {/if}
           </div>
         {/each}
+        </div>
       {/if}
     </div>
   {/each}
