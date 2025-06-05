@@ -259,9 +259,6 @@ importers:
 
   packages/ui:
     dependencies:
-      '@lucide/svelte':
-        specifier: ^0.503.0
-        version: 0.503.0(svelte@5.31.1)
       '@nostr-git/core':
         specifier: link:../core
         version: link:../core
@@ -295,7 +292,13 @@ importers:
       svelte:
         specifier: ^5.28.2
         version: 5.31.1
+      zod:
+        specifier: ^3.25.50
+        version: 3.25.50
     devDependencies:
+      '@lucide/svelte':
+        specifier: ^0.482.0
+        version: 0.482.0(svelte@5.31.1)
       '@sveltejs/package':
         specifier: ^2.3.11
         version: 2.3.11(svelte@5.31.1)(typescript@5.8.3)
@@ -309,7 +312,7 @@ importers:
         specifier: ^10.4.21
         version: 10.4.21(postcss@8.5.3)
       bits-ui:
-        specifier: ^1.3.19
+        specifier: ^1.5.3
         version: 1.5.3(svelte@5.31.1)
       clsx:
         specifier: ^2.1.1
@@ -1237,8 +1240,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.25':
     resolution: {integrity: sha512-vNk6aEwybGtawWmy/PzwnGDOjCkLWSD2wqvjGGAgOAwCGWySYXfYoxt00IJkTF+8Lb57DwOb3Aa0o9CApepiYQ==}
 
-  '@lucide/svelte@0.503.0':
-    resolution: {integrity: sha512-Y7Q8pHnX2YG8Ef4a/VnYFN9tTAJS33MiS78vQtPiyp5iiWuBlTMoViMiRUxQb7U9Ro46RdJ0kpCADvvha3Z2rA==}
+  '@lucide/svelte@0.482.0':
+    resolution: {integrity: sha512-n2ycHU9cNcleRDwwpEHBJ6pYzVhHIaL3a+9dQa8kns9hB2g05bY+v2p2KP8v0pZwtNhYTHk/F2o2uZ1bVtQGhw==}
     peerDependencies:
       svelte: ^5
 
@@ -4325,6 +4328,9 @@ packages:
     resolution: {integrity: sha512-zK7YHHz4ZXpW89AHXUPbQVGKI7uvkd3hzusTdotCg1UxyaVtg0zFJSTfW/Dq5f7OBBVnq6cZIaC8Ti4hb6dtCA==}
     engines: {node: '>= 14'}
 
+  zod@3.25.50:
+    resolution: {integrity: sha512-VstOnRxf4tlSq0raIwbn0n+LA34SxVoZ8r3pkwSUM0jqNiA/HCMQEVjTuS5FZmHsge+9MDGTiAuHyml5T0um6A==}
+
 snapshots:
 
   '@actions/core@1.11.1':
@@ -5311,7 +5317,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.0
 
-  '@lucide/svelte@0.503.0(svelte@5.31.1)':
+  '@lucide/svelte@0.482.0(svelte@5.31.1)':
     dependencies:
       svelte: 5.31.1
 
@@ -8614,3 +8620,5 @@ snapshots:
       archiver-utils: 5.0.2
       compress-commons: 6.0.2
       readable-stream: 4.7.0
+
+  zod@3.25.50: {}

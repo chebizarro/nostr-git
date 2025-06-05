@@ -13,6 +13,7 @@ export { default as RepoThreadView } from "./git/RepoThreadView.svelte";
 export { default as WikiContent } from "./git/WikiContent.svelte";
 export { default as WikiSidebar } from "./git/WikiSidebar.svelte";
 export { default as RepoTab } from "./git/RepoTab.svelte";
+export { default as NewIssueForm } from "./git/NewIssueForm.svelte";
 
 // Export all Svelte components from thread/
 export { default as ThreadCommit } from "./thread/ThreadCommit.svelte";
@@ -29,3 +30,6 @@ export { Textarea } from "./ui/textarea";
 export { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 export { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./ui/card";
 export { Separator } from "./ui/separator";
+export { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+export { Checkbox } from "./ui/checkbox";
+export { Label } from "./ui/label";

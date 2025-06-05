@@ -14,7 +14,8 @@ export type Registry = {
   TabsList: typeof import("../components/ui/tabs/tabs-list.svelte").default;
   TabsTrigger: typeof import("../components/ui/tabs/tabs-trigger.svelte").default;
   TabsContent: typeof import("../components/ui/tabs/tabs-content.svelte").default;
-  // Add more widgets as needed
+  Checkbox: typeof import("../components/ui/checkbox/checkbox.svelte").default;
+  Label: typeof import("../components/ui/label/label.svelte").default;
 };
 
 import Button from "../components/ui/button/button.svelte";
@@ -29,6 +30,8 @@ import Tabs from "../components/ui/tabs/tabs-list.svelte";
 import TabsList from "../components/ui/tabs/tabs-list.svelte";
 import TabsTrigger from "../components/ui/tabs/tabs-trigger.svelte";
 import TabsContent from "../components/ui/tabs/tabs-content.svelte";
+import Checkbox from "../components/ui/checkbox/checkbox.svelte";
+import Label from "../components/ui/label/label.svelte";
 
 export const defaultRegistry: Registry = {
   Button,
@@ -43,4 +46,6 @@ export const defaultRegistry: Registry = {
   TabsList,
   TabsTrigger,
   TabsContent,
+  Checkbox,
+  Label,
 };

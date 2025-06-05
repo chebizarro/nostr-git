@@ -41,8 +41,6 @@
   let isExpanded = $state(false);
   let isBookmarked = $state(false);
 
-  console.log(status);
-
   const statusIcon = $derived(() => getStatusIcon(status?.kind));
 
   function getStatusIcon(kind: number | undefined) {

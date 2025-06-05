@@ -12,7 +12,7 @@
   import { toast } from "$lib/stores/toast";
   import type { IssueEvent, Profile } from '@nostr-git/shared-types';
   import { parseIssueEvent } from '@nostr-git/shared-types';
-  import IssueThread from "../thread/IssueThread.svelte";
+  import IssueThread from "./IssueThread.svelte";
 
   // Accept event and optional author (Profile store)
   const { event, author }: { event: IssueEvent, author?: import('svelte/store').Readable<Profile|undefined> } = $props();
@@ -26,7 +26,6 @@
     author: parsedAuthor
   } = parsed;
 
-const md = markdownIt();
 
   // Use $author store if available, fallback to parsedAuthor
   let displayAuthor = $state<Partial<Profile> & { pubkey?: string }>({});

@@ -7,7 +7,9 @@
   import type { RepoAnnouncementEvent, Profile } from '@nostr-git/shared-types';
   import { parseRepoAnnouncementEvent } from '@nostr-git/shared-types';
   // Accept event and optional owner (Profile)
-  const { event, owner = {}, issueCount = 0, lastUpdated = undefined }: { event: RepoAnnouncementEvent, owner?: Profile, issueCount?: number, lastUpdated?: string } = $props();
+  const { event, owner = {
+    pubkey: ""
+  }, issueCount = 0, lastUpdated = undefined }: { event: RepoAnnouncementEvent, owner?: Profile, issueCount?: number, lastUpdated?: string } = $props();
   const parsed = parseRepoAnnouncementEvent(event);
   // Prefer owner for avatar/name if provided
   const repoOwner: Profile = { ...owner };
