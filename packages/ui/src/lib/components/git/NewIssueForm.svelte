@@ -1,12 +1,15 @@
 <script lang="ts">
   import { z } from "zod";
   import { CircleAlert } from "@lucide/svelte";
+  import { CircleAlert } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
 
   const { Button, Input, Textarea, Label, Checkbox } = useRegistry();
   import { X, Plus } from "@lucide/svelte";
   import { createIssueEvent } from "@nostr-git/shared-types";
+  import { createIssueEvent } from "@nostr-git/shared-types";
 
+  const { repoId, repoOwnerPubkey, postIssue } = $props();
   const { repoId, repoOwnerPubkey, postIssue } = $props();
 
   const back = () => history.back();
@@ -80,11 +83,16 @@
         recipients: [repoOwnerPubkey],
         subject,
         labels,
+        repoAddr: `30617:${repoOwnerPubkey}:${repoId}`,
+        recipients: [repoOwnerPubkey],
+        subject,
+        labels,
       });
       console.log(issueEvent);
       postIssue(issueEvent);
       back()
     } catch (error) {
+      console.error(error);
       console.error(error);
     } finally {
       isSubmitting = false;
