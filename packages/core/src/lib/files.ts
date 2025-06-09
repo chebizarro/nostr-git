@@ -8,8 +8,6 @@ if (typeof window.Buffer === 'undefined') {
   (window as any).Buffer = Buffer;
 }
 
-const fs: any = new LightningFS('nostr-git');
-
 export interface FileEntry {
   name: string;
   path: string;
@@ -43,10 +41,10 @@ export async function listRepoFilesFromEvent(opts: {
   if (opts.commit) {
     oid = opts.commit;
   } else {
-    oid = await git.resolveRef({ fs, dir, ref: branch });
+    oid = await git.resolveRef({ dir, ref: branch });
   }
   const treePath = opts.path || '';
-  const { tree } = await git.readTree({ fs, dir, oid, filepath: treePath });
+  const { tree } = await git.readTree({ dir, oid, filepath: treePath });
   return tree.map((entry: any) => ({
     name: entry.path,
     path: treePath ? `${treePath}/${entry.path}` : entry.path,
@@ -72,8 +70,8 @@ export async function getRepoFileContentFromEvent(opts: {
   const dir = `${rootDir}/${opts.repoEvent.id}`;
   await ensureRepoFromEvent({ repoEvent: event, branch });
   const git = getGitProvider();
-  const oid = await git.resolveRef({ fs, dir, ref: branch });
-  const { blob } = await git.readBlob({ fs, dir, oid, filepath: opts.path });
+  const oid = await git.resolveRef({ dir, ref: branch });
+  const { blob } = await git.readBlob({ dir, oid, filepath: opts.path });
   return Buffer.from(blob).toString('utf8');
 }
 
@@ -95,8 +93,8 @@ export async function getRepoFileContent(opts: {
   const branch = opts.branch || 'main';
   await ensureRepo({ host: opts.host, owner: opts.owner, repo: opts.repo, branch });
   const git = getGitProvider();
-  const oid = await git.resolveRef({ fs, dir, ref: branch });
-  const { blob } = await git.readBlob({ fs, dir, oid, filepath: opts.path });
+  const oid = await git.resolveRef({ dir, ref: branch });
+  const { blob } = await git.readBlob({ dir, oid, filepath: opts.path });
   return Buffer.from(blob).toString('utf8');
 }
 
@@ -116,10 +114,10 @@ export async function listRepoFiles(opts: {
   if (opts.commit) {
     oid = opts.commit;
   } else {
-    oid = await git.resolveRef({ fs, dir, ref: branch });
+    oid = await git.resolveRef({ dir, ref: branch });
   }
   const treePath = opts.path || '';
-  const { tree } = await git.readTree({ fs, dir, oid, filepath: treePath });
+  const { tree } = await git.readTree({ dir, oid, filepath: treePath });
   return tree.map((entry: any) => ({
     name: entry.path,
     path: treePath ? `${treePath}/${entry.path}` : entry.path,

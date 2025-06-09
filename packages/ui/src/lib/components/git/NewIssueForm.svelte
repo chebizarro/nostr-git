@@ -1,12 +1,13 @@
 <script lang="ts">
   import { z } from "zod";
-import { CircleAlert } from "@lucide/svelte";
+  import { CircleAlert } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
 
   const { Button, Input, Textarea, Label, Checkbox } = useRegistry();
   import { X, Plus } from "@lucide/svelte";
+  import { createIssueEvent } from "@nostr-git/shared-types";
 
-  const { repoId, repoOwnerPubkey, onClose } = $props();
+  const { repoId, repoOwnerPubkey, postIssue } = $props();
 
   const back = () => history.back();
 
@@ -15,7 +16,6 @@ import { CircleAlert } from "@lucide/svelte";
     content: z.string().min(1, "Description is required"),
     labels: z.array(z.string()).default([]),
   });
-  type IssueFormData = z.infer<typeof issueSchema>;
 
   let subject = $state("");
   let content = $state("");
@@ -68,18 +68,17 @@ import { CircleAlert } from "@lucide/svelte";
       return;
     }
     try {
-      // Here we would create the NIP-34 issue event
-      console.log("Creating NIP-34 issue:", {
-        kind: 1621,
+      const issueEvent = createIssueEvent({
         content,
-        tags: [
-          ["a", `30617:${repoOwnerPubkey}:${repoId}`],
-          ["p", repoOwnerPubkey],
-          ["subject", subject],
-          ...labels.map((label) => ["t", label]),
-        ],
+        repoAddr: `30617:${repoOwnerPubkey}:${repoId}`,
+        recipients: [repoOwnerPubkey],
+        subject,
+        labels,
       });
+      console.log(issueEvent);
+      postIssue(issueEvent);
     } catch (error) {
+      console.error(error);
     } finally {
       isSubmitting = false;
     }
@@ -120,9 +119,7 @@ import { CircleAlert } from "@lucide/svelte";
     {#if errors.content}
       <div class="text-red-500 text-sm mt-1">{errors.content}</div>
     {/if}
-    <p class="text-xs text-muted-foreground">
-      Supports Markdown formatting
-    </p>
+    <p class="text-xs text-muted-foreground">Supports Markdown formatting</p>
   </div>
   <div class="space-y-3">
     <Label>Labels</Label>

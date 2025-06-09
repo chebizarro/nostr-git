@@ -2,20 +2,21 @@
   "name": "@nostr-git/shared-types",
   "version": "0.1.0",
   "description": "Shared TypeScript types for nostr-git, including NIP-34 event types.",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "default": "./dist/index.js"
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc --declaration --emitDeclarationOnly false --outDir dist",
+    "build": "tsc --declaration --outDir dist",
     "clean": "rm -rf dist",
     "prepare": "npm run build"
   },

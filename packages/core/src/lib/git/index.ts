@@ -27,4 +27,5 @@ export const git = {
   status,
   nip34,
   repo,
+  patches,
 };

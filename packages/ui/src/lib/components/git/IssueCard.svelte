@@ -1,21 +1,23 @@
 <script lang="ts">
   import TimeAgo from "../../TimeAgo.svelte";
-  import {
-    CircleAlert,
-    ChevronDown,
-    ChevronUp,
-    BookmarkPlus,
-    BookmarkCheck,
-  } from "@lucide/svelte";
+  import { CircleAlert, ChevronDown, ChevronUp, BookmarkPlus, BookmarkCheck } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
   const { Avatar, AvatarFallback, AvatarImage, Button } = useRegistry();
   import { toast } from "$lib/stores/toast";
-  import type { IssueEvent, Profile } from '@nostr-git/shared-types';
-  import { parseIssueEvent } from '@nostr-git/shared-types';
+  import type { CommentEvent, IssueEvent, Profile } from "@nostr-git/shared-types";
+  import { parseIssueEvent } from "@nostr-git/shared-types";
   import IssueThread from "./IssueThread.svelte";
 
   // Accept event and optional author (Profile store)
-  const { event, author }: { event: IssueEvent, author?: import('svelte/store').Readable<Profile|undefined> } = $props();
+  const {
+    event,
+    author,
+    comments,
+  }: {
+    event: IssueEvent;
+    author?: Profile;
+    comments?: CommentEvent[];
+  } = $props();
   const parsed = parseIssueEvent(event);
   const {
     id,
@@ -23,14 +25,13 @@
     content: description,
     labels,
     createdAt,
-    author: parsedAuthor
+    author: parsedAuthor,
   } = parsed;
-
 
   // Use $author store if available, fallback to parsedAuthor
   let displayAuthor = $state<Partial<Profile> & { pubkey?: string }>({});
   $effect(() => {
-    const a = typeof author !== 'undefined' ? $author : undefined;
+    const a = typeof author !== "undefined" ? $author : undefined;
     if (a) {
       displayAuthor.name = a.name;
       displayAuthor.display_name = a.display_name;
@@ -46,10 +47,10 @@
 
   // For commentCount and status, you may want to compute based on event.tags or extend the parser as needed.
   // Here, we'll default to 0 and 'open' for now:
-  let commentCount = event.tags.filter(t => t[0] === 'e').length;
-  let status: 'open' | 'closed' | 'resolved' = $state('open');
-  if (event.tags.some(t => t[0] === 't' && t[1] === 'closed')) status = 'closed';
-  else if (event.tags.some(t => t[0] === 't' && t[1] === 'resolved')) status = 'resolved';
+  let commentCount = comments?.length ?? 0;
+  let status: "open" | "closed" | "resolved" = $state("open");
+  if (event.tags.some((t) => t[0] === "t" && t[1] === "closed")) status = "closed";
+  else if (event.tags.some((t) => t[0] === "t" && t[1] === "resolved")) status = "resolved";
 
   let isExpanded = $state(false);
   let isBookmarked = $state(false);
@@ -109,11 +110,16 @@
       <div class="flex items-center gap-2 text-xs text-muted-foreground mb-1">
         <span>Opened <TimeAgo date={createdAt} /></span>
         <span>•</span>
-        <span>by {displayAuthor.display_name || displayAuthor.name || displayAuthor.pubkey || 'Unknown'}</span>
+        <span
+          >by {displayAuthor.display_name ||
+            displayAuthor.name ||
+            displayAuthor.pubkey ||
+            "Unknown"}</span
+        >
         <span>•</span>
         <span>{commentCount} comments</span>
       </div>
-      <p class="text-xs text-muted-foreground mb-2">{description}</p>
+      <p class="text-xs text-muted-foreground mb-2">{@html description}</p>
       {#if labels && labels.length}
         <div class="inline-flex gap-1 mb-2">
           {#each labels as label}
@@ -140,11 +146,19 @@
     <Avatar
       class="h-8 w-8 rounded-full flex items-center justify-center font-medium bg-secondary text-secondary-foreground ml-3"
     >
-      <AvatarImage src={displayAuthor.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayAuthor.display_name || displayAuthor.name || displayAuthor.pubkey || 'Unknown')}&background=random`} alt={displayAuthor.display_name || displayAuthor.name || displayAuthor.pubkey || 'Unknown'} />
-      <AvatarFallback>{((displayAuthor.display_name || displayAuthor.name || displayAuthor.pubkey || 'U').slice(0, 2).toUpperCase())}</AvatarFallback>
+      <AvatarImage
+        src={displayAuthor.picture ||
+          `https://ui-avatars.com/api/?name=${encodeURIComponent(displayAuthor.display_name || displayAuthor.name || displayAuthor.pubkey || "Unknown")}&background=random`}
+        alt={displayAuthor.display_name || displayAuthor.name || displayAuthor.pubkey || "Unknown"}
+      />
+      <AvatarFallback
+        >{(displayAuthor.display_name || displayAuthor.name || displayAuthor.pubkey || "U")
+          .slice(0, 2)
+          .toUpperCase()}</AvatarFallback
+      >
     </Avatar>
   </div>
 </div>
 {#if isExpanded}
-  <IssueThread issueId={id} />
+  <IssueThread issueId={id} comments={comments} />
 {/if}

@@ -33,3 +33,4 @@ export { Separator } from "./ui/separator";
 export { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 export { Checkbox } from "./ui/checkbox";
 export { Label } from "./ui/label";
+export { Badge } from "./ui/badge";

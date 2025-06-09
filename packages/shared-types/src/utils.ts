@@ -1,4 +1,5 @@
-import type { Nip34Event, RepoAnnouncementEvent, RepoStateEvent, PatchEvent, IssueEvent, StatusEvent, NostrTag } from './nip34';
+import type { Nip34Event, RepoAnnouncementEvent, RepoStateEvent, PatchEvent, IssueEvent, StatusEvent, NostrTag } from './nip34.js';
+import type { CommentEvent, CommentTag, CreateCommentOpts } from './nip22.js';
 
 /**
  * Type guard for RepoAnnouncementEvent (kind: 30617)
@@ -36,9 +37,9 @@ export function isStatusEvent(event: Nip34Event): event is StatusEvent {
 }
 
 /**
- * Get a human-readable label for a NIP-34 event kind
+ * Get a human-readable label for a NIP-34 or NIP-22 event kind
  */
-export function getNip34KindLabel(kind: number): string {
+export function getNostrKindLabel(kind: number): string {
   switch (kind) {
     case 30617:
       return 'Repository Announcement';
@@ -56,10 +57,20 @@ export function getNip34KindLabel(kind: number): string {
       return 'Status: Closed';
     case 1633:
       return 'Status: Draft';
+    case 1111:
+      return 'Comment';
     default:
       return 'Unknown';
   }
 }
+
+/**
+ * Type guard for Comment Event (kind: 1111)
+ */
+export function isCommentEvent(event: { kind: number }): event is CommentEvent {
+  return event.kind === 1111;
+}
+
 
 /**
  * Get the first tag of a given type (e.g. 'committer')
@@ -92,7 +103,27 @@ import type {
   PatchTag,
   IssueTag,
   StatusTag,
-} from './nip34';
+} from './nip34.js';
+
+
+
+/**
+// export function createCommentEvent(opts: {
+//   content: string;
+//   tags: CommentTag[];
+//   created_at?: number;
+//   pubkey?: string;
+//   id?: string;
+// }): CommentEvent {
+//   return {
+//     kind: 1111,
+//     content: opts.content,
+//     tags: opts.tags,
+//     created_at: opts.created_at ?? Math.floor(Date.now() / 1000),
+//     ...(opts.pubkey ? { pubkey: opts.pubkey } : {}),
+//     ...(opts.id ? { id: opts.id } : {}),
+//   } as CommentEvent;
+// }
 
 /**
  * Create a repo announcement event (kind 30617)
@@ -271,7 +302,7 @@ export function removeTag<E extends { tags: NostrTag[] }>(event: E, tagType: str
 }
 
 // -------------------
-// Parsing Utilities for NIP-34 Events
+// Parsing Utilities for NIP-34 & NIP-22 Events
 // -------------------
 
 export interface Patch {
