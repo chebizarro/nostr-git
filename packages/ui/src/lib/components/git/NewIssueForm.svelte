@@ -1,15 +1,12 @@
 <script lang="ts">
   import { z } from "zod";
   import { CircleAlert } from "@lucide/svelte";
-  import { CircleAlert } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
 
   const { Button, Input, Textarea, Label, Checkbox } = useRegistry();
   import { X, Plus } from "@lucide/svelte";
   import { createIssueEvent } from "@nostr-git/shared-types";
-  import { createIssueEvent } from "@nostr-git/shared-types";
 
-  const { repoId, repoOwnerPubkey, postIssue } = $props();
   const { repoId, repoOwnerPubkey, postIssue } = $props();
 
   const back = () => history.back();
@@ -78,7 +75,15 @@
     }
     try {
       const issueEvent = createIssueEvent({
+      const issueEvent = createIssueEvent({
         content,
+        repoAddr: `30617:${repoOwnerPubkey}:${repoId}`,
+        recipients: [repoOwnerPubkey],
+        subject,
+        labels,
+      });
+      console.log(issueEvent);
+      postIssue(issueEvent);
         repoAddr: `30617:${repoOwnerPubkey}:${repoId}`,
         recipients: [repoOwnerPubkey],
         subject,
@@ -92,7 +97,6 @@
       postIssue(issueEvent);
       back()
     } catch (error) {
-      console.error(error);
       console.error(error);
     } finally {
       isSubmitting = false;
@@ -134,6 +138,7 @@
     {#if errors.content}
       <div class="text-red-500 text-sm mt-1">{errors.content}</div>
     {/if}
+    <p class="text-xs text-muted-foreground">Supports Markdown formatting</p>
     <p class="text-xs text-muted-foreground">Supports Markdown formatting</p>
   </div>
   <div class="space-y-3">
