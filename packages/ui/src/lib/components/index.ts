@@ -14,6 +14,8 @@ export { default as WikiContent } from "./git/WikiContent.svelte";
 export { default as WikiSidebar } from "./git/WikiSidebar.svelte";
 export { default as RepoTab } from "./git/RepoTab.svelte";
 export { default as NewIssueForm } from "./git/NewIssueForm.svelte";
+export { default as MergeAnalyzer } from "./git/MergeAnalyzer.svelte";
+export { default as ConflictVisualizer } from "./git/ConflictVisualizer.svelte";
 
 // Export all Svelte components from thread/
 export { default as ThreadCommit } from "./thread/ThreadCommit.svelte";
@@ -27,10 +29,13 @@ export { Input } from "./ui/input";
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 export { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
 export { Textarea } from "./ui/textarea";
-export { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
+export * from "./ui/collapsible";
 export { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./ui/card";
 export { Separator } from "./ui/separator";
 export { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 export { Checkbox } from "./ui/checkbox";
 export { Label } from "./ui/label";
 export { Badge } from "./ui/badge";
+export { ScrollArea } from "./ui/scroll-area";
+export { Alert, AlertDescription, AlertTitle } from "./ui/alert";
+export { Progress } from "./ui/progress";

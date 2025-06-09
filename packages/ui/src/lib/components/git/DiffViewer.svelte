@@ -17,7 +17,6 @@
     createdAt: string;
   }
 
-
   // Derive AnyFileChange from GitDiff as it's not directly exported in a way Storybook/Vite can consume
   type AnyFileChange = ReturnType<typeof parseGitDiff>["files"][number];
 
