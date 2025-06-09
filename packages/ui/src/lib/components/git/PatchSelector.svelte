@@ -3,7 +3,7 @@
   import { useRegistry } from "../../useRegistry";
   const { Card, CardHeader, CardTitle, CardContent, ScrollArea, Badge } = useRegistry();
 
-  const props = $props();
+  const { patches, selectedPatch, onPatchSelect } = $props();
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -23,13 +23,13 @@
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'clean':
-        return <CheckCircle class="h-3 w-3 text-green-500" />;
+        return {icon: CheckCircle, color: 'h-3 w-3 text-green-500'}
       case 'conflicts':
-        return <AlertTriangle class="h-3 w-3 text-orange-500" />;
+        return {icon: AlertTriangle, color: 'h-3 w-3 text-orange-500'}
       case 'error':
-        return <XCircle class="h-3 w-3 text-red-500" />;
+        return {icon: XCircle, color: 'h-3 w-3 text-red-500'}
       case 'pending':
-        return <Clock class="h-3 w-3 text-blue-500" />;
+        return {icon: Clock, color: 'h-3 w-3 text-blue-500'}
       default:
         return null;
     }
@@ -47,8 +47,9 @@
       <ScrollArea class="h-80">
         <div class="p-3 space-y-2">
           {#each patches as patch (patch.id)}
-            <div
-              class={`p-3 rounded-lg border cursor-pointer transition-all ${
+            <button
+              type="button"
+              class={`p-3 rounded-lg border w-full text-left transition-all ${
                 selectedPatch?.id === patch.id 
                   ? 'border-primary bg-primary/5 shadow-md' 
                   : getStatusColor(patch.status)
@@ -83,7 +84,7 @@
               <div class="text-xs text-muted-foreground mt-1">
                 by {patch.author}
               </div>
-            </div>
+            </button>
           {/each}
         </div>
       </ScrollArea>

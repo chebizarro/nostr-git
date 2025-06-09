@@ -1,9 +1,6 @@
 import { getGitProvider } from './git-provider.js';
-import LightningFS from '@isomorphic-git/lightning-fs';
-import { ensureRepoFromEvent, rootDir } from './git.js';
+import { rootDir } from './git.js';
 import { parseRepoAnnouncementEvent, RepoAnnouncementEvent } from '@nostr-git/shared-types';
-
-const fs: any = new LightningFS('nostr-git');
 
 export interface Branch {
   name: string;
@@ -34,7 +31,7 @@ export async function listBranches(opts: { url: string; dir: string; }): Promise
 export async function createBranch(opts: { owner: string; repo: string; branch: string; checkout?: boolean; }): Promise<void> {
   const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
   const git = getGitProvider();
-  await git.branch({ fs, dir, ref: opts.branch, checkout: opts.checkout });
+  await git.branch({ dir, ref: opts.branch, checkout: opts.checkout });
 }
 
 /**
@@ -43,7 +40,7 @@ export async function createBranch(opts: { owner: string; repo: string; branch: 
 export async function deleteBranch(opts: { owner: string; repo: string; branch: string; }): Promise<void> {
   const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
   const git = getGitProvider();
-  await git.deleteBranch({ fs, dir, ref: opts.branch });
+  await git.deleteBranch({ dir, ref: opts.branch });
 }
 
 /**
@@ -52,5 +49,5 @@ export async function deleteBranch(opts: { owner: string; repo: string; branch: 
 export async function renameBranch(opts: { owner: string; repo: string; oldBranch: string; newBranch: string; }): Promise<void> {
   const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
   const git = getGitProvider();
-  await git.renameBranch({ fs, dir, oldref: opts.oldBranch, ref: opts.newBranch });
+  await git.renameBranch({ dir, oldref: opts.oldBranch, ref: opts.newBranch });
 }

@@ -101,7 +101,7 @@
 </script>
 
 <div
-  class="border rounded-md p-4 overflow-x-auto font-mono text-sm bg-card"
+  class="git-diff-view border border-border rounded-md overflow-hidden"
   style="border-color: hsl(var(--border));"
 >
   {#if parsed.length === 0}
@@ -150,17 +150,17 @@
                 {@const isMessageLine = change.type === "MessageLine"}
                 {@const lineDisplayData = (() => {
                   if (isMessageLine) {
-                    return { bgClass: "py-1 px-2 text-muted-foreground italic", contentClass: "" };
+                    return { bgClass: "px-2 pt-1 text-muted-foreground italic", contentClass: "" };
                   }
 
-                  let bgClass = "py-1";
+                  let bgClass = "pl-2 pt-1";
                   let contentClass = "pl-2"; // Default padding for content
 
                   if (change.type === "AddedLine") {
-                    bgClass += " bg-green-950/30";
+                    bgClass += " git-diff-line-add bg-green-500/10";
                     contentClass = "border-l-4 border-green-500 pl-2";
                   } else if (change.type === "DeletedLine") {
-                    bgClass += " bg-red-950/30";
+                    bgClass += " git-diff-line-remove bg-red-500/10";
                     contentClass = "border-l-4 border-red-500 pl-2";
                   } else if (change.type === "UnchangedLine") {
                     bgClass += " hover:bg-secondary/50";
@@ -173,19 +173,17 @@
                     <div class="{lineDisplayData.bgClass}">{change.content}</div>
                   {:else}
                     <div class={`flex group ${lineDisplayData.bgClass}`}>
-                      <div class="flex shrink-0 text-muted-foreground items-center">
+                      <div class="flex shrink-0 text-muted-foreground select-none">
                         {#if showLineNumbers}
-                          <span class="w-8 select-none text-right pr-1">
+                          <span class="w-8 text-right pr-2">
                             {'lineBefore' in change && change.lineBefore !== undefined ? change.lineBefore : ''}
                           </span>
-                          <span class="w-8 select-none text-right pr-2 border-r border-border mr-2">
+                          <span class="w-8 text-right pr-2 border-r border-border mr-2">
                             {'lineAfter' in change && change.lineAfter !== undefined ? change.lineAfter : ''}
                           </span>
                         {/if}
                       </div>
-                      <div class={`flex-1 ${lineDisplayData.contentClass}`}>
-                        <span class="font-mono whitespace-pre">{change.content}</span>
-                      </div>
+                      <span class="font-mono whitespace-pre px-2 flex-1">{change.content}</span>
                       <Button
                         variant="ghost"
                         size="icon"

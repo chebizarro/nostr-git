@@ -16,7 +16,9 @@ export { default as RepoTab } from "./git/RepoTab.svelte";
 export { default as NewIssueForm } from "./git/NewIssueForm.svelte";
 export { default as MergeAnalyzer } from "./git/MergeAnalyzer.svelte";
 export { default as ConflictVisualizer } from "./git/ConflictVisualizer.svelte";
-
+export { default as PatchSelector } from "./git/PatchSelector.svelte";
+export { default as CommitSelector } from "./git/CommitSelector.svelte";
+export { Repo } from "./git/Repo.svelte";
 // Export all Svelte components from thread/
 export { default as ThreadCommit } from "./thread/ThreadCommit.svelte";
 export { default as ThreadComposer } from "./thread/ThreadComposer.svelte";

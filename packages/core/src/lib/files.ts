@@ -1,6 +1,5 @@
 import { getGitProvider } from './git-provider.js';
 import { ensureRepo, ensureRepoFromEvent, rootDir } from './git.js';
-import LightningFS from '@isomorphic-git/lightning-fs';
 import { Buffer } from 'buffer';
 import { parseRepoAnnouncementEvent, type RepoAnnouncementEvent } from '@nostr-git/shared-types';
 
@@ -12,7 +11,6 @@ export interface FileEntry {
   name: string;
   path: string;
   type: 'file' | 'directory' | 'submodule' | 'symlink';
-  size?: number;
   oid?: string;
 }
 

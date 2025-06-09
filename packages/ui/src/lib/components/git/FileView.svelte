@@ -3,25 +3,31 @@
   import { useRegistry } from "../../useRegistry";
   const { Button } = useRegistry();
   import { toast } from "$lib/stores/toast";
+  import type { FileEntry } from "@nostr-git/core";
+  import Spinner from "../editor/Spinner.svelte";
 
-  const props = $props<{
-    name: string;
-    type?: "file" | "directory";
-    path: string;
-    content?: string;
-  }>();
+  const {file, getFileContent}: {file: FileEntry, getFileContent: (path: string) => Promise<string>} = $props();
 
-  const name = props.name;
-  const type = props.type ?? "file";
-  const path = props.path;
-  const content = props.content ?? "";
+  const name = file.name;
+  const type = file.type ?? "file";
+  const path = file.path;
+  let content = $state("");
 
   let isExpanded = $state(false);
+
+  $effect(async () => {
+    if (isExpanded) {
+      content = await getFileContent(path);
+    }
+  })
 
   async function copyContent(event: MouseEvent | undefined) {
     event?.stopPropagation();
     try {
-      await navigator.clipboard.writeText(content);
+      if (!content) {
+        content = await getFileContent(path);
+      }
+      navigator.clipboard.writeText(content);
       toast.push({
         title: "Copied to clipboard",
         description: `${name} content has been copied to your clipboard.`,
@@ -35,9 +41,12 @@
     }
   }
 
-  function downloadFile(event: MouseEvent | undefined) {
+  async function downloadFile(event: MouseEvent | undefined) {
     event?.stopPropagation();
-    const blob = new Blob([content ?? ""], { type: "text/plain" });
+    if (!content) {
+      content = await getFileContent(path);
+    }
+    const blob = new Blob([content], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -89,11 +98,13 @@
     {/if}
   </button>
 
-  {#if isExpanded && type === "file" && content}
+  {#if isExpanded && type === "file"}
     <div class="p-4 border-t" style="border-color: hsl(var(--border));">
-      <pre class="bg-secondary/30 p-4 rounded-lg overflow-x-auto">
-        <code>{content}</code>
-      </pre>
+      {#if content}
+        <pre class="bg-secondary/30 p-4 rounded-lg overflow-x-auto"><code>{content}</code></pre>
+      {:else}
+        <Spinner>Fetching content...</Spinner>
+      {/if}
     </div>
   {/if}
 </div>
