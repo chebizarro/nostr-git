@@ -77,6 +77,7 @@
       });
       console.log(issueEvent);
       postIssue(issueEvent);
+      back()
     } catch (error) {
       console.error(error);
     } finally {
