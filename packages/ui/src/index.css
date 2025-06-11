@@ -45,6 +45,68 @@
   }
 }
 
+/* These classes are necessary to be defined here */
+/* if we want to use them with @apply */
+@layer utilities {
+  /* Primary color utilities */
+  .text-primary-foreground {
+    color: hsl(var(--primary-foreground));
+  }
+  .bg-primary-foreground {
+    background-color: hsl(var(--primary-foreground));
+  }
+  .border-primary-foreground {
+    border-color: hsl(var(--primary-foreground));
+  }
+
+  /* Secondary color utilities */
+  .text-secondary-foreground {
+    color: hsl(var(--secondary-foreground));
+  }
+  .bg-secondary-foreground {
+    background-color: hsl(var(--secondary-foreground));
+  }
+
+  /* Destructive color utilities */
+  .text-destructive-foreground {
+    color: hsl(var(--destructive-foreground));
+  }
+  .bg-destructive-foreground {
+    background-color: hsl(var(--destructive-foreground));
+  }
+
+  /* Muted color utilities */
+  .text-muted-foreground {
+    color: hsl(var(--muted-foreground));
+  }
+  .bg-muted-foreground {
+    background-color: hsl(var(--muted-foreground));
+  }
+
+  /* Accent color utilities */
+  .text-accent-foreground {
+    color: hsl(var(--accent-foreground));
+  }
+  .bg-accent-foreground {
+    background-color: hsl(var(--accent-foreground));
+  }
+
+  /* Popover color utilities */
+  .text-popover-foreground {
+    color: hsl(var(--popover-foreground));
+  }
+  .bg-popover-foreground {
+    background-color: hsl(var(--popover-foreground));
+  }
+
+  /* Card color utilities */
+  .text-card-foreground {
+    color: hsl(var(--card-foreground));
+  }
+  .bg-card-foreground {
+    background-color: hsl(var(--card-foreground));
+  }
+}
 
 @layer components {
   .git-menu-item {
