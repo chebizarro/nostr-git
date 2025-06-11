@@ -42,6 +42,12 @@
     }
   }
 
+  function handleKeyDown(event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      handleAddCustomLabel();
+    }
+  }
   function handleAddCustomLabel() {
     const trimmed = newLabel.trim();
     if (trimmed && !customLabels.includes(trimmed) && !commonLabels.includes(trimmed)) {
@@ -135,7 +141,7 @@
         </label>
       {/each}
       {#each customLabels as label}
-        <span class="flex items-center space-x-2 bg-gray-200 rounded px-2 py-1">
+        <label class="flex items-center space-x-2 rounded">
           <Checkbox
             checked={labels.includes(label)}
             onclick={(e) => handleLabelToggle(label, e.target.checked)}
@@ -144,10 +150,15 @@
           <button type="button" class="text-red-500" onclick={() => handleRemoveCustomLabel(label)}
             ><X size={14} /></button
           >
-        </span>
+        </label>
       {/each}
       <div class="flex gap-2">
-        <Input placeholder="Add custom label" bind:value={newLabel} class="flex-1" />
+        <Input 
+          placeholder="Add custom label"
+          bind:value={newLabel}
+          class="flex-1" 
+          onkeydown={handleKeyDown}
+        />
         <Button type="button" variant="outline" onclick={handleAddCustomLabel}
           ><Plus size={14} /></Button
         >
@@ -158,8 +169,8 @@
     <Button type="button" variant="outline" onclick={handleCancel} disabled={isSubmitting}
       >Cancel</Button
     >
-    <Button type="submit" disabled={isSubmitting}
-      >{isSubmitting ? "Creating..." : "Create Issue"}</Button
-    >
+    <Button type="submit" variant={"git"} disabled={isSubmitting}>
+      {isSubmitting ? "Creating..." : "Create Issue"}
+    </Button>
   </div>
 </form>
