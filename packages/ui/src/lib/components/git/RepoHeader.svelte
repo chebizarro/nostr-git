@@ -11,11 +11,15 @@
     owner = {},
     activeTab = "overview",
     children,
+    watchRepo,
+    isRepoWatched,
   }: {
     event: RepoAnnouncementEvent;
     owner?: Profile;
     activeTab?: string;
     children?: any;
+    watchRepo?: () => void;
+    isRepoWatched: boolean;
   } = $props();
   const parsed = parseRepoAnnouncementEvent(event);
   const name = parsed.name ?? "";
@@ -33,9 +37,9 @@
         <Star class="h-4 w-4" />
         Star
       </Button>
-      <Button variant="outline" size="sm" class="gap-2">
+      <Button variant="outline" size="sm" class="gap-2" onclick={watchRepo}>
         <Eye class="h-4 w-4" />
-        Watch
+        {isRepoWatched ? "Unwatch" : "Watch"}
       </Button>
       <Button variant="outline" size="sm" class="gap-2">
         <GitFork class="h-4 w-4" />
