@@ -41,3 +41,5 @@ export { Badge } from "./ui/badge";
 export { ScrollArea } from "./ui/scroll-area";
 export { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 export { Progress } from "./ui/progress";
+
+export { toast } from "../stores/toast";

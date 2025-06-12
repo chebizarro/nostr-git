@@ -126,7 +126,6 @@
       <div class="text-red-500 text-sm mt-1">{errors.content}</div>
     {/if}
     <p class="text-xs text-muted-foreground">Supports Markdown formatting</p>
-    <p class="text-xs text-muted-foreground">Supports Markdown formatting</p>
   </div>
   <div class="space-y-3">
     <Label>Labels</Label>
