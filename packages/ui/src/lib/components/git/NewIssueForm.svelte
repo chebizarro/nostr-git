@@ -75,25 +75,12 @@
     }
     try {
       const issueEvent = createIssueEvent({
-      const issueEvent = createIssueEvent({
         content,
         repoAddr: `30617:${repoOwnerPubkey}:${repoId}`,
         recipients: [repoOwnerPubkey],
         subject,
         labels,
       });
-      console.log(issueEvent);
-      postIssue(issueEvent);
-        repoAddr: `30617:${repoOwnerPubkey}:${repoId}`,
-        recipients: [repoOwnerPubkey],
-        subject,
-        labels,
-        repoAddr: `30617:${repoOwnerPubkey}:${repoId}`,
-        recipients: [repoOwnerPubkey],
-        subject,
-        labels,
-      });
-      console.log(issueEvent);
       postIssue(issueEvent);
       back()
     } catch (error) {
