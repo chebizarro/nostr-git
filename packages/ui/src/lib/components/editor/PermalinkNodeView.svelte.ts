@@ -1,6 +1,6 @@
 import { mergeAttributes, Node, nodePasteRule, type PasteRuleMatch, type RawCommands } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
-import { createNeventFromPermalink } from '../../../../../core/src/lib/event.js';
+import { createNeventFromPermalink } from '@nostr-git/core';
 import type { EventTemplate, NostrEvent } from 'nostr-tools';
 import type { MarkdownSerializerState } from '@tiptap/pm/markdown';
 import { mount, unmount, type Component } from 'svelte';

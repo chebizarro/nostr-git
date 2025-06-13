@@ -1,13 +1,11 @@
 <script lang="ts">
   import { generateSecretKey } from "nostr-tools";
-  import { createEventFromPermalink } from "./event.js";
-  import { fetchPermalink } from "./git.js";
-  import { parsePermalink } from "./permalink.js";
+  import { createEventFromPermalink, fetchPermalink, parsePermalink } from "@nostr-git/core";
 
-  let permalinkText = "";
-  let snippetContent = "";
-  let errorMessage = "";
-  let loading = false;
+  let permalinkText = $state("");
+  let snippetContent = $state("");
+  let errorMessage = $state("");
+  let loading = $state(false);
 
   async function handlePermalink() {
     snippetContent = "";

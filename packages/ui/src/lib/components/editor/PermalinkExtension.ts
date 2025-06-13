@@ -3,7 +3,7 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { type EventTemplate, type NostrEvent } from 'nostr-tools';
 import { PermalinkNode } from './PermalinkNodeView.svelte';
 import type { Component } from 'svelte';
-import { isPermalink } from '../../../../../core/src/lib/permalink.js';
+import { isPermalink } from '@nostr-git/core';
 import Spinner from './Spinner.svelte';
 
 

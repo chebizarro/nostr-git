@@ -8,8 +8,6 @@ export type Registry = {
   CardTitle: typeof import("../components/ui/card/card-title.svelte").default;
   CardContent: typeof import("../components/ui/card/card-content.svelte").default;
   Collapsible: typeof import("../components/ui/collapsible");
-  CollapsibleContent: typeof import("../components/ui/collapsible");
-  CollapsibleTrigger: typeof import("../components/ui/collapsible");
   Separator: typeof import("../components/ui/separator/separator.svelte").default;
   Textarea: typeof import("../components/ui/textarea/textarea.svelte").default;
   Avatar: typeof import("../components/ui/avatar/avatar.svelte").default;
