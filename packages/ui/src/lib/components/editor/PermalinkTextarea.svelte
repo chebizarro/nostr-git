@@ -2,12 +2,7 @@
   import { generateSecretKey } from "nostr-tools";
   import { createEventFromPermalink } from "./event.js";
   import { fetchPermalink } from "./git.js";
-  import { Buffer } from "buffer";
   import { parsePermalink } from "./permalink.js";
-
-  if (typeof window !== "undefined" && !window.Buffer) {
-    (window as any).Buffer = Buffer;
-  }
 
   let permalinkText = "";
   let snippetContent = "";
@@ -68,7 +63,7 @@
     <textarea
       rows="3"
       bind:value={permalinkText}
-      on:paste={handlePaste}
+      onpaste={handlePaste}
       placeholder="https://github.com/user/repo/blob/main/path/to/file.ts#L10-L20"
     >
     </textarea>

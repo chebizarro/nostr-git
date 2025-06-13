@@ -50,7 +50,6 @@
 		"@nostr-git/git-wrapper": "workspace:*",
 		"@nostr-git/shared-types": "workspace:*",
 		"axios": "^1.9.0",
-		"buffer": "^6.0.3",
 		"comlink": "^4.4.2",
 		"diff": "^7.0.0",
 		"file-type": "^20.4.1",
@@ -58,6 +57,7 @@
 		"mime-types": "^3.0.1",
 		"nostr-tools": "^2.11.0",
 		"parse-git-diff": "^0.0.19",
-		"parse-patch": "^0.1.4"
+		"parse-patch": "^0.1.4",
+		"buffer": "^6.0.3"
 	}
 }

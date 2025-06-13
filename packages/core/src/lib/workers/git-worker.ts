@@ -2,11 +2,8 @@ import { expose } from 'comlink';
 import LightningFS from '@isomorphic-git/lightning-fs';
 import http from 'isomorphic-git/http/web';
 import git from 'isomorphic-git';
-import { Buffer } from 'buffer';
 import axios from 'axios';
 import { finalizeEvent, SimplePool } from 'nostr-tools';
-
-(globalThis as any).Buffer = Buffer;
 
 const fs = new LightningFS('fs');
 const dir = '/clone';
@@ -28,8 +25,6 @@ const cloneAndFork = async ({
   nostrPrivateKey: Uint8Array;
   relays: string[];
 }) => {
-  const pfs = fs.promises;
-
   await git.clone({ fs, http, dir, url: sourceUrl, singleBranch: true, depth: 1 });
 
   const remoteUrl = await createRemoteRepo(targetHost, targetToken, targetUsername, targetRepo);

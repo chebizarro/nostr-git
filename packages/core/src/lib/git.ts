@@ -1,18 +1,16 @@
 import { getGitProvider } from './git-provider.js';
-import LightningFS from '@isomorphic-git/lightning-fs';
 import http from 'isomorphic-git/http/web';
-import { Buffer } from 'buffer';
 import { fileTypeFromBuffer } from 'file-type';
 import { lookup as mimeLookup } from 'mime-types';
 import { createPatch } from 'diff';
 import type { RepoAnnouncement } from '@nostr-git/shared-types';
 import type { PermalinkData } from './permalink.js';
+import { Buffer } from 'buffer';
 
 if (typeof window.Buffer === 'undefined') {
   (window as any).Buffer = Buffer;
 }
 
-const fs: any = new LightningFS('nostr-git');
 export const rootDir = '/repos';
 
 export async function fetchPermalink(data: PermalinkData) {
@@ -20,9 +18,10 @@ export async function fetchPermalink(data: PermalinkData) {
   try {
     await ensureRepo({ host: data.host, owner: data.owner, repo: data.repo, branch: data.branch });
     const git = getGitProvider();
-    const commitOid = await git.resolveRef({ fs, dir, ref: data.branch });
-    const { blob } = await git.readBlob({ fs, dir, oid: commitOid, filepath: data.filePath });
-    let content = Buffer.from(blob).toString('utf8');
+    const commitOid = await git.resolveRef({ dir, ref: data.branch });
+    const { blob } = await git.readBlob({ dir, oid: commitOid, filepath: data.filePath });
+    const decoder = new TextDecoder('utf-8');
+    let content = decoder.decode(blob);
 
     if (data.startLine !== undefined) {
       const lines = content.split('\n');
@@ -35,10 +34,10 @@ export async function fetchPermalink(data: PermalinkData) {
   }
 }
 
-async function isRepoCloned(dir: string, fsOverride?: any): Promise<boolean> {
+async function isRepoCloned(dir: string): Promise<boolean> {
   const git = getGitProvider();
   try {
-    await git.resolveRef({ fs: fsOverride || fs, dir, ref: 'HEAD' });
+    await git.resolveRef({ dir, ref: 'HEAD' });
     return true;
   } catch {
     return false;
@@ -50,7 +49,6 @@ export async function ensureRepo(opts: { host: string; owner: string; repo: stri
   const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
   if (!(await isRepoCloned(dir))) {
     await git.clone({
-      fs,
       http,
       dir,
       corsProxy: 'https://cors.isomorphic-git.org',
@@ -98,7 +96,6 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
 
   //if (!(await isRepoCloned(dir))) {
     await git.clone({
-      fs,
       http,
       dir,
       corsProxy: 'https://cors.isomorphic-git.org',
@@ -149,7 +146,7 @@ export async function produceGitDiffFromPermalink(data: PermalinkData): Promise<
 
   const newOid = data.branch;
   if (!newOid) throw new Error('No commit SHA found in permalink data');
-  const { commit } = await git.readCommit({ fs, dir, oid: newOid });
+  const { commit } = await git.readCommit({ dir, oid: newOid });
   const parentOid = commit.parent[0];
 
   const changes = await getFileChanges(dir, parentOid || '', newOid);
@@ -203,7 +200,6 @@ async function getFileChanges(
 ): Promise<Array<{ filepath: string; type: 'add' | 'remove' | 'modify'; Aoid?: string; Boid?: string }>> {
   const git = getGitProvider();
   const results = await git.walk({
-    fs,
     dir,
     trees: [git.TREE({ ref: oldOid }), git.TREE({ ref: newOid })],
     map: async (filepath: string, [A, B]: [any, any]) => {
@@ -235,14 +231,14 @@ async function createFilePatch(
 ) {
   const git = getGitProvider();
   const oldContent = oldOid
-    ? (await git.readBlob({ fs, dir, oid: oldOid, filepath })).blob
-    : Buffer.from('');
+    ? (await git.readBlob({ dir, oid: oldOid, filepath })).blob
+    : '';
   const newContent = newOid
-    ? (await git.readBlob({ fs, dir, oid: newOid, filepath })).blob
-    : Buffer.from('');
+    ? (await git.readBlob({ dir, oid: newOid, filepath })).blob
+    : '';
 
-  const oldBuf = Buffer.from(oldContent);
-  const newBuf = Buffer.from(newContent);
+  const oldBuf = oldContent;
+  const newBuf = newContent;
 
   return createPatch(
     filepath,

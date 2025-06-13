@@ -1,9 +1,6 @@
 // Status and diff-related git functions for @nostr-git/core
 import { getGitProvider } from './git-provider.js';
-import LightningFS from '@isomorphic-git/lightning-fs';
 import { rootDir } from './git.js';
-
-const fs: any = new LightningFS('nostr-git');
 
 export interface FileChange {
   filepath: string;
@@ -18,7 +15,7 @@ export interface FileChange {
 export async function statusMatrix(opts: { owner: string; repo: string; }): Promise<any[]> {
   const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
   const git = getGitProvider();
-  return git.statusMatrix({ fs, dir });
+  return git.statusMatrix({ dir });
 }
 
 /**
@@ -28,7 +25,6 @@ export async function getFileChanges(opts: { owner: string; repo: string; oldOid
   const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
   const git = getGitProvider();
   const results = await git.walk({
-    fs,
     dir,
     trees: [git.TREE({ ref: opts.oldOid }), git.TREE({ ref: opts.newOid })],
     map: async (filepath: string, [A, B]: [any, any]) => {

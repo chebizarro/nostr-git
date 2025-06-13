@@ -1,20 +1,11 @@
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { type EventTemplate, type NostrEvent } from 'nostr-tools';
-import { Buffer } from 'buffer';
 import { PermalinkNode } from './PermalinkNodeView.svelte';
 import type { Component } from 'svelte';
 import { isPermalink } from '../../../../../core/src/lib/permalink.js';
 import Spinner from './Spinner.svelte';
 
-type WindowWithBuffer = Window &
-  typeof globalThis & {
-    Buffer?: typeof Buffer;
-  };
-
-if (typeof window !== 'undefined' && !(window as WindowWithBuffer).Buffer) {
-  (window as WindowWithBuffer).Buffer = Buffer;
-}
 
 export interface PermalinkExtensionOptions {
   signer: (event: EventTemplate) => Promise<NostrEvent>;

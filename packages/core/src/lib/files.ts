@@ -1,7 +1,7 @@
 import { getGitProvider } from './git-provider.js';
 import { ensureRepo, ensureRepoFromEvent, rootDir } from './git.js';
-import { Buffer } from 'buffer';
 import { parseRepoAnnouncementEvent, type RepoAnnouncementEvent } from '@nostr-git/shared-types';
+import { Buffer } from 'buffer';
 
 if (typeof window.Buffer === 'undefined') {
   (window as any).Buffer = Buffer;
@@ -70,7 +70,8 @@ export async function getRepoFileContentFromEvent(opts: {
   const git = getGitProvider();
   const oid = await git.resolveRef({ dir, ref: branch });
   const { blob } = await git.readBlob({ dir, oid, filepath: opts.path });
-  return Buffer.from(blob).toString('utf8');
+  const decoder = new TextDecoder('utf-8');
+  return decoder.decode(blob);
 }
 
 /**
@@ -93,7 +94,8 @@ export async function getRepoFileContent(opts: {
   const git = getGitProvider();
   const oid = await git.resolveRef({ dir, ref: branch });
   const { blob } = await git.readBlob({ dir, oid, filepath: opts.path });
-  return Buffer.from(blob).toString('utf8');
+  const decoder = new TextDecoder('utf-8');
+  return decoder.decode(blob);
 }
 
 export async function listRepoFiles(opts: {

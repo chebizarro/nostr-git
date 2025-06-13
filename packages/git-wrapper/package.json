@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
-	"type": "module",
+  "type": "module",
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -17,7 +17,8 @@
     "prepare": "npm run build"
   },
   "dependencies": {
-    "isomorphic-git": "^1.27.0"
+    "isomorphic-git": "^1.27.0",
+    "buffer": "^6.0.3"
   },
   "devDependencies": {
     "typescript": "^5.0.0"
