@@ -26,7 +26,7 @@ export class Repo {
 
   selectedBranch = $state<string | undefined>(undefined);
 
-  publish: (event: NostrEvent) => { controller: AbortController, event: NostrEvent };
+  publish: (event: NostrEvent) => { controller: AbortController };
 
   #mainBranch = $derived.by(() => {
     if (this.state) {
@@ -93,7 +93,7 @@ export class Repo {
   }: {
     repoEvent: RepoAnnouncementEvent | undefined;
     repoStateEvent?: RepoStateEvent | undefined;
-    publish: (event: NostrEvent) => { controller: AbortController, event: NostrEvent };
+    publish: (event: NostrEvent) => { controller: AbortController };
     issues: IssueEvent[];
     patches: PatchEvent[];
   }) {

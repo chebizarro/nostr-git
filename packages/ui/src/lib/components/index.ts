@@ -43,3 +43,4 @@ export { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 export { Progress } from "./ui/progress";
 
 export { toast } from "../stores/toast";
+export { default as ConfigProvider } from "../ConfigProvider.svelte";

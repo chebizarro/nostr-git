@@ -14,7 +14,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "watch": "tsc --watch"
   },
   "dependencies": {
     "isomorphic-git": "^1.27.0",

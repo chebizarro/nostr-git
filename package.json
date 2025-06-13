@@ -6,7 +6,12 @@
   ],
   "scripts": {
     "build": "pnpm -r build",
-    "watch": "pnpm -r --parallel --stream watch"
+    "watch": "pnpm -r --parallel --stream watch",
+    "watch:core": "pnpm --filter @nostr-git/core watch",
+    "watch:ui": "pnpm --filter @nostr-git/ui watch",
+    "watch:shared-types": "pnpm --filter @nostr-git/shared-types watch",
+    "watch:git-wrapper": "pnpm --filter @nostr-git/git-wrapper watch",
+    "watch:all": "pnpm -r --parallel --stream run watch"
   },
   "devDependencies": {
     "@storybook/addon-svelte-csf": "5.0.0-next.28",

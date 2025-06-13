@@ -18,7 +18,8 @@
   "scripts": {
     "build": "tsc --declaration --outDir dist",
     "clean": "rm -rf dist",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "watch": "tsc --declaration --outDir dist --watch"
   },
   "repository": {
     "type": "git",

@@ -6,7 +6,8 @@
 		"typecheck": "tsc --noEmit --project tsconfig.json",
 		"format": "prettier --write .",
 		"lint": "prettier --check . && eslint .",
-		"prepare": "npm run build"
+		"prepare": "npm run build",
+		"watch": "tsc --project tsconfig.json --watch"
 	},
 	"files": [
 		"dist",

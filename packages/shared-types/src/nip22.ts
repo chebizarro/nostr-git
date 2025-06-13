@@ -39,6 +39,7 @@ export type CommentEvent = NostrEvent & {
   kind: 1111;
   content: string;
   tags: CommentTag[];
+  sig: string;
 };
 
 export interface CreateCommentOpts {
@@ -85,6 +86,6 @@ export function createCommentEvent(opts: CreateCommentOpts): CommentEvent {
     pubkey: opts.authorPubkey || '',
     created_at: opts.created_at || Math.floor(Date.now() / 1000),
     id: opts.id || '',
-    sig: ''
+    sig: '',
   };
 }
