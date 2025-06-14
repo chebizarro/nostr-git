@@ -1,4 +1,3 @@
-// 🔒 Unique symbol for context
 export const REGISTRY = Symbol("ui-component-registry");
 
 export type Registry = {

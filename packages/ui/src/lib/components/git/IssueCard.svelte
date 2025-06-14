@@ -25,7 +25,6 @@
     content: description,
     labels,
     createdAt,
-    author: parsedAuthor,
   } = parsed;
 
   // Use $author store if available, fallback to parsedAuthor
@@ -36,12 +35,12 @@
       displayAuthor.name = a.name;
       displayAuthor.display_name = a.display_name;
       displayAuthor.picture = a.picture;
-      displayAuthor.pubkey = (a as any).pubkey ?? parsedAuthor?.pubkey;
+      displayAuthor.pubkey = (a as any).pubkey;
     } else {
       displayAuthor.name = undefined;
       displayAuthor.display_name = undefined;
       displayAuthor.picture = undefined;
-      displayAuthor.pubkey = parsedAuthor?.pubkey;
+      displayAuthor.pubkey = undefined;
     }
   });
 
@@ -144,18 +143,12 @@
       </div>
     </div>
     <Avatar
-      class="h-8 w-8 rounded-full flex items-center justify-center font-medium bg-secondary text-secondary-foreground ml-3"
+      class="h-8 w-8"
     >
       <AvatarImage
-        src={displayAuthor.picture ||
-          `https://ui-avatars.com/api/?name=${encodeURIComponent(displayAuthor.display_name || displayAuthor.name || displayAuthor.pubkey || "Unknown")}&background=random`}
+        src={displayAuthor.picture}
         alt={displayAuthor.display_name || displayAuthor.name || displayAuthor.pubkey || "Unknown"}
       />
-      <AvatarFallback
-        >{(displayAuthor.display_name || displayAuthor.name || displayAuthor.pubkey || "U")
-          .slice(0, 2)
-          .toUpperCase()}</AvatarFallback
-      >
     </Avatar>
   </div>
 </div>

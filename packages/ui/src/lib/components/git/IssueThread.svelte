@@ -1,15 +1,13 @@
 <script lang="ts">
-  import TimeAgo from "../../TimeAgo.svelte";
+  import { default as TimeAgo } from "../../TimeAgo.svelte";
   import { MessageSquare } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
+  import { useFunctions } from "../../useFunctions";
   const { Avatar, AvatarFallback, AvatarImage, Button, Textarea, Card } = useRegistry();
   import { createCommentEvent, parseCommentEvent } from "@nostr-git/shared-types";
   import type { CommentEvent, Profile } from "@nostr-git/shared-types";
-  import { getContext } from "svelte";
 
-  const postComment: (comment: CommentEvent) => void = getContext("postComment");
-
-  const getProfile: (pubkey: string) => Profile = getContext("getProfile");
+  const { postComment, getProfile } = useFunctions();
 
   function submitComment(commentData: CommentEvent) {
     postComment(commentData);
@@ -24,6 +22,8 @@
   } = $props();
 
   let newComment = $state("");
+
+  const profile = getProfile(globalThis.$user);
 
   const commentsParsed = $derived.by(() => {
     return comments
@@ -53,8 +53,8 @@
 <Card class="mt-2 border-none shadow-none">
   <div class="space-y-4 p-4">
     {#each commentsParsed as c (c.id)}
-    {@const author = getProfile(c.author.pubkey)}
-    <div class="flex gap-3 group animate-fade-in">
+      {@const author = getProfile(c.author.pubkey)}
+      <div class="flex gap-3 group animate-fade-in">
         {#if author}
           <Avatar class="h-8 w-8">
             <AvatarImage src={author.picture} alt={author.name} />
@@ -76,6 +76,7 @@
 
     <form onsubmit={submit} class="flex gap-3 pt-4 border-t">
       <Avatar class="h-8 w-8">
+        <AvatarImage src={profile?.picture} alt={profile?.name} />
         <AvatarFallback>ME</AvatarFallback>
       </Avatar>
       <div class="flex-1 space-y-2">

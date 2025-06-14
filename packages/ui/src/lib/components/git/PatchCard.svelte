@@ -82,7 +82,7 @@
               class="text-lg font-medium hover:text-accent transition-colors truncate max-w-xs"
               title={title}
             >
-              {title}
+              {description}
             </h3>
           </a>
         </div>
@@ -154,9 +154,6 @@
     </div>
     <Avatar class="h-8 w-8">
       <AvatarImage src={displayAuthor.picture ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(displayAuthor.display_name || displayAuthor.name || displayAuthor.pubkey || 'Unknown')}&background=random`} alt={displayAuthor?.name ?? displayAuthor?.display_name ?? ""} />
-      <AvatarFallback
-        >{(displayAuthor?.name ?? displayAuthor?.display_name ?? "").slice(0, 2).toUpperCase()}</AvatarFallback
-      >
     </Avatar>
   </div>
 </Card>
