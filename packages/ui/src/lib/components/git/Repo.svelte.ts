@@ -86,26 +86,15 @@ export class Repo {
   }) {
     // Subscribe to repoEvents and update reactive state
     repoEvents.subscribe((events) => {
-      console.log('Repo constructor received events:', events);
-      console.log('Events length:', events.length);
-      console.log('Event details:', events.map(e => ({ id: e.id, kind: e.kind, pubkey: e.pubkey })));
-      
       if (events && events.length > 0) {
         this.repoEvent = events.find((event: { kind: number; }) => event.kind === 30617);
         this.repoStateEvent = events.find((event: { kind: number; }) => event.kind === 30618);
         this.state = this.repoStateEvent ? parseRepoStateEvent(this.repoStateEvent) : undefined;
         this.repo = this.repoEvent ? parseRepoAnnouncementEvent(this.repoEvent) : undefined;
-        console.log('Found repoEvent (30617):', !!this.repoEvent);
-        console.log('Found repoStateEvent (30618):', !!this.repoStateEvent);
-        console.log('Parsed state:', this.state);
-        console.log('Parsed repo:', this.repo);
         
         // Load branches from repo event if no state available
         if (this.repoEvent && !this.state) {
-          console.log('Loading branches from repo event (no state available)');
           this.#loadBranchesFromRepo(this.repoEvent);
-        } else if (this.state) {
-          console.log('Using branches from state:', this.state.refs);
         }
       }
     });
@@ -131,7 +120,6 @@ export class Repo {
         lineage: branch.isHead,
       }));
     } catch (error) {
-      console.error('Failed to load branches from repo event:', error);
       this.#branchesFromRepo = [];
     }
   }
