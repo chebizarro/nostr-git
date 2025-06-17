@@ -51,6 +51,10 @@ export interface GitProvider {
   getRemoteInfo2(options: any): Promise<any>;
   listRemotes(options: any): Promise<any>;
   listServerRefs(options: any): Promise<any>;
+  addRemote(options: any): Promise<any>;
+  
+  // Working Directory
+  checkout(options: any): Promise<any>;
   
   // Config
   getConfig(options: any): Promise<any>;

@@ -56,6 +56,10 @@ export class WasmGitProvider implements GitProvider {
   async getRemoteInfo2(options: any): Promise<any> { throw new Error('Not implemented: getRemoteInfo2 (wasm-git)'); }
   async listRemotes(options: any): Promise<any> { throw new Error('Not implemented: listRemotes (wasm-git)'); }
   async listServerRefs(options: any): Promise<any> { throw new Error('Not implemented: listServerRefs (wasm-git)'); }
+  async addRemote(options: any): Promise<any> { throw new Error('Not implemented: addRemote (wasm-git)'); }
+
+  // Working Directory
+  async checkout(options: any): Promise<any> { throw new Error('Not implemented: checkout (wasm-git)'); }
 
   // Config
   async getConfig(options: any): Promise<any> { throw new Error('Not implemented: getConfig (wasm-git)'); }

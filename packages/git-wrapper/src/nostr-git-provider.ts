@@ -61,6 +61,10 @@ export class NostrGitProvider implements GitProvider {
   async getRemoteInfo2(options: any): Promise<any> { return this.git.getRemoteInfo2(options); }
   async listRemotes(options: any): Promise<any> { return this.git.listRemotes(options); }
   async listServerRefs(options: any): Promise<any> { return this.git.listServerRefs(options); }
+  async addRemote(options: any): Promise<any> { return this.git.addRemote(options); }
+
+  // Working Directory
+  async checkout(options: any): Promise<any> { return this.git.checkout(options); }
 
   async getConfig(options: any): Promise<any> { return this.git.getConfig(options); }
   async getConfigAll(options: any): Promise<any> { return this.git.getConfigAll(options); }
@@ -175,4 +179,3 @@ export class NostrGitProvider implements GitProvider {
     throw new Error('Not implemented: subscribeToCollaborationEvents');
   }
 }
-

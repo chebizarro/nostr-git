@@ -68,6 +68,10 @@ export class IsomorphicGitProvider implements GitProvider {
   async getRemoteInfo2(options: any) { return isogit.getRemoteInfo2({ ...options, fs: this.fs }); }
   async listRemotes(options: any) { return isogit.listRemotes({ ...options, fs: this.fs }); }
   async listServerRefs(options: any) { return isogit.listServerRefs({ ...options, fs: this.fs }); }
+  async addRemote(options: any) { return isogit.addRemote({ ...options, fs: this.fs }); }
+
+  // Working Directory
+  async checkout(options: any) { return isogit.checkout({ ...options, fs: this.fs }); }
 
   // Config
   async getConfig(options: any) { return isogit.getConfig({ ...options, fs: this.fs }); }
@@ -94,4 +98,3 @@ export class IsomorphicGitProvider implements GitProvider {
   async updateIndex(options: any) { return isogit.updateIndex({ ...options, fs: this.fs }); }
   async walk(options: any) { return isogit.walk({ ...options, fs: this.fs }); }
 }
-

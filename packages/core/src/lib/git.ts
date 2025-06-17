@@ -50,7 +50,6 @@ export async function ensureRepo(opts: { host: string; owner: string; repo: stri
   if (!(await isRepoCloned(dir))) {
     console.log(`Cloning https://${opts.host}/${opts.owner}/${opts.repo}.git to ${dir} (depth: ${depth})`);
     
-    // Create a timeout promise to prevent infinite stalling
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => reject(new Error('Clone operation timed out after 60 seconds')), 60000);
     });
@@ -115,7 +114,7 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
     throw new Error("No supported clone URL found in repo announcement");
   }
 
-  //if (!(await isRepoCloned(dir))) {
+  if (!(await isRepoCloned(dir))) {
     console.log(`Cloning ${cloneUrl} to ${dir} (depth: ${depth})`);
     
     // Create a timeout promise to prevent infinite stalling
@@ -132,7 +131,7 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
       noCheckout: true,
       noTags: true,
       // Optimize for speed over completeness
-      //since: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Only last 30 days
+      since: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Only last 30 days
       onProgress: (progress: any) => {
         // Only log major progress milestones to reduce overhead
         if (progress.phase === 'Receiving objects' || progress.phase === 'Resolving deltas') {
@@ -157,7 +156,7 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
       throw error;
     }
   }
-//}
+}
 
 function sshToHttps(sshUrl: string): string | null {
   // Match git@host:user/repo(.git)

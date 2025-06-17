@@ -182,13 +182,41 @@ export class Repo {
     return files;
   }
 
-  async getFileContent({ branch, path }: { branch?: string; path: string }) {
+  async getFileContent({ branch, path, commit }: { branch?: string; path: string; commit?: string }) {
     const content = await getRepoFileContentFromEvent({
       repoEvent: this.repoEvent!,
       branch: branch || this.mainBranch.split("/").pop()!,
+      commit,
       path,
     });
     return content;
   }
 
+  async fileExistsAtCommit({ branch, path, commit }: { branch?: string; path: string; commit?: string }) {
+    const { fileExistsAtCommit } = await import('@nostr-git/core');
+    return await fileExistsAtCommit({
+      repoEvent: this.repoEvent!,
+      branch: branch || this.mainBranch.split("/").pop()!,
+      commit,
+      path,
+    });
+  }
+
+  async getCommitInfo({ commit }: { commit: string }) {
+    const { getCommitInfo } = await import('@nostr-git/core');
+    return await getCommitInfo({
+      repoEvent: this.repoEvent!,
+      commit,
+    });
+  }
+
+  async getFileHistory({ path, branch, maxCount }: { path: string; branch?: string; maxCount?: number }) {
+    const { getFileHistory } = await import('@nostr-git/core');
+    return await getFileHistory({
+      repoEvent: this.repoEvent!,
+      path,
+      branch: branch || this.mainBranch.split("/").pop()!,
+      maxCount,
+    });
+  }
 }
