@@ -5,9 +5,15 @@
 
   const { Button, Input, Textarea, Label, Checkbox } = useRegistry();
   import { X, Plus } from "@lucide/svelte";
-  import { createIssueEvent } from "@nostr-git/shared-types";
+  import { createIssueEvent, type IssueEvent } from "@nostr-git/shared-types";
 
-  const { repoId, repoOwnerPubkey, postIssue } = $props();
+  interface Props {
+    repoId: string;
+    repoOwnerPubkey: string;
+    onIssueCreated: (issue: IssueEvent) => Promise<void>;
+  }
+
+  let { repoId, repoOwnerPubkey, onIssueCreated }: Props = $props();
 
   const back = () => history.back();
 
@@ -34,20 +40,21 @@
     "help wanted",
   ];
 
-  function handleLabelToggle(label: string, checked: boolean) {
-    if (checked) {
-      labels = [...labels, label];
-    } else {
+  function handleLabelToggle(label: string) {
+    if (labels.includes(label)) {
       labels = labels.filter((l) => l !== label);
+    } else {
+      labels = [...labels, label];
     }
   }
 
-  function handleKeyDown(event) {
+  function handleKeyDown(event: KeyboardEvent) {
     if (event.key === 'Enter') {
       event.preventDefault();
       handleAddCustomLabel();
     }
   }
+
   function handleAddCustomLabel() {
     const trimmed = newLabel.trim();
     if (trimmed && !customLabels.includes(trimmed) && !commonLabels.includes(trimmed)) {
@@ -62,7 +69,8 @@
     labels = labels.filter((l) => l !== label);
   }
 
-  async function onFormSubmit() {
+  async function onFormSubmit(e: Event) {
+    e.preventDefault();
     errors = {};
     isSubmitting = true;
     const result = issueSchema.safeParse({ subject, content, labels });
@@ -81,8 +89,9 @@
         subject,
         labels,
       });
-      postIssue(issueEvent);
-      back()
+      
+      onIssueCreated(issueEvent)
+
     } catch (error) {
       console.error(error);
     } finally {
@@ -134,7 +143,7 @@
         <label class="flex items-center space-x-2">
           <Checkbox
             checked={labels.includes(label)}
-            onclick={(e) => handleLabelToggle(label, e.target.checked)}
+            onCheckedChange={() => handleLabelToggle(label)}
           />
           <span>{label}</span>
         </label>
@@ -143,7 +152,7 @@
         <label class="flex items-center space-x-2 rounded">
           <Checkbox
             checked={labels.includes(label)}
-            onclick={(e) => handleLabelToggle(label, e.target.checked)}
+            onCheckedChange={() => handleLabelToggle(label)}
           />
           <span>{label}</span>
           <button type="button" class="text-red-500" onclick={() => handleRemoveCustomLabel(label)}
