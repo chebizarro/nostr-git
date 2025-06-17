@@ -2,11 +2,15 @@
   "name": "ngit-vscode",
   "displayName": "Nostr Git Integration",
   "description": "Interact with Nostr-backed Git repositories using ngit.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chebizarro/nostr-git.git"
+  },
   "publisher": "biz",
   "version": "0.0.1",
   "icon": "icon.png",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.100.0"
   },
   "main": "./out/extension.js",
   "contributes": {
@@ -47,6 +51,13 @@
           "id": "nostrRepos",
           "name": "Nostr Repos"
         }
+      ],
+      "nostr-git": [
+        {
+          "icon": "icon.png",
+          "id": "nostrGit",
+          "name": "Nostr Git"
+        }
       ]
     },
     "menus": {
@@ -65,7 +76,10 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p ./"
+    "compile": "tsc -p ./",
+    "watch": "tsc -p ./ --watch",
+    "package": "npx vsce package",
+    "clean": "rm -r dist/"
   },
   "devDependencies": {
     "@types/node": "^22.14.1",

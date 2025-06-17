@@ -1,0 +1,43 @@
+.vscode/**
+.vscode-test/**
+node_modules/**
+src/**
+.gitignore
+.yarnrc
+webpack.config.js
+vsc-extension-quickstart.md
+**/tsconfig.json
+**/.eslintrc.json
+**/*.map
+**/*.ts
+
+# Exclude parent directories and other packages
+../**
+**/../**
+../actions/**
+../core/**
+../extension/**
+../git-wrapper/**
+../shared-types/**
+../storybook/**
+../ui/**
+
+# Exclude development files
+.github/**
+.eslintrc*
+tsconfig.*
+jest.config.js
+.prettierrc*
+.npmrc
+test/**
+**/*.test.js
+**/*.spec.js
+.editorconfig
+.npmignore
+
+# Only include essential output files
+!out/**/*.js
+
+../../.git/
+../../.vscode/
+../../*
