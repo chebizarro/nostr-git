@@ -5,10 +5,12 @@ import { FsClient } from 'isomorphic-git';
 export class IsomorphicGitProvider implements GitProvider {
   fs: FsClient;
   http: isogit.HttpClient;
+  corsProxy: string;
 
-  constructor(options: { fs: FsClient, http: isogit.HttpClient }) {
+  constructor(options: { fs: FsClient, http: isogit.HttpClient, corsProxy: string }) {
     this.fs = options.fs;
     this.http = options.http;
+    this.corsProxy = options.corsProxy;
   }
 
   // Return a tree walker for the given ref (commit-ish)
@@ -18,7 +20,7 @@ export class IsomorphicGitProvider implements GitProvider {
     return (isogit as any).TREE({ ...options, fs: this.fs });
   }
   // Repository
-  async clone(options: any) { return isogit.clone({ ...options, fs: this.fs, http: this.http }); }
+  async clone(options: any) { return isogit.clone({ ...options, fs: this.fs, http: this.http, corsProxy: this.corsProxy }); }
   async commit(options: any) { return isogit.commit({ ...options, fs: this.fs }); }
   async fetch(options: any) { return isogit.fetch({ ...options, fs: this.fs, http: this.http }); }
   async init(options: any) { return isogit.init({ ...options, fs: this.fs }); }

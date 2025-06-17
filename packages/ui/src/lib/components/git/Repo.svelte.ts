@@ -5,7 +5,6 @@ import {
   PatchEvent,
   RepoAnnouncement,
   RepoState,
-  TrustedEvent,
   type RepoAnnouncementEvent,
   type RepoStateEvent,
 } from "@nostr-git/shared-types";
@@ -13,17 +12,19 @@ import {
   listBranchesFromEvent,
   getRepoFileContentFromEvent,
   listRepoFilesFromEvent,
-  type Branch
+  type Branch,
+  getGitWorker
 } from "@nostr-git/core";
-import { get, type Readable } from "svelte/store";
+import { type Readable } from "svelte/store";
 
 export class Repo {
   repoEvent: RepoAnnouncementEvent = $state(undefined);
   repo: RepoAnnouncement | undefined = $state(undefined);
   repoStateEvent?: RepoStateEvent = $state(undefined);
-  state: RepoState | undefined;
+  state: RepoState | undefined = $state(undefined);
   issues = $state<IssueEvent[]>([]);
   patches = $state<PatchEvent[]>([]);
+  worker: Worker;
 
   selectedBranch = $state<string | undefined>(undefined);
   #branchesFromRepo = $state<Branch[]>([]);
@@ -68,49 +69,96 @@ export class Repo {
         name: ref.ref,
         commit: ref.commit,
         lineage: ref.lineage,
+        isHead: ref.lineage?.includes(this.state.head) || false,
       }));
     } else {
-      // Return branches loaded from repo event
       return this.#branchesFromRepo;
     }
   });
 
+  // Reactive state for clone progress
+  cloneProgress = $state<{
+    isCloning: boolean;
+    phase: string;
+    progress?: number;
+    error?: string;
+  }>({
+    isCloning: false,
+    phase: 'idle',
+  });
+
   constructor({
-    repoEvents,
+    repoEvent,
+    repoStateEvent,
     issues,
     patches,
   }: {
-    repoEvents: Readable<TrustedEvent[]>;
+    repoEvent: Readable<RepoAnnouncementEvent>;
+    repoStateEvent: Readable<RepoStateEvent>;
     issues: Readable<IssueEvent[]>;
     patches: Readable<PatchEvent[]>;
   }) {
-    // Subscribe to repoEvents and update reactive state
-    repoEvents.subscribe((events) => {
-      if (events && events.length > 0) {
-        this.repoEvent = events.find((event: { kind: number; }) => event.kind === 30617);
-        this.repoStateEvent = events.find((event: { kind: number; }) => event.kind === 30618);
-        this.state = this.repoStateEvent ? parseRepoStateEvent(this.repoStateEvent) : undefined;
-        this.repo = this.repoEvent ? parseRepoAnnouncementEvent(this.repoEvent) : undefined;
-        
-        // Load branches from repo event if no state available
-        if (this.repoEvent && !this.state) {
-          this.#loadBranchesFromRepo(this.repoEvent);
+    repoEvent.subscribe((event) => {
+      if (event) {
+        this.repoEvent = event;
+        this.repo = parseRepoAnnouncementEvent(event);
+
+        if (!this.state) {
+          this.#loadBranchesFromRepo(event);
         }
       }
     });
 
-    // Subscribe to issues and update reactive state
+    repoStateEvent.subscribe((event) => {
+      if (event) {
+        this.state = parseRepoStateEvent(event);
+      }
+    });
+
     issues.subscribe((issueEvents) => {
       this.issues = issueEvents;
     });
-
-    // Subscribe to patches and update reactive state
     patches.subscribe((patchEvents) => {
       this.patches = patchEvents;
     });
+
+    const { api, worker } = getGitWorker((progressEvent) => {
+      console.log(`Clone progress for ${progressEvent.repoId}: ${progressEvent.phase}`);
+      this.cloneProgress = {
+        isCloning: true,
+        phase: progressEvent.phase,
+        progress: progressEvent.progress,
+      };
+    });
+    this.worker = worker;
+    
+    (async () => {
+      const repoId = this.repoEvent.id;
+      const cloneUrls = [...(this.repo?.clone || [])];
+            
+      try {
+        const result = await api.clone({
+          repoId,
+          cloneUrls,
+        });
+        console.log('Clone result:', result);
+        this.cloneProgress = {
+          isCloning: false,
+          phase: 'done',
+        };
+      } catch (error) {
+        console.error('Git clone failed:', error);
+        this.cloneProgress = {
+          isCloning: false,
+          phase: 'error',
+          error: error.message,
+        };
+      } finally {
+        this.worker.terminate();
+      }
+    })();
   }
 
-  // Private method to load branches from repo event
   async #loadBranchesFromRepo(repoEvent: RepoAnnouncementEvent) {
     try {
       const repoBranches = await listBranchesFromEvent({ repoEvent });
@@ -118,26 +166,26 @@ export class Repo {
         name: branch.name,
         commit: branch.oid,
         lineage: branch.isHead,
+        isHead: branch.isHead,
       }));
     } catch (error) {
       this.#branchesFromRepo = [];
     }
   }
 
-  // File handling
-
-  async listRepoFiles({ branch }: { branch: string }) {
+  async listRepoFiles({ branch, path }: { branch: string; path?: string }) {
     const files = await listRepoFilesFromEvent({
       repoEvent: this.repoEvent!,
       branch,
+      path,
     });
     return files;
   }
 
-  async getFileContent({ branch, path }: { branch: string; path: string }) {
+  async getFileContent({ branch, path }: { branch?: string; path: string }) {
     const content = await getRepoFileContentFromEvent({
       repoEvent: this.repoEvent!,
-      branch,
+      branch: branch || this.mainBranch.split("/").pop()!,
       path,
     });
     return content;

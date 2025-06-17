@@ -7,10 +7,25 @@ if (typeof window.Buffer === 'undefined') {
   (window as any).Buffer = Buffer;
 }
 
+/**
+ * Represents a file or directory in a Git repository.
+ */
 export interface FileEntry {
+  /**
+   * The name of the file or directory.
+   */
   name: string;
+  /**
+   * The path of the file or directory.
+   */
   path: string;
+  /**
+   * The type of the file or directory.
+   */
   type: 'file' | 'directory' | 'submodule' | 'symlink';
+  /**
+   * The object ID of the file or directory, if applicable.
+   */
   oid?: string;
 }
 
@@ -66,7 +81,7 @@ export async function getRepoFileContentFromEvent(opts: {
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main';
   const dir = `${rootDir}/${opts.repoEvent.id}`;
-  await ensureRepoFromEvent({ repoEvent: event, branch });
+  await ensureRepoFromEvent({ repoEvent: event, branch }, 10);
   const git = getGitProvider();
   const oid = await git.resolveRef({ dir, ref: branch });
   const { blob } = await git.readBlob({ dir, oid, filepath: opts.path });

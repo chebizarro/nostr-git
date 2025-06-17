@@ -1,5 +1,4 @@
 import { getGitProvider } from './git-provider.js';
-import http from 'isomorphic-git/http/web';
 import { fileTypeFromBuffer } from 'file-type';
 import { lookup as mimeLookup } from 'mime-types';
 import { createPatch } from 'diff';
@@ -7,7 +6,8 @@ import type { RepoAnnouncement } from '@nostr-git/shared-types';
 import type { PermalinkData } from './permalink.js';
 import { Buffer } from 'buffer';
 
-if (typeof window.Buffer === 'undefined') {
+// Only set Buffer on window if we're in a browser context (not in a worker)
+if (typeof window !== 'undefined' && typeof window.Buffer === 'undefined') {
   (window as any).Buffer = Buffer;
 }
 
@@ -34,7 +34,7 @@ export async function fetchPermalink(data: PermalinkData) {
   }
 }
 
-async function isRepoCloned(dir: string): Promise<boolean> {
+export async function isRepoCloned(dir: string): Promise<boolean> {
   const git = getGitProvider();
   try {
     await git.resolveRef({ dir, ref: 'HEAD' });
@@ -48,26 +48,47 @@ export async function ensureRepo(opts: { host: string; owner: string; repo: stri
   const git = getGitProvider();
   const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
   if (!(await isRepoCloned(dir))) {
-    await git.clone({
-      http,
+    console.log(`Cloning https://${opts.host}/${opts.owner}/${opts.repo}.git to ${dir} (depth: ${depth})`);
+    
+    // Create a timeout promise to prevent infinite stalling
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Clone operation timed out after 60 seconds')), 60000);
+    });
+
+    const clonePromise = git.clone({
       dir,
       corsProxy: 'https://cors.isomorphic-git.org',
       url: `https://${opts.host}/${opts.owner}/${opts.repo}.git`,
       ref: opts.branch,
-      depth,
+      depth: Math.min(depth, 1), // Force shallow clone for large repos
       noCheckout: true,
+      noTags: true,
+      singleBranch: true,
+      // Optimize for speed over completeness
+      since: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Only last 30 days
+      onProgress: (progress: any) => {
+        // Only log major progress milestones to reduce overhead
+        if (progress.phase === 'Receiving objects' || progress.phase === 'Resolving deltas') {
+          console.log(`${progress.phase}: ${progress.loaded}/${progress.total} (${Math.round(progress.loaded/progress.total*100)}%)`);
+        }
+      },
     });
-  }
-}
 
-function sshToHttps(sshUrl: string): string | null {
-  // Match git@host:user/repo(.git)
-  const match = sshUrl.match(/^git@([^:]+):(.+?)(\.git)?$/);
-  if (match) {
-    const [, host, path] = match;
-    return `https://${host}/${path}.git`;
+    // Race between clone and timeout
+    try {
+      await Promise.race([clonePromise, timeoutPromise]);
+      console.log(`Successfully cloned https://${opts.host}/${opts.owner}/${opts.repo}.git`);
+    } catch (error) {
+      console.error(`Clone failed for https://${opts.host}/${opts.owner}/${opts.repo}.git:`, error);
+      // Clean up partial clone on failure
+      try {
+        await git.deleteRef({ dir, ref: 'HEAD' });
+      } catch (cleanupError) {
+        // Ignore cleanup errors
+      }
+      throw error;
+    }
   }
-  return null;
 }
 
 export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; branch: string }, depth: number = 1) {
@@ -95,17 +116,57 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
   }
 
   //if (!(await isRepoCloned(dir))) {
-    await git.clone({
-      http,
+    console.log(`Cloning ${cloneUrl} to ${dir} (depth: ${depth})`);
+    
+    // Create a timeout promise to prevent infinite stalling
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Clone operation timed out after 60 seconds')), 60000);
+    });
+
+    const clonePromise = git.clone({
       dir,
-      corsProxy: 'https://cors.isomorphic-git.org',
       url: cloneUrl,
       ref: opts.branch,
       singleBranch: true,
       depth,
       noCheckout: true,
+      noTags: true,
+      // Optimize for speed over completeness
+      //since: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Only last 30 days
+      onProgress: (progress: any) => {
+        // Only log major progress milestones to reduce overhead
+        if (progress.phase === 'Receiving objects' || progress.phase === 'Resolving deltas') {
+          console.log(`${progress.phase}: ${progress.loaded}/${progress.total} (${Math.round(progress.loaded/progress.total*100)}%)`);
+        }
+      },
+      onMessage: (message: any) => console.log('Git message:', message),
     });
-  //}
+
+    // Race between clone and timeout
+    try {
+      await Promise.race([clonePromise, timeoutPromise]);
+      console.log(`Successfully cloned ${cloneUrl}`);
+    } catch (error) {
+      console.error(`Clone failed for ${cloneUrl}:`, error);
+      // Clean up partial clone on failure
+      try {
+        await git.deleteRef({ dir, ref: 'HEAD' });
+      } catch (cleanupError) {
+        // Ignore cleanup errors
+      }
+      throw error;
+    }
+  }
+//}
+
+function sshToHttps(sshUrl: string): string | null {
+  // Match git@host:user/repo(.git)
+  const match = sshUrl.match(/^git@([^:]+):(.+?)(\.git)?$/);
+  if (match) {
+    const [, host, path] = match;
+    return `https://${host}/${path}.git`;
+  }
+  return null;
 }
 
 /**

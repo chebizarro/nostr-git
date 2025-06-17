@@ -5,8 +5,17 @@
   import { toast } from "$lib/stores/toast";
   import type { FileEntry } from "@nostr-git/core";
   import Spinner from "../editor/Spinner.svelte";
+  import CodeMirror from "svelte-codemirror-editor";
 
-  const {file, getFileContent}: {file: FileEntry, getFileContent: (path: string) => Promise<string>} = $props();
+  const {
+    file,
+    getFileContent,
+    setDirectory,
+  }: {
+    file: FileEntry;
+    getFileContent: (path: string) => Promise<string>;
+    setDirectory: (path: string) => void;
+  } = $props();
 
   const name = file.name;
   const type = file.type ?? "file";
@@ -15,11 +24,18 @@
 
   let isExpanded = $state(false);
 
-  $effect(async () => {
+  $effect(() => {
     if (isExpanded) {
-      content = await getFileContent(path);
+      if (type === "file") {
+        getFileContent(path).then((c) => {
+          content = c;
+        });
+      } else {
+        content = "";
+        setDirectory(path);
+      }
     }
-  })
+  });
 
   async function copyContent(event: MouseEvent | undefined) {
     event?.stopPropagation();
@@ -72,7 +88,7 @@
   <button
     type="button"
     class="flex items-center justify-between p-2 hover:bg-secondary/30 cursor-pointer w-full text-left"
-    onclick={() => type === "file" && (isExpanded = !isExpanded)}
+    onclick={() => (isExpanded = !isExpanded)}
     aria-expanded={type === "file" ? isExpanded : undefined}
   >
     <div class="flex items-center">
@@ -101,7 +117,7 @@
   {#if isExpanded && type === "file"}
     <div class="p-4 border-t" style="border-color: hsl(var(--border));">
       {#if content}
-        <pre class="bg-secondary/30 p-4 rounded-lg overflow-x-auto"><code>{content}</code></pre>
+        <CodeMirror bind:value={content} />
       {:else}
         <Spinner>Fetching content...</Spinner>
       {/if}

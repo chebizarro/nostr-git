@@ -61,6 +61,7 @@
     "date-fns": "^4.1.0",
     "parse-git-diff": "^0.0.19",
     "parse-patch": "^0.1.4",
+    "svelte-codemirror-editor": "^1.4.1",
     "zod": "^3.25.50"
   }
 }
