@@ -114,7 +114,9 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
     throw new Error("No supported clone URL found in repo announcement");
   }
 
-  if (!(await isRepoCloned(dir))) {
+  const isCloned = await isRepoCloned(dir);
+  
+  if (!isCloned) {
     console.log(`Cloning ${cloneUrl} to ${dir} (depth: ${depth})`);
     
     // Create a timeout promise to prevent infinite stalling
@@ -154,6 +156,22 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
         // Ignore cleanup errors
       }
       throw error;
+    }
+  } else if (depth > 1) {
+    // Repository exists but might be shallow - try to deepen it if we need more history
+    try {
+      console.log(`Repository exists at ${dir}, attempting to fetch more history (depth: ${depth})`);
+      await git.fetch({
+        dir,
+        url: cloneUrl,
+        ref: opts.branch,
+        depth,
+        singleBranch: true,
+      });
+      console.log(`Successfully deepened repository to depth ${depth}`);
+    } catch (error) {
+      console.warn(`Failed to deepen repository, continuing with existing clone:`, error);
+      // Continue with existing clone even if deepening fails
     }
   }
 }

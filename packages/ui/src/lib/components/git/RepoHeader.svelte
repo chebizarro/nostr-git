@@ -8,14 +8,12 @@
   // Accept props: event (NIP-34 RepoAnnouncementEvent), owner (Profile), activeTab
   const {
     event,
-    owner = {},
     activeTab = "overview",
     children,
     watchRepo,
     isRepoWatched,
   }: {
     event: RepoAnnouncementEvent;
-    owner?: Profile;
     activeTab?: string;
     children?: any;
     watchRepo?: () => void;
@@ -54,7 +52,7 @@
       "bg-muted text-muted-foreground inline-flex h-10 items-center justify-center rounded-md p-1 w-full"
     )}
   >
-    <div class="grid grid-cols-5 justify-between m-2 w-full">
+    <div class="grid grid-cols-6 justify-between m-2 w-full">
       {@render children?.(activeTab)}
     </div>
   </nav>

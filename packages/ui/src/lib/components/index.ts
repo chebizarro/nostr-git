@@ -18,6 +18,7 @@ export { default as MergeAnalyzer } from "./git/MergeAnalyzer.svelte";
 export { default as ConflictVisualizer } from "./git/ConflictVisualizer.svelte";
 export { default as PatchSelector } from "./git/PatchSelector.svelte";
 export { default as CommitSelector } from "./git/CommitSelector.svelte";
+export { default as CommitCard } from "./git/CommitCard.svelte";
 export { Repo } from "./git/Repo.svelte";
 // Export all Svelte components from thread/
 export { default as ThreadCommit } from "./thread/ThreadCommit.svelte";
@@ -41,6 +42,10 @@ export { Badge } from "./ui/badge";
 export { ScrollArea } from "./ui/scroll-area";
 export { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 export { Progress } from "./ui/progress";
+export { Select, SelectContent, SelectItem, SelectTrigger } from "./ui/select";
+export { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
+
 
 export { toast } from "../stores/toast";
 export { default as ConfigProvider } from "../ConfigProvider.svelte";
+export { default as FunctionProvider } from "../FunctionProvider.svelte";

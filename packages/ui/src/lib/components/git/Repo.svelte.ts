@@ -13,7 +13,11 @@ import {
   getRepoFileContentFromEvent,
   listRepoFilesFromEvent,
   type Branch,
-  getGitWorker
+  getGitWorker,
+  fileExistsAtCommit,
+  getCommitInfo,
+  getFileHistory,
+  getCommitHistory,
 } from "@nostr-git/core";
 import { type Readable } from "svelte/store";
 
@@ -25,9 +29,11 @@ export class Repo {
   issues = $state<IssueEvent[]>([]);
   patches = $state<PatchEvent[]>([]);
   worker: Worker;
+  api: any;
 
   selectedBranch = $state<string | undefined>(undefined);
   #branchesFromRepo = $state<Branch[]>([]);
+  #commits = $state<any[] | undefined>(undefined);
 
   #mainBranch = $derived.by(() => {
     if (this.state) {
@@ -55,6 +61,14 @@ export class Repo {
 
   get relays() {
     return this.repo?.relays;
+  }
+
+  get commits() {
+    if (!this.#commits) {
+      console.log("Loading commits...")
+      this.#loadCommits();
+    }
+    return this.#commits;
   }
 
   #maintainers = $derived.by(() => {
@@ -131,13 +145,14 @@ export class Repo {
       };
     });
     this.worker = worker;
-    
+    this.api = api;
+
     (async () => {
       const repoId = this.repoEvent.id;
       const cloneUrls = [...(this.repo?.clone || [])];
-            
+
       try {
-        const result = await api.clone({
+        const result = await this.api.clone({
           repoId,
           cloneUrls,
         });
@@ -153,8 +168,6 @@ export class Repo {
           phase: 'error',
           error: error.message,
         };
-      } finally {
-        this.worker.terminate();
       }
     })();
   }
@@ -171,6 +184,26 @@ export class Repo {
     } catch (error) {
       this.#branchesFromRepo = [];
     }
+  }
+
+  async #loadCommits() {
+    try {
+        const result = await this.api.getCommitHistory({
+          repoId: this.repoEvent!.id,
+          branch: this.mainBranch.split("/").pop() || "main",
+        });
+
+        if (result.success) {
+          this.#commits = result.commits;
+        } else {
+          throw new Error(result.error);
+        }
+    } catch (error) {
+      console.error('Failed to load commits:', error);
+    } finally {
+      this.worker.terminate();
+      console.log('Git worker terminated');
+    } 
   }
 
   async listRepoFiles({ branch, path }: { branch: string; path?: string }) {
@@ -193,7 +226,6 @@ export class Repo {
   }
 
   async fileExistsAtCommit({ branch, path, commit }: { branch?: string; path: string; commit?: string }) {
-    const { fileExistsAtCommit } = await import('@nostr-git/core');
     return await fileExistsAtCommit({
       repoEvent: this.repoEvent!,
       branch: branch || this.mainBranch.split("/").pop()!,
@@ -203,7 +235,6 @@ export class Repo {
   }
 
   async getCommitInfo({ commit }: { commit: string }) {
-    const { getCommitInfo } = await import('@nostr-git/core');
     return await getCommitInfo({
       repoEvent: this.repoEvent!,
       commit,
@@ -211,12 +242,19 @@ export class Repo {
   }
 
   async getFileHistory({ path, branch, maxCount }: { path: string; branch?: string; maxCount?: number }) {
-    const { getFileHistory } = await import('@nostr-git/core');
     return await getFileHistory({
       repoEvent: this.repoEvent!,
       path,
       branch: branch || this.mainBranch.split("/").pop()!,
       maxCount,
+    });
+  }
+
+  async getCommitHistory({ branch, depth }: { branch?: string; depth?: number }) {
+    return await getCommitHistory({
+      repoEvent: this.repoEvent!,
+      branch: branch || this.mainBranch.split("/").pop()!,
+      depth,
     });
   }
 }

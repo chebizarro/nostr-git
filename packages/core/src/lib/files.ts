@@ -3,8 +3,8 @@ import { ensureRepo, ensureRepoFromEvent, rootDir } from './git.js';
 import { parseRepoAnnouncementEvent, type RepoAnnouncementEvent } from '@nostr-git/shared-types';
 import { Buffer } from 'buffer';
 
-if (typeof window.Buffer === 'undefined') {
-  (window as any).Buffer = Buffer;
+if (typeof globalThis.Buffer === 'undefined') {
+  (globalThis as any).Buffer = Buffer;
 }
 
 /**
@@ -274,5 +274,51 @@ export async function getFileHistory(opts: {
     message: commit.commit.message,
     author: commit.commit.author,
     committer: commit.commit.committer,
+  }));
+}
+
+/**
+ * Get commit history for a branch
+ * @param opts.repoEvent - RepoAnnouncementEvent (from shared-types)
+ * @param opts.branch - branch to get history for (optional, defaults to main)
+ * @param opts.depth - maximum number of commits to return (optional, defaults to 50)
+ * @returns array of commit objects with full details
+ */
+export async function getCommitHistory(opts: {
+  repoEvent: RepoAnnouncementEvent;
+  branch?: string;
+  depth?: number;
+}): Promise<Array<{
+  oid: string;
+  commit: {
+    message: string;
+    author: { name: string; email: string; timestamp: number };
+    committer: { name: string; email: string; timestamp: number };
+    parent: string[];
+  };
+}>> {
+  const event = parseRepoAnnouncementEvent(opts.repoEvent);
+  const branch = opts.branch || 'main';
+  const dir = `${rootDir}/${opts.repoEvent.id}`;
+  const depth = opts.depth || 50;
+  
+  console.log(`getCommitHistory: requesting ${depth} commits for branch ${branch}`);
+  await ensureRepoFromEvent({ repoEvent: event, branch }, depth);
+
+  const git = getGitProvider();
+  const commits = await git.log({
+    dir,
+    ref: branch,
+    depth,
+  });
+  console.log(`getCommitHistory: got ${commits.length} commits from git.log`);
+  return commits.map((commit: any) => ({
+    oid: commit.oid,
+    commit: {
+      message: commit.commit.message,
+      author: commit.commit.author,
+      committer: commit.commit.committer,
+      parent: commit.commit.parent,
+    },
   }));
 }
