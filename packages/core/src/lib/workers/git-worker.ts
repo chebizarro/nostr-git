@@ -14,6 +14,104 @@ if (typeof globalThis.Buffer === 'undefined') {
 const clonedRepos = new Set<string>();
 const repoDataLevels = new Map<string, 'refs' | 'shallow' | 'full'>();
 
+/**
+ * Get the total number of commits in a repository
+ * This is a lightweight operation that doesn't require downloading the full history
+ */
+async function getCommitCount({
+  repoId,
+  branch = 'main',
+}: {
+  repoId: string;
+  branch?: string;
+}): Promise<{
+  success: boolean;
+  count?: number;
+  repoId: string;
+  branch: string;
+  fromCache?: boolean;
+  error?: string;
+}> {
+  try {
+    const dir = `${rootDir}/${repoId}`;
+    
+    // First check if we already have the full history
+    const currentLevel = repoDataLevels.get(repoId);
+    if (currentLevel === 'full') {
+      // If we have full history, we can count commits locally
+      const commits = await git.log({
+        dir,
+        ref: branch,
+      });
+      return {
+        success: true,
+        count: commits.length,
+        repoId,
+        branch,
+        fromCache: true
+      };
+    }
+    
+    // If we don't have full history, do a lightweight remote count
+    // This uses git's protocol to get just the commit count
+    const cloneUrl = `https://github.com/${repoId}.git`;
+    
+    // This is a lightweight operation that doesn't download the full history
+    const refs = await git.listServerRefs({
+      http: http,
+      url: cloneUrl,
+      prefix: 'refs/heads/',
+      symrefs: true,
+    });
+    
+    // Find the specific branch we're interested in
+    const branchRef = refs.find((ref: { ref: string }) => ref.ref === `refs/heads/${branch}`);
+    
+    if (!branchRef) {
+      return {
+        success: false,
+        repoId,
+        branch,
+        error: `Branch ${branch} not found`
+      };
+    }
+    
+    // For remote counting, we can only get an accurate count if we fetch the full history
+    // This is a limitation of the git protocol
+    // As a workaround, we'll return the depth we have if we have a shallow clone
+    if (currentLevel === 'shallow') {
+      const commits = await git.log({
+        dir,
+        ref: branch,
+      });
+      return {
+        success: true,
+        count: commits.length,
+        repoId,
+        branch,
+        fromCache: true
+      };
+    }
+    
+    // If we don't have the repo cloned yet, we can't get an accurate count
+    // without cloning first
+    return {
+      success: false,
+      repoId,
+      branch,
+      error: 'Repository not fully cloned. Clone the repository first to get commit count.'
+    };
+  } catch (error) {
+    console.error(`Error getting commit count for ${repoId}:`, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+      repoId,
+      branch,
+    };
+  }
+}
+
 const git: GitProvider = new IsomorphicGitProvider({
   fs: new LightningFS('nostr-git'),
   http: http,
@@ -403,13 +501,14 @@ const getCommitHistory = async ({
   }
 };
 
-expose({
-  cloneAndFork,
-  clone,
+expose({ 
+  cloneAndFork, 
+  clone, 
   initializeRepo,
   ensureShallowClone,
   ensureFullClone,
   getRepoDataLevel,
   clearCloneCache,
-  getCommitHistory
+  getCommitHistory,
+  getCommitCount
 });

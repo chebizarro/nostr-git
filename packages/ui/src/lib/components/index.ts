@@ -26,6 +26,7 @@ export { default as ThreadComposer } from "./thread/ThreadComposer.svelte";
 export { default as ThreadIssue } from "./thread/ThreadIssue.svelte";
 export { default as ThreadMessage } from "./thread/ThreadMessage.svelte";
 export { default as ThreadPatch } from "./thread/ThreadPatch.svelte";
+export { default as ContextMessages } from "./ContextMessages.svelte";
 
 export { Button } from "./ui/button";
 export { Input } from "./ui/input";
@@ -47,5 +48,7 @@ export { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 
 
 export { toast } from "../stores/toast";
+export { context } from "../stores/context";
+
 export { default as ConfigProvider } from "../ConfigProvider.svelte";
 export { default as FunctionProvider } from "../FunctionProvider.svelte";
