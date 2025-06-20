@@ -113,7 +113,7 @@ function getInitials(name: string): string {
           </div>
           
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+            <DropdownMenuTrigger>
               <Button variant="ghost" size="sm" class="h-8 w-8 p-0">
                 <MoreHorizontal class="h-4 w-4" />
               </Button>
@@ -132,7 +132,7 @@ function getInitials(name: string): string {
         </div>
         
         <div class="mb-3">
-          <h3 class="font-medium text-sm leading-tight mb-1">
+          <h3 class="font-medium text-sm leading-tight mb-1 truncate">
             {commit.commit.message}
           </h3>
           

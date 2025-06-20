@@ -29,7 +29,7 @@
   aria-current={isActive ? 'page' : undefined}
   tabindex="0"
 >
-  <span class="flex items-center gap-2">
+  <span class="flex items-center gap-1">
     {@render icon?.()}
     <span class="relative">{label}</span>
   </span>

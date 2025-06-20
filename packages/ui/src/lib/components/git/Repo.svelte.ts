@@ -400,6 +400,75 @@ export class Repo {
     return content;
   }
 
+  /**
+   * Completely reset the git repo: delete from FS, reload, and re-initialize all state.
+   * Shows loading/error/success in context store. Triggers a full reload of branches, commits, etc.
+   */
+  async resetRepo() {
+    const repoId = this.repoEvent?.id;
+    if (!repoId) {
+      context.error('Cannot reset: repoId missing');
+      return;
+    }
+    // Show loading
+    const loadingId = context.loading('Resetting repository...');
+    try {
+      // Call worker to delete repo
+      const result = await this.api.deleteRepo({ repoId });
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to delete repo');
+      }
+      // Reset all local state
+      this.state = undefined;
+      this.repo = undefined;
+      this.repoStateEvent = undefined;
+      this.issues = [];
+      this.patches = [];
+      this.#branchesFromRepo = [];
+      this.#commits = undefined;
+      this.#totalCommits = undefined;
+      this.#currentPage = 1;
+      this.#hasMoreCommits = false;
+      this.cloneProgress = { isCloning: false, phase: 'idle' };
+
+      // Remove any loading indicators
+      Object.values(this.#loadingIds).forEach(id => { if (id) context.remove(id); });
+      this.#loadingIds = { commits: null, branches: null, clone: null };
+
+      // Re-parse event and trigger fresh clone/load
+      if (this.repoEvent) {
+        this.repo = parseRepoAnnouncementEvent(this.repoEvent);
+        // Re-clone repo (triggers all reloads via constructor logic)
+        const cloneUrls = [...(this.repo?.clone || [])];
+        this.#loadingIds.clone = context.loading('Cloning repository...');
+        await this.api.clone({ repoId, cloneUrls });
+        context.update(loadingId, {
+          type: 'success',
+          message: 'Repository reset and reloaded',
+          duration: 3000
+        });
+        this.#loadingIds.clone = null;
+        // Reload branches and commits
+        await this.#loadBranchesFromRepo(this.repoEvent);
+        await this.#loadCommits();
+      } else {
+        context.update(loadingId, {
+          type: 'warning',
+          message: 'Repository reset, but announcement event missing',
+          duration: 4000
+        });
+      }
+    } catch (error) {
+      context.update(loadingId, {
+        type: 'error',
+        message: 'Failed to reset repository',
+        details: error instanceof Error ? error.message : String(error),
+        duration: 5000
+      });
+      // Do not throw further; UI should recover gracefully
+    }
+  }
+
   async fileExistsAtCommit({ branch, path, commit }: { branch?: string; path: string; commit?: string }) {
     return await fileExistsAtCommit({
       repoEvent: this.repoEvent!,

@@ -11,7 +11,7 @@
     FileCode,
   } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
-  const { Avatar, AvatarFallback, AvatarImage, Button, Card } = useRegistry();
+  const { Avatar, AvatarImage, Button, Card } = useRegistry();
   import { toast } from "$lib/stores/toast";
   import type { PatchEvent, Profile, StatusEvent } from "@nostr-git/shared-types";
   import { parseGitPatchFromEvent } from "@nostr-git/core";
@@ -69,7 +69,7 @@
 </script>
 
 <Card class="git-card hover:bg-accent/50 transition-colors">
-  <div class="flex items-start gap-3 p-4">
+  <div class="flex items-start gap-3">
     {#if statusIcon}
       {@const { icon: Icon, color } = statusIcon()}
       <Icon class={`h-6 w-6 ${color}`} />

@@ -2,7 +2,7 @@
   import TimeAgo from "../../TimeAgo.svelte";
   import { CircleAlert, ChevronDown, ChevronUp, BookmarkPlus, BookmarkCheck } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
-  const { Avatar, AvatarFallback, AvatarImage, Button } = useRegistry();
+  const { Avatar, AvatarImage, Button, Card } = useRegistry();
   import { toast } from "$lib/stores/toast";
   import type { CommentEvent, IssueEvent, Profile } from "@nostr-git/shared-types";
   import { parseIssueEvent } from "@nostr-git/shared-types";
@@ -67,7 +67,7 @@
   }
 </script>
 
-<div class="bg-card text-card-foreground rounded-lg border shadow-sm p-4">
+<Card class="git-card hover:bg-accent/50 transition-colors">
   <div class="flex items-start gap-3">
     <CircleAlert
       class={`h-5 w-5 mt-0.5 ${
@@ -151,7 +151,7 @@
       />
     </Avatar>
   </div>
-</div>
+</Card>
 {#if isExpanded}
   <IssueThread issueId={id} comments={comments} />
 {/if}

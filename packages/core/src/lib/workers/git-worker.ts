@@ -11,6 +11,12 @@ if (typeof globalThis.Buffer === 'undefined') {
   (globalThis as any).Buffer = Buffer;
 }
 
+const git: GitProvider = new IsomorphicGitProvider({
+  fs: new LightningFS('nostr-git'),
+  http: http,
+  corsProxy: 'https://cors.isomorphic-git.org',
+});
+
 const clonedRepos = new Set<string>();
 const repoDataLevels = new Map<string, 'refs' | 'shallow' | 'full'>();
 
@@ -112,11 +118,6 @@ async function getCommitCount({
   }
 }
 
-const git: GitProvider = new IsomorphicGitProvider({
-  fs: new LightningFS('nostr-git'),
-  http: http,
-  corsProxy: 'https://cors.isomorphic-git.org',
-});
 
 async function isRepoCloned(dir: string): Promise<boolean> {
   try {
@@ -138,23 +139,6 @@ const initializeRepo = async ({
   repoId: string;
   cloneUrls: string[];
 }) => {
-  if (clonedRepos.has(repoId)) {
-    console.log(`Repository ${repoId} already initialized, skipping...`);
-    return { success: true, repoId, cached: true, level: repoDataLevels.get(repoId) };
-  }
-
-  if (await isRepoCloned(`${rootDir}/${repoId}`)) {
-    clonedRepos.add(repoId);
-    repoDataLevels.set(repoId, 'shallow');
-    console.log(`Repository ${repoId} already exists, skipping...`);
-    return { success: true, repoId, cached: true, level: 'shallow' };
-  }
-
-  const dir = `${rootDir}/${repoId}`;
-  const cloneUrl = cloneUrls.find((url) => url.startsWith("https://"));
-  if (!cloneUrl) return { success: false, repoId, error: 'No HTTPS clone URL found' };
-
-  console.log(`Initializing repository ${repoId} with minimal data...`);
 
   const sendProgress = (phase: string, loaded?: number, total?: number) => {
     self.postMessage({
@@ -167,14 +151,40 @@ const initializeRepo = async ({
     });
   };
 
+  if (clonedRepos.has(repoId)) {
+    console.log(`Repository ${repoId} already initialized, skipping...`);
+    return { success: true, repoId, cached: true, level: repoDataLevels.get(repoId) };
+  }
+
+  if (await isRepoCloned(`${rootDir}/${repoId}`)) {
+    clonedRepos.add(repoId);
+    repoDataLevels.set(repoId, 'shallow');
+    console.log(`Repository ${repoId} already exists, skipping...`);
+    await git.fetch({
+      dir: `${rootDir}/${repoId}`,
+      singleBranch: true,
+      tags: false,
+      onProgress: (progress: { phase: string; loaded?: number; total?: number }) => {
+        sendProgress(`Updating shallow clone: ${progress.phase}`, progress.loaded, progress.total);
+      }
+    });
+    return { success: true, repoId, cached: true, level: 'shallow' };
+  }
+
+  const dir = `${rootDir}/${repoId}`;
+  const cloneUrl = cloneUrls.find((url) => url.startsWith("https://"));
+  if (!cloneUrl) return { success: false, repoId, error: 'No HTTPS clone URL found' };
+
+  console.log(`Initializing repository ${repoId} with minimal data...`);
+
   sendProgress('Fetching repository metadata...');
 
   try {
-    await git.init({ dir, bare: false });
-    await git.addRemote({ dir, remote: 'origin', url: cloneUrl });
-    await git.fetch({
+    //await git.init({ dir, bare: false });
+    //await git.addRemote({ dir, remote: 'origin', url: cloneUrl });
+    await git.clone({
       dir,
-      remote: 'origin',
+      url: cloneUrl,
       depth: 1,
       singleBranch: false,
       tags: false,
@@ -210,6 +220,15 @@ const ensureShallowClone = async ({
 }) => {
   const currentLevel = repoDataLevels.get(repoId);
   if (currentLevel === 'shallow' || currentLevel === 'full') {
+    await git.fetch({
+      dir: `${rootDir}/${repoId}`,
+      ref: branch,
+      singleBranch: true,
+      tags: false,
+      onProgress: (progress: { phase: string; loaded?: number; total?: number }) => {
+        sendProgress(`Updating shallow clone: ${progress.phase}`, progress.loaded, progress.total);
+      }
+    });
     return { success: true, repoId, cached: true, level: currentLevel };
   }
 
@@ -218,6 +237,15 @@ const ensureShallowClone = async ({
       clonedRepos.add(repoId);
       repoDataLevels.set(repoId, 'shallow');
       console.log(`Repository ${repoId} already exists, skipping...`);
+      await git.fetch({
+        dir: `${rootDir}/${repoId}`,
+        ref: branch,
+        singleBranch: true,
+        tags: false,
+        onProgress: (progress: { phase: string; loaded?: number; total?: number }) => {
+          sendProgress(`Updating shallow clone: ${progress.phase}`, progress.loaded, progress.total);
+        }
+      });
       return { success: true, repoId, cached: true, level: 'shallow' };
     }
     return {
@@ -470,36 +498,86 @@ const getCommitHistory = async ({
   branch?: string;
   depth?: number;
 }) => {
-  try {
-    const cloneResult = await ensureFullClone({ repoId, branch, depth });
-    if (!cloneResult.success) {
-      throw new Error(`Failed to ensure full clone: ${cloneResult.error}`);
+  const dir = `${rootDir}/${repoId}`;
+  let attempt = 0;
+  let maxAttempts = 2;
+  let lastError = null;
+  let currentDepth = Math.max(depth, 100);
+
+  while (attempt < maxAttempts) {
+    try {
+      const cloneResult = await ensureFullClone({ repoId, branch, depth: currentDepth });
+      if (!cloneResult.success) {
+        throw new Error(`Failed to ensure full clone: ${cloneResult.error}`);
+      }
+      const commits = await git.log({
+        dir,
+        ref: branch,
+        depth: currentDepth,
+      });
+      return {
+        success: true,
+        commits,
+        repoId,
+        branch,
+      };
+    } catch (error: any) {
+      lastError = error;
+      // Defensive deepening: if NotFoundError, try deepening once
+      if (error && error.message && error.message.includes('Could not find') && attempt === 0) {
+        console.warn(`NotFoundError in getCommitHistory for ${repoId}, deepening and retrying...`);
+        currentDepth = 500; // Try a much larger depth
+        attempt++;
+        continue;
+      } else {
+        console.error(`Error getting commit history for ${repoId}:`, error);
+        break;
+      }
     }
-
-    const dir = `${rootDir}/${repoId}`;
-
-    const commits = await git.log({
-      dir,
-      ref: branch,
-      depth: Math.max(depth, 100),
-    });
-
-    return {
-      success: true,
-      commits,
-      repoId,
-      branch,
-    };
-  } catch (error) {
-    console.error(`Error getting commit history for ${repoId}:`, error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : String(error),
-      repoId,
-      branch,
-    };
   }
+  return {
+    success: false,
+    error: lastError instanceof Error ? lastError.message : String(lastError),
+    repoId,
+    branch,
+    retried: attempt > 0
+  };
 };
+
+async function deleteRepo({ repoId }: { repoId: string }) {
+  // Remove from tracked sets
+  clonedRepos.delete(repoId);
+  repoDataLevels.delete(repoId);
+
+  // Remove directory from LightningFS
+  const fs = new LightningFS('nostr-git');
+  const dir = `${rootDir}/${repoId}`;
+  try {
+    // Recursively delete all files and subdirectories
+    async function rmrf(path: string) {
+      let stat;
+      try {
+        stat = await fs.promises.stat(path);
+      } catch {
+        return; // Path does not exist
+      }
+      if (stat.type === 'dir') {
+        const entries = await fs.promises.readdir(path);
+        for (const entry of entries) {
+          await rmrf(`${path}/${entry}`);
+        }
+        await fs.promises.rmdir(path);
+      } else {
+        await fs.promises.unlink(path);
+      }
+    }
+    await rmrf(dir);
+    return { success: true, repoId };
+  } catch (error) {
+    console.error(`Failed to delete repo directory ${dir}:`, error);
+    return { success: false, repoId, error: error instanceof Error ? error.message : String(error) };
+  }
+}
 
 expose({ 
   cloneAndFork, 
@@ -510,5 +588,6 @@ expose({
   getRepoDataLevel,
   clearCloneCache,
   getCommitHistory,
-  getCommitCount
+  getCommitCount,
+  deleteRepo
 });
