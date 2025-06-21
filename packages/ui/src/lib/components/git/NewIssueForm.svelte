@@ -92,6 +92,8 @@
       
       onIssueCreated(issueEvent)
 
+      back()
+
     } catch (error) {
       console.error(error);
     } finally {

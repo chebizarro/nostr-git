@@ -1,34 +1,44 @@
 <script lang="ts">
-  import { default as TimeAgo } from "../../TimeAgo.svelte";
+  import TimeAgo from '../../TimeAgo.svelte';
   import { MessageSquare } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
-  import { useFunctions } from "../../useFunctions";
-  const { Avatar, AvatarFallback, AvatarImage, Button, Textarea, Card } = useRegistry();
+  const { Avatar, AvatarImage, Button, Textarea, Card } = useRegistry();
   import { createCommentEvent, parseCommentEvent } from "@nostr-git/shared-types";
   import type { CommentEvent, Profile } from "@nostr-git/shared-types";
+  import { nip19 } from 'nostr-tools';
 
-  const { postComment, getProfile } = useFunctions();
-
-  function submitComment(commentData: CommentEvent) {
-    postComment(commentData);
+  interface Props {
+    issueId: string;
+    issueKind: '1621' | '1617';
+    currentCommenter: string;
+    currentCommenterProfile?: Profile,
+    comments?: CommentEvent[];
+    commenterProfiles?: Profile[];
+    onCommentCreated: (comment: CommentEvent) => Promise<void>;
   }
 
   const {
     issueId,
-    comments = [],
-  }: {
-    issueId: string;
-    comments?: CommentEvent[];
-  } = $props();
+    issueKind = '1621',
+    comments,
+    commenterProfiles,
+    currentCommenter,
+    currentCommenterProfile,
+    onCommentCreated
+  }: Props = $props();
 
   let newComment = $state("");
 
-  const profile = getProfile(globalThis.$user);
-
   const commentsParsed = $derived.by(() => {
+    const profiles = commenterProfiles || [];
+
     return comments
-      .filter((c) => c.tags.some((t) => t[0] === "E" && t[1] === issueId))
-      .map((c) => parseCommentEvent(c));
+      ?.filter((c) => c.tags.some((t) => t[0] === "E" && t[1] === issueId))
+      .map((c) => {
+        const parsed = parseCommentEvent(c);
+        const profile = profiles.find((p) => p.pubkey === c.pubkey);
+        return { ...parsed, authorProfile: profile };
+      }) || [];
   });
 
   function submit(event: Event) {
@@ -40,44 +50,51 @@
       root: {
         type: "E",
         value: issueId,
-        kind: "1621",
+        kind: issueKind,
       },
     });
 
     newComment = "";
 
-    submitComment(commentEvent);
+    onCommentCreated(commentEvent);
   }
+
 </script>
 
 <Card class="mt-2 border-none shadow-none">
-  <div class="space-y-4 p-4">
+  <div class="space-y-4 p-2 sm:p-4 sm:px-8">
     {#each commentsParsed as c (c.id)}
-      {@const author = getProfile(c.author.pubkey)}
-      <div class="flex gap-3 group animate-fade-in">
-        {#if author}
-          <Avatar class="h-8 w-8">
-            <AvatarImage src={author.picture} alt={author.name} />
-          </Avatar>
-        {/if}
-        <div class="flex-1">
-          <div class="flex items-center gap-2">
-            <button class="font-semibold text-sm" onclick={() => console.log(c.author)}
-              >{c.author.pubkey}</button
-            >
-            <button class="text-xs text-muted-foreground">
+      {@const authorName = c.authorProfile?.name ??
+        nip19.npubEncode(c.author.pubkey).substring(0,9)
+      }
+      {@const authorProfile = c.authorProfile?.picture ?? ''}
+
+      <div class="w-full flex gap-3 group animate-fade-in">
+        <Avatar class="h-8 w-8">
+          <AvatarImage 
+            class="h-full w-full"
+            src={authorProfile}
+            alt={authorName} 
+          />
+        </Avatar>
+        <div class="w-full flex flex-col gap-y-2">
+          <div class="w-full grid grid-cols-[1fr_auto] space-x-2">
+            <div>{authorName}</div>
+            <div class="text-sm text-muted-foreground">
               <TimeAgo date={c.createdAt} />
-            </button>
+            </div>
           </div>
-          <p class="text-sm mt-1 whitespace-pre-wrap">{c.content}</p>
+          <p class="text-md whitespace-pre-wrap">{c.content}</p>
         </div>
       </div>
     {/each}
 
     <form onsubmit={submit} class="flex gap-3 pt-4 border-t">
       <Avatar class="h-8 w-8">
-        <AvatarImage src={profile?.picture} alt={profile?.name} />
-        <AvatarFallback>ME</AvatarFallback>
+        <AvatarImage 
+          src={currentCommenterProfile.picture ?? ''} 
+          alt={currentCommenterProfile.name || nip19.npubEncode(currentCommenter).substring(0, 9)} 
+        />
       </Avatar>
       <div class="flex-1 space-y-2">
         <Textarea
