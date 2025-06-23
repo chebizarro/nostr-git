@@ -14,7 +14,6 @@ export function parseGitPatchFromEvent(event: PatchEvent): Patch {
   });
 
   const getTag = (name: string) => event.tags.find(t => t[0] === name)?.[1];
-  const getAllTags = (name: string) => event.tags.filter(t => t[0] === name).map(t => t[1]);
   const authorTag = event.tags.find(t => t[0] === "committer");
   const author: Profile = {
     pubkey: event.pubkey,
@@ -34,7 +33,6 @@ export function parseGitPatchFromEvent(event: PatchEvent): Patch {
     author,
     baseBranch: getTag("base-branch") || "",
     commitCount: header.length,
-    commentCount: getAllTags("e").length,
     createdAt: new Date(event.created_at * 1000).toISOString(),
     status: "open",
     raw: event,

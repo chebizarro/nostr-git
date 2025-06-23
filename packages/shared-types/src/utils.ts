@@ -313,7 +313,6 @@ export interface Patch {
   author: { pubkey: string; name?: string; avatar?: string };
   baseBranch: string;
   commitCount: number;
-  commentCount: number;
   commits: any[];
   createdAt: string;
   diff: any[];
@@ -341,7 +340,6 @@ export function parsePatchEvent(event: PatchEvent): Patch {
     author,
     baseBranch: getTag("base-branch") || "",
     commitCount: getAllTags("commit").length,
-    commentCount: getAllTags("e").length,
     createdAt: new Date(event.created_at * 1000).toISOString(),
     diff: [],
     status,
