@@ -11,32 +11,26 @@
     FileCode,
   } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
-  const { Avatar, AvatarImage, Button, Card } = useRegistry();
+  const {Button, Card, ProfileComponent } = useRegistry();
   import { toast } from "$lib/stores/toast";
-  import type { PatchEvent, Profile, StatusEvent } from "@nostr-git/shared-types";
+  import type { PatchEvent, StatusEvent } from "@nostr-git/shared-types";
   import { parseGitPatchFromEvent } from "@nostr-git/core";
 
-  // Accept event and optional owner (Profile)
+  interface Props {
+    event: PatchEvent;
+    status?: StatusEvent;
+    commentCount?: number
+  }
+
   const {
     event,
-    author,
     status,
-  }: { event: PatchEvent; author?: import('svelte/store').Readable<Profile|undefined>; status?: StatusEvent } = $props();
+    commentCount = 0
+  }: Props = $props();
 
   const parsed = parseGitPatchFromEvent(event);
 
-  let displayAuthor = $state<Partial<Profile> & { pubkey?: string }>({});
-  $effect(() => {
-    const a = typeof author !== 'undefined' ? $author : undefined;
-    if (a) {
-      displayAuthor.name = a.name;
-      displayAuthor.display_name = a.display_name;
-      displayAuthor.picture = a.picture;
-      displayAuthor.pubkey = (a as any).pubkey;
-    }
-  });
-
-  const { id, title, description, baseBranch, commitCount, commentCount } = parsed;
+  const { id, title, description, baseBranch, commitCount } = parsed;
 
   let isExpanded = $state(false);
   let isBookmarked = $state(false);
@@ -152,8 +146,7 @@
         </div>
       {/if}
     </div>
-    <Avatar class="h-8 w-8">
-      <AvatarImage src={displayAuthor.picture ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(displayAuthor.display_name || displayAuthor.name || displayAuthor.pubkey || 'Unknown')}&background=random`} alt={displayAuthor?.name ?? displayAuthor?.display_name ?? ""} />
-    </Avatar>
+    <ProfileComponent pubkey={event.pubkey} hideDetails={true}>
+    </ProfileComponent>
   </div>
 </Card>

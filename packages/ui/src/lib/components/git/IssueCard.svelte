@@ -1,23 +1,32 @@
 <script lang="ts">
   import TimeAgo from "../../TimeAgo.svelte";
-  import { CircleAlert, ChevronDown, ChevronUp, BookmarkPlus, BookmarkCheck } from "@lucide/svelte";
-  import { useRegistry } from "../../useRegistry";
-  const { Avatar, AvatarImage, Button, Card } = useRegistry();
+  import { CircleDot, ChevronDown, ChevronUp, BookmarkPlus, BookmarkCheck, CircleCheck } from "@lucide/svelte";
   import { toast } from "$lib/stores/toast";
-  import type { CommentEvent, IssueEvent, Profile } from "@nostr-git/shared-types";
-  import { parseIssueEvent } from "@nostr-git/shared-types";
+  import type { CommentEvent, IssueEvent } from "@nostr-git/shared-types";
+  import { getTagValue, parseIssueEvent } from "@nostr-git/shared-types";
   import IssueThread from "./IssueThread.svelte";
+  import { useRegistry } from "../../useRegistry";
 
+  const { Button, ProfileLink, Card } = useRegistry();
+
+  interface Props {
+    event: IssueEvent;
+    comments?: CommentEvent[];
+    currentCommenter: string;
+    onCommentCreated: (comment: CommentEvent) => Promise<void>;
+  }
   // Accept event and optional author (Profile store)
   const {
     event,
-    author,
     comments,
-  }: {
-    event: IssueEvent;
-    author?: Profile;
-    comments?: CommentEvent[];
-  } = $props();
+    currentCommenter,
+    onCommentCreated,
+  }: Props = $props();
+
+  $inspect(comments).with((type, comments) => {
+    console.log('comments for all issues on the repo in nostr-git issuecard:', comments)
+  })
+
   const parsed = parseIssueEvent(event);
   const {
     id,
@@ -27,26 +36,11 @@
     createdAt,
   } = parsed;
 
-  // Use $author store if available, fallback to parsedAuthor
-  let displayAuthor = $state<Partial<Profile> & { pubkey?: string }>({});
-  $effect(() => {
-    const a = typeof author !== "undefined" ? $author : undefined;
-    if (a) {
-      displayAuthor.name = a.name;
-      displayAuthor.display_name = a.display_name;
-      displayAuthor.picture = a.picture;
-      displayAuthor.pubkey = (a as any).pubkey;
-    } else {
-      displayAuthor.name = undefined;
-      displayAuthor.display_name = undefined;
-      displayAuthor.picture = undefined;
-      displayAuthor.pubkey = undefined;
-    }
-  });
+  const commentsOnThisIssue = $derived.by(() => {
+    return comments?.filter((c) => getTagValue(c, 'E') === id)
+  })
 
-  // For commentCount and status, you may want to compute based on event.tags or extend the parser as needed.
-  // Here, we'll default to 0 and 'open' for now:
-  let commentCount = comments?.length ?? 0;
+  let commentCount = $derived(commentsOnThisIssue?.length ?? 0)
   let status: "open" | "closed" | "resolved" = $state("open");
   if (event.tags.some((t) => t[0] === "t" && t[1] === "closed")) status = "closed";
   else if (event.tags.some((t) => t[0] === "t" && t[1] === "resolved")) status = "resolved";
@@ -69,15 +63,17 @@
 
 <Card class="git-card hover:bg-accent/50 transition-colors">
   <div class="flex items-start gap-3">
-    <CircleAlert
-      class={`h-5 w-5 mt-0.5 ${
-        status === "open"
-          ? "text-amber-500"
-          : status === "closed"
-            ? "text-red-500"
-            : "text-green-500"
-      }`}
-    />
+    <div class="pt-2">
+      {#if status === "open"}
+        <CircleDot
+          class={"h-5 w-5 mt-0.5 text-green-500"}
+        />
+      {:else if status === 'closed'}
+        <CircleCheck class="h-5 w-5 mt-0.5 text-purple-500"/>
+      {:else}
+        <CircleCheck class="h-5 w-5 mt-0.5 text-green-500"/>
+      {/if}
+    </div>
     <div class="flex-1">
       <div class="flex items-center justify-between mb-1">
         <button
@@ -106,19 +102,12 @@
           {/if}
         </Button>
       </div>
-      <div class="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+      <div class="flex items-center flex-wrap gap-2 text-sm text-muted-foreground mb-1">
         <span>Opened <TimeAgo date={createdAt} /></span>
-        <span>•</span>
-        <span
-          >by {displayAuthor.display_name ||
-            displayAuthor.name ||
-            displayAuthor.pubkey ||
-            "Unknown"}</span
-        >
-        <span>•</span>
-        <span>{commentCount} comments</span>
+        <span>• By <ProfileLink pubkey={event.pubkey}/> </span>
+        <span>• {commentCount} comments</span>
       </div>
-      <p class="text-xs text-muted-foreground mb-2">{@html description}</p>
+      <p class="text-sm text-muted-foreground mb-2">{@html description}</p>
       {#if labels && labels.length}
         <div class="inline-flex gap-1 mb-2">
           {#each labels as label}
@@ -142,16 +131,14 @@
         </button>
       </div>
     </div>
-    <Avatar
-      class="h-8 w-8"
-    >
-      <AvatarImage
-        src={displayAuthor.picture}
-        alt={displayAuthor.display_name || displayAuthor.name || displayAuthor.pubkey || "Unknown"}
-      />
-    </Avatar>
   </div>
 </Card>
 {#if isExpanded}
-  <IssueThread issueId={id} comments={comments} />
+  <IssueThread
+    issueId={id}
+    issueKind={'1621'}
+    comments={commentsOnThisIssue}
+    currentCommenter={currentCommenter}
+    onCommentCreated={onCommentCreated}
+  />
 {/if}

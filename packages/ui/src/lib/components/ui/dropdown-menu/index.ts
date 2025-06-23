@@ -40,7 +40,6 @@ export {
 	Label,
 	RadioGroup,
 	RadioItem,
-	Root,
 	Separator,
 	Shortcut,
 	Sub,
