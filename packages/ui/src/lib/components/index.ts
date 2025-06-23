@@ -42,6 +42,7 @@ export { Label } from "./ui/label";
 export { Badge } from "./ui/badge";
 export { ScrollArea } from "./ui/scroll-area";
 export { Alert, AlertDescription, AlertTitle } from "./ui/alert";
+export { Profile, ProfileLink } from "./ui/profile";
 export { Progress } from "./ui/progress";
 export { Select, SelectContent, SelectItem, SelectTrigger } from "./ui/select";
 export { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";

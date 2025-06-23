@@ -17,6 +17,8 @@ export type Registry = {
   Collapsible: typeof import("../components/ui/collapsible");
   Input: typeof import("../components/ui/input/input.svelte").default;
   Label: typeof import("../components/ui/label/label.svelte").default;
+  ProfileComponent: typeof import("../components/ui/profile/profile.svelte").default;
+  ProfileLink: typeof import("../components/ui/profile/profile-link.svelte").default;
   Progress: typeof import("../components/ui/progress/progress.svelte").default;
   ScrollArea: typeof import("../components/ui/scroll-area/scroll-area.svelte").default;
   Separator: typeof import("../components/ui/separator/separator.svelte").default;
@@ -43,6 +45,8 @@ import Checkbox from "../components/ui/checkbox/checkbox.svelte";
 import * as Collapsible from "../components/ui/collapsible";
 import Input from "../components/ui/input/input.svelte";
 import Label from "../components/ui/label/label.svelte";
+import ProfileComponent from "../components/ui/profile/profile.svelte";
+import ProfileLink from "../components/ui/profile/profile-link.svelte";
 import Progress from "../components/ui/progress/progress.svelte";
 import ScrollArea from "../components/ui/scroll-area/scroll-area.svelte";
 import Separator from "../components/ui/separator/separator.svelte";
@@ -69,6 +73,8 @@ export const defaultRegistry: Registry = {
   Collapsible,
   Input,
   Label,
+  ProfileComponent,
+  ProfileLink,
   Progress,
   ScrollArea,
   Separator,
