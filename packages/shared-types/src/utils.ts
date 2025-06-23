@@ -316,7 +316,7 @@ export interface Patch {
   commits: any[];
   createdAt: string;
   diff: any[];
-  status: "open" | "merged" | "closed";
+  status: "open" | "applied" | "closed" | "draft";
   raw: PatchEvent;
 }
 
@@ -329,9 +329,10 @@ export function parsePatchEvent(event: PatchEvent): Patch {
     name: authorTag?.[1],
     avatar: authorTag?.[2]
   };
-  let status: "open" | "merged" | "closed" = "open";
-  if (event.tags.some(t => t[0] === "t" && t[1] === "merged")) status = "merged";
+  let status: "open" | "applied" | "closed" | "draft" = "open";
+  if (event.tags.some(t => t[0] === "t" && t[1] === "applied")) status = "applied";
   else if (event.tags.some(t => t[0] === "t" && t[1] === "closed")) status = "closed";
+  else if (event.tags.some(t => t[0] === "t" && t[1] === "draft")) status = "draft";
   return {
     id: event.id,
     repoId: getTag("a") || "",

@@ -3,8 +3,15 @@ import { ensureRepo, ensureRepoFromEvent, rootDir } from './git.js';
 import { parseRepoAnnouncementEvent, type RepoAnnouncementEvent } from '@nostr-git/shared-types';
 import { Buffer } from 'buffer';
 
+declare global {
+  // Extend globalThis to include Buffer
+  // eslint-disable-next-line no-var
+  // Use 'any' to avoid circular reference error
+  var Buffer: any;
+}
+
 if (typeof globalThis.Buffer === 'undefined') {
-  (globalThis as any).Buffer = Buffer;
+  globalThis.Buffer = Buffer;
 }
 
 /**
