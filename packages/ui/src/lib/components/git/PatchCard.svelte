@@ -19,12 +19,14 @@
   interface Props {
     event: PatchEvent;
     status?: StatusEvent;
+    patches?: PatchEvent[];
     commentCount?: number
   }
 
   const {
     event,
     status,
+    patches,
     commentCount = 0
   }: Props = $props();
 
@@ -115,7 +117,7 @@
       <div class="flex items-center gap-2 text-xs text-muted-foreground mb-1">
         <span>Base: {baseBranch}</span>
         <span>•</span>
-        <span>{commitCount} commits</span>
+        <span>{commitCount + (patches?.length ?? 0)} commits</span>
         <span>•</span>
         <span>{commentCount} comments</span>
       </div>

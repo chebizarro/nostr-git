@@ -39,7 +39,7 @@ export type CommentEvent = NostrEvent & {
   kind: 1111;
   content: string;
   tags: CommentTag[];
-  sig: string;
+  sig?: string | undefined;
 };
 
 export interface CreateCommentOpts {

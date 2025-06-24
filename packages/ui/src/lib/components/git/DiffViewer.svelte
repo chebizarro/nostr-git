@@ -3,7 +3,7 @@
   import { useRegistry } from "../../useRegistry";
   const { Avatar, AvatarFallback, AvatarImage, Button, Textarea } = useRegistry();
   import { formatDistanceToNow } from "date-fns";
-  import parseGitDiff from "parse-git-diff";
+  import parseDiff from "parse-diff";
   import { ChevronDown, ChevronUp } from "@lucide/svelte";
 
   interface Comment {
@@ -17,24 +17,20 @@
     createdAt: string;
   }
 
-  // Derive AnyFileChange from GitDiff as it's not directly exported in a way Storybook/Vite can consume
-  type AnyFileChange = ReturnType<typeof parseGitDiff>["files"][number];
+  // Use parse-diff File type
+  type AnyFileChange = import("parse-diff").File;
 
   function getFileLabel(file: AnyFileChange): string {
-    if ("pathBefore" in file && "pathAfter" in file) {
-      if (typeof file.pathBefore === "string" && typeof file.pathAfter === "string") {
-        if (file.pathBefore !== file.pathAfter) {
-          return `${file.pathBefore} → ${file.pathAfter}`;
-        }
-        return file.pathBefore;
-      }
+    // parse-diff: file.from and file.to
+    if (file.from && file.to && file.from !== file.to) {
+      return `${file.from} → ${file.to}`;
     }
-    if ("path" in file && typeof file.path === "string") return file.path;
-    return String(file.type);
+    return file.from || file.to || "unknown";
   }
 
   function getFileIsBinary(file: AnyFileChange): boolean {
-    return "isBinary" in file ? !!file.isBinary : false;
+    // parse-diff does not provide isBinary, so always return false for now
+    return false;
   }
 
   const {
@@ -59,7 +55,7 @@
     let initialExpanded = new Set<string>();
     if (typeof diff === "string") {
       try {
-        parsed = parseGitDiff(diff);
+        parsed = parseDiff(diff);
       } catch (e) {
         parsed = [];
       }
@@ -136,7 +132,7 @@
           <span class="ml-2 text-xs text-orange-400 shrink-0">[binary]</span>
         {/if}
       </button>
-      {#if isExpanded && "chunks" in file && file.chunks}
+      {#if isExpanded && file.chunks}
         <div id={`file-diff-${fileIdx}`}>
           {#each file.chunks as chunk, chunkIdx}
           <div class="mb-2">
@@ -147,39 +143,24 @@
                 {@const lineKey = `${fileIdx}:${chunkIdx}:${ln}`}
                 {@const lineComments = getCommentsForLine(lineKey)}
                 {@const hasComments = lineComments.length > 0}
-                {@const isMessageLine = change.type === "MessageLine"}
-                {@const lineDisplayData = (() => {
-                  if (isMessageLine) {
-                    return { bgClass: "px-2 pt-1 text-muted-foreground italic", contentClass: "" };
-                  }
-
-                  let bgClass = "pl-2 pt-1";
-                  let contentClass = "pl-2"; // Default padding for content
-
-                  if (change.type === "AddedLine") {
-                    bgClass += " git-diff-line-add bg-green-500/10";
-                    contentClass = "border-l-4 border-green-500 pl-2";
-                  } else if (change.type === "DeletedLine") {
-                    bgClass += " git-diff-line-remove bg-red-500/10";
-                    contentClass = "border-l-4 border-red-500 pl-2";
-                  } else if (change.type === "UnchangedLine") {
-                    bgClass += " hover:bg-secondary/50";
-                  }
-                  return { bgClass, contentClass };
-                })()}
+                {@const isAdd = change.type === 'add'}
+                {@const isDel = change.type === 'del'}
+                {@const isNormal = change.type === 'normal'}
+                {@const bgClass = isAdd
+                  ? 'git-diff-line-add bg-green-500/10'
+                  : isDel
+                  ? 'git-diff-line-remove bg-red-500/10'
+                  : 'hover:bg-secondary/50'}
 
                 <div>
-                  {#if isMessageLine}
-                    <div class="{lineDisplayData.bgClass}">{change.content}</div>
-                  {:else}
-                    <div class={`flex group ${lineDisplayData.bgClass}`}>
+                  <div class={`flex group pl-2 pt-1 ${bgClass}`}>
                       <div class="flex shrink-0 text-muted-foreground select-none">
                         {#if showLineNumbers}
                           <span class="w-8 text-right pr-2">
-                            {'lineBefore' in change && change.lineBefore !== undefined ? change.lineBefore : ''}
+                            {isDel ? change.ln ?? '' : isNormal ? change.ln1 ?? '' : ''}
                           </span>
                           <span class="w-8 text-right pr-2 border-r border-border mr-2">
-                            {'lineAfter' in change && change.lineAfter !== undefined ? change.lineAfter : ''}
+                            {isAdd ? change.ln ?? '' : isNormal ? change.ln2 ?? '' : ''}
                           </span>
                         {/if}
                       </div>
@@ -193,9 +174,8 @@
                         <MessageSquare class="h-4 w-4" />
                       </Button>
                     </div>
-                  {/if}
-
-                  {#if !isMessageLine && hasComments}
+                  
+                  {#if hasComments}
                     <div
                       class="bg-secondary/30 border-l-4 border-primary ml-10 pl-4 py-2 space-y-3"
                     >
@@ -222,7 +202,7 @@
                       {/each}
                     </div>
                   {/if}
-                  {#if !isMessageLine && selectedLine === ln}
+                  {#if selectedLine === ln}
                     <div class="bg-secondary/20 border-l-4 border-primary ml-10 pl-4 py-2">
                       <div class="flex gap-2">
                         <Avatar class="h-8 w-8">

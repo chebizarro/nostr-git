@@ -1,5 +1,5 @@
 import type { Nip34Event, RepoAnnouncementEvent, RepoStateEvent, PatchEvent, IssueEvent, StatusEvent, NostrTag } from './nip34.js';
-import type { CommentEvent, CommentTag, CreateCommentOpts } from './nip22.js';
+import type { CommentEvent } from './nip22.js';
 
 /**
  * Type guard for RepoAnnouncementEvent (kind: 30617)
@@ -314,6 +314,7 @@ export interface Patch {
   baseBranch: string;
   commitCount: number;
   commits: any[];
+  commitHash: string;
   createdAt: string;
   diff: any[];
   status: "open" | "applied" | "closed" | "draft";
@@ -341,6 +342,7 @@ export function parsePatchEvent(event: PatchEvent): Patch {
     author,
     baseBranch: getTag("base-branch") || "",
     commitCount: getAllTags("commit").length,
+    commitHash: getAllTags("commit")[0],
     createdAt: new Date(event.created_at * 1000).toISOString(),
     diff: [],
     status,

@@ -12,8 +12,8 @@
     issueKind: '1621' | '1617';
     currentCommenter: string;
     currentCommenterProfile?: Profile,
-    comments?: CommentEvent[];
-    commenterProfiles?: Profile[];
+    comments?: CommentEvent[] | undefined;
+    commenterProfiles?: Profile[] | undefined;
     onCommentCreated: (comment: CommentEvent) => Promise<void>;
   }
 
@@ -54,7 +54,7 @@
 </script>
 
 <Card class="mt-2 border-none shadow-none">
-  <div class="space-y-4 p-2 sm:p-4 sm:px-8">
+  <div class="space-y-4 p-2">
     {#each commentsParsed as c (c.id)}
       <div class="w-full flex-col gap-3 group animate-fade-in">
         <div class="w-full grid grid-cols-[1fr_auto] space-x-2">
@@ -64,26 +64,29 @@
             <TimeAgo date={c.createdAt} />
           </div>
         </div>
-        <div class="w-full flex flex-col gap-y-2">
+        <div class="w-full flex flex-col gap-y-2 mt-2">
           <p class="text-md whitespace-pre-wrap">{c.content}</p>
         </div>
       </div>
     {/each}
 
-    <form onsubmit={submit} class="flex gap-3 pt-4 border-t">
-        <ProfileComponent pubkey={currentCommenter} hideDetails={true}>
-        </ProfileComponent>
-      <div class="flex-1 space-y-2">
-        <Textarea
-          bind:value={newComment}
-          placeholder="Write a comment..."
-          class="min-h-[80px] resize-none"
-        />
-        <div class="flex justify-end">
-          <Button type="submit" class="gap-2" disabled={!newComment.trim()}>
-            <MessageSquare class="h-4 w-4" /> Comment
-          </Button>
+    <form onsubmit={submit} class="flex flex-col gap-3 pt-4 border-t">
+      <div class="flex gap-3">
+        <div class="flex-shrink-0">
+          <ProfileComponent pubkey={currentCommenter} hideDetails={true} />
         </div>
+        <div class="flex-1">
+          <Textarea
+            bind:value={newComment}
+            placeholder="Write a comment..."
+            class="min-h-[80px] resize-none w-full"
+          />
+        </div>
+      </div>
+      <div class="flex justify-end">
+        <Button type="submit" class="gap-2" disabled={!newComment.trim()}>
+          <MessageSquare class="h-4 w-4" /> Comment
+        </Button>
       </div>
     </form>
   </div>

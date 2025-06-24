@@ -1,9 +1,11 @@
 import { Patch, PatchEvent, Profile } from "@nostr-git/shared-types";
 import { parseGitPatch } from "parse-patch";
-import parseGitDiff, { AnyFileChange } from "parse-git-diff";
+import parseDiff from "parse-diff";
 
 export function parseGitPatchFromEvent(event: PatchEvent): Patch {
   const header = parseGitPatch(event.content);
+
+  let diff = parseDiff(event.content);
 
   const commits = header.map((commit) => {
     return {
@@ -19,11 +21,6 @@ export function parseGitPatchFromEvent(event: PatchEvent): Patch {
     pubkey: event.pubkey,
     name: authorTag?.[1],
   };
-  let diff: AnyFileChange[] = [];
-  if (header.length > 0) {
-    const gitDiff = parseGitDiff(header[0].diff);
-    diff = gitDiff["files"];
-  }
 
   return {
     id: event.id,
