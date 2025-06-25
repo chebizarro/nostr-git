@@ -334,6 +334,8 @@ export function parsePatchEvent(event: PatchEvent): Patch {
   if (event.tags.some(t => t[0] === "t" && t[1] === "applied")) status = "applied";
   else if (event.tags.some(t => t[0] === "t" && t[1] === "closed")) status = "closed";
   else if (event.tags.some(t => t[0] === "t" && t[1] === "draft")) status = "draft";
+  const commits = getAllTags("commit");
+  console.log(commits)
   return {
     id: event.id,
     repoId: getTag("a") || "",
@@ -342,7 +344,7 @@ export function parsePatchEvent(event: PatchEvent): Patch {
     author,
     baseBranch: getTag("base-branch") || "",
     commitCount: getAllTags("commit").length,
-    commitHash: getAllTags("commit")[0],
+    commitHash: getTag("commit") || "",
     createdAt: new Date(event.created_at * 1000).toISOString(),
     diff: [],
     status,

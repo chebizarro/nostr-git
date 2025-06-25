@@ -30,6 +30,7 @@ export function parseGitPatchFromEvent(event: PatchEvent): Patch {
     author,
     baseBranch: getTag("base-branch") || "",
     commitCount: header.length,
+    commitHash: getTag("commit") || "",
     createdAt: new Date(event.created_at * 1000).toISOString(),
     status: "open",
     raw: event,
