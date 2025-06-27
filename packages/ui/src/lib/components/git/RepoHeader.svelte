@@ -49,7 +49,7 @@
 
   <nav
     class={cn(
-      "bg-muted text-muted-foreground rounded-md p-1 w-full"
+      "bg-muted text-muted-foreground rounded-md w-full"
     )}
   >
     <div class="flex overflow-x-auto scrollbar-hide">

@@ -1,6 +1,13 @@
 <script lang="ts">
   import TimeAgo from "../../TimeAgo.svelte";
-  import { CircleDot, ChevronDown, ChevronUp, BookmarkPlus, BookmarkCheck, CircleCheck } from "@lucide/svelte";
+  import {
+    CircleDot,
+    ChevronDown,
+    ChevronUp,
+    BookmarkPlus,
+    BookmarkCheck,
+    CircleCheck,
+  } from "@lucide/svelte";
   import { toast } from "$lib/stores/toast";
   import type { CommentEvent, IssueEvent } from "@nostr-git/shared-types";
   import { getTagValue, parseIssueEvent } from "@nostr-git/shared-types";
@@ -16,31 +23,20 @@
     onCommentCreated: (comment: CommentEvent) => Promise<void>;
   }
   // Accept event and optional author (Profile store)
-  const {
-    event,
-    comments,
-    currentCommenter,
-    onCommentCreated,
-  }: Props = $props();
+  const { event, comments, currentCommenter, onCommentCreated }: Props = $props();
 
   $inspect(comments).with((type, comments) => {
-    console.log('comments for all issues on the repo in nostr-git issuecard:', comments)
-  })
+    console.log("comments for all issues on the repo in nostr-git issuecard:", comments);
+  });
 
   const parsed = parseIssueEvent(event);
-  const {
-    id,
-    subject: title,
-    content: description,
-    labels,
-    createdAt,
-  } = parsed;
+  const { id, subject: title, content: description, labels, createdAt } = parsed;
 
   const commentsOnThisIssue = $derived.by(() => {
-    return comments?.filter((c) => getTagValue(c, 'E') === id)
-  })
+    return comments?.filter((c) => getTagValue(c, "E") === id);
+  });
 
-  let commentCount = $derived(commentsOnThisIssue?.length ?? 0)
+  let commentCount = $derived(commentsOnThisIssue?.length ?? 0);
   let status: "open" | "closed" | "resolved" = $state("open");
   if (event.tags.some((t) => t[0] === "t" && t[1] === "closed")) status = "closed";
   else if (event.tags.some((t) => t[0] === "t" && t[1] === "resolved")) status = "resolved";
@@ -65,13 +61,11 @@
   <div class="flex items-start gap-3">
     <div class="pt-2">
       {#if status === "open"}
-        <CircleDot
-          class={"h-5 w-5 mt-0.5 text-green-500"}
-        />
-      {:else if status === 'closed'}
-        <CircleCheck class="h-5 w-5 mt-0.5 text-purple-500"/>
+        <CircleDot class={"h-5 w-5 mt-0.5 text-green-500"} />
+      {:else if status === "closed"}
+        <CircleCheck class="h-5 w-5 mt-0.5 text-purple-500" />
       {:else}
-        <CircleCheck class="h-5 w-5 mt-0.5 text-green-500"/>
+        <CircleCheck class="h-5 w-5 mt-0.5 text-green-500" />
       {/if}
     </div>
     <div class="flex-1">
@@ -104,7 +98,7 @@
       </div>
       <div class="flex items-center flex-wrap gap-2 text-sm text-muted-foreground mb-1">
         <span>Opened <TimeAgo date={createdAt} /></span>
-        <span>• By <ProfileLink pubkey={event.pubkey}/> </span>
+        <span>• By <ProfileLink pubkey={event.pubkey} /> </span>
         <span>• {commentCount} comments</span>
       </div>
       <p class="text-sm text-muted-foreground mb-2">{@html description}</p>
@@ -134,11 +128,14 @@
   </div>
 </Card>
 {#if isExpanded}
-  <IssueThread
-    issueId={id}
-    issueKind={'1621'}
-    comments={commentsOnThisIssue}
-    currentCommenter={currentCommenter}
-    onCommentCreated={onCommentCreated}
-  />
+    <div>
+      <IssueThread
+        class="m-2"
+        issueId={id}
+        issueKind={"1621"}
+        comments={commentsOnThisIssue}
+        currentCommenter={currentCommenter}
+        onCommentCreated={onCommentCreated}
+      />
+    </div>
 {/if}

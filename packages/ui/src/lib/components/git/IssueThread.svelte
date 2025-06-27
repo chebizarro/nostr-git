@@ -53,7 +53,7 @@
 
 </script>
 
-<Card class="mt-2 border-none shadow-none">
+<Card class="mt-2 p-2 border-none shadow-none">
   <div class="space-y-4 p-2">
     {#each commentsParsed as c (c.id)}
       <div class="w-full flex-col gap-3 group animate-fade-in">
