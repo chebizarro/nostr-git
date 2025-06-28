@@ -53,7 +53,7 @@
     )}
   >
     <div class="flex overflow-x-auto scrollbar-hide">
-      <div class="w-full flex justify-evenly gap-1 m-2 min-w-max">
+      <div class="w-full flex justify-evenly gap-1 m-1 min-w-max">
         {@render children?.(activeTab)}
       </div>
     </div>

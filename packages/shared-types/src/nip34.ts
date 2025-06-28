@@ -15,6 +15,26 @@ export type NostrEvent = Event;
 export type NostrTag = [string, ...string[]];
 
 // -------------------
+// Kind Number Constants
+// -------------------
+
+// Repository events
+export const GIT_REPO_ANNOUNCEMENT = 30617;
+export const GIT_REPO_STATE = 30618;
+
+// Patch events
+export const GIT_PATCH = 1617;
+
+// Issue events
+export const GIT_ISSUE = 1621;
+
+// Status events
+export const GIT_STATUS_OPEN = 1630;
+export const GIT_STATUS_APPLIED = 1631;
+export const GIT_STATUS_CLOSED = 1632;
+export const GIT_STATUS_DRAFT = 1633;
+
+// -------------------
 // Repository Announcement (kind: 30617)
 // -------------------
 export type RepoAnnouncementTag =
@@ -29,7 +49,7 @@ export type RepoAnnouncementTag =
   | ["t", string];
 
 export interface RepoAnnouncementEvent extends NostrEvent {
-  kind: 30617;
+  kind: typeof GIT_REPO_ANNOUNCEMENT;
   tags: RepoAnnouncementTag[];
 }
 
@@ -46,7 +66,7 @@ export type RepoStateTag =
   | ["HEAD", `ref: refs/heads/${string}`];
 
 export interface RepoStateEvent extends NostrEvent {
-  kind: 30618;
+  kind: typeof GIT_REPO_STATE;
   tags: RepoStateTag[];
 }
 
@@ -64,7 +84,7 @@ export type PatchTag =
   | ["committer", string, string, string, string];
 
 export interface PatchEvent extends NostrEvent {
-  kind: 1617;
+  kind: typeof GIT_PATCH;
   content: string; // git format-patch content
   tags: PatchTag[];
 }
@@ -80,7 +100,7 @@ export type IssueTag =
   | ["e", string];
 
 export interface IssueEvent extends NostrEvent {
-  kind: 1621;
+  kind: typeof GIT_ISSUE;
   content: string; // markdown text
   tags: IssueTag[];
 }
@@ -99,7 +119,7 @@ export type StatusTag =
   | ["applied-as-commits", ...string[]];
 
 export interface StatusEvent extends NostrEvent {
-  kind: 1630 | 1631 | 1632 | 1633;
+  kind: typeof GIT_STATUS_OPEN | typeof GIT_STATUS_CLOSED | typeof GIT_STATUS_APPLIED | typeof GIT_STATUS_DRAFT;
   content: string;
   tags: StatusTag[];
 }

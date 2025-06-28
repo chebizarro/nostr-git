@@ -11,24 +11,30 @@
     FileCode,
   } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
-  const {Button, Card, ProfileComponent } = useRegistry();
+  const { Button, Card, ProfileComponent } = useRegistry();
   import { toast } from "$lib/stores/toast";
-  import type { PatchEvent, StatusEvent } from "@nostr-git/shared-types";
+  import {
+    GIT_STATUS_APPLIED,
+    GIT_STATUS_CLOSED,
+    GIT_STATUS_DRAFT,
+    GIT_STATUS_OPEN,
+    type PatchEvent,
+    type StatusEvent,
+    type CommentEvent,
+  } from "@nostr-git/shared-types";
   import { parseGitPatchFromEvent } from "@nostr-git/core";
+  import IssueThread from "./IssueThread.svelte";
 
   interface Props {
     event: PatchEvent;
     status?: StatusEvent;
     patches?: PatchEvent[];
-    commentCount?: number
+    comments?: CommentEvent[];
+    currentCommenter: string;
+    onCommentCreated: (comment: CommentEvent) => Promise<void>;
   }
 
-  const {
-    event,
-    status,
-    patches,
-    commentCount = 0
-  }: Props = $props();
+  const { event, status, patches, comments, currentCommenter, onCommentCreated }: Props = $props();
 
   const parsed = parseGitPatchFromEvent(event);
 
@@ -41,13 +47,13 @@
 
   function getStatusIcon(kind: number | undefined) {
     switch (kind) {
-      case 1630:
+      case GIT_STATUS_OPEN:
         return { icon: GitPullRequest, color: "text-amber-500" };
-      case 1631:
+      case GIT_STATUS_APPLIED:
         return { icon: Check, color: "text-green-500" };
-      case 1632:
+      case GIT_STATUS_CLOSED:
         return { icon: X, color: "text-red-500" };
-      case 1633:
+      case GIT_STATUS_DRAFT:
         return { icon: FileCode, color: "text-gray-500" };
       default:
         return { icon: GitPullRequest, color: "text-gray-400" };
@@ -62,6 +68,9 @@
     });
   }
 
+  function toggleExpand() {
+    isExpanded = !isExpanded;
+  }
 </script>
 
 <Card class="git-card hover:bg-accent/50 transition-colors">
@@ -103,7 +112,7 @@
             aria-controls="patch-description"
             class="ml-auto"
             style="border-color: hsl(var(--border))"
-            onclick={() => (isExpanded = !isExpanded)}
+            onclick={toggleExpand}
           >
             {#if isExpanded}
               <ChevronUp class="h-5 w-5 text-muted-foreground" />
@@ -119,7 +128,7 @@
         <span>•</span>
         <span>{commitCount + (patches?.length ?? 0)} commits</span>
         <span>•</span>
-        <span>{commentCount} comments</span>
+        <span>{comments?.length ?? 0} comments</span>
       </div>
 
       {#if isExpanded}
@@ -130,11 +139,11 @@
           </Button>
           <div class="flex items-center gap-1">
             <MessageSquare class="h-4 w-4 text-muted-foreground" />
-            <span class="text-sm text-muted-foreground">{commentCount}</span>
+            <span class="text-sm text-muted-foreground">{comments?.length ?? 0}</span>
           </div>
         </div>
       {:else}
-        <p id="patch-description" class="text-sm text-muted-foreground mt-3 line-clamp-2">
+        <p class="text-sm text-muted-foreground mt-3 line-clamp-2">
           {description}
         </p>
         <div class="mt-4 flex items-center justify-between">
@@ -143,12 +152,23 @@
           </Button>
           <div class="flex items-center gap-1">
             <MessageSquare class="h-4 w-4 text-muted-foreground" />
-            <span class="text-sm text-muted-foreground">{commentCount}</span>
+            <span class="text-sm text-muted-foreground">{comments?.length ?? 0}</span>
           </div>
         </div>
       {/if}
     </div>
-    <ProfileComponent pubkey={event.pubkey} hideDetails={true}>
-    </ProfileComponent>
+    <ProfileComponent pubkey={event.pubkey} hideDetails={true}></ProfileComponent>
   </div>
 </Card>
+
+{#if isExpanded}
+<Card class="git-card transition-colors">
+  <IssueThread
+      issueId={id}
+      issueKind={"1617"}
+      comments={comments}
+      currentCommenter={currentCommenter}
+      onCommentCreated={onCommentCreated}
+    />
+  </Card>
+{/if}
