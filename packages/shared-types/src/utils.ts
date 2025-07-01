@@ -445,7 +445,7 @@ export function parseRepoStateEvent(event: RepoStateEvent): RepoState {
 
 export interface Status {
   id: string;
-  status: "open" | "applied" | "closed" | "draft";
+  status: "open" | "applied" | "closed" | "draft" | "resolved";
   relatedIds: string[];
   author: { pubkey: string };
   createdAt: string;
