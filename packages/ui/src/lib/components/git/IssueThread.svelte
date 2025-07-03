@@ -73,7 +73,7 @@
       <form onsubmit={submit} class="flex flex-col gap-3 pt-4 border-t">
         <div class="flex gap-3">
           <div class="flex-shrink-0">
-            <ProfileComponent pubkey={currentCommenter} hideDetails={true} />
+            <ProfileComponent pubkey={currentCommenter} hideDetails={true}/>
           </div>
           <div class="flex-1">
             <Textarea
