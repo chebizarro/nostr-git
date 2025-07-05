@@ -418,23 +418,6 @@ export class Repo {
       if (!result.success) {
         throw new Error(result.error || 'Failed to delete repo');
       }
-      // Reset all local state
-      this.state = undefined;
-      this.repo = undefined;
-      this.repoStateEvent = undefined;
-      this.issues = [];
-      this.patches = [];
-      this.#branchesFromRepo = [];
-      this.#commits = undefined;
-      this.#totalCommits = undefined;
-      this.#currentPage = 1;
-      this.#hasMoreCommits = false;
-      this.cloneProgress = { isCloning: false, phase: 'idle' };
-
-      // Remove any loading indicators
-      Object.values(this.#loadingIds).forEach(id => { if (id) context.remove(id); });
-      this.#loadingIds = { commits: null, branches: null, clone: null };
-
       // Re-parse event and trigger fresh clone/load
       if (this.repoEvent) {
         this.repo = parseRepoAnnouncementEvent(this.repoEvent);

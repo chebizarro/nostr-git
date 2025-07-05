@@ -1,4 +1,4 @@
-import type { Nip34Event, RepoAnnouncementEvent, RepoStateEvent, PatchEvent, IssueEvent, StatusEvent, NostrTag } from './nip34.js';
+import { type Nip34Event, type RepoAnnouncementEvent, type RepoStateEvent, type PatchEvent, type IssueEvent, type StatusEvent, type NostrTag, GIT_REPO_ANNOUNCEMENT } from './nip34.js';
 import type { CommentEvent } from './nip22.js';
 
 /**
@@ -382,6 +382,7 @@ export function parseIssueEvent(event: IssueEvent): Issue {
 export interface RepoAnnouncement {
   id: string;
   repoId: string;
+  address: string;
   name?: string;
   owner: string;
   description?: string;
@@ -401,6 +402,7 @@ export function parseRepoAnnouncementEvent(event: RepoAnnouncementEvent): RepoAn
   return {
     id: event.id,
     repoId: getTag("d") || "",
+    address: `${GIT_REPO_ANNOUNCEMENT}:${event.pubkey}:${getTag("d")}`,
     name: getTag("name"),
     owner: event.pubkey,
     description: getTag("description"),
