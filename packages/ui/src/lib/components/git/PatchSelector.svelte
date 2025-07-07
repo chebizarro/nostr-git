@@ -4,8 +4,6 @@
   const { Card, CardHeader, CardTitle, CardContent, ScrollArea, Badge } = useRegistry();
 
   const { patches, selectedPatch, onPatchSelect } = $props();
-
-
   
   const getStatusColor = (status: string) => {
     switch (status) {
