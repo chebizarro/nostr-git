@@ -1,17 +1,9 @@
 import Mustache from "mustache";
+import { NostrEvent } from "nostr-tools";
 import * as nip19 from "nostr-tools/nip19";
 
-// Types compatible with nostr event
 export type RawTag = string[];
-export interface NostrEvent {
-  kind: number;
-  created_at: number;
-  pubkey: string;
-  content: string;
-  tags: RawTag[];
-}
 
-// Default templates (copied from unknown-kinds.ts for now)
 const DEFAULT_TEMPLATES: Record<number, string> = {
   14: "encrypted message to {{tags.p}}",
   7: "{{pubkey}} reacts to {{tags.e}} by {{tags.p}}{{#content}} with {{content}}{{/content}}",
@@ -21,7 +13,7 @@ const DEFAULT_TEMPLATES: Record<number, string> = {
   30618: "## Git repository state {{tags.d}} hosted at {{tags.clone}} by {{#npub}}{{pubkey}}{{/npub}}",
   1617: "Patch",
   1621: "Issue: {{tags.subject}}\n{{content}}",
-  1623: "```\n{{content}}\n```",
+  1623: "{{content}}",
   1630: "Status changed to Open {{#nevent}}{{tags.e}}{{/nevent}}",
   1631: "Patch applied: {{#nevent}}{{tags.e}}{{/nevent}}",
   1632: "Status changed to Closed {{#nevent}}{{tags.e}}{{/nevent}}",

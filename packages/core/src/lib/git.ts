@@ -87,6 +87,9 @@ export async function ensureRepo(opts: { host: string; owner: string; repo: stri
       }
       throw error;
     }
+  } else {
+    console.log(`Repository already cloned at ${dir}`);
+    git.fetch({ dir, ref: opts.branch });
   }
 }
 

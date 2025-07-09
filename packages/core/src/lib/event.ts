@@ -37,7 +37,6 @@ export async function createNeventFromPermalink(
   const event = await createEventFromPermalink(permalink, signer, relays);
 
   const pool = new SimplePool();
-
   pool.publish(relays, event);
 
   const nevent = nip19.neventEncode({
