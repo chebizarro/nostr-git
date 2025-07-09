@@ -1,10 +1,29 @@
 <script lang="ts">
-  import { AlertTriangle, CheckCircle, Clock, GitPullRequest, XCircle } from "@lucide/svelte";
+  import {
+    AlertTriangle,
+    CheckCircle,
+    Clock,
+    GitPullRequest,
+    XCircle,
+  } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
-  const { Card, CardHeader, CardTitle, CardContent, ScrollArea, Badge } = useRegistry();
+  const {
+    Card,
+    CardHeader,
+    CardTitle,
+    CardContent,
+    ScrollArea,
+    Badge,
+  } = useRegistry();
 
-  const { patches, selectedPatch, onPatchSelect } = $props();
+  const {
+    patches,
+    selectedPatch,
+    onPatchSelect,
+  } = $props();
   
+const patchList = patches.map(p => ({...p, id: p.id}))
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'clean':

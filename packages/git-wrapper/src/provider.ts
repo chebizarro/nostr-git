@@ -4,12 +4,12 @@ export interface GitProvider {
   // Return a tree walker for the given ref (commit-ish)
   TREE(options: { ref: string }): any;
   // Repository
-  clone(options: any): Promise<any>;
-  commit(options: any): Promise<any>;
-  fetch(options: any): Promise<any>;
+  clone(options: any): Promise<void>;
+  commit(options: any): Promise<string>;
+  fetch(options: any): Promise<GitFetchResult>;
   init(options: any): Promise<any>;
   log(options: any): Promise<any>;
-  merge(options: any): Promise<any>;
+  merge(options: any): Promise<GitMergeResult>;
   pull(options: any): Promise<any>;
   push(options: any): Promise<any>;
   status(options: any): Promise<any>;
@@ -83,4 +83,20 @@ export interface GitProvider {
   updateIndex(options: any): Promise<any>;
   version(): Promise<any>;
   walk(options: any): Promise<any>;
+}
+
+export type GitMergeResult = {
+  oid?: string; // The SHA-1 object id that is now at the head of the branch. Absent only if `dryRun` was specified and `mergeCommit` is true.
+  alreadyMerged?: boolean; // True if the branch was already merged so no changes were made
+  fastForward?: boolean; // True if it was a fast-forward merge
+  mergeCommit?: boolean; // True if merge resulted in a merge commit
+  tree?: string; // The SHA-1 object id of the tree resulting from a merge commit
+}
+
+export type GitFetchResult = {
+  defaultBranch: string | null; // The branch that is cloned if no branch is specified
+  fetchHead: string | null; // The SHA-1 object id of the fetched head commit
+  fetchHeadDescription: string | null; // a textual description of the branch that was fetched
+  headers?: Map<string, string>; // The HTTP response headers returned by the git server
+  pruned?: Array<string>; // A list of branches that were pruned, if you provided the `prune` parameter
 }

@@ -1,4 +1,4 @@
-import { GitProvider } from './provider.js';
+import { GitFetchResult, GitMergeResult, GitProvider } from './provider.js';
 import { NostrClient, NostrEvent } from './nostr-client.js';
 
 /**
@@ -19,11 +19,11 @@ export class NostrGitProvider implements GitProvider {
     // Discover repo state/location via Nostr, then clone via backend
     throw new Error('Not implemented: clone via Nostr');
   }
-  async commit(options: any): Promise<any> { return this.git.commit(options); }
-  async fetch(options: any): Promise<any> { return this.git.fetch(options); }
+  async commit(options: any): Promise<string> { return this.git.commit(options); }
+  async fetch(options: any): Promise<GitFetchResult> { return this.git.fetch(options); }
   async init(options: any): Promise<any> { return this.git.init(options); }
   async log(options: any): Promise<any> { return this.git.log(options); }
-  async merge(options: any): Promise<any> { return this.git.merge(options); }
+  async merge(options: any): Promise<GitMergeResult> { return this.git.merge(options); }
   async pull(options: any): Promise<any> { return this.git.pull(options); }
   async push(options: any): Promise<any> { return this.git.push(options); }
   async status(options: any): Promise<any> { return this.git.status(options); }

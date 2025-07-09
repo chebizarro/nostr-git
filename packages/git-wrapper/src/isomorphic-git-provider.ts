@@ -1,5 +1,5 @@
 import * as isogit from 'isomorphic-git';
-import { GitProvider } from './provider.js';
+import { GitFetchResult, GitMergeResult, GitProvider } from './provider.js';
 import { FsClient } from 'isomorphic-git';
 
 export class IsomorphicGitProvider implements GitProvider {
@@ -22,10 +22,10 @@ export class IsomorphicGitProvider implements GitProvider {
   // Repository
   async clone(options: any) { return isogit.clone({ ...options, fs: this.fs, http: this.http, corsProxy: this.corsProxy }); }
   async commit(options: any) { return isogit.commit({ ...options, fs: this.fs }); }
-  async fetch(options: any) { return isogit.fetch({ ...options, fs: this.fs, http: this.http }); }
+  async fetch(options: any) { return isogit.fetch({ ...options, fs: this.fs, http: this.http }) as Promise<GitFetchResult>; }
   async init(options: any) { return isogit.init({ ...options, fs: this.fs }); }
   async log(options: any) { return isogit.log({ ...options, fs: this.fs }); }
-  async merge(options: any) { return isogit.merge({ ...options, fs: this.fs }); }
+  async merge(options: any) { return isogit.merge({ ...options, fs: this.fs }) as Promise<GitMergeResult>; }
   async pull(options: any) { return isogit.pull({ ...options, fs: this.fs, http: this.http }); }
   async push(options: any) { return isogit.push({ ...options, fs: this.fs, http: this.http }); }
   async status(options: any) { return isogit.status({ ...options, fs: this.fs }); }

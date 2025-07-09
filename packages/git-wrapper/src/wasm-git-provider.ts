@@ -1,4 +1,4 @@
-import { GitProvider } from './provider.js';
+import { GitFetchResult, GitMergeResult, GitProvider } from './provider.js';
 
 /**
  * Placeholder for a wasm-git implementation of the GitProvider interface.
@@ -10,11 +10,11 @@ export class WasmGitProvider implements GitProvider {
     throw new Error('Not implemented: TREE (wasm-git)');
   }
   async clone(options: any): Promise<any> { throw new Error('Not implemented: clone (wasm-git)'); }
-  async commit(options: any): Promise<any> { throw new Error('Not implemented: commit (wasm-git)'); }
-  async fetch(options: any): Promise<any> { throw new Error('Not implemented: fetch (wasm-git)'); }
+  async commit(options: any): Promise<string> { throw new Error('Not implemented: commit (wasm-git)'); }
+  async fetch(options: any): Promise<GitFetchResult> { throw new Error('Not implemented: fetch (wasm-git)'); }
   async init(options: any): Promise<any> { throw new Error('Not implemented: init (wasm-git)'); }
   async log(options: any): Promise<any> { throw new Error('Not implemented: log (wasm-git)'); }
-  async merge(options: any): Promise<any> { throw new Error('Not implemented: merge (wasm-git)'); }
+  async merge(options: any): Promise<GitMergeResult> { throw new Error('Not implemented: merge (wasm-git)'); }
   async pull(options: any): Promise<any> { throw new Error('Not implemented: pull (wasm-git)'); }
   async push(options: any): Promise<any> { throw new Error('Not implemented: push (wasm-git)'); }
   async status(options: any): Promise<any> { throw new Error('Not implemented: status (wasm-git)'); }
