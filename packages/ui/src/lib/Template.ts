@@ -1,6 +1,6 @@
 import Mustache from "mustache";
 import { NostrEvent } from "nostr-tools";
-import * as nip19 from "nostr-tools/nip19";
+import { nip19 } from "nostr-tools";
 
 export type RawTag = string[];
 
@@ -10,7 +10,8 @@ const DEFAULT_TEMPLATES: Record<number, string> = {
   10002: "canonical relays list for {{pubkey}}",
   1111: "{{#nevent}}{{tags.E}}{{/nevent}}\n{{content}}",
   30617: "Git repository {{tags.name}} hosted at {{{tags.clone}}} by {{#npub}}{{pubkey}}{{/npub}}",
-  30618: "## Git repository state {{tags.d}} hosted at {{tags.clone}} by {{#npub}}{{pubkey}}{{/npub}}",
+  30618:
+    "## Git repository state {{tags.d}} hosted at {{tags.clone}} by {{#npub}}{{pubkey}}{{/npub}}",
   1617: "Patch",
   1621: "Issue: {{tags.subject}}\n{{content}}",
   1623: "{{content}}",

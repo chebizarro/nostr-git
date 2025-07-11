@@ -196,6 +196,7 @@ export class Repo {
     issues.subscribe((issueEvents) => {
       this.issues = issueEvents;
     });
+    
     patches.subscribe((patchEvents) => {
       this.patches = patchEvents;
     });
