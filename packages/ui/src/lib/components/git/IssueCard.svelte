@@ -10,7 +10,11 @@
     FileCode,
   } from "@lucide/svelte";
   import { toast } from "$lib/stores/toast";
-  import type { CommentEvent, IssueEvent, StatusEvent } from "@nostr-git/shared-types";
+  import type {
+    CommentEvent,
+    IssueEvent,
+    StatusEvent,
+  } from "@nostr-git/shared-types";
   import {
     getTagValue,
     GIT_STATUS_CLOSED,
@@ -22,7 +26,13 @@
   import IssueThread from "./IssueThread.svelte";
   import { useRegistry } from "../../useRegistry";
   import { fly } from "svelte/transition";
-  const { Button, ProfileLink, Card, EventActions } = useRegistry();
+  const {
+    Button,
+    ProfileLink,
+    Card,
+    EventActions,
+    ReactionSummary,
+  } = useRegistry();
 
   interface Props {
     event: IssueEvent;
@@ -37,6 +47,10 @@
   const parsed = parseIssueEvent(event);
 
   const { id, subject: title, content: description, labels, createdAt } = parsed;
+
+  const url = "";
+
+  const noun = "Issue";
 
   const commentsOnThisIssue = $derived.by(() => {
     return comments?.filter((c) => getTagValue(c, "E") === id);
@@ -96,6 +110,8 @@
               </h3>
             </a>
           </div>
+          <ReactionSummary event={event} url={url} reactionClass="tooltip-left" deleteReaction={() => {}} createReaction={() => {}} noTooltip={false} children={() => {}} />
+          <EventActions event={event} url={url} noun={noun} customActions={undefined} />
           <Button
             variant="ghost"
             size="icon"
