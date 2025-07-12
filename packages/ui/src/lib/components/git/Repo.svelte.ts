@@ -21,6 +21,7 @@ import {
 } from "@nostr-git/core";
 import { type Readable } from "svelte/store";
 import { context } from "$lib/stores/context";
+import { Token, tokens } from "$lib/stores/tokens";
 
 export class Repo {
   repoEvent: RepoAnnouncementEvent = $state(undefined);
@@ -31,6 +32,8 @@ export class Repo {
   patches = $state<PatchEvent[]>([]);
   worker: Worker;
   api: any;
+
+  tokens = $state<Token[]>([]);
 
   selectedBranch = $state<string | undefined>(undefined);
   #branchesFromRepo = $state<Branch[]>([]);
@@ -261,6 +264,10 @@ export class Repo {
         };
       }
     })();
+
+    tokens.subscribe((tokens) => {
+      this.tokens = tokens;
+    });
   }
 
   async #loadBranchesFromRepo(repoEvent: RepoAnnouncementEvent) {

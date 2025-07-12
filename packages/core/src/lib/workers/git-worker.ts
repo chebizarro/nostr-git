@@ -6,6 +6,7 @@ import { finalizeEvent, SimplePool } from 'nostr-tools';
 import { GitProvider, IsomorphicGitProvider } from '@nostr-git/git-wrapper';
 import { rootDir } from '../git.js';
 import { Buffer } from 'buffer';
+import { analyzePatchMergeability, type MergeAnalysisResult } from '../merge-analysis.js';
 
 if (typeof globalThis.Buffer === 'undefined') {
   (globalThis as any).Buffer = Buffer;
@@ -218,6 +219,17 @@ const ensureShallowClone = async ({
   repoId: string;
   branch?: string;
 }) => {
+  const sendProgress = (phase: string, loaded?: number, total?: number) => {
+    self.postMessage({
+      type: 'clone-progress',
+      repoId,
+      phase,
+      loaded,
+      total,
+      progress: loaded && total ? loaded / total : undefined
+    });
+  };
+  
   const currentLevel = repoDataLevels.get(repoId);
   if (currentLevel === 'shallow' || currentLevel === 'full') {
     await git.fetch({
@@ -258,17 +270,6 @@ const ensureShallowClone = async ({
   const dir = `${rootDir}/${repoId}`;
 
   console.log(`Upgrading repository ${repoId} to shallow clone for branch ${branch}...`);
-
-  const sendProgress = (phase: string, loaded?: number, total?: number) => {
-    self.postMessage({
-      type: 'clone-progress',
-      repoId,
-      phase,
-      loaded,
-      total,
-      progress: total ? (loaded || 0) / total : undefined
-    });
-  };
 
   sendProgress(`Fetching ${branch} branch data...`);
 
@@ -579,6 +580,56 @@ async function deleteRepo({ repoId }: { repoId: string }) {
   }
 }
 
+/**
+ * Analyze if a patch can be merged cleanly into the target branch
+ */
+async function analyzePatchMerge({
+  repoId,
+  patchData,
+  targetBranch = 'main'
+}: {
+  repoId: string;
+  patchData: {
+    id: string;
+    commits: Array<{ oid: string; message: string; author: { name: string; email: string } }>;
+    baseBranch: string;
+    rawContent: string;
+  };
+  targetBranch?: string;
+}): Promise<MergeAnalysisResult> {
+  try {
+    const dir = `${rootDir}/${repoId}`;
+    
+    // Ensure we have at least shallow clone data
+    await ensureShallowClone({ repoId, branch: targetBranch });
+    
+    // Reconstruct a minimal patch object for analysis
+    const patch = {
+      id: patchData.id,
+      commits: patchData.commits,
+      baseBranch: patchData.baseBranch,
+      raw: { content: patchData.rawContent }
+    };
+    
+    // Perform the merge analysis
+    const result = await analyzePatchMergeability(git, dir, patch as any, targetBranch);
+    
+    return result;
+  } catch (error) {
+    return {
+      canMerge: false,
+      hasConflicts: false,
+      conflictFiles: [],
+      conflictDetails: [],
+      upToDate: false,
+      fastForward: false,
+      patchCommits: [],
+      analysis: 'error',
+      errorMessage: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}
+
 expose({ 
   cloneAndFork, 
   clone, 
@@ -589,5 +640,6 @@ expose({
   clearCloneCache,
   getCommitHistory,
   getCommitCount,
-  deleteRepo
+  deleteRepo,
+  analyzePatchMerge
 });

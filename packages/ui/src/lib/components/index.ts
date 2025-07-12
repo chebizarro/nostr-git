@@ -16,6 +16,7 @@ export { default as RepoTab } from "./git/RepoTab.svelte";
 export { default as NewIssueForm } from "./git/NewIssueForm.svelte";
 export { default as MergeAnalyzer } from "./git/MergeAnalyzer.svelte";
 export { default as ConflictVisualizer } from "./git/ConflictVisualizer.svelte";
+export { default as MergeStatus } from "./git/MergeStatus.svelte";
 export { default as PatchSelector } from "./git/PatchSelector.svelte";
 export { default as CommitSelector } from "./git/CommitSelector.svelte";
 export { default as CommitCard } from "./git/CommitCard.svelte";
@@ -50,6 +51,8 @@ export { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 
 export { toast } from "../stores/toast";
 export { context } from "../stores/context";
+export { tokens } from "../stores/tokens";
+export { signer } from "../stores/signer";
 
 export { default as ConfigProvider } from "../ConfigProvider.svelte";
 export { default as FunctionProvider } from "../FunctionProvider.svelte";
