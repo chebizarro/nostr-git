@@ -47,6 +47,8 @@ export { Profile, ProfileLink } from "./ui/profile";
 export { Progress } from "./ui/progress";
 export { Select, SelectContent, SelectItem, SelectTrigger } from "./ui/select";
 export { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
+export { default as EventActions } from "./EventActions.svelte";
+export { default as ReactionSummary } from "./ReactionSummary.svelte";
 
 
 export { toast } from "../stores/toast";

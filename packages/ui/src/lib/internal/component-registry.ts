@@ -27,6 +27,8 @@ export type Registry = {
   TabsList: typeof import("../components/ui/tabs/tabs-list.svelte").default;
   TabsTrigger: typeof import("../components/ui/tabs/tabs-trigger.svelte").default;
   Textarea: typeof import("../components/ui/textarea/textarea.svelte").default;
+  EventActions: typeof import("../components/EventActions.svelte").default;
+  ReactionSummary: typeof import("../components/ReactionSummary.svelte").default;
 };
 
 import Alert from "../components/ui/alert/alert.svelte";
@@ -55,6 +57,8 @@ import TabsContent from "../components/ui/tabs/tabs-content.svelte";
 import TabsList from "../components/ui/tabs/tabs-list.svelte";
 import TabsTrigger from "../components/ui/tabs/tabs-trigger.svelte";
 import Textarea from "../components/ui/textarea/textarea.svelte";
+import EventActions from "../components/EventActions.svelte";
+import ReactionSummary from "../components/ReactionSummary.svelte";
 
 export const defaultRegistry: Registry = {
   Alert,
@@ -83,4 +87,6 @@ export const defaultRegistry: Registry = {
   TabsList,
   TabsTrigger,
   Textarea,
+  EventActions,
+  ReactionSummary,
 };

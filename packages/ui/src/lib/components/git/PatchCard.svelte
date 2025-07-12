@@ -15,7 +15,7 @@
     User,
   } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
-  const { Button, Card, ProfileComponent } = useRegistry();
+  const { Button, Card, ProfileComponent, EventActions, ReactionSummary } = useRegistry();
   import { toast } from "$lib/stores/toast";
   import {
     GIT_STATUS_APPLIED,
@@ -46,6 +46,9 @@
 
   let isExpanded = $state(false);
   let isBookmarked = $state(false);
+
+  const noun = "Patch";
+  const url = "";
 
   // Copy to clipboard function
   const copyToClipboard = async (text: string, label: string) => {
@@ -250,6 +253,8 @@
             <a href={`patches/${id}`}>View Diff</a>
           </Button>
           <div class="flex items-center gap-1">
+            <ReactionSummary event={event} url={url} reactionClass="tooltip-left" deleteReaction={() => {}} createReaction={() => {}} noTooltip={false} children={() => {}} />
+            <EventActions event={event} url={url} noun={noun} customActions={undefined} />
             <MessageSquare class="h-4 w-4 text-muted-foreground" />
             <span class="text-sm text-muted-foreground">{comments?.length ?? 0}</span>
           </div>
@@ -270,6 +275,8 @@
               </div>
             {/if}
             <div class="flex items-center gap-1">
+              <ReactionSummary event={event} url={url} reactionClass="tooltip-left" deleteReaction={() => {}} createReaction={() => {}} noTooltip={false} children={() => {}} />
+              <EventActions event={event} url={url} noun={noun} customActions={undefined} />
               <MessageSquare class="h-4 w-4 text-muted-foreground" />
               <span class="text-sm text-muted-foreground">{comments?.length ?? 0}</span>
             </div>
@@ -277,7 +284,7 @@
         </div>
       {/if}
     </div>
-    <ProfileComponent pubkey={event.pubkey} hideDetails={true}></ProfileComponent>
+    <ProfileComponent pubkey={event.pubkey} hideDetails={true} />
   </div>
 </Card>
 

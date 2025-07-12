@@ -22,7 +22,7 @@
   import IssueThread from "./IssueThread.svelte";
   import { useRegistry } from "../../useRegistry";
   import { fly } from "svelte/transition";
-  const { Button, ProfileLink, Card } = useRegistry();
+  const { Button, ProfileLink, Card, EventActions } = useRegistry();
 
   interface Props {
     event: IssueEvent;
