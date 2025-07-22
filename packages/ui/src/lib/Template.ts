@@ -54,10 +54,6 @@ export class Template {
   }
 }
 
-// Optionally, export helpers for Svelte components to use
-export function isKnownUnknown(kind: number): boolean {
-  return DEFAULT_TEMPLATES[kind] !== undefined;
-}
 
 export function getDefaultTemplates(): Record<number, string> {
   return DEFAULT_TEMPLATES;

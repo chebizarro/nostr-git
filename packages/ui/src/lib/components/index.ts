@@ -60,3 +60,4 @@ export { default as ConfigProvider } from "../ConfigProvider.svelte";
 export { default as FunctionProvider } from "../FunctionProvider.svelte";
 
 export { PermalinkExtension, type PermalinkExtensionOptions } from "./editor/PermalinkExtension";
+export { default as EventRenderer } from "./events/EventRenderer.svelte";
