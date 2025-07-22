@@ -5,10 +5,9 @@
 
   interface Props {
     event: NostrEvent;
-    relays?: string[];
   }
 
-  let { event, relays = [] }: Props = $props();
+  let { event }: Props = $props();
 
   let repoId = $state('');
   let cloneUrl = $state('');

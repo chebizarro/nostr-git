@@ -12,11 +12,9 @@
 
   interface Props {
     event: NostrEvent;
-    relays?: string[];
-    fallbackToTemplate?: boolean; // For backward compatibility during transition
   }
 
-  let { event, relays = [], fallbackToTemplate = false }: Props = $props();
+  let { event }: Props = $props();
 
   let componentType = $state<string>('unknown');
   let isKnownEvent = $state(false);
@@ -78,33 +76,22 @@
 
 <!-- Route to appropriate component based on event kind -->
 {#if componentType === 'git-repo'}
-  <GitRepoComponent {event} {relays} />
+  <GitRepoComponent {event} />
 {:else if componentType === 'git-repo-state'}
-  <GitRepoStateComponent {event} {relays} />
+  <GitRepoStateComponent {event} />
 {:else if componentType === 'git-issue'}
-  <GitIssueComponent {event} {relays} />
+  <GitIssueComponent {event} />
 {:else if componentType === 'git-patch'}
-  <GitPatchComponent {event} {relays} />
+  <GitPatchComponent {event} />
 {:else if componentType === 'git-comment'}
-  <GitCommentComponent {event} {relays} />
+  <GitCommentComponent {event} />
 {:else if componentType === 'git-status'}
-  <GitStatusComponent {event} {relays} />
+  <GitStatusComponent {event} />
 {:else if isKnownEvent}
   <!-- For other known events that don't have dedicated components yet -->
-  <UnknownEventComponent {event} {relays} />
+  <UnknownEventComponent {event} />
 {:else}
   <!-- Fallback for truly unknown events -->
-  <UnknownEventComponent {event} {relays} />
+  <UnknownEventComponent {event} />
 {/if}
 
-<style>
-  /* Global styles for event rendering */
-  :global(.event-renderer) {
-    /* Ensure consistent spacing and layout */
-    margin-bottom: 1rem;
-  }
-  
-  :global(.event-renderer:last-child) {
-    margin-bottom: 0;
-  }
-</style>

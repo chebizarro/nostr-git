@@ -1,27 +1,18 @@
-<!--
-  UnknownEventComponent.svelte
-  Fallback component for unknown or unsupported Nostr event kinds
-  Provides basic event information with Svelte 5 reactivity
--->
 <script lang="ts">
   import { nip19, type NostrEvent } from 'nostr-tools';
   import { onMount } from 'svelte';
-  import { HelpCircle, Copy, Hash } from '@lucide/svelte';
+  import { HelpCircle, Copy } from '@lucide/svelte';
 
   interface Props {
     event: NostrEvent;
-    relays?: string[];
-    showRawData?: boolean;
   }
 
-  let { event, relays = [], showRawData = false }: Props = $props();
+  let { event }: Props = $props();
 
-  // Reactive state using Svelte 5 runes
   let authorNpub = $state('');
   let eventId = $state('');
   let expandedRaw = $state(false);
 
-  // Derived computed values
   const shortNpub = $derived(authorNpub ? authorNpub.slice(0, 16) + '...' : '');
   const shortEventId = $derived(eventId ? eventId.slice(0, 16) + '...' : '');
   const eventContent = $derived(event.content || '');
@@ -31,9 +22,7 @@
   );
   const tagCount = $derived(event.tags?.length || 0);
 
-  // Parse event data
   const parseEventData = () => {
-    // Generate npub from pubkey
     if (event.pubkey) {
       try {
         authorNpub = nip19.npubEncode(event.pubkey);
@@ -43,28 +32,22 @@
       }
     }
 
-    // Set event ID
     eventId = event.id || '';
   };
 
-  // Effect to handle event updates
   $effect(() => {
     if (event) {
       parseEventData();
     }
   });
 
-  // Handle copy to clipboard functionality
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      // Could integrate with toast system here
     } catch (error) {
       console.error('Failed to copy to clipboard:', error);
     }
   };
-
-  // Toggle raw data view
   const toggleRawData = () => {
     expandedRaw = !expandedRaw;
   };
@@ -174,7 +157,6 @@
 
 <style>
   .unknown-event {
-    /* Custom styling for unknown events */
     transition: all 0.2s ease-in-out;
   }
   
@@ -183,13 +165,11 @@
   }
 
   .prose {
-    /* Ensure content is properly formatted */
     word-wrap: break-word;
     overflow-wrap: break-word;
   }
 
   pre {
-    /* JSON formatting */
     white-space: pre-wrap;
     word-wrap: break-word;
     max-height: 300px;

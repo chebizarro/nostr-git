@@ -8,10 +8,9 @@
 
   interface Props {
     event: NostrEvent;
-    relays?: string[];
   }
 
-  let { event, relays = [] }: Props = $props();
+  let { event }: Props = $props();
 
   // Reactive state using Svelte 5 runes
   let patchTitle = $state('');
