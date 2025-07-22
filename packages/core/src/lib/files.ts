@@ -54,35 +54,75 @@ export async function listRepoFilesFromEvent(opts: {
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main';
   const dir = `${rootDir}/${opts.repoEvent.id}`;
-  await ensureRepoFromEvent({ repoEvent: event, branch });
+  
+  // Ensure adequate repository depth for file operations
+  // If accessing a specific commit, we need more than shallow clone
+  const requiredDepth = opts.commit ? 100 : 10; // More depth if accessing specific commit
+  await ensureRepoFromEvent({ repoEvent: event, branch }, requiredDepth);
 
   const git = getGitProvider();
   let oid: string;
+  
   if (opts.commit) {
     oid = opts.commit;
     try {
       await git.readCommit({ dir, oid });
     } catch (error: any) {
-      // Try to get more information about available commits
-      try {
-        const commits = await git.log({ dir, depth: 10 });
-        const availableCommits = commits.map((c: any) => c.oid.substring(0, 8)).join(', ');
-        throw new Error(`Commit ${opts.commit} not found in repository. Available recent commits: ${availableCommits}`);
-      } catch (logError) {
-        throw new Error(`Commit ${opts.commit} not found in repository. Unable to list available commits.`);
+      // If commit not found, try to deepen the repository
+      if (error.name === 'NotFoundError') {
+        console.warn(`Commit ${opts.commit} not found, attempting to deepen repository...`);
+        try {
+          // Try with much deeper history
+          await ensureRepoFromEvent({ repoEvent: event, branch }, 500);
+          // Retry reading the commit
+          await git.readCommit({ dir, oid });
+        } catch (deepenError: any) {
+          // Try to get more information about available commits
+          try {
+            const commits = await git.log({ dir, depth: 10 });
+            const availableCommits = commits.map((c: any) => c.oid.substring(0, 8)).join(', ');
+            throw new Error(`Commit ${opts.commit} not found in repository. Available recent commits: ${availableCommits}`);
+          } catch (logError) {
+            throw new Error(`Commit ${opts.commit} not found in repository. Unable to list available commits.`);
+          }
+        }
+      } else {
+        throw error;
       }
     }
   } else {
     oid = await git.resolveRef({ dir, ref: branch });
   }
+  
   const treePath = opts.path || '';
-  const { tree } = await git.readTree({ dir, oid, filepath: treePath });
-  return tree.map((entry: any) => ({
-    name: entry.path,
-    path: treePath ? `${treePath}/${entry.path}` : entry.path,
-    type: entry.type === 'blob' ? 'file' : entry.type === 'tree' ? 'directory' : entry.type === 'commit' ? 'submodule' : 'file',
-    oid: entry.oid,
-  }));
+  
+  try {
+    const { tree } = await git.readTree({ dir, oid, filepath: treePath });
+    return tree.map((entry: any) => ({
+      name: entry.path,
+      path: treePath ? `${treePath}/${entry.path}` : entry.path,
+      type: entry.type === 'blob' ? 'file' : entry.type === 'tree' ? 'directory' : entry.type === 'commit' ? 'submodule' : 'file',
+      oid: entry.oid,
+    }));
+  } catch (error: any) {
+    if (error.name === 'NotFoundError') {
+      // If tree not found, try to deepen repository further
+      console.warn(`Tree not found for ${oid}, attempting to deepen repository further...`);
+      try {
+        await ensureRepoFromEvent({ repoEvent: event, branch }, 1000);
+        const { tree } = await git.readTree({ dir, oid, filepath: treePath });
+        return tree.map((entry: any) => ({
+          name: entry.path,
+          path: treePath ? `${treePath}/${entry.path}` : entry.path,
+          type: entry.type === 'blob' ? 'file' : entry.type === 'tree' ? 'directory' : entry.type === 'commit' ? 'submodule' : 'file',
+          oid: entry.oid,
+        }));
+      } catch (retryError) {
+        throw new Error(`Unable to access file tree at ${treePath}. Repository may be incomplete or corrupted.`);
+      }
+    }
+    throw error;
+  }
 }
 
 /**
@@ -102,8 +142,12 @@ export async function getRepoFileContentFromEvent(opts: {
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main';
   const dir = `${rootDir}/${opts.repoEvent.id}`;
-  await ensureRepoFromEvent({ repoEvent: event, branch });
   
+  // Ensure adequate repository depth for file operations
+  // If accessing a specific commit, we need more than shallow clone
+  const requiredDepth = opts.commit ? 100 : 10; // More depth if accessing specific commit
+  await ensureRepoFromEvent({ repoEvent: event, branch }, requiredDepth);
+
   const git = getGitProvider();
   let oid: string;
   
@@ -112,13 +156,26 @@ export async function getRepoFileContentFromEvent(opts: {
     try {
       await git.readCommit({ dir, oid });
     } catch (error: any) {
-      // Try to get more information about available commits
-      try {
-        const commits = await git.log({ dir, depth: 10 });
-        const availableCommits = commits.map((c: any) => c.oid.substring(0, 8)).join(', ');
-        throw new Error(`Commit ${opts.commit} not found in repository. Available recent commits: ${availableCommits}`);
-      } catch (logError) {
-        throw new Error(`Commit ${opts.commit} not found in repository. Unable to list available commits.`);
+      // If commit not found, try to deepen the repository
+      if (error.name === 'NotFoundError') {
+        console.warn(`Commit ${opts.commit} not found, attempting to deepen repository...`);
+        try {
+          // Try with much deeper history
+          await ensureRepoFromEvent({ repoEvent: event, branch }, 500);
+          // Retry reading the commit
+          await git.readCommit({ dir, oid });
+        } catch (deepenError: any) {
+          // Try to get more information about available commits
+          try {
+            const commits = await git.log({ dir, depth: 10 });
+            const availableCommits = commits.map((c: any) => c.oid.substring(0, 8)).join(', ');
+            throw new Error(`Commit ${opts.commit} not found in repository. Available recent commits: ${availableCommits}`);
+          } catch (logError) {
+            throw new Error(`Commit ${opts.commit} not found in repository. Unable to list available commits.`);
+          }
+        }
+      } else {
+        throw error;
       }
     }
   } else {
@@ -131,7 +188,19 @@ export async function getRepoFileContentFromEvent(opts: {
     return decoder.decode(blob);
   } catch (error: any) {
     if (error.name === 'NotFoundError') {
-      throw new Error(`File '${opts.path}' not found at ${opts.commit ? `commit ${opts.commit}` : `branch ${branch}`}`);
+      // If file not found, try to deepen repository and retry
+      console.warn(`File '${opts.path}' not found, attempting to deepen repository...`);
+      try {
+        await ensureRepoFromEvent({ repoEvent: event, branch }, 1000);
+        const { blob } = await git.readBlob({ dir, oid, filepath: opts.path });
+        const decoder = new TextDecoder('utf-8');
+        return decoder.decode(blob);
+      } catch (retryError: any) {
+        if (retryError.name === 'NotFoundError') {
+          throw new Error(`File '${opts.path}' not found at ${opts.commit ? `commit ${opts.commit}` : `branch ${branch}`}`);
+        }
+        throw retryError;
+      }
     }
     throw error;
   }

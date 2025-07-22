@@ -18,8 +18,568 @@ const git: GitProvider = new IsomorphicGitProvider({
   corsProxy: 'https://cors.isomorphic-git.org',
 });
 
+// In-memory tracking (for current session)
 const clonedRepos = new Set<string>();
 const repoDataLevels = new Map<string, 'refs' | 'shallow' | 'full'>();
+
+// Persistent cache interface using IndexedDB
+interface RepoCache {
+  repoId: string;
+  lastUpdated: number;
+  headCommit: string;
+  dataLevel: 'refs' | 'shallow' | 'full';
+  branches: Array<{ name: string; commit: string }>;
+  cloneUrls: string[];
+  commitCount?: number;
+}
+
+class RepoCacheManager {
+  private dbName = 'nostr-git-cache';
+  private dbVersion = 1;
+  private db: IDBDatabase | null = null;
+
+  async init(): Promise<void> {
+    if (this.db) return;
+
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(this.dbName, this.dbVersion);
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        this.db = request.result;
+        resolve();
+      };
+      
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result;
+        if (!db.objectStoreNames.contains('repos')) {
+          const store = db.createObjectStore('repos', { keyPath: 'repoId' });
+          store.createIndex('lastUpdated', 'lastUpdated');
+        }
+      };
+    });
+  }
+
+  async getRepoCache(repoId: string): Promise<RepoCache | null> {
+    await this.init();
+    if (!this.db) return null;
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['repos'], 'readonly');
+      const store = transaction.objectStore('repos');
+      const request = store.get(repoId);
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result || null);
+    });
+  }
+
+  async setRepoCache(cache: RepoCache): Promise<void> {
+    await this.init();
+    if (!this.db) return;
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['repos'], 'readwrite');
+      const store = transaction.objectStore('repos');
+      const request = store.put(cache);
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve();
+    });
+  }
+
+  async deleteRepoCache(repoId: string): Promise<void> {
+    await this.init();
+    if (!this.db) return;
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['repos'], 'readwrite');
+      const store = transaction.objectStore('repos');
+      const request = store.delete(repoId);
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve();
+    });
+  }
+
+  async clearOldCache(maxAgeMs: number = 7 * 24 * 60 * 60 * 1000): Promise<void> {
+    await this.init();
+    if (!this.db) return;
+
+    const cutoffTime = Date.now() - maxAgeMs;
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['repos'], 'readwrite');
+      const store = transaction.objectStore('repos');
+      const index = store.index('lastUpdated');
+      const range = IDBKeyRange.upperBound(cutoffTime);
+      const request = index.openCursor(range);
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest).result;
+        if (cursor) {
+          cursor.delete();
+          cursor.continue();
+        } else {
+          resolve();
+        }
+      };
+    });
+  }
+}
+
+const cacheManager = new RepoCacheManager();
+
+// Initialize cache cleanup on worker start
+cacheManager.clearOldCache().catch(console.warn);
+
+/**
+ * Check if repository needs updating by comparing remote HEAD with cached HEAD
+ */
+async function needsUpdate(repoId: string, cloneUrls: string[], cache: RepoCache | null): Promise<boolean> {
+  if (!cache) return true;
+  
+  // Check if cache is too old (older than 1 hour)
+  const maxCacheAge = 60 * 60 * 1000; // 1 hour
+  if (Date.now() - cache.lastUpdated > maxCacheAge) {
+    return true;
+  }
+
+  try {
+    // Check remote HEAD for the main branch
+    const cloneUrl = cloneUrls[0];
+    if (!cloneUrl) return true;
+
+    const refs = await git.listServerRefs({
+      http: http,
+      url: cloneUrl,
+      prefix: 'refs/heads/',
+      symrefs: true,
+    });
+
+    const mainBranch = refs.find((ref: any) => 
+      ref.ref === 'refs/heads/main' || ref.ref === 'refs/heads/master'
+    );
+
+    if (!mainBranch) return true;
+
+    // Compare with cached HEAD commit
+    return mainBranch.oid !== cache.headCommit;
+  } catch (error) {
+    console.warn(`Failed to check remote HEAD for ${repoId}:`, error);
+    // If we can't check remote, assume we need update if cache is old
+    return Date.now() - cache.lastUpdated > maxCacheAge;
+  }
+}
+
+/**
+ * Smart repository initialization that checks cache and only updates when necessary
+ */
+async function smartInitializeRepo({
+  repoId,
+  cloneUrls,
+  forceUpdate = false,
+}: {
+  repoId: string;
+  cloneUrls: string[];
+  forceUpdate?: boolean;
+}) {
+  const sendProgress = (phase: string, loaded?: number, total?: number) => {
+    self.postMessage({
+      type: 'clone-progress',
+      repoId,
+      phase,
+      loaded,
+      total,
+      progress: total ? (loaded || 0) / total : undefined
+    });
+  };
+
+  try {
+    // Check cache first
+    const cache = await cacheManager.getRepoCache(repoId);
+    const needsUpdateCheck = forceUpdate || await needsUpdate(repoId, cloneUrls, cache);
+    
+    if (cache && !needsUpdateCheck) {
+      // Use cached data
+      sendProgress('Using cached data');
+      repoDataLevels.set(repoId, cache.dataLevel);
+      clonedRepos.add(repoId);
+      
+      return {
+        success: true,
+        repoId,
+        fromCache: true,
+        dataLevel: cache.dataLevel,
+        branches: cache.branches,
+        headCommit: cache.headCommit,
+      };
+    }
+
+    // Need to fetch from remote
+    sendProgress('Checking repository status');
+    
+    const dir = `${rootDir}/${repoId}`;
+    const isAlreadyCloned = await isRepoCloned(dir);
+    
+    if (isAlreadyCloned && !forceUpdate) {
+      // Repository exists locally, just update cache
+      try {
+        const headCommit = await git.resolveRef({ dir, ref: 'HEAD' });
+        const branches = await git.listBranches({ dir });
+        
+        const newCache: RepoCache = {
+          repoId,
+          lastUpdated: Date.now(),
+          headCommit,
+          dataLevel: repoDataLevels.get(repoId) || 'shallow',
+          branches: branches.map((name: string) => ({ name, commit: headCommit })),
+          cloneUrls,
+        };
+        
+        await cacheManager.setRepoCache(newCache);
+        repoDataLevels.set(repoId, newCache.dataLevel);
+        clonedRepos.add(repoId);
+        
+        sendProgress('Repository ready');
+        return {
+          success: true,
+          repoId,
+          fromCache: false,
+          dataLevel: newCache.dataLevel,
+          branches: newCache.branches,
+          headCommit: newCache.headCommit,
+        };
+      } catch (error) {
+        console.warn(`Failed to read existing repo ${repoId}, re-cloning:`, error);
+      }
+    }
+
+    // Perform fresh clone/initialization
+    return await initializeRepo({ repoId, cloneUrls });
+  } catch (error) {
+    console.error(`Smart initialization failed for ${repoId}:`, error);
+    return {
+      success: false,
+      repoId,
+      error: error instanceof Error ? error.message : String(error),
+      fromCache: false,
+    };
+  }
+}
+
+/**
+ * Initialize a repository with minimal data - just refs and basic metadata
+ * This is the fastest initial load, only fetching what's needed for branch listing
+ */
+const initializeRepo = async ({
+  repoId,
+  cloneUrls,
+}: {
+  repoId: string;
+  cloneUrls: string[];
+}) => {
+
+  const sendProgress = (phase: string, loaded?: number, total?: number) => {
+    self.postMessage({
+      type: 'clone-progress',
+      repoId,
+      phase,
+      loaded,
+      total,
+      progress: total ? (loaded || 0) / total : undefined
+    });
+  };
+
+  try {
+    const dir = `${rootDir}/${repoId}`;
+    sendProgress('Initializing repository');
+
+    // Try each clone URL until one works
+    let lastError: Error | null = null;
+    let cloneResult = null;
+
+    for (const cloneUrl of cloneUrls) {
+      try {
+        sendProgress('Fetching repository metadata', 0, 1);
+        
+        const onProgress = (progress: { phase: string; loaded?: number; total?: number }) => {
+          sendProgress(progress.phase, progress.loaded, progress.total);
+        };
+
+        // Initialize with minimal clone (refs only)
+        cloneResult = await git.clone({
+          dir,
+          url: cloneUrl,
+          ref: 'HEAD',
+          singleBranch: false, // We want all branches for refs
+          depth: 1, // Minimal depth for refs
+          noCheckout: true, // Don't checkout files yet
+          noTags: true, // Skip tags for speed
+          onProgress,
+        });
+
+        break; // Success, exit loop
+      } catch (error: any) {
+        console.warn(`Clone failed for URL ${cloneUrl}:`, error);
+        lastError = error;
+        continue; // Try next URL
+      }
+    }
+
+    if (!cloneResult) {
+      throw lastError || new Error('All clone URLs failed');
+    }
+
+    // Get repository metadata
+    const branches = await git.listBranches({ dir });
+    const headCommit = await git.resolveRef({ dir, ref: 'HEAD' });
+
+    // Update tracking
+    repoDataLevels.set(repoId, 'refs');
+    clonedRepos.add(repoId);
+
+    // Cache the results
+    const cache: RepoCache = {
+      repoId,
+      lastUpdated: Date.now(),
+      headCommit,
+      dataLevel: 'refs',
+      branches: branches.map((name: string) => ({ name, commit: headCommit })),
+      cloneUrls,
+    };
+    
+    await cacheManager.setRepoCache(cache);
+
+    sendProgress('Repository initialized');
+    return {
+      success: true,
+      repoId,
+      dataLevel: 'refs' as const,
+      branches: cache.branches,
+      headCommit,
+      fromCache: false,
+    };
+  } catch (error: any) {
+    console.error(`Repository initialization failed for ${repoId}:`, error);
+    return {
+      success: false,
+      repoId,
+      error: error.message || String(error),
+      fromCache: false,
+    };
+  }
+};
+
+/**
+ * Ensure repository has shallow clone data (HEAD commit + tree) with smart caching
+ * This enables file listing and content access for the default branch
+ */
+const ensureShallowClone = async ({
+  repoId,
+  branch = 'main',
+}: {
+  repoId: string;
+  branch?: string;
+}) => {
+  const sendProgress = (phase: string, loaded?: number, total?: number) => {
+    self.postMessage({
+      type: 'clone-progress',
+      repoId,
+      phase,
+      loaded,
+      total,
+      progress: total ? (loaded || 0) / total : undefined
+    });
+  };
+
+  try {
+    const dir = `${rootDir}/${repoId}`;
+    const currentLevel = repoDataLevels.get(repoId);
+
+    // If we already have shallow or full data, no need to fetch
+    if (currentLevel === 'shallow' || currentLevel === 'full') {
+      sendProgress('Using existing shallow clone');
+      return {
+        success: true,
+        repoId,
+        branch,
+        dataLevel: currentLevel,
+        fromCache: true,
+      };
+    }
+
+    // Check if we need to initialize first
+    if (!clonedRepos.has(repoId)) {
+      throw new Error('Repository not initialized. Call initializeRepo first.');
+    }
+
+    sendProgress('Fetching branch content', 0, 1);
+
+    const onProgress = (progress: { phase: string; loaded?: number; total?: number }) => {
+      sendProgress(progress.phase, progress.loaded, progress.total);
+    };
+
+    // Fetch the specific branch with shallow clone
+    await git.fetch({
+      dir,
+      ref: branch,
+      depth: 1,
+      singleBranch: true,
+      onProgress,
+    });
+
+    // Checkout the branch
+    await git.checkout({
+      dir,
+      ref: branch,
+    });
+
+    // Update tracking
+    repoDataLevels.set(repoId, 'shallow');
+
+    // Update cache
+    const cache = await cacheManager.getRepoCache(repoId);
+    if (cache) {
+      cache.dataLevel = 'shallow';
+      cache.lastUpdated = Date.now();
+      await cacheManager.setRepoCache(cache);
+    }
+
+    sendProgress('Shallow clone ready');
+    return {
+      success: true,
+      repoId,
+      branch,
+      dataLevel: 'shallow' as const,
+    };
+  } catch (error: any) {
+    console.error(`Shallow clone failed for ${repoId}:`, error);
+    return {
+      success: false,
+      repoId,
+      branch,
+      error: error.message || String(error),
+      fromCache: false,
+    };
+  }
+};
+
+/**
+ * Legacy clone function - now uses smart initialization strategy
+ * Checks cache and only downloads when necessary
+ */
+const clone = async ({
+  repoId,
+  cloneUrls,
+}: {
+  repoId: string;
+  cloneUrls: string[];
+}) => {
+  try {
+    // Use smart initialization
+    const initResult = await smartInitializeRepo({ repoId, cloneUrls });
+    if (!initResult.success) {
+      return initResult;
+    }
+
+    // If we got data from cache and it's already shallow/full, we're done
+    if (initResult.fromCache && initResult.dataLevel !== 'refs') {
+      return initResult;
+    }
+
+    // Otherwise, ensure we have at least shallow clone
+    const shallowResult = await ensureShallowClone({ repoId });
+    if (!shallowResult.success) {
+      return shallowResult;
+    }
+
+    return {
+      success: true,
+      repoId,
+      dataLevel: shallowResult.dataLevel,
+      fromCache: initResult.fromCache,
+    };
+  } catch (error: any) {
+    console.error(`Clone failed for ${repoId}:`, error);
+    return {
+      success: false,
+      repoId,
+      error: error.message || String(error),
+    };
+  }
+};
+
+/**
+ * Clear clone cache and data level tracking
+ */
+const clearCloneCache = async () => {
+  clonedRepos.clear();
+  repoDataLevels.clear();
+  
+  // Also clear persistent cache
+  try {
+    await cacheManager.init();
+    const db = (cacheManager as any).db;
+    if (db) {
+      const transaction = db.transaction(['repos'], 'readwrite');
+      const store = transaction.objectStore('repos');
+      await new Promise((resolve, reject) => {
+        const request = store.clear();
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(undefined);
+      });
+    }
+  } catch (error) {
+    console.warn('Failed to clear persistent cache:', error);
+  }
+};
+
+/**
+ * Enhanced delete repository function that also clears cache
+ */
+async function deleteRepo({ repoId }: { repoId: string }) {
+  // Remove from tracked sets
+  clonedRepos.delete(repoId);
+  repoDataLevels.delete(repoId);
+
+  // Remove from persistent cache
+  try {
+    await cacheManager.deleteRepoCache(repoId);
+  } catch (error) {
+    console.warn(`Failed to delete cache for ${repoId}:`, error);
+  }
+
+  // Remove directory from LightningFS
+  const fs = new LightningFS('nostr-git');
+  const dir = `${rootDir}/${repoId}`;
+  try {
+    // Recursively delete all files and subdirectories
+    async function rmrf(path: string) {
+      let stat;
+      try {
+        stat = await fs.promises.stat(path);
+      } catch {
+        return; // Path does not exist
+      }
+      if (stat.type === 'dir') {
+        const entries = await fs.promises.readdir(path);
+        for (const entry of entries) {
+          await rmrf(`${path}/${entry}`);
+        }
+        await fs.promises.rmdir(path);
+      } else {
+        await fs.promises.unlink(path);
+      }
+    }
+    await rmrf(dir);
+    return { success: true, repoId };
+  } catch (error) {
+    console.error(`Failed to delete repo directory ${dir}:`, error);
+    return { success: false, repoId, error: error instanceof Error ? error.message : String(error) };
+  }
+};
 
 /**
  * Get the total number of commits in a repository
@@ -112,13 +672,12 @@ async function getCommitCount({
     console.error(`Error getting commit count for ${repoId}:`, error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
       repoId,
       branch,
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 }
-
 
 async function isRepoCloned(dir: string): Promise<boolean> {
   try {
@@ -128,177 +687,6 @@ async function isRepoCloned(dir: string): Promise<boolean> {
     return false;
   }
 }
-
-/**
- * Initialize a repository with minimal data - just refs and basic metadata
- * This is the fastest initial load, only fetching what's needed for branch listing
- */
-const initializeRepo = async ({
-  repoId,
-  cloneUrls,
-}: {
-  repoId: string;
-  cloneUrls: string[];
-}) => {
-
-  const sendProgress = (phase: string, loaded?: number, total?: number) => {
-    self.postMessage({
-      type: 'clone-progress',
-      repoId,
-      phase,
-      loaded,
-      total,
-      progress: total ? (loaded || 0) / total : undefined
-    });
-  };
-
-  if (clonedRepos.has(repoId)) {
-    console.log(`Repository ${repoId} already initialized, skipping...`);
-    return { success: true, repoId, cached: true, level: repoDataLevels.get(repoId) };
-  }
-
-  if (await isRepoCloned(`${rootDir}/${repoId}`)) {
-    clonedRepos.add(repoId);
-    repoDataLevels.set(repoId, 'shallow');
-    console.log(`Repository ${repoId} already exists, skipping...`);
-    await git.fetch({
-      dir: `${rootDir}/${repoId}`,
-      singleBranch: true,
-      tags: false,
-      onProgress: (progress: { phase: string; loaded?: number; total?: number }) => {
-        sendProgress(`Updating shallow clone: ${progress.phase}`, progress.loaded, progress.total);
-      }
-    });
-    return { success: true, repoId, cached: true, level: 'shallow' };
-  }
-
-  const dir = `${rootDir}/${repoId}`;
-  const cloneUrl = cloneUrls.find((url) => url.startsWith("https://"));
-  if (!cloneUrl) return { success: false, repoId, error: 'No HTTPS clone URL found' };
-
-  console.log(`Initializing repository ${repoId} with minimal data...`);
-
-  sendProgress('Fetching repository metadata...');
-
-  try {
-    //await git.init({ dir, bare: false });
-    //await git.addRemote({ dir, remote: 'origin', url: cloneUrl });
-    await git.clone({
-      dir,
-      url: cloneUrl,
-      depth: 1,
-      singleBranch: false,
-      tags: false,
-      prune: true,
-      onProgress: (progress: { phase: string; loaded?: number; total?: number }) => {
-        sendProgress(`Fetching refs: ${progress.phase}`, progress.loaded, progress.total);
-      }
-    });
-
-    sendProgress('Repository initialized with refs');
-
-    clonedRepos.add(repoId);
-    repoDataLevels.set(repoId, 'refs');
-    console.log(`Repository ${repoId} initialized with refs successfully`);
-
-    return { success: true, repoId, cached: false, level: 'refs' };
-  } catch (error: any) {
-    console.error(`Failed to initialize repository ${repoId}:`, error);
-    return { success: false, repoId, error: error.message };
-  }
-};
-
-/**
- * Ensure repository has shallow clone data (HEAD commit + tree)
- * This enables file listing and content access for the default branch
- */
-const ensureShallowClone = async ({
-  repoId,
-  branch = 'main',
-}: {
-  repoId: string;
-  branch?: string;
-}) => {
-  const sendProgress = (phase: string, loaded?: number, total?: number) => {
-    self.postMessage({
-      type: 'clone-progress',
-      repoId,
-      phase,
-      loaded,
-      total,
-      progress: loaded && total ? loaded / total : undefined
-    });
-  };
-  
-  const currentLevel = repoDataLevels.get(repoId);
-  if (currentLevel === 'shallow' || currentLevel === 'full') {
-    await git.fetch({
-      dir: `${rootDir}/${repoId}`,
-      ref: branch,
-      singleBranch: true,
-      tags: false,
-      onProgress: (progress: { phase: string; loaded?: number; total?: number }) => {
-        sendProgress(`Updating shallow clone: ${progress.phase}`, progress.loaded, progress.total);
-      }
-    });
-    return { success: true, repoId, cached: true, level: currentLevel };
-  }
-
-  if (!clonedRepos.has(repoId)) {
-    if (await isRepoCloned(`${rootDir}/${repoId}`)) {
-      clonedRepos.add(repoId);
-      repoDataLevels.set(repoId, 'shallow');
-      console.log(`Repository ${repoId} already exists, skipping...`);
-      await git.fetch({
-        dir: `${rootDir}/${repoId}`,
-        ref: branch,
-        singleBranch: true,
-        tags: false,
-        onProgress: (progress: { phase: string; loaded?: number; total?: number }) => {
-          sendProgress(`Updating shallow clone: ${progress.phase}`, progress.loaded, progress.total);
-        }
-      });
-      return { success: true, repoId, cached: true, level: 'shallow' };
-    }
-    return {
-      success: false,
-      repoId,
-      error: 'Repository not initialized. Call initializeRepo first.'
-    };
-  }
-
-  const dir = `${rootDir}/${repoId}`;
-
-  console.log(`Upgrading repository ${repoId} to shallow clone for branch ${branch}...`);
-
-  sendProgress(`Fetching ${branch} branch data...`);
-
-  try {
-    await git.fetch({
-      dir,
-      remote: 'origin',
-      ref: branch,
-      depth: 1,
-      singleBranch: true,
-      tags: false,
-      onProgress: (progress: { phase: string; loaded?: number; total?: number }) => {
-        sendProgress(`Shallow clone: ${progress.phase}`, progress.loaded, progress.total);
-      }
-    });
-
-    await git.checkout({ dir, ref: branch });
-
-    sendProgress('Shallow clone completed');
-
-    repoDataLevels.set(repoId, 'shallow');
-    console.log(`Repository ${repoId} upgraded to shallow clone successfully`);
-
-    return { success: true, repoId, cached: false, level: 'shallow' };
-  } catch (error: any) {
-    console.error(`Failed to create shallow clone for repository ${repoId}:`, error);
-    return { success: false, repoId, error: error.message };
-  }
-};
 
 /**
  * Ensure repository has full history (for commit history, file history, etc.)
@@ -372,33 +760,6 @@ const ensureFullClone = async ({
 };
 
 /**
- * Legacy clone function - now uses progressive loading strategy
- * Initializes repo and ensures shallow clone for backward compatibility
- */
-const clone = async ({
-  repoId,
-  cloneUrls,
-}: {
-  repoId: string;
-  cloneUrls: string[];
-}) => {
-  // Initialize with refs first
-  const initResult = await initializeRepo({ repoId, cloneUrls });
-  if (!initResult.success) {
-    return initResult;
-  }
-
-  // If already cached at a higher level, return that
-  if (initResult.cached && initResult.level !== 'refs') {
-    return initResult;
-  }
-
-  // Upgrade to shallow clone for backward compatibility
-  const shallowResult = await ensureShallowClone({ repoId });
-  return shallowResult;
-};
-
-/**
  * Get the current data level for a repository
  */
 const getRepoDataLevel = (repoId: string): 'none' | 'refs' | 'shallow' | 'full' => {
@@ -407,13 +768,156 @@ const getRepoDataLevel = (repoId: string): 'none' | 'refs' | 'shallow' | 'full' 
 };
 
 /**
- * Clear clone cache and data level tracking
+ * Get commit history for a repository
+ * Ensures the repository has sufficient history depth before fetching commits
  */
-const clearCloneCache = () => {
-  clonedRepos.clear();
-  repoDataLevels.clear();
+const getCommitHistory = async ({
+  repoId,
+  branch = 'main',
+  depth = 50,
+}: {
+  repoId: string;
+  branch?: string;
+  depth?: number;
+}) => {
+  const dir = `${rootDir}/${repoId}`;
+  let attempt = 0;
+  let maxAttempts = 3; // Increased attempts
+  let lastError = null;
+  let currentDepth = Math.max(depth, 50); // Ensure minimum depth
+
+  while (attempt < maxAttempts) {
+    try {
+      // Always ensure we have sufficient history for the requested depth
+      const cloneResult = await ensureFullClone({ repoId, branch, depth: currentDepth });
+      if (!cloneResult.success) {
+        throw new Error(`Failed to ensure full clone: ${cloneResult.error}`);
+      }
+
+      // Verify the repository has the expected data level
+      const actualDataLevel = repoDataLevels.get(repoId);
+      if (actualDataLevel !== 'full') {
+        console.warn(`Expected full clone but got ${actualDataLevel}, forcing full clone...`);
+        // Force a full clone by temporarily removing from cache
+        const wasCloned = clonedRepos.has(repoId);
+        clonedRepos.delete(repoId);
+        repoDataLevels.delete(repoId);
+        
+        const retryResult = await ensureFullClone({ repoId, branch, depth: currentDepth });
+        if (!retryResult.success) {
+          throw new Error(`Failed to force full clone: ${retryResult.error}`);
+        }
+        
+        if (wasCloned) {
+          clonedRepos.add(repoId);
+        }
+      }
+
+      const commits = await git.log({
+        dir,
+        ref: branch,
+        depth: currentDepth,
+      });
+
+      return {
+        success: true,
+        commits,
+        repoId,
+        branch,
+        actualDepth: commits.length,
+        requestedDepth: currentDepth,
+      };
+    } catch (error: any) {
+      lastError = error;
+      console.error(`Attempt ${attempt + 1} failed for getCommitHistory ${repoId}:`, error);
+      
+      // Handle different types of errors
+      if (error && error.message) {
+        if (error.message.includes('Could not find') && attempt < maxAttempts - 1) {
+          console.warn(`NotFoundError in getCommitHistory for ${repoId}, deepening and retrying...`);
+          // Exponentially increase depth
+          currentDepth = Math.min(currentDepth * 2, 1000);
+          attempt++;
+          continue;
+        } else if (error.message.includes('shallow') && attempt < maxAttempts - 1) {
+          console.warn(`Shallow clone issue for ${repoId}, forcing full clone...`);
+          // Force re-clone by clearing cache
+          clonedRepos.delete(repoId);
+          repoDataLevels.delete(repoId);
+          currentDepth = Math.max(currentDepth, 100);
+          attempt++;
+          continue;
+        }
+      }
+      
+      console.error(`Error getting commit history for ${repoId}:`, error);
+      break;
+    }
+  }
+  
+  return {
+    success: false,
+    error: lastError instanceof Error ? lastError.message : String(lastError),
+    repoId,
+    branch,
+    retried: attempt > 0,
+    finalDepth: currentDepth,
+  };
 };
 
+/**
+ * Analyze if a patch can be merged cleanly into the target branch
+ */
+async function analyzePatchMerge({
+  repoId,
+  patchData,
+  targetBranch = 'main'
+}: {
+  repoId: string;
+  patchData: {
+    id: string;
+    commits: Array<{ oid: string; message: string; author: { name: string; email: string } }>;
+    baseBranch: string;
+    rawContent: string;
+  };
+  targetBranch?: string;
+}): Promise<MergeAnalysisResult> {
+  try {
+    const dir = `${rootDir}/${repoId}`;
+    
+    // Ensure we have at least shallow clone data
+    await ensureShallowClone({ repoId, branch: targetBranch });
+    
+    // Reconstruct a minimal patch object for analysis
+    const patch = {
+      id: patchData.id,
+      commits: patchData.commits,
+      baseBranch: patchData.baseBranch,
+      raw: { content: patchData.rawContent }
+    };
+    
+    // Perform the merge analysis
+    const result = await analyzePatchMergeability(git, dir, patch as any, targetBranch);
+    
+    return result;
+  } catch (error) {
+    return {
+      canMerge: false,
+      hasConflicts: false,
+      conflictFiles: [],
+      conflictDetails: [],
+      upToDate: false,
+      fastForward: false,
+      patchCommits: [],
+      analysis: 'error',
+      errorMessage: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}
+
+/**
+ * Clone and fork a repository
+ */
 const cloneAndFork = async ({
   sourceUrl,
   targetHost,
@@ -486,153 +990,10 @@ const createRemoteRepo = async (
   }
 };
 
-/**
- * Get commit history for a repository
- * Ensures the repository has sufficient history depth before fetching commits
- */
-const getCommitHistory = async ({
-  repoId,
-  branch = 'main',
-  depth = 50,
-}: {
-  repoId: string;
-  branch?: string;
-  depth?: number;
-}) => {
-  const dir = `${rootDir}/${repoId}`;
-  let attempt = 0;
-  let maxAttempts = 2;
-  let lastError = null;
-  let currentDepth = Math.max(depth, 100);
-
-  while (attempt < maxAttempts) {
-    try {
-      const cloneResult = await ensureFullClone({ repoId, branch, depth: currentDepth });
-      if (!cloneResult.success) {
-        throw new Error(`Failed to ensure full clone: ${cloneResult.error}`);
-      }
-      const commits = await git.log({
-        dir,
-        ref: branch,
-        depth: currentDepth,
-      });
-      return {
-        success: true,
-        commits,
-        repoId,
-        branch,
-      };
-    } catch (error: any) {
-      lastError = error;
-      // Defensive deepening: if NotFoundError, try deepening once
-      if (error && error.message && error.message.includes('Could not find') && attempt === 0) {
-        console.warn(`NotFoundError in getCommitHistory for ${repoId}, deepening and retrying...`);
-        currentDepth = 500; // Try a much larger depth
-        attempt++;
-        continue;
-      } else {
-        console.error(`Error getting commit history for ${repoId}:`, error);
-        break;
-      }
-    }
-  }
-  return {
-    success: false,
-    error: lastError instanceof Error ? lastError.message : String(lastError),
-    repoId,
-    branch,
-    retried: attempt > 0
-  };
-};
-
-async function deleteRepo({ repoId }: { repoId: string }) {
-  // Remove from tracked sets
-  clonedRepos.delete(repoId);
-  repoDataLevels.delete(repoId);
-
-  // Remove directory from LightningFS
-  const fs = new LightningFS('nostr-git');
-  const dir = `${rootDir}/${repoId}`;
-  try {
-    // Recursively delete all files and subdirectories
-    async function rmrf(path: string) {
-      let stat;
-      try {
-        stat = await fs.promises.stat(path);
-      } catch {
-        return; // Path does not exist
-      }
-      if (stat.type === 'dir') {
-        const entries = await fs.promises.readdir(path);
-        for (const entry of entries) {
-          await rmrf(`${path}/${entry}`);
-        }
-        await fs.promises.rmdir(path);
-      } else {
-        await fs.promises.unlink(path);
-      }
-    }
-    await rmrf(dir);
-    return { success: true, repoId };
-  } catch (error) {
-    console.error(`Failed to delete repo directory ${dir}:`, error);
-    return { success: false, repoId, error: error instanceof Error ? error.message : String(error) };
-  }
-}
-
-/**
- * Analyze if a patch can be merged cleanly into the target branch
- */
-async function analyzePatchMerge({
-  repoId,
-  patchData,
-  targetBranch = 'main'
-}: {
-  repoId: string;
-  patchData: {
-    id: string;
-    commits: Array<{ oid: string; message: string; author: { name: string; email: string } }>;
-    baseBranch: string;
-    rawContent: string;
-  };
-  targetBranch?: string;
-}): Promise<MergeAnalysisResult> {
-  try {
-    const dir = `${rootDir}/${repoId}`;
-    
-    // Ensure we have at least shallow clone data
-    await ensureShallowClone({ repoId, branch: targetBranch });
-    
-    // Reconstruct a minimal patch object for analysis
-    const patch = {
-      id: patchData.id,
-      commits: patchData.commits,
-      baseBranch: patchData.baseBranch,
-      raw: { content: patchData.rawContent }
-    };
-    
-    // Perform the merge analysis
-    const result = await analyzePatchMergeability(git, dir, patch as any, targetBranch);
-    
-    return result;
-  } catch (error) {
-    return {
-      canMerge: false,
-      hasConflicts: false,
-      conflictFiles: [],
-      conflictDetails: [],
-      upToDate: false,
-      fastForward: false,
-      patchCommits: [],
-      analysis: 'error',
-      errorMessage: error instanceof Error ? error.message : 'Unknown error'
-    };
-  }
-}
-
 expose({ 
   cloneAndFork, 
   clone, 
+  smartInitializeRepo,
   initializeRepo,
   ensureShallowClone,
   ensureFullClone,

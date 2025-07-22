@@ -215,9 +215,15 @@ export class Repo {
     this.worker = worker;
     this.api = api;
 
+    // Smart initialization - only clone if needed
     (async () => {
       const repoId = this.repoEvent.id;
       const cloneUrls = [...(this.repo?.clone || [])];
+
+      if (!repoId || !cloneUrls.length) {
+        console.warn('Missing repoId or clone URLs, skipping initialization');
+        return;
+      }
 
       try {
         // Clear any previous loading message
@@ -225,42 +231,56 @@ export class Repo {
           context.remove(this.#loadingIds.clone);
         }
         
-        this.#loadingIds.clone = context.loading('Cloning repository...');
+        this.#loadingIds.clone = context.loading('Initializing repository...');
         
-        // Clone the repository
-        await this.api.clone({
+        // Use smart initialization instead of always cloning
+        const result = await this.api.smartInitializeRepo({
           repoId,
           cloneUrls,
         });
         
-        // Update loading message to success
-        if (this.#loadingIds.clone) {
-          context.update(this.#loadingIds.clone, {
-            type: 'success',
-            message: 'Repository cloned successfully',
-            duration: 3000
-          });
-          this.#loadingIds.clone = null;
+        if (result.success) {
+          // Update loading message based on whether we used cache or not
+          const message = result.fromCache 
+            ? 'Repository loaded from cache' 
+            : 'Repository initialized successfully';
+          
+          if (this.#loadingIds.clone) {
+            context.update(this.#loadingIds.clone, {
+              type: 'success',
+              message,
+              duration: result.fromCache ? 2000 : 3000
+            });
+            this.#loadingIds.clone = null;
+          }
+
+          // Update clone progress to indicate completion
+          this.cloneProgress = {
+            isCloning: false,
+            phase: result.fromCache ? 'cached' : 'ready',
+          };
+        } else {
+          throw new Error(result.error || 'Smart initialization failed');
         }
       } catch (error) {
-        console.error('Git clone failed:', error);
+        console.error('Git initialization failed:', error);
         
         if (this.#loadingIds.clone) {
           context.update(this.#loadingIds.clone, {
             type: 'error',
-            message: 'Failed to clone repository',
+            message: 'Failed to initialize repository',
             details: error instanceof Error ? error.message : 'Unknown error',
             duration: 5000
           });
           this.#loadingIds.clone = null;
         } else {
-          context.error('Failed to clone repository', error instanceof Error ? error.message : 'Unknown error');
+          context.error('Failed to initialize repository', error instanceof Error ? error.message : 'Unknown error');
         }
         
         this.cloneProgress = {
           isCloning: false,
           phase: 'error',
-          error: error.message,
+          error: error instanceof Error ? error.message : 'Unknown error',
         };
       }
     })();
@@ -327,41 +347,79 @@ export class Repo {
       this.#loadingIds.commits = context.loading('Loading commits...');
       
       const branchName = this.mainBranch.split("/").pop() || "main";
-      const skip = (this.#currentPage - 1) * this.#commitsPerPage;
+      const repoId = this.repoEvent.id;
       
-      // Load commits with pagination
+      // Calculate the depth needed for current page
+      const requiredDepth = this.#commitsPerPage * this.#currentPage;
+      
+      // Check current data level
+      const dataLevel = await this.api.getRepoDataLevel(repoId);
+      
+      // For commit history, we need full clone to avoid NotFoundError
+      // Don't rely on shallow clones for commit operations
+      if (dataLevel !== 'full') {
+        console.log(`Upgrading to full clone for commit history (current: ${dataLevel})`);
+        const upgradeResult = await this.api.ensureFullClone({
+          repoId,
+          branch: branchName,
+          depth: Math.max(requiredDepth, 100), // Ensure sufficient depth
+        });
+        
+        if (!upgradeResult.success) {
+          throw new Error(`Failed to upgrade to full clone: ${upgradeResult.error}`);
+        }
+      }
+      
+      // Load commits with the worker's optimized method
       const commitsResult = await this.api.getCommitHistory({
-        repoId: this.repoEvent.id,
+        repoId,
         branch: branchName,
-        skip,
-        limit: this.#commitsPerPage,
+        depth: requiredDepth,
       });
 
       if (commitsResult.success) {
+        const allCommits = commitsResult.commits || [];
+        const startIndex = (this.#currentPage - 1) * this.#commitsPerPage;
+        const endIndex = startIndex + this.#commitsPerPage;
+        
+        // Extract commits for current page
+        const pageCommits = allCommits.slice(startIndex, endIndex);
+        
         // If it's the first page, replace the commits, otherwise append
         this.#commits = this.#currentPage === 1 
-          ? commitsResult.commits 
-          : [...(this.#commits || []), ...commitsResult.commits];
+          ? pageCommits 
+          : [...(this.#commits || []), ...pageCommits];
         
-        this.#hasMoreCommits = commitsResult.hasMore;
+        this.#hasMoreCommits = endIndex < allCommits.length;
         
-        // Only fetch total count on first load
-        if (this.#currentPage === 1) {
-          const countResult = await this.api.getCommitCount({
-            repoId: this.repoEvent.id,
-            branch: branchName,
-          });
-          
-          if (countResult.success) {
-            this.#totalCommits = countResult.count;
+        // Only fetch total count on first load and cache it
+        if (this.#currentPage === 1 && this.#totalCommits === undefined) {
+          // Use the commit count from the result if available, otherwise get it separately
+          if (allCommits.length < requiredDepth) {
+            // If we got fewer commits than requested, we have all of them
+            this.#totalCommits = allCommits.length;
+          } else {
+            // Get total count separately (this might be cached)
+            const countResult = await this.api.getCommitCount({
+              repoId,
+              branch: branchName,
+            });
+            
+            if (countResult.success) {
+              this.#totalCommits = countResult.count;
+            }
           }
         }
         
         // Update loading message to success
         if (this.#loadingIds.commits) {
+          const message = this.#currentPage === 1 
+            ? `Loaded ${pageCommits.length} commits` 
+            : `Loaded ${pageCommits.length} more commits`;
+          
           context.update(this.#loadingIds.commits, {
             type: 'success',
-            message: `Loaded ${commitsResult.commits.length} commits`,
+            message,
             duration: 2000
           });
           this.#loadingIds.commits = null;
@@ -421,24 +479,41 @@ export class Repo {
     // Show loading
     const loadingId = context.loading('Resetting repository...');
     try {
-      // Call worker to delete repo
+      // Call worker to delete repo (this now also clears cache)
       const result = await this.api.deleteRepo({ repoId });
       if (!result.success) {
         throw new Error(result.error || 'Failed to delete repo');
       }
-      // Re-parse event and trigger fresh clone/load
+      // Re-parse event and trigger fresh initialization
       if (this.repoEvent) {
         this.repo = parseRepoAnnouncementEvent(this.repoEvent);
-        // Re-clone repo (triggers all reloads via constructor logic)
+        // Force re-initialization (bypasses cache)
         const cloneUrls = [...(this.repo?.clone || [])];
-        this.#loadingIds.clone = context.loading('Cloning repository...');
-        await this.api.clone({ repoId, cloneUrls });
-        context.update(loadingId, {
-          type: 'success',
-          message: 'Repository reset and reloaded',
-          duration: 3000
+        this.#loadingIds.clone = context.loading('Re-initializing repository...');
+        
+        const initResult = await this.api.smartInitializeRepo({ 
+          repoId, 
+          cloneUrls,
+          forceUpdate: true // Force fresh initialization
         });
+        
+        if (initResult.success) {
+          context.update(loadingId, {
+            type: 'success',
+            message: 'Repository reset and reloaded',
+            duration: 3000
+          });
+        } else {
+          throw new Error(initResult.error || 'Failed to re-initialize');
+        }
+        
         this.#loadingIds.clone = null;
+        // Reset state and reload
+        this.#commits = undefined;
+        this.#totalCommits = undefined;
+        this.#currentPage = 1;
+        this.#hasMoreCommits = false;
+        
         // Reload branches and commits
         await this.#loadBranchesFromRepo(this.repoEvent);
         await this.#loadCommits();
