@@ -4,7 +4,7 @@ import http from 'isomorphic-git/http/web';
 import axios from 'axios';
 import { finalizeEvent, SimplePool } from 'nostr-tools';
 import { GitProvider, IsomorphicGitProvider } from '@nostr-git/git-wrapper';
-import { rootDir } from '../git.js';
+import { ensureRepoFromEvent, rootDir, getDefaultBranch } from '../git.js';
 import { Buffer } from 'buffer';
 import { analyzePatchMergeability, type MergeAnalysisResult } from '../merge-analysis.js';
 
@@ -17,6 +17,35 @@ const git: GitProvider = new IsomorphicGitProvider({
   http: http,
   corsProxy: 'https://cors.isomorphic-git.org',
 });
+
+/**
+ * Resolve branch name with multi-fallback strategy
+ * Tries the provided branch first, then common defaults in order
+ */
+async function resolveRobustBranchInWorker(dir: string, requestedBranch?: string): Promise<string> {
+  const branchesToTry = [
+    requestedBranch,
+    'main',
+    'master', 
+    'develop',
+    'dev'
+  ].filter(Boolean) as string[];
+  
+  for (const branchName of branchesToTry) {
+    try {
+      await git.resolveRef({ dir, ref: branchName });
+      console.log(`Successfully resolved branch '${branchName}' in worker`);
+      return branchName;
+    } catch (error) {
+      console.log(`Failed to resolve branch '${branchName}' in worker:`, error instanceof Error ? error.message : String(error));
+      continue;
+    }
+  }
+  
+  // If all fails, return 'main' as ultimate fallback
+  console.warn('All branch resolution attempts failed, using main as ultimate fallback');
+  return 'main';
+}
 
 // In-memory tracking (for current session)
 const clonedRepos = new Set<string>();
@@ -378,7 +407,7 @@ const initializeRepo = async ({
  */
 const ensureShallowClone = async ({
   repoId,
-  branch = 'main',
+  branch,
 }: {
   repoId: string;
   branch?: string;
@@ -390,12 +419,15 @@ const ensureShallowClone = async ({
       phase,
       loaded,
       total,
-      progress: total ? (loaded || 0) / total : undefined
     });
   };
 
+  const dir = `${rootDir}/${repoId}`;
+  
+  // Use robust multi-fallback branch resolution
+  let targetBranch: string = branch || 'main'; // Initialize with fallback
   try {
-    const dir = `${rootDir}/${repoId}`;
+    targetBranch = await resolveRobustBranchInWorker(dir, branch);
     const currentLevel = repoDataLevels.get(repoId);
 
     // If we already have shallow or full data, no need to fetch
@@ -424,7 +456,7 @@ const ensureShallowClone = async ({
     // Fetch the specific branch with shallow clone
     await git.fetch({
       dir,
-      ref: branch,
+      ref: targetBranch,
       depth: 1,
       singleBranch: true,
       onProgress,
@@ -433,7 +465,7 @@ const ensureShallowClone = async ({
     // Checkout the branch
     await git.checkout({
       dir,
-      ref: branch,
+      ref: targetBranch,
     });
 
     // Update tracking
@@ -451,15 +483,19 @@ const ensureShallowClone = async ({
     return {
       success: true,
       repoId,
-      branch,
+      branch: targetBranch,
       dataLevel: 'shallow' as const,
     };
   } catch (error: any) {
     console.error(`Shallow clone failed for ${repoId}:`, error);
+    // If targetBranch wasn't assigned due to error, use fallback
+    if (!targetBranch) {
+      targetBranch = branch || 'main';
+    }
     return {
       success: false,
       repoId,
-      branch,
+      branch: targetBranch,
       error: error.message || String(error),
       fromCache: false,
     };
@@ -587,7 +623,7 @@ async function deleteRepo({ repoId }: { repoId: string }) {
  */
 async function getCommitCount({
   repoId,
-  branch = 'main',
+  branch,
 }: {
   repoId: string;
   branch?: string;
@@ -599,8 +635,12 @@ async function getCommitCount({
   fromCache?: boolean;
   error?: string;
 }> {
+  const dir = `${rootDir}/${repoId}`;
+  
+  // Use robust multi-fallback branch resolution
+  let targetBranch: string = branch || 'main'; // Initialize with fallback
   try {
-    const dir = `${rootDir}/${repoId}`;
+    targetBranch = await resolveRobustBranchInWorker(dir, branch);
     
     // First check if we already have the full history
     const currentLevel = repoDataLevels.get(repoId);
@@ -608,13 +648,13 @@ async function getCommitCount({
       // If we have full history, we can count commits locally
       const commits = await git.log({
         dir,
-        ref: branch,
+        ref: targetBranch,
       });
       return {
         success: true,
         count: commits.length,
         repoId,
-        branch,
+        branch: targetBranch,
         fromCache: true
       };
     }
@@ -632,14 +672,14 @@ async function getCommitCount({
     });
     
     // Find the specific branch we're interested in
-    const branchRef = refs.find((ref: { ref: string }) => ref.ref === `refs/heads/${branch}`);
+    const branchRef = refs.find((ref: { ref: string }) => ref.ref === `refs/heads/${targetBranch}`);
     
     if (!branchRef) {
       return {
         success: false,
         repoId,
-        branch,
-        error: `Branch ${branch} not found`
+        branch: targetBranch,
+        error: `Branch ${targetBranch} not found`
       };
     }
     
@@ -655,7 +695,7 @@ async function getCommitCount({
         success: true,
         count: commits.length,
         repoId,
-        branch,
+        branch: targetBranch,
         fromCache: true
       };
     }
@@ -665,7 +705,7 @@ async function getCommitCount({
     return {
       success: false,
       repoId,
-      branch,
+      branch: targetBranch,
       error: 'Repository not fully cloned. Clone the repository first to get commit count.'
     };
   } catch (error) {
@@ -673,7 +713,7 @@ async function getCommitCount({
     return {
       success: false,
       repoId,
-      branch,
+      branch: targetBranch,
       error: error instanceof Error ? error.message : String(error),
     };
   }
@@ -693,13 +733,17 @@ async function isRepoCloned(dir: string): Promise<boolean> {
  */
 const ensureFullClone = async ({
   repoId,
-  branch = 'main',
+  branch,
   depth = 50,
 }: {
   repoId: string;
   branch?: string;
   depth?: number;
 }) => {
+  const dir = `${rootDir}/${repoId}`;
+  
+  // Use robust multi-fallback branch resolution
+  const targetBranch = await resolveRobustBranchInWorker(dir, branch);
   const currentLevel = repoDataLevels.get(repoId);
   if (currentLevel === 'full') {
     return { success: true, repoId, cached: true, level: currentLevel };
@@ -714,8 +758,6 @@ const ensureFullClone = async ({
       };
     }
   }
-
-  const dir = `${rootDir}/${repoId}`;
 
   console.log(`Upgrading repository ${repoId} to full clone (depth: ${depth})...`);
 
@@ -773,7 +815,7 @@ const getRepoDataLevel = (repoId: string): 'none' | 'refs' | 'shallow' | 'full' 
  */
 const getCommitHistory = async ({
   repoId,
-  branch = 'main',
+  branch,
   depth = 50,
 }: {
   repoId: string;
@@ -781,6 +823,9 @@ const getCommitHistory = async ({
   depth?: number;
 }) => {
   const dir = `${rootDir}/${repoId}`;
+  
+  // Use robust multi-fallback branch resolution
+  const targetBranch = await resolveRobustBranchInWorker(dir, branch);
   let attempt = 0;
   let maxAttempts = 3; // Increased attempts
   let lastError = null;
@@ -859,7 +904,7 @@ const getCommitHistory = async ({
     success: false,
     error: lastError instanceof Error ? lastError.message : String(lastError),
     repoId,
-    branch,
+    branch: targetBranch,
     retried: attempt > 0,
     finalDepth: currentDepth,
   };
@@ -871,7 +916,7 @@ const getCommitHistory = async ({
 async function analyzePatchMerge({
   repoId,
   patchData,
-  targetBranch = 'main'
+  targetBranch
 }: {
   repoId: string;
   patchData: {
@@ -884,6 +929,9 @@ async function analyzePatchMerge({
 }): Promise<MergeAnalysisResult> {
   try {
     const dir = `${rootDir}/${repoId}`;
+    
+    // Use robust multi-fallback branch resolution
+    const effectiveTargetBranch = await resolveRobustBranchInWorker(dir, targetBranch);
     
     // Ensure we have at least shallow clone data
     await ensureShallowClone({ repoId, branch: targetBranch });

@@ -13,6 +13,105 @@ if (typeof window !== 'undefined' && typeof window.Buffer === 'undefined') {
 
 export const rootDir = '/repos';
 
+/**
+ * Detect the default branch name from a repository's HEAD reference
+ * @param repoEvent Repository event
+ * @returns Promise resolving to the default branch name
+ */
+export async function detectDefaultBranch(repoEvent: RepoAnnouncement): Promise<string> {
+  const git = getGitProvider();
+  const dir = `${rootDir}/${repoEvent.id}`;
+  
+  try {
+    // First try to get the symbolic ref for HEAD
+    const headRef = await git.resolveRef({ dir, ref: 'HEAD', depth: 2 });
+    
+    // If HEAD points to a symbolic ref, extract the branch name
+    if (headRef && typeof headRef === 'string' && headRef.startsWith('refs/heads/')) {
+      return headRef.replace('refs/heads/', '');
+    }
+    
+    // Fallback: try to list refs and find the default branch
+    const refs = await git.listRefs({ dir });
+    
+    // Look for common default branch names in order of preference
+    const commonDefaults = ['main', 'master', 'develop', 'dev'];
+    for (const defaultName of commonDefaults) {
+      const fullRef = `refs/heads/${defaultName}`;
+      if (refs.some((ref: any) => ref.ref === fullRef)) {
+        return defaultName;
+      }
+    }
+    
+    // If no common defaults found, use the first branch
+    const firstBranch = refs.find((ref: any) => ref.ref.startsWith('refs/heads/'));
+    if (firstBranch) {
+      return firstBranch.ref.replace('refs/heads/', '');
+    }
+    
+  } catch (error) {
+    console.warn('Failed to detect default branch:', error);
+  }
+  
+  // Ultimate fallback
+  return 'main';
+}
+
+/**
+ * Get the default branch for a repository, with caching
+ */
+const defaultBranchCache = new Map<string, string>();
+
+export async function getDefaultBranch(repoEvent: RepoAnnouncement): Promise<string> {
+  const cacheKey = repoEvent.id;
+  
+  if (defaultBranchCache.has(cacheKey)) {
+    return defaultBranchCache.get(cacheKey)!;
+  }
+  
+  const defaultBranch = await detectDefaultBranch(repoEvent);
+  defaultBranchCache.set(cacheKey, defaultBranch);
+  
+  return defaultBranch;
+}
+
+/**
+ * Robust branch resolution that tries multiple common branch names
+ * @param git Git provider instance
+ * @param dir Repository directory
+ * @param preferredBranch Preferred branch name to try first
+ * @returns Promise resolving to the OID of the resolved branch
+ */
+export async function resolveRobustBranch(
+  git: any,
+  dir: string,
+  preferredBranch?: string
+): Promise<string> {
+  const branchesToTry = [
+    preferredBranch,
+    'main',
+    'master', 
+    'develop',
+    'dev'
+  ].filter(Boolean) as string[];
+  
+  let lastError = null;
+  
+  for (const branchName of branchesToTry) {
+    try {
+      const oid = await git.resolveRef({ dir, ref: branchName });
+      console.log(`Successfully resolved branch '${branchName}' to OID: ${oid.substring(0, 8)}`);
+      return oid;
+    } catch (branchError: any) {
+      console.log(`Failed to resolve branch '${branchName}':`, branchError.message || String(branchError));
+      lastError = branchError;
+      continue;
+    }
+  }
+  
+  throw lastError || new Error('Failed to resolve any common default branch');
+}
+
 export async function fetchPermalink(data: PermalinkData) {
   const dir = `${rootDir}/${data.owner}/${data.repo}`;
   try {
@@ -93,7 +192,7 @@ export async function ensureRepo(opts: { host: string; owner: string; repo: stri
   }
 }
 
-export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; branch: string }, depth: number = 1) {
+export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; branch?: string }, depth: number = 1) {
   const git = getGitProvider();
   const dir = `${rootDir}/${opts.repoEvent.id}`;
 
@@ -119,6 +218,24 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
 
   const isCloned = await isRepoCloned(dir);
   
+  // Determine the branch to use
+  let targetBranch = opts.branch;
+  
+  if (!targetBranch) {
+    if (isCloned) {
+      // If repo exists, detect the actual default branch
+      try {
+        targetBranch = await detectDefaultBranch(opts.repoEvent);
+      } catch (error) {
+        console.warn('Failed to detect default branch, using main:', error);
+        targetBranch = 'main';
+      }
+    } else {
+      // For initial clone, try common defaults and let git figure it out
+      targetBranch = 'main'; // Start with main, will be corrected after clone
+    }
+  }
+  
   if (!isCloned) {
     console.log(`Cloning ${cloneUrl} to ${dir} (depth: ${depth})`);
     
@@ -127,11 +244,12 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
       setTimeout(() => reject(new Error('Clone operation timed out after 60 seconds')), 60000);
     });
 
+    // Try to clone without specifying a branch first (let git use default)
     const clonePromise = git.clone({
       dir,
       url: cloneUrl,
-      ref: opts.branch,
-      singleBranch: true,
+      // Don't specify ref initially - let git use the remote's default
+      singleBranch: false, // Allow git to determine the default branch
       depth,
       noCheckout: true,
       noTags: true,
@@ -150,6 +268,15 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
     try {
       await Promise.race([clonePromise, timeoutPromise]);
       console.log(`Successfully cloned ${cloneUrl}`);
+      
+      // After successful clone, detect the actual default branch
+      try {
+        const actualDefault = await detectDefaultBranch(opts.repoEvent);
+        defaultBranchCache.set(opts.repoEvent.id, actualDefault);
+        console.log(`Detected default branch: ${actualDefault}`);
+      } catch (error) {
+        console.warn('Failed to detect default branch after clone:', error);
+      }
     } catch (error) {
       console.error(`Clone failed for ${cloneUrl}:`, error);
       // Clean up partial clone on failure
@@ -164,14 +291,34 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
     // Repository exists but might be shallow - try to deepen it if we need more history
     try {
       console.log(`Repository exists at ${dir}, attempting to fetch more history (depth: ${depth})`);
-      await git.fetch({
-        dir,
-        url: cloneUrl,
-        ref: opts.branch,
-        depth,
-        singleBranch: true,
-      });
-      console.log(`Successfully deepened repository to depth ${depth}`);
+      
+      // Try multiple common default branch names in order of preference
+      const branchesToTry = ['main', 'master', 'develop', 'dev'];
+      let fetchSucceeded = false;
+      let lastError = null;
+      
+      for (const branchName of branchesToTry) {
+        try {
+          await git.fetch({
+            dir,
+            url: cloneUrl,
+            ref: branchName,
+            depth,
+            singleBranch: true,
+          });
+          console.log(`Successfully deepened repository using branch '${branchName}' to depth ${depth}`);
+          fetchSucceeded = true;
+          break;
+        } catch (branchError: any) {
+          console.log(`Failed to fetch branch '${branchName}':`, branchError.message || String(branchError));
+          lastError = branchError;
+          continue;
+        }
+      }
+      
+      if (!fetchSucceeded) {
+        throw lastError || new Error('Failed to fetch any common default branch');
+      }
     } catch (error) {
       console.warn(`Failed to deepen repository, continuing with existing clone:`, error);
       // Continue with existing clone even if deepening fails

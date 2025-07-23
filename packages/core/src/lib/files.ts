@@ -1,5 +1,5 @@
 import { getGitProvider } from './git-provider.js';
-import { ensureRepo, ensureRepoFromEvent, rootDir } from './git.js';
+import { ensureRepo, ensureRepoFromEvent, rootDir, getDefaultBranch, resolveRobustBranch } from './git.js';
 import { parseRepoAnnouncementEvent, type RepoAnnouncementEvent } from '@nostr-git/shared-types';
 import { Buffer } from 'buffer';
 
@@ -52,7 +52,7 @@ export async function listRepoFilesFromEvent(opts: {
   path?: string;
 }): Promise<FileEntry[]> {
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
-  const branch = opts.branch || 'main';
+  const branch = opts.branch || 'main'; // Will be resolved robustly later
   const dir = `${rootDir}/${opts.repoEvent.id}`;
   
   // Ensure adequate repository depth for file operations
@@ -140,7 +140,7 @@ export async function getRepoFileContentFromEvent(opts: {
   path: string;
 }): Promise<string> {
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
-  const branch = opts.branch || 'main';
+  const branch = opts.branch || await getDefaultBranch(event);
   const dir = `${rootDir}/${opts.repoEvent.id}`;
   
   // Ensure adequate repository depth for file operations
@@ -191,12 +191,13 @@ export async function getRepoFileContentFromEvent(opts: {
       // If file not found, try to deepen repository and retry
       console.warn(`File '${opts.path}' not found, attempting to deepen repository...`);
       try {
-        await ensureRepoFromEvent({ repoEvent: event, branch }, 1000);
+        await ensureRepoFromEvent({ repoEvent: event, branch: opts.branch !== await getDefaultBranch(event) ? opts.branch : undefined }, 1000);
         const { blob } = await git.readBlob({ dir, oid, filepath: opts.path });
         const decoder = new TextDecoder('utf-8');
         return decoder.decode(blob);
       } catch (retryError: any) {
         if (retryError.name === 'NotFoundError') {
+          throw new Error(`File '${opts.path}' not found at ${opts.commit ? `commit ${opts.commit}` : `branch ${opts.branch || await getDefaultBranch(event)}`}`);
           throw new Error(`File '${opts.path}' not found at ${opts.commit ? `commit ${opts.commit}` : `branch ${branch}`}`);
         }
         throw retryError;
@@ -299,7 +300,7 @@ export async function getCommitInfo(opts: {
 }> {
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const dir = `${rootDir}/${opts.repoEvent.id}`;
-  await ensureRepoFromEvent({ repoEvent: event, branch: 'main' });
+  await ensureRepoFromEvent({ repoEvent: event });
   
   const git = getGitProvider();
   const commit = await git.readCommit({ dir, oid: opts.commit });
@@ -333,9 +334,9 @@ export async function getFileHistory(opts: {
   committer: { name: string; email: string; timestamp: number };
 }>> {
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
-  const branch = opts.branch || 'main';
+  const branch = opts.branch || await getDefaultBranch(event);
   const dir = `${rootDir}/${opts.repoEvent.id}`;
-  await ensureRepoFromEvent({ repoEvent: event, branch });
+  await ensureRepoFromEvent({ repoEvent: event, branch: branch !== await getDefaultBranch(event) ? branch : undefined });
   
   const git = getGitProvider();
   const commits = await git.log({
@@ -374,7 +375,7 @@ export async function getCommitHistory(opts: {
   };
 }>> {
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
-  const branch = opts.branch || 'main';
+  const branch = opts.branch || await getDefaultBranch(event);
   const dir = `${rootDir}/${opts.repoEvent.id}`;
   const depth = opts.depth || 50;
   
