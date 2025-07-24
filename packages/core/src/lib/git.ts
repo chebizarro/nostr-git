@@ -80,12 +80,14 @@ export async function getDefaultBranch(repoEvent: RepoAnnouncement): Promise<str
  * @param git Git provider instance
  * @param dir Repository directory
  * @param preferredBranch Preferred branch name to try first
+ * @param options Optional configuration for error handling
  * @returns Promise resolving to the OID of the resolved branch
  */
 export async function resolveRobustBranch(
   git: any,
   dir: string,
-  preferredBranch?: string
+  preferredBranch?: string,
+  options?: { onBranchNotFound?: (branchName: string, error: any) => void }
 ): Promise<string> {
   const branchesToTry = [
     preferredBranch,
@@ -103,7 +105,12 @@ export async function resolveRobustBranch(
       console.log(`Successfully resolved branch '${branchName}' to OID: ${oid.substring(0, 8)}`);
       return oid;
     } catch (branchError: any) {
-      console.log(`Failed to resolve branch '${branchName}':`, branchError.message || String(branchError));
+      // Call the callback if provided for better error handling
+      if (options?.onBranchNotFound) {
+        options.onBranchNotFound(branchName, branchError);
+      } else {
+        console.log(`Failed to resolve branch '${branchName}':`, branchError.message || String(branchError));
+      }
       lastError = branchError;
       continue;
     }
@@ -292,32 +299,21 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
     try {
       console.log(`Repository exists at ${dir}, attempting to fetch more history (depth: ${depth})`);
       
-      // Try multiple common default branch names in order of preference
-      const branchesToTry = ['main', 'master', 'develop', 'dev'];
-      let fetchSucceeded = false;
-      let lastError = null;
+      // Use robust branch resolution instead of hardcoded fallback
+      const resolvedBranch = await resolveRobustBranch(git, dir, targetBranch);
       
-      for (const branchName of branchesToTry) {
-        try {
-          await git.fetch({
-            dir,
-            url: cloneUrl,
-            ref: branchName,
-            depth,
-            singleBranch: true,
-          });
-          console.log(`Successfully deepened repository using branch '${branchName}' to depth ${depth}`);
-          fetchSucceeded = true;
-          break;
-        } catch (branchError: any) {
-          console.log(`Failed to fetch branch '${branchName}':`, branchError.message || String(branchError));
-          lastError = branchError;
-          continue;
-        }
-      }
-      
-      if (!fetchSucceeded) {
-        throw lastError || new Error('Failed to fetch any common default branch');
+      try {
+        await git.fetch({
+          dir,
+          url: cloneUrl,
+          ref: resolvedBranch,
+          depth,
+          singleBranch: true,
+        });
+        console.log(`Successfully deepened repository using resolved branch '${resolvedBranch}' to depth ${depth}`);
+      } catch (fetchError: any) {
+        console.log(`Failed to fetch resolved branch '${resolvedBranch}':`, fetchError.message || String(fetchError));
+        throw fetchError;
       }
     } catch (error) {
       console.warn(`Failed to deepen repository, continuing with existing clone:`, error);

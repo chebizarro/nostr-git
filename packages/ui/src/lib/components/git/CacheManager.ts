@@ -258,7 +258,8 @@ export class CacheManager {
           break;
       }
 
-      if (cleanedCount > 0) {
+      // Only log if significant cleanup occurred (more than 10 entries)
+      if (cleanedCount > 10) {
         console.log(`Cleaned up ${cleanedCount} expired entries from ${cacheName} cache`);
       }
     } catch (error) {
@@ -502,7 +503,7 @@ export class MergeAnalysisCacheManager {
       return null;
     }
 
-    console.log(`Using cached merge analysis for patch ${patch.id}`);
+  
     return cacheEntry.result;
   }
 
@@ -519,7 +520,7 @@ export class MergeAnalysisCacheManager {
     };
 
     await this.cacheManager.set(this.CACHE_NAME, patch.id, cacheEntry);
-    console.log(`Cached merge analysis for patch ${patch.id}`);
+  
   }
 
   /**

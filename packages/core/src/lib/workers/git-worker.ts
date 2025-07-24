@@ -689,7 +689,7 @@ async function getCommitCount({
     if (currentLevel === 'shallow') {
       const commits = await git.log({
         dir,
-        ref: branch,
+        ref: targetBranch,
       });
       return {
         success: true,
@@ -779,7 +779,7 @@ const ensureFullClone = async ({
     await git.fetch({
       dir,
       remote: 'origin',
-      ref: branch,
+      ref: targetBranch,
       depth: Math.min(depth, 100), // Cap at 100 to prevent excessive downloads
       singleBranch: true,
       tags: false,
@@ -860,7 +860,7 @@ const getCommitHistory = async ({
 
       const commits = await git.log({
         dir,
-        ref: branch,
+        ref: targetBranch,
         depth: currentDepth,
       });
 
@@ -934,7 +934,7 @@ async function analyzePatchMerge({
     const effectiveTargetBranch = await resolveRobustBranchInWorker(dir, targetBranch);
     
     // Ensure we have at least shallow clone data
-    await ensureShallowClone({ repoId, branch: targetBranch });
+    await ensureShallowClone({ repoId, branch: effectiveTargetBranch });
     
     // Reconstruct a minimal patch object for analysis
     const patch = {
@@ -945,7 +945,7 @@ async function analyzePatchMerge({
     };
     
     // Perform the merge analysis
-    const result = await analyzePatchMergeability(git, dir, patch as any, targetBranch);
+    const result = await analyzePatchMergeability(git, dir, patch as any, effectiveTargetBranch);
     
     return result;
   } catch (error) {

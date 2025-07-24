@@ -161,6 +161,21 @@ export class BranchManager {
   }
 
   /**
+   * Handle branch resolution errors and surface them through toast system
+   */
+  private handleBranchNotFound(branchName: string, error: any): void {
+    // Only show toast for non-fallback branches (not main/master/develop/dev)
+    const fallbackBranches = ['main', 'master', 'develop', 'dev'];
+    if (!fallbackBranches.includes(branchName)) {
+      const message = `Branch '${branchName}' from repository state not found in local git repository`;
+      const details = `This branch may have been deleted, merged, or not fetched locally. The branch exists in the repository state but not in the current git clone.`;
+      
+      context.warning(message, details, 8000); // Show for 8 seconds
+      console.warn(`Branch resolution warning: ${message}`, error);
+    }
+  }
+
+  /**
    * Process repository state event to extract branch/tag information
    */
   processRepoStateEvent(stateEvent: RepoStateEvent): void {

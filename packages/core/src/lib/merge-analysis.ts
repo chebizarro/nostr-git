@@ -40,19 +40,49 @@ export interface ConflictMarker {
 }
 
 /**
+ * Resolve the target branch using robust multi-fallback strategy
+ */
+async function resolveRobustBranchInMergeAnalysis(
+  git: GitProvider,
+  repoDir: string,
+  preferredBranch?: string
+): Promise<string> {
+  const candidates = preferredBranch ? [preferredBranch, 'main', 'master', 'develop', 'dev'] : ['main', 'master', 'develop', 'dev'];
+  
+  for (const branch of candidates) {
+    try {
+      await git.resolveRef({
+        dir: repoDir,
+        ref: `refs/heads/${branch}`
+      });
+      return branch;
+    } catch {
+      // Branch doesn't exist, try next candidate
+      continue;
+    }
+  }
+  
+  // If no candidates work, fall back to the preferred branch or 'main'
+  return preferredBranch || 'main';
+}
+
+/**
  * Analyze if a patch can be merged cleanly into the target branch
  */
 export async function analyzePatchMergeability(
   git: GitProvider,
   repoDir: string,
   patch: Patch | SimplifiedPatch,
-  targetBranch: string = 'main'
+  targetBranch?: string
 ): Promise<MergeAnalysisResult> {
   try {
+    // Resolve the target branch using robust multi-fallback strategy
+    const resolvedBranch = await resolveRobustBranchInMergeAnalysis(git, repoDir, targetBranch);
+    
     // Ensure we have the latest state
     await git.fetch({
       dir: repoDir,
-      ref: targetBranch,
+      ref: resolvedBranch,
       singleBranch: true,
       depth: 1
     });
@@ -60,7 +90,7 @@ export async function analyzePatchMergeability(
     // Get current HEAD of target branch
     const targetCommit = await git.resolveRef({
       dir: repoDir,
-      ref: `refs/heads/${targetBranch}`
+      ref: `refs/heads/${resolvedBranch}`
     });
 
     // Parse patch to get commit information
@@ -82,7 +112,7 @@ export async function analyzePatchMergeability(
     }
 
     // Check if patch is already applied (commits exist in target branch)
-    const isUpToDate = await checkIfPatchApplied(git, repoDir, patchCommits, targetBranch);
+    const isUpToDate = await checkIfPatchApplied(git, repoDir, patchCommits, resolvedBranch);
     if (isUpToDate) {
       return {
         canMerge: true,
@@ -119,7 +149,7 @@ export async function analyzePatchMergeability(
     }
 
     // Perform a dry-run merge to detect conflicts
-    const conflictAnalysis = await performDryRunMerge(git, repoDir, patch as SimplifiedPatch, targetBranch);
+    const conflictAnalysis = await performDryRunMerge(git, repoDir, patch as SimplifiedPatch, resolvedBranch);
     
     return {
       canMerge: !conflictAnalysis.hasConflicts,

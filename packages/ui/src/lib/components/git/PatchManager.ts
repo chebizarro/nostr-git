@@ -83,7 +83,7 @@ export class PatchManager {
       if (result) {
         // Cache the new result
         await this.cacheManager.set(patch, targetBranch, repoId, result);
-        console.log(`Refreshed merge analysis for patch ${patch.id}`);
+
       }
       
       return result;
@@ -103,7 +103,7 @@ export class PatchManager {
   ): Promise<MergeAnalysisResult | null> {
     // Prevent duplicate analysis
     if (this.activeAnalysis.has(patch.id)) {
-      console.log(`Analysis already in progress for patch ${patch.id}`);
+
       return null;
     }
 
@@ -149,7 +149,7 @@ export class PatchManager {
   ): Promise<void> {
     if (!patches.length) return;
 
-    console.log(`Starting background merge analysis for ${patches.length} patches`);
+
     
     // Clear any existing timeouts
     this.clearBatchTimeouts();
@@ -186,11 +186,11 @@ export class PatchManager {
         // Check if we already have a cached result
         const cachedResult = await this.cacheManager.get(patch, targetBranch, repoId);
         if (cachedResult) {
-          console.log(`Using cached merge analysis for patch ${patch.id}`);
+
           continue;
         }
 
-        console.log(`Analyzing merge for patch ${patch.id} in background`);
+
         
         // Perform analysis
         const result = await this.analyzePatch(patch, targetBranch, repoId);
@@ -198,7 +198,7 @@ export class PatchManager {
         if (result) {
           // Cache the result
           await this.cacheManager.set(patch, targetBranch, repoId, result);
-          console.log(`Background merge analysis completed for patch ${patch.id}`);
+
         }
       } catch (error) {
         console.warn(`Background merge analysis failed for patch ${patch.id}:`, error);
@@ -212,7 +212,7 @@ export class PatchManager {
    */
   async clearCache(): Promise<void> {
     await this.cacheManager.clear();
-    console.log('Cleared all merge analysis cache entries');
+
   }
 
   /**
@@ -238,7 +238,7 @@ export class PatchManager {
     // Clear all batch timeouts
     this.clearBatchTimeouts();
     
-    console.log('PatchManager disposed');
+
   }
 
   /**
@@ -256,6 +256,6 @@ export class PatchManager {
    */
   updateConfig(config: Partial<PatchManagerConfig>): void {
     this.config = { ...this.config, ...config };
-    console.log('PatchManager configuration updated:', this.config);
+
   }
 }

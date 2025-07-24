@@ -41,6 +41,11 @@ export class Repo {
 
   tokens = $state<Token[]>([]);
 
+  // Cached resolved branch to avoid redundant fallback iterations
+  #resolvedDefaultBranch: string | null = null;
+  #branchResolutionTimestamp: number = 0;
+  #branchResolutionTTL = 5 * 60 * 1000; // 5 minutes cache TTL
+
   #loadingIds = {
     commits: null as string | null,
     branches: null as string | null,
@@ -125,6 +130,9 @@ export class Repo {
       if (event) {
         this.repoEvent = event;
         this.repo = parseRepoAnnouncementEvent(event);
+        
+        // Invalidate branch cache when repo event changes
+        this.invalidateBranchCache();
 
         // Store the initial event for later processing
         if (!initialRepoEvent) {
@@ -140,7 +148,16 @@ export class Repo {
 
     repoStateEvent.subscribe((event) => {
       if (event) {
+        this.repoStateEvent = event; // Set the reactive state
         this.state = parseRepoStateEvent(event);
+        
+        // Process the Repository State event in BranchManager
+        this.branchManager.processRepoStateEvent(event);
+        
+        // Invalidate branch cache when repo state changes
+        this.invalidateBranchCache();
+        
+        console.log('✅ Repository State event processed in Repo class:', event.id, 'with', event.tags.length, 'tags');
       }
     });
 
@@ -212,6 +229,43 @@ export class Repo {
     tokens.subscribe((tokens) => {
       this.tokens = tokens;
     });
+  }
+
+  /**
+   * Get cached resolved default branch or perform resolution and cache the result
+   * This eliminates redundant fallback iterations across multiple git operations
+   */
+  async getResolvedDefaultBranch(requestedBranch?: string): Promise<string> {
+    const now = Date.now();
+    
+    // Check if we have a valid cached result
+    if (this.#resolvedDefaultBranch && 
+        (now - this.#branchResolutionTimestamp) < this.#branchResolutionTTL) {
+      console.log(`Using cached resolved branch: ${this.#resolvedDefaultBranch}`);
+      return this.#resolvedDefaultBranch;
+    }
+    
+    // Perform fresh branch resolution
+    console.log('Resolving default branch (cache miss or expired)');
+    
+    // Use BranchManager's robust branch resolution
+    const resolvedBranch = requestedBranch || this.branchManager.getMainBranch();
+    
+    // Cache the result
+    this.#resolvedDefaultBranch = resolvedBranch;
+    this.#branchResolutionTimestamp = now;
+    
+    console.log(`Cached resolved branch: ${resolvedBranch}`);
+    return resolvedBranch;
+  }
+  
+  /**
+   * Invalidate the cached resolved branch (call when repository state changes)
+   */
+  invalidateBranchCache(): void {
+    console.log('Invalidating branch resolution cache');
+    this.#resolvedDefaultBranch = null;
+    this.#branchResolutionTimestamp = 0;
   }
 
   get #maintainers(): string[] {
@@ -382,7 +436,49 @@ export class Repo {
   }
 
   async loadPage(page: number) {
-    return await this.commitManager.loadPage(page);
+    try {
+      
+      // Use repoEvent.id as the primary repository ID since that's what gets initialized
+      // The repoId getter may return a different value that doesn't match the initialized repo
+      const effectiveRepoId = this.repoEvent?.id || this.repoId;
+      
+      // Get the actual resolved default branch with fallback
+      let effectiveMainBranch: string;
+      try {
+        effectiveMainBranch = await this.getResolvedDefaultBranch();
+      } catch (branchError) {
+        console.warn('⚠️ getResolvedDefaultBranch failed, using fallback:', branchError);
+        effectiveMainBranch = this.mainBranch || 'main';
+      }
+      
+      if (!this.repoEvent || !effectiveMainBranch || !effectiveRepoId) {
+        const error = "Repository event, main branch, and repository ID are required";
+        return { success: false, error };
+      }
+
+      // Use the CommitManager's loadPage method which sets the page and calls loadCommits
+      const originalLoadCommits = this.commitManager.loadCommits.bind(this.commitManager);
+      
+      // Temporarily override loadCommits to provide the required parameters
+      this.commitManager.loadCommits = async () => {
+        return await originalLoadCommits(
+          effectiveRepoId!, // Use the effective repository ID
+          undefined, // branch (will use mainBranch)
+          effectiveMainBranch!
+        );
+      };
+      
+      try {
+        const result = await this.commitManager.loadPage(page);
+        return result;
+      } finally {
+        // Restore the original method
+        this.commitManager.loadCommits = originalLoadCommits;
+      }
+    } catch (error) {
+      console.error('❌ loadPage error:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
   }
 
   async listRepoFiles({ branch, path }: { branch?: string; path?: string }) {
