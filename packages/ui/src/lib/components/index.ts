@@ -20,7 +20,16 @@ export { default as MergeStatus } from "./git/MergeStatus.svelte";
 export { default as PatchSelector } from "./git/PatchSelector.svelte";
 export { default as CommitSelector } from "./git/CommitSelector.svelte";
 export { default as CommitCard } from "./git/CommitCard.svelte";
+export { default as FileMetadataPanel } from "./git/FileMetadataPanel.svelte";
+
 export { Repo } from "./git/Repo.svelte";
+
+export { default as ImageViewer } from "./git/viewers/ImageViewer.svelte";
+export { default as PDFViewer } from "./git/viewers/PDFViewer.svelte";
+export { default as VideoViewer } from "./git/viewers/VideoViewer.svelte";
+export { default as AudioViewer } from "./git/viewers/AudioViewer.svelte";
+export { default as BinaryViewer } from "./git/viewers/BinaryViewer.svelte";
+
 // Export all Svelte components from thread/
 export { default as ThreadCommit } from "./thread/ThreadCommit.svelte";
 export { default as ThreadComposer } from "./thread/ThreadComposer.svelte";
@@ -61,3 +70,4 @@ export { default as FunctionProvider } from "../FunctionProvider.svelte";
 
 export { PermalinkExtension, type PermalinkExtensionOptions } from "./editor/PermalinkExtension";
 export { default as EventRenderer } from "./events/EventRenderer.svelte";
+export { default as Spinner } from "./editor/Spinner.svelte";

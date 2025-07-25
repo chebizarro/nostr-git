@@ -29,6 +29,7 @@ export type Registry = {
   Textarea: typeof import("../components/ui/textarea/textarea.svelte").default;
   EventActions: typeof import("../components/EventActions.svelte").default;
   ReactionSummary: typeof import("../components/ReactionSummary.svelte").default;
+  Spinner: typeof import("../components/editor/Spinner.svelte").default;
 };
 
 import Alert from "../components/ui/alert/alert.svelte";
@@ -59,6 +60,7 @@ import TabsTrigger from "../components/ui/tabs/tabs-trigger.svelte";
 import Textarea from "../components/ui/textarea/textarea.svelte";
 import EventActions from "../components/EventActions.svelte";
 import ReactionSummary from "../components/ReactionSummary.svelte";
+import Spinner from "../components/editor/Spinner.svelte";
 
 export const defaultRegistry: Registry = {
   Alert,
@@ -89,4 +91,5 @@ export const defaultRegistry: Registry = {
   Textarea,
   EventActions,
   ReactionSummary,
+  Spinner,
 };

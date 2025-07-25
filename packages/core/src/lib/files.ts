@@ -196,8 +196,9 @@ export async function getRepoFileContentFromEvent(opts: {
   
   try {
     const { blob } = await git.readBlob({ dir, oid, filepath: opts.path });
-    const decoder = new TextDecoder('utf-8');
-    return decoder.decode(blob);
+    // Return raw binary data as string to preserve binary files (images, PDFs, etc.)
+    // The UI layer will handle text vs binary detection and appropriate decoding
+    return Array.from(new Uint8Array(blob)).map(byte => String.fromCharCode(byte)).join('');
   } catch (error: any) {
     if (error.name === 'NotFoundError') {
       // If file not found, try to deepen repository and retry
@@ -205,8 +206,8 @@ export async function getRepoFileContentFromEvent(opts: {
       try {
         await ensureRepoFromEvent({ repoEvent: event, branch: opts.branch }, 1000);
         const { blob } = await git.readBlob({ dir, oid, filepath: opts.path });
-        const decoder = new TextDecoder('utf-8');
-        return decoder.decode(blob);
+        // Return raw binary data as string to preserve binary files
+        return Array.from(new Uint8Array(blob)).map(byte => String.fromCharCode(byte)).join('');
       } catch (retryError: any) {
         if (retryError.name === 'NotFoundError') {
           throw new Error(`File '${opts.path}' not found at ${opts.commit ? `commit ${opts.commit}` : `branch ${branch}`}`);

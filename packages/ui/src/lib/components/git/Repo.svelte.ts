@@ -16,7 +16,7 @@ import { type Readable } from "svelte/store";
 import { context } from "$lib/stores/context";
 import { Token, tokens } from "$lib/stores/tokens";
 import { WorkerManager, type WorkerProgressEvent, type CloneProgress } from "./WorkerManager";
-import { CacheManager, MergeAnalysisCacheManager } from "./CacheManager";
+import { CacheManager, MergeAnalysisCacheManager, CacheType } from './CacheManager';
 import { PatchManager } from "./PatchManager";
 import { CommitManager } from "./CommitManager";
 import { BranchManager } from "./BranchManager";
@@ -82,6 +82,26 @@ export class Repo {
 
     // Initialize cache managers
     this.cacheManager = new CacheManager();
+    
+    // Register cache configurations for file operations
+    this.cacheManager.registerCache('file_content', {
+      type: CacheType.MEMORY,
+      keyPrefix: 'file_content_',
+      defaultTTL: 10 * 60 * 1000, // 10 minutes
+      maxSize: 100,
+      autoCleanup: true,
+      cleanupInterval: 5 * 60 * 1000 // 5 minutes
+    });
+    
+    this.cacheManager.registerCache('file_listing', {
+      type: CacheType.MEMORY,
+      keyPrefix: 'file_listing_',
+      defaultTTL: 5 * 60 * 1000, // 5 minutes
+      maxSize: 50,
+      autoCleanup: true,
+      cleanupInterval: 5 * 60 * 1000 // 5 minutes
+    });
+    
     this.mergeAnalysisCacheManager = new MergeAnalysisCacheManager(this.cacheManager);
     
     // Initialize PatchManager with dependencies
