@@ -23,10 +23,7 @@
     AudioViewer,
     BinaryViewer }from "./viewers";
   
-  // Simplified CodeMirror imports to avoid conflicts
-  // import { oneDark } from '@codemirror/theme-one-dark';
-  // import { lineNumbers } from '@codemirror/view';
-  // import type { Extension } from '@codemirror/state';
+  // Try using extensions prop to force line numbers
 
   const {
     file,
@@ -50,10 +47,8 @@
   let fileTypeInfo = $state<FileTypeInfo | null>(null);
   let metadata = $state<Record<string, string>>({});
   
-  // Simplified approach - no extensions to avoid conflicts
-  // function getCodeMirrorExtensions(fileTypeInfo: FileTypeInfo | null) {
-  //   return [];
-  // }
+  // Note: Using default basicSetup which includes line numbers
+  // Language highlighting will be basic but functional
 
   $effect(() => {
     if (isExpanded && type === "file") {
@@ -240,7 +235,7 @@
           </div>
         {:else}
           <!-- Text files with CodeMirror -->
-          <div class="p-4">
+          <div class="p-4 border-t" style="border-color: hsl(var(--border));">
             <div class="mb-2 flex items-center justify-between">
               <div class="flex items-center gap-2">
                 <span class="text-sm font-medium text-muted-foreground">Language:</span>
@@ -248,27 +243,17 @@
                   {fileTypeInfo?.language || 'text'}
                 </span>
               </div>
-              {#if fileTypeInfo?.language && fileTypeInfo.language !== 'text'}
-                <span class="text-xs text-muted-foreground">
-                  Syntax highlighting enabled
-                </span>
-              {/if}
             </div>
             <CodeMirror 
               bind:value={content} 
               readonly={!fileTypeInfo?.canEdit}
-              basic={true}
-              placeholder={`${fileTypeInfo?.language || 'text'} file content...`}
             />
           </div>
         {/if}
       {:else if content}
-        <!-- Fallback for when file type detection fails -->
         <div class="p-4">
           <CodeMirror 
             bind:value={content} 
-            basic={true}
-            placeholder="File content..."
           />
         </div>
       {:else}
