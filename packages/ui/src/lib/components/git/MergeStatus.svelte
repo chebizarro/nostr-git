@@ -12,7 +12,7 @@
   import type { MergeAnalysisResult } from "@nostr-git/core";
   import { toast } from "../../stores/toast";
   
-  const { Card, CardHeader, CardTitle, CardContent, Badge, Alert, AlertDescription } = useRegistry();
+  const { Card, CardHeader, CardTitle, CardContent, Badge } = useRegistry();
 
   interface Props {
     result: MergeAnalysisResult | null;
@@ -30,6 +30,8 @@
         return { icon: AlertTriangle, color: 'text-orange-500' };
       case 'up-to-date':
         return { icon: Info, color: 'text-blue-500' };
+      case 'diverged':
+        return { icon: AlertTriangle, color: 'text-yellow-500' };
       case 'error':
         return { icon: XCircle, color: 'text-red-500' };
       default:
@@ -45,6 +47,8 @@
         return 'border-orange-200 bg-orange';
       case 'up-to-date':
         return 'border-blue-200 bg-blue';
+      case 'diverged':
+        return 'border-yellow-200 bg-yellow';
       case 'error':
         return 'border-red-200 bg-red';
       default:
@@ -63,7 +67,7 @@
       case 'up-to-date':
         return 'This patch has already been applied to the target branch.';
       case 'diverged':
-        return 'The target branch has diverged. Manual intervention may be required.';
+        return 'The target branch has diverged from remote. Use "Reset Repo" to sync with remote, or force push may be required after merge.';
       case 'error':
         return `Unable to analyze merge: ${result.errorMessage || 'Unknown error'}`;
       default:
@@ -71,34 +75,6 @@
     }
   };
 
-  // Show toast notifications for merge analysis results
-  $effect(() => {
-    if (result && !loading) {
-      switch (result.analysis) {
-        case 'clean':
-          toast.push({
-            message: result.fastForward 
-              ? 'Merge Ready: This patch can be fast-forward merged cleanly.'
-              : 'Merge Ready: This patch can be merged without conflicts.',
-            timeout: 4000
-          });
-          break;
-        case 'conflicts':
-          toast.push({
-            message: `Merge Conflicts Detected: ${result.conflictFiles.length} file(s) have conflicts that need resolution.`,
-            timeout: 6000,
-            theme: 'error'
-          });
-          break;
-        case 'up-to-date':
-          toast.push({
-            message: 'Already Up-to-Date: This patch has already been applied to the target branch.',
-            timeout: 3000
-          });
-          break;
-      }
-    }
-  });
 </script>
 
 <Card class={result ? getStatusColor(result.analysis) : 'border-gray-200'}>
@@ -182,6 +158,31 @@
                 </CardContent>
               </Card>
             {/each}
+          </div>
+        </div>
+      {/if}
+
+      {#if result.analysis === 'diverged'}
+        <div class="space-y-3">
+          <div class="flex items-center gap-2 text-sm">
+            <AlertTriangle class="h-4 w-4 text-yellow-500" />
+            <span class="font-medium">Branch Divergence Detected</span>
+          </div>
+          <div class="text-sm text-muted-foreground space-y-2">
+            <p>The local branch has diverged from the remote repository.</p>
+            <div class="bg-yellow-50 border border-yellow-200 rounded-md p-3">
+              <p class="font-medium text-yellow-800 mb-2">Recommended Actions:</p>
+              <ul class="text-sm text-yellow-700 space-y-1">
+                <li>• Use the "Reset Repo" button to sync with remote (discards local changes)</li>
+                <li>• Or proceed with merge and use force push to update remote</li>
+              </ul>
+            </div>
+            {#if result.remoteCommit && result.targetCommit}
+              <div class="text-xs text-muted-foreground">
+                <span class="font-medium">Local:</span> {result.targetCommit.slice(0, 8)}<br>
+                <span class="font-medium">Remote:</span> {result.remoteCommit.slice(0, 8)}
+              </div>
+            {/if}
           </div>
         </div>
       {/if}

@@ -189,11 +189,31 @@ export class Repo {
       }
     });
 
+    tokens.subscribe(async (tokenList) => {
+      this.tokens = tokenList;
+      console.log('🔐 Token store updated in Repo:', tokenList.length, 'tokens');
+      
+      // Update WorkerManager authentication if it's ready
+      if (this.workerManager.isReady) {
+        await this.workerManager.setAuthConfig({ tokens: tokenList });
+        console.log('🔐 Updated WorkerManager authentication with', tokenList.length, 'tokens');
+      }
+    });
+
     // Smart initialization - initialize WorkerManager and then load branches
     (async () => {
       try {
         // Initialize the WorkerManager first
         await this.workerManager.initialize();
+        
+        // Wait for tokens to be loaded from localStorage before configuring auth
+        const loadedTokens = await tokens.waitForInitialization();
+        if (loadedTokens.length > 0) {
+          await this.workerManager.setAuthConfig({ tokens: loadedTokens });
+          console.log('🔐 Configured git authentication for', loadedTokens.length, 'hosts');
+        } else {
+          console.log('🔐 No authentication tokens found');
+        }
         
         // Now that WorkerManager is ready, load branches if we have a repo event
         if (initialRepoEvent && !this.state) {
@@ -246,8 +266,18 @@ export class Repo {
       this.issues = issueEvents;
     });
 
-    tokens.subscribe((tokens) => {
+    tokens.subscribe(async (tokens) => {
       this.tokens = tokens;
+      
+      // Update authentication configuration when tokens change
+      if (this.workerManager.isReady && tokens.length > 0) {
+        try {
+          await this.workerManager.setAuthConfig({ tokens });
+          console.log('Updated git authentication for', tokens.length, 'hosts');
+        } catch (error) {
+          console.error('Failed to update git authentication:', error);
+        }
+      }
     });
   }
 
@@ -549,7 +579,76 @@ export class Repo {
     });
   }
 
+  /**
+   * Reset the repository state and clear all caches
+   * Forces fresh data to be loaded from remote and resets local git state
+   */
+  async reset() {
+    console.log('Resetting repository state...');
+    
+    // Reset managers that have reset methods
+    this.commitManager?.reset();
+    this.branchManager?.reset();
+    
+    // Clear caches for managers that have clearCache methods
+    try {
+      await this.fileManager?.clearCache();
+      await this.patchManager?.clearCache();
+      await this.mergeAnalysisCacheManager?.clear();
+      
+      // Clear individual cache types in CacheManager
+      if (this.cacheManager) {
+        await this.cacheManager.clear('file_content');
+        await this.cacheManager.clear('file_listing');
+        await this.cacheManager.clear('file_exists');
+        await this.cacheManager.clear('file_history');
+      }
+    } catch (error) {
+      console.warn('Error clearing caches during reset:', error);
+    }
+    
+    // Reset branch resolution cache
+    this.invalidateBranchCache();
+    
+    // Reset clone progress
+    this.cloneProgress = {
+      isCloning: false,
+      phase: '',
+      progress: 0,
+    };
+    
+    // Reset local git repository to match remote HEAD state
+    if (this.repoEvent) {
+      try {
+        console.log('Resetting local git repository to match remote...');
+        const resetResult = await this.workerManager.resetRepoToRemote(
+          this.repoEvent.id,
+          this.mainBranch
+        );
+        
+        if (resetResult.success) {
+          console.log(`Git reset successful: ${resetResult.message}`);
+        }
+      } catch (resetError) {
+        console.warn('Git reset to remote failed:', resetError);
+        // Continue with cache clearing even if git reset fails
+      }
+      
+      // Force reload branches and other data
+      await this.#loadBranchesFromRepo(this.repoEvent);
+      
+      // Trigger merge analysis refresh if patches exist
+      if (this.patches.length > 0) {
+        await this.#performMergeAnalysis(this.patches);
+      }
+    }
+    
+    console.log('Repository reset complete');
+  }
+
   dispose() {
+    this.cacheManager?.dispose();
+    // MergeAnalysisCacheManager doesn't have a dispose method - it's managed by CacheManager
     this.patchManager?.dispose();
     this.commitManager?.dispose();
     this.branchManager?.dispose();

@@ -18,6 +18,7 @@ export interface MergeAnalysisResult {
   fastForward: boolean;
   mergeBase?: string;
   targetCommit?: string;
+  remoteCommit?: string;
   patchCommits: string[];
   analysis: 'clean' | 'conflicts' | 'up-to-date' | 'diverged' | 'error';
   errorMessage?: string;
@@ -95,24 +96,63 @@ export async function analyzePatchMergeability(
     const remotes = await git.listRemotes({ dir: repoDir });
     const originRemote = remotes.find((r: any) => r.remote === 'origin');
     
+    let remoteDivergence = false;
+    let remoteCommit: string | undefined;
+    
     if (originRemote && originRemote.url) {
-      // Ensure we have the latest state
-      await git.fetch({
-        dir: repoDir,
-        url: originRemote.url,
-        ref: resolvedBranch,
-        singleBranch: true,
-        depth: 1
-      });
+      try {
+        // Fetch with more depth to detect divergence
+        await git.fetch({
+          dir: repoDir,
+          url: originRemote.url,
+          ref: resolvedBranch,
+          singleBranch: true,
+          depth: 50 // Get more history to detect divergence
+        });
+        
+        // Get remote branch HEAD
+        try {
+          remoteCommit = await git.resolveRef({
+            dir: repoDir,
+            ref: `refs/remotes/origin/${resolvedBranch}`
+          });
+        } catch (remoteRefError) {
+          console.warn(`Could not resolve remote ref origin/${resolvedBranch}:`, remoteRefError);
+        }
+      } catch (fetchError) {
+        console.warn('Failed to fetch remote in merge analysis:', fetchError);
+      }
     } else {
       console.warn('Origin remote not found, skipping fetch in merge analysis');
     }
 
-    // Get current HEAD of target branch
+    // Get current HEAD of local target branch
     const targetCommit = await git.resolveRef({
       dir: repoDir,
       ref: `refs/heads/${resolvedBranch}`
     });
+    
+    // Check for remote divergence if we have both commits
+    if (remoteCommit && targetCommit !== remoteCommit) {
+      try {
+        // Check if local is behind remote (remote has commits local doesn't)
+        const isAncestor = await git.isDescendent({
+          dir: repoDir,
+          oid: targetCommit,
+          ancestor: remoteCommit
+        });
+        
+        if (!isAncestor) {
+          // Local is not a descendant of remote - branches have diverged
+          remoteDivergence = true;
+          console.warn(`Local branch ${resolvedBranch} has diverged from remote`);
+        }
+      } catch (divergenceError) {
+        console.warn('Could not check branch divergence:', divergenceError);
+        // Assume divergence to be safe
+        remoteDivergence = true;
+      }
+    }
 
     // Parse patch to get commit information
     const patchCommits = patch.commits.map(c => c.oid);
@@ -169,6 +209,24 @@ export async function analyzePatchMergeability(
       };
     }
 
+    // Check for remote divergence first - this affects merge strategy
+    if (remoteDivergence) {
+      return {
+        canMerge: false, // Cannot merge cleanly due to divergence
+        hasConflicts: false,
+        conflictFiles: [],
+        conflictDetails: [],
+        upToDate: false,
+        fastForward: false,
+        mergeBase,
+        targetCommit,
+        remoteCommit,
+        patchCommits,
+        analysis: 'diverged',
+        errorMessage: 'Local branch has diverged from remote. Force push or rebase required.'
+      };
+    }
+    
     // Perform a dry-run merge to detect conflicts
     const conflictAnalysis = await performDryRunMerge(git, repoDir, patch as SimplifiedPatch, resolvedBranch);
     
@@ -181,6 +239,7 @@ export async function analyzePatchMergeability(
       fastForward: false,
       mergeBase,
       targetCommit,
+      remoteCommit,
       patchCommits,
       analysis: conflictAnalysis.hasConflicts ? 'conflicts' : 'clean'
     };
@@ -202,6 +261,7 @@ export async function analyzePatchMergeability(
 
 /**
  * Check if patch commits are already applied to the target branch
+ * Uses multiple strategies to detect already-merged patches
  */
 async function checkIfPatchApplied(
   git: GitProvider,
@@ -210,19 +270,57 @@ async function checkIfPatchApplied(
   targetBranch: string
 ): Promise<boolean> {
   try {
+    // Strategy 1: Check if any patch commit exists in branch history
+    // Use a larger depth to catch older merges
     const log = await git.log({
       dir: repoDir,
       ref: targetBranch,
-      depth: 100 // Check recent commits
+      depth: 500 // Check more commits for thorough detection
     });
 
     const targetCommits = log.map((commit: any) => commit.oid);
     
-    // Check if all patch commits exist in target branch
-    return patchCommits.every(patchCommit => 
+    // Check if any patch commits exist in target branch
+    const hasAnyPatchCommit = patchCommits.some(patchCommit => 
       targetCommits.includes(patchCommit)
     );
-  } catch {
+    
+    if (hasAnyPatchCommit) {
+      console.log(`Patch already merged: found commits ${patchCommits.filter(c => targetCommits.includes(c))} in branch ${targetBranch}`);
+      return true;
+    }
+    
+    // Strategy 2: Check if patch content matches recent commits
+    // This catches cases where patch was applied but with different commit IDs
+    // (e.g., rebased, cherry-picked, or manually applied)
+    if (patchCommits.length > 0) {
+      try {
+        // Get the first patch commit to check its content
+        const patchCommit = await git.readCommit({
+          dir: repoDir,
+          oid: patchCommits[0]
+        });
+        
+        // Look for commits with same author and message in recent history
+        const recentCommits = log.slice(0, 50); // Check last 50 commits
+        const matchingCommit = recentCommits.find((commit: any) => 
+          commit.commit.author.email === patchCommit.commit.author.email &&
+          commit.commit.message.trim() === patchCommit.commit.message.trim()
+        );
+        
+        if (matchingCommit) {
+          console.log(`Patch content already merged: found matching commit ${matchingCommit.oid} with same author/message`);
+          return true;
+        }
+      } catch (commitError) {
+        // Patch commit might not exist in this repo, continue with other checks
+        console.warn('Could not read patch commit for content comparison:', commitError);
+      }
+    }
+    
+    return false;
+  } catch (error) {
+    console.warn('Error checking if patch is applied:', error);
     return false;
   }
 }

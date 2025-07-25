@@ -26,6 +26,15 @@ export interface CloneProgress {
   progress?: number;
 }
 
+export interface AuthToken {
+  host: string;
+  token: string;
+}
+
+export interface AuthConfig {
+  tokens: AuthToken[];
+}
+
 /**
  * WorkerManager handles all git worker communication and lifecycle management.
  * This provides a clean interface for git operations while managing the underlying worker.
@@ -35,6 +44,7 @@ export class WorkerManager {
   private api: any = null;
   private isInitialized = false;
   private progressCallback?: WorkerProgressCallback;
+  private authConfig: AuthConfig = { tokens: [] };
   
   constructor(progressCallback?: WorkerProgressCallback) {
     this.progressCallback = progressCallback;
@@ -53,6 +63,11 @@ export class WorkerManager {
       this.worker = worker;
       this.api = api;
       this.isInitialized = true;
+      
+      // Set authentication configuration in the worker
+      if (this.authConfig.tokens.length > 0) {
+        await this.api.setAuthConfig(this.authConfig);
+      }
     } catch (error) {
       console.error('Failed to initialize git worker:', error);
       throw new Error(`Worker initialization failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -238,8 +253,22 @@ export class WorkerManager {
     pushedRemotes?: string[];
     skippedRemotes?: string[];
     warning?: string;
+    pushErrors?: Array<{ remote: string; url: string; error: string; code: string; stack: string }>;
   }> {
     await this.initialize();
+    
+    // Debug patch data in WorkerManager
+    console.log('🔧 WorkerManager - Patch data received:', {
+      repoId: params.repoId,
+      patchDataId: params.patchData?.id,
+      hasRawContent: !!params.patchData?.rawContent,
+      rawContentType: typeof params.patchData?.rawContent,
+      rawContentLength: params.patchData?.rawContent?.length,
+      targetBranch: params.targetBranch,
+      authorName: params.authorName,
+      authorEmail: params.authorEmail
+    });
+    
     const result = await this.api.applyPatchAndPush(params);
     return result;
   }
@@ -263,6 +292,81 @@ export class WorkerManager {
    */
   get apiInstance(): any {
     return this.api;
+  }
+
+  /**
+   * Set authentication configuration for git operations
+   */
+  async setAuthConfig(config: AuthConfig): Promise<void> {
+    this.authConfig = config;
+    
+    // If worker is already initialized, update the configuration
+    if (this.isInitialized && this.api) {
+      try {
+        await this.api.setAuthConfig(config);
+        console.log('Authentication configuration updated for', config.tokens.length, 'hosts');
+      } catch (error) {
+        console.error('Failed to update authentication configuration:', error);
+      }
+    }
+  }
+
+  /**
+   * Add or update a single authentication token
+   */
+  async addAuthToken(token: AuthToken): Promise<void> {
+    // Remove existing token for the same host
+    this.authConfig.tokens = this.authConfig.tokens.filter(t => t.host !== token.host);
+    // Add the new token
+    this.authConfig.tokens.push(token);
+    
+    // Update the worker if initialized
+    if (this.isInitialized && this.api) {
+      await this.setAuthConfig(this.authConfig);
+    }
+  }
+
+  /**
+   * Remove authentication token for a specific host
+   */
+  async removeAuthToken(host: string): Promise<void> {
+    this.authConfig.tokens = this.authConfig.tokens.filter(t => t.host !== host);
+    
+    // Update the worker if initialized
+    if (this.isInitialized && this.api) {
+      await this.setAuthConfig(this.authConfig);
+    }
+  }
+
+  /**
+   * Get current authentication configuration
+   */
+  getAuthConfig(): AuthConfig {
+    return { ...this.authConfig };
+  }
+
+  /**
+   * Reset repository to match remote HEAD state
+   * This performs a hard reset to remove any local commits that diverge from remote
+   */
+  async resetRepoToRemote(repoId: string, branch?: string): Promise<any> {
+    if (!this.isInitialized || !this.api) {
+      throw new Error('WorkerManager not initialized');
+    }
+
+    try {
+      const result = await this.api.resetRepoToRemote({ repoId, branch });
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Reset to remote failed');
+      }
+      
+      console.log(`Repository ${repoId} reset to remote commit ${result.remoteCommit}`);
+      return result;
+    } catch (error) {
+      console.error(`WorkerManager: Reset to remote failed for ${repoId}:`, error);
+      throw error;
+    }
   }
 
   /**

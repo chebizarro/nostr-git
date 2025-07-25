@@ -23,8 +23,6 @@
     AudioViewer,
     BinaryViewer }from "./viewers";
   
-  // Try using extensions prop to force line numbers
-
   const {
     file,
     getFileContent,
@@ -43,13 +41,9 @@
   let isMetadataPanelOpen = $state(false);
   let isLoading = $state(false);
 
-  // File type detection
   let fileTypeInfo = $state<FileTypeInfo | null>(null);
   let metadata = $state<Record<string, string>>({});
   
-  // Note: Using default basicSetup which includes line numbers
-  // Language highlighting will be basic but functional
-
   $effect(() => {
     if (isExpanded && type === "file") {
       if (!content) {
@@ -58,11 +52,14 @@
           content = c;
           isLoading = false;
           
-          // Detect file type and generate metadata
           fileTypeInfo = detectFileType(name, c);
           metadata = getFileMetadata(file, c, fileTypeInfo);
         }).catch((error) => {
-          console.error('Failed to load file content:', error);
+          toast.push({
+            title: "Failed to load file content",
+            description: error.message,
+            variant: "destructive",
+          });
           isLoading = false;
         });
       }
@@ -79,7 +76,6 @@
         content = await getFileContent(path);
       }
       
-      // For binary files, show appropriate message
       if (fileTypeInfo?.category === 'binary') {
         toast.push({
           title: "Cannot copy binary file",
@@ -109,7 +105,6 @@
       content = await getFileContent(path);
     }
     
-    // Use appropriate MIME type based on file type detection
     const mimeType = fileTypeInfo?.mimeType || "text/plain";
     const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
@@ -137,13 +132,11 @@
     isMetadataPanelOpen = true;
   }
 
-  // Get appropriate icon based on file type
   function getFileIcon() {
     if (type === "directory") return Folder;
     if (fileTypeInfo?.icon) {
-      // Map icon names to actual Lucide components
       const iconMap: Record<string, any> = {
-        'Image': FileCode, // We'll use FileCode as fallback since we can't dynamically import
+        'Image': FileCode,
         'FileText': FileCode,
         'Settings': FileCode,
         'Container': FileCode,
@@ -212,7 +205,6 @@
           <Spinner>Fetching content...</Spinner>
         </div>
       {:else if content && fileTypeInfo}
-        <!-- Render content based on file type -->
         {#if fileTypeInfo.category === 'image'}
           <div class="p-4">
             <ImageViewer {content} filename={name} mimeType={fileTypeInfo.mimeType} />
@@ -234,7 +226,6 @@
             <BinaryViewer {content} filename={name} />
           </div>
         {:else}
-          <!-- Text files with CodeMirror -->
           <div class="p-4 border-t" style="border-color: hsl(var(--border));">
             <div class="mb-2 flex items-center justify-between">
               <div class="flex items-center gap-2">
@@ -245,15 +236,14 @@
               </div>
             </div>
             <CodeMirror 
-              bind:value={content} 
-              readonly={!fileTypeInfo?.canEdit}
+              bind:value={content}
             />
           </div>
         {/if}
       {:else if content}
         <div class="p-4">
           <CodeMirror 
-            bind:value={content} 
+            bind:value={content}
           />
         </div>
       {:else}
@@ -266,7 +256,6 @@
     </div>
   {/if}
   
-  <!-- Metadata Panel (slide-in modal) -->
   <FileMetadataPanel 
     bind:isOpen={isMetadataPanelOpen}
     {file}

@@ -4,6 +4,7 @@
   import { GitBranch, Star, Eye, GitFork } from "@lucide/svelte";
   import type { RepoAnnouncementEvent } from "@nostr-git/shared-types";
   import { parseRepoAnnouncementEvent } from "@nostr-git/shared-types";
+  import AuthStatusIndicator from "./AuthStatusIndicator.svelte";
 
   // Accept props: event (NIP-34 RepoAnnouncementEvent), owner (Profile), activeTab
   const {
@@ -46,6 +47,11 @@
     </div>
   </div>
   <p class="text-muted-foreground mb-4">{description}</p>
+  
+  <!-- Authentication Status Indicator -->
+  <div class="mb-4">
+    <AuthStatusIndicator {event} />
+  </div>
 
   <nav
     class={cn(

@@ -8,6 +8,19 @@ import { ensureRepoFromEvent, rootDir, getDefaultBranch } from '../git.js';
 import { Buffer } from 'buffer';
 import { analyzePatchMergeability, type MergeAnalysisResult } from '../merge-analysis.js';
 
+// Authentication configuration
+interface AuthToken {
+  host: string;
+  token: string;
+}
+
+interface AuthConfig {
+  tokens: AuthToken[];
+}
+
+// Global authentication configuration
+let authConfig: AuthConfig = { tokens: [] };
+
 if (typeof globalThis.Buffer === 'undefined') {
   (globalThis as any).Buffer = Buffer;
 }
@@ -17,6 +30,48 @@ const git: GitProvider = new IsomorphicGitProvider({
   http: http,
   corsProxy: 'https://cors.isomorphic-git.org',
 });
+
+/**
+ * Set authentication configuration for git operations
+ */
+function setAuthConfig(config: AuthConfig): void {
+  authConfig = config;
+  console.log('Git worker authentication configured for', config.tokens.length, 'hosts');
+}
+
+/**
+ * Get authentication callback for a given URL
+ */
+function getAuthCallback(url: string) {
+  if (!authConfig.tokens.length) {
+    return undefined;
+  }
+
+  // Extract hostname from URL
+  let hostname: string;
+  try {
+    hostname = new URL(url).hostname;
+  } catch (error) {
+    console.warn('Failed to parse URL for authentication:', url);
+    return undefined;
+  }
+
+  // Find matching token
+  const matchingToken = authConfig.tokens.find(token => {
+    // Support both exact matches and subdomain matches
+    return hostname === token.host || hostname.endsWith('.' + token.host);
+  });
+
+  if (matchingToken) {
+    console.log('Using authentication for', hostname);
+    return () => ({
+      username: 'token',
+      password: matchingToken.token
+    });
+  }
+
+  return undefined;
+}
 
 /**
  * Resolve branch name with multi-fallback strategy
@@ -361,6 +416,7 @@ const initializeRepo = async ({
         };
 
         // Initialize with minimal clone (refs only)
+        const authCallback = getAuthCallback(cloneUrl);
         cloneResult = await git.clone({
           dir,
           url: cloneUrl,
@@ -370,6 +426,7 @@ const initializeRepo = async ({
           noCheckout: true, // Don't checkout files yet
           noTags: true, // Skip tags for speed
           onProgress,
+          ...(authCallback && { onAuth: authCallback }),
         });
 
         break; // Success, exit loop
@@ -485,6 +542,7 @@ const ensureShallowClone = async ({
     }
     
     // Fetch the specific branch with shallow clone
+    const authCallback = getAuthCallback(originRemote.url);
     await git.fetch({
       dir,
       url: originRemote.url,
@@ -492,6 +550,7 @@ const ensureShallowClone = async ({
       depth: 1,
       singleBranch: true,
       onProgress,
+      ...(authCallback && { onAuth: authCallback }),
     });
 
     // Checkout the branch
@@ -819,6 +878,7 @@ const ensureFullClone = async ({
     }
     
     // Fetch more history - unshallow the repository
+    const authCallback = getAuthCallback(originRemote.url);
     await git.fetch({
       dir,
       url: originRemote.url,
@@ -828,7 +888,8 @@ const ensureFullClone = async ({
       tags: false,
       onProgress: (progress: { phase: string; loaded?: number; total?: number }) => {
         sendProgress(`Full clone: ${progress.phase}`, progress.loaded, progress.total);
-      }
+      },
+      ...(authCallback && { onAuth: authCallback }),
     });
 
     sendProgress('Full clone completed');
@@ -1025,6 +1086,11 @@ function parsePatchContent(patchLines: string[]): Array<{
   let isInContent = false;
   
   for (const line of patchLines) {
+    // Skip undefined or null lines
+    if (!line || typeof line !== 'string') {
+      continue;
+    }
+    
     // Detect file headers
     if (line.startsWith('diff --git')) {
       // Save previous file if exists
@@ -1070,17 +1136,99 @@ function parsePatchContent(patchLines: string[]): Array<{
 }
 
 /**
+ * Extract new file content from a unified diff patch for file additions
+ */
+function extractNewFileContentFromPatch(patchContent: string): string {
+  const lines = patchContent.split('\n');
+  const contentLines: string[] = [];
+  let inContent = false;
+  
+  for (const line of lines) {
+    // Skip header lines until we reach the actual diff content
+    if (line.startsWith('@@')) {
+      inContent = true;
+      continue;
+    }
+    
+    if (inContent) {
+      if (line.startsWith('+') && !line.startsWith('+++')) {
+        // This is a new line being added
+        contentLines.push(line.substring(1)); // Remove the '+' prefix
+      } else if (!line.startsWith('-') && !line.startsWith('\\')) {
+        // This is a context line (unchanged)
+        contentLines.push(line.startsWith(' ') ? line.substring(1) : line);
+      }
+      // Skip lines starting with '-' (deletions) and '\\' (no newline indicators)
+    }
+  }
+  
+  return contentLines.join('\n');
+}
+
+/**
+ * Apply a unified diff patch to existing file content
+ */
+function applyUnifiedDiffPatch(existingContent: string, patchContent: string): string {
+  const existingLines = existingContent.split('\n');
+  const patchLines = patchContent.split('\n');
+  const resultLines: string[] = [];
+  
+  let existingIndex = 0;
+  let inHunk = false;
+  let hunkOldStart = 0;
+  let hunkNewStart = 0;
+  
+  for (const line of patchLines) {
+    // Parse hunk header: @@ -oldStart,oldCount +newStart,newCount @@
+    const hunkMatch = line.match(/^@@\s+-?(\d+),?\d*\s+\+(\d+),?\d*\s+@@/);
+    if (hunkMatch) {
+      hunkOldStart = parseInt(hunkMatch[1]) - 1; // Convert to 0-based index
+      hunkNewStart = parseInt(hunkMatch[2]) - 1; // Convert to 0-based index
+      
+      // Copy any lines before this hunk
+      while (existingIndex < hunkOldStart) {
+        resultLines.push(existingLines[existingIndex]);
+        existingIndex++;
+      }
+      
+      inHunk = true;
+      continue;
+    }
+    
+    if (inHunk) {
+      if (line.startsWith(' ')) {
+        // Context line - copy from existing content
+        resultLines.push(line.substring(1));
+        existingIndex++;
+      } else if (line.startsWith('+')) {
+        // Addition - add new line
+        resultLines.push(line.substring(1));
+      } else if (line.startsWith('-')) {
+        // Deletion - skip this line from existing content
+        existingIndex++;
+      } else if (line.startsWith('\\')) {
+        // No newline indicator - ignore
+        continue;
+      } else {
+        // End of hunk or unknown line
+        inHunk = false;
+      }
+    }
+  }
+  
+  // Copy any remaining lines from the existing content
+  while (existingIndex < existingLines.length) {
+    resultLines.push(existingLines[existingIndex]);
+    existingIndex++;
+  }
+  
+  return resultLines.join('\n');
+}
+
+/**
  * Apply a patch to the repository and push to all remotes
  */
-async function applyPatchAndPush({
-  repoId,
-  patchData,
-  targetBranch,
-  mergeCommitMessage,
-  authorName,
-  authorEmail,
-  onProgress
-}: {
+async function applyPatchAndPush(params: {
   repoId: string;
   patchData: {
     id: string;
@@ -1100,7 +1248,33 @@ async function applyPatchAndPush({
   pushedRemotes?: string[];
   skippedRemotes?: string[];
   warning?: string;
+  pushErrors?: Array<{ remote: string; url: string; error: string; code: string; stack: string }>;
 }> {
+  console.log('🚀 WORKER ENTRY - applyPatchAndPush called with:', {
+    hasParams: !!params,
+    paramsType: typeof params,
+    paramsKeys: params ? Object.keys(params) : 'no params',
+    timestamp: new Date().toISOString()
+  });
+  
+  // Destructure parameters from the params object
+  const {
+    repoId,
+    patchData,
+    targetBranch,
+    mergeCommitMessage,
+    authorName,
+    authorEmail,
+    onProgress
+  } = params;
+  
+  console.log('🚀 WORKER ENTRY - Parameters destructured:', {
+    hasRepoId: !!repoId,
+    hasPatchData: !!patchData,
+    hasTargetBranch: !!targetBranch,
+    hasAuthorName: !!authorName,
+    hasAuthorEmail: !!authorEmail
+  });
   const progress = onProgress || (() => {});
   
   try {
@@ -1142,17 +1316,139 @@ async function applyPatchAndPush({
       // For now, we'll use a simpler approach: parse the patch and apply changes manually
       // This is a simplified implementation - in production you'd want more robust patch parsing
       
+      // Validate patch data
+      console.log('🔧 Worker Debug - patchData received:', {
+        hasPatchData: !!patchData,
+        hasRawContent: !!patchData?.rawContent,
+        rawContentType: typeof patchData?.rawContent,
+        rawContentLength: patchData?.rawContent?.length,
+        rawContentPreview: patchData?.rawContent?.substring(0, 100),
+        patchDataKeys: patchData ? Object.keys(patchData) : 'no patchData'
+      });
+      
+      if (!patchData.rawContent) {
+        throw new Error('Patch rawContent is missing or undefined');
+      }
+      
+      if (typeof patchData.rawContent !== 'string') {
+        throw new Error(`Patch rawContent must be a string, got: ${typeof patchData.rawContent}`);
+      }
+      
+      console.log('🔧 Worker Debug - About to split patch content');
+      
       // Parse patch content to extract file changes
       const patchLines = patchData.rawContent.split('\n');
+      
+      console.log('🔧 Worker Debug - Patch lines created:', {
+        linesCount: patchLines.length,
+        firstLineType: typeof patchLines[0],
+        firstLineContent: patchLines[0]?.substring(0, 50)
+      });
+      
       const fileChanges = parsePatchContent(patchLines);
       
+      console.log('🔧 Worker Debug - File changes parsed:', {
+        changesCount: fileChanges.length,
+        changes: fileChanges.map(change => ({
+          filepath: change.filepath,
+          type: change.type,
+          contentType: typeof change.content,
+          contentLength: change.content?.length,
+          contentPreview: change.content?.substring(0, 100),
+          hasContent: !!change.content
+        }))
+      });
+      
       // Apply each file change
-      for (const change of fileChanges) {
+      for (let i = 0; i < fileChanges.length; i++) {
+        const change = fileChanges[i];
+        
+        console.log(`🔧 Worker Debug - Processing change ${i + 1}/${fileChanges.length}:`, {
+          filepath: change.filepath,
+          type: change.type,
+          contentType: typeof change.content,
+          contentLength: change.content?.length,
+          hasContent: !!change.content
+        });
+        
         if (change.type === 'modify' || change.type === 'add') {
-          await git.writeBlob({ dir, blob: change.content });
+          if (!change.content || typeof change.content !== 'string') {
+            console.error('🔧 Worker Debug - Invalid content for patch application:', {
+              filepath: change.filepath,
+              contentType: typeof change.content,
+              content: change.content
+            });
+            throw new Error(`Invalid content for file ${change.filepath}: expected string, got ${typeof change.content}`);
+          }
+          
+          console.log(`🔧 Worker Debug - About to apply patch to ${change.filepath}`);
+          console.log(`🔧 Worker Debug - Patch content preview:`, {
+            contentType: typeof change.content,
+            contentLength: change.content?.length,
+            contentPreview: change.content?.substring(0, 200),
+            isUnifiedDiff: change.content?.includes('@@') && change.content?.includes('+++'),
+          });
+          
+          // Get the filesystem from the isomorphic-git provider
+          const fs = (git as any).fs || (git as any).options?.fs;
+          if (!fs) {
+            throw new Error('Filesystem not available from git provider');
+          }
+          
+          const fullPath = `${dir}/${change.filepath}`;
+          
+          // Ensure the directory exists
+          const pathParts = change.filepath.split('/');
+          if (pathParts.length > 1) {
+            const dirPath = pathParts.slice(0, -1).join('/');
+            const fullDirPath = `${dir}/${dirPath}`;
+            console.log(`🔧 Worker Debug - Ensuring directory exists: ${fullDirPath}`);
+            
+            try {
+              // Create directory structure if it doesn't exist
+              await fs.promises.mkdir(fullDirPath, { recursive: true });
+            } catch (error) {
+              // Directory might already exist, that's fine
+              console.log(`🔧 Worker Debug - Directory creation result:`, error);
+            }
+          }
+          
+          let finalContent: string = '';
+          
+          if (change.type === 'add') {
+            // For new files, the patch content should be the entire file content
+            // But we need to extract it from the unified diff format
+            console.log(`🔧 Worker Debug - Processing new file addition`);
+            finalContent = extractNewFileContentFromPatch(change.content);
+          } else {
+            // For modifications, we need to apply the patch to the existing file
+            console.log(`🔧 Worker Debug - Processing file modification`);
+            
+            let existingContent = '';
+            try {
+              existingContent = await fs.promises.readFile(fullPath, 'utf8');
+              console.log(`🔧 Worker Debug - Read existing file, length: ${existingContent.length}`);
+              // Apply the unified diff patch to the existing content
+              finalContent = applyUnifiedDiffPatch(existingContent, change.content);
+            } catch (error) {
+              console.log(`🔧 Worker Debug - File doesn't exist yet, treating as new file`);
+              // File doesn't exist, treat as new file
+              finalContent = extractNewFileContentFromPatch(change.content);
+            }
+          }
+          
+          console.log(`🔧 Worker Debug - Writing final content to: ${fullPath}`);
+          console.log(`🔧 Worker Debug - Final content length: ${finalContent.length}`);
+          await fs.promises.writeFile(fullPath, finalContent, 'utf8');
+          console.log(`🔧 Worker Debug - File write successful for ${change.filepath}`);
+          
+          // Stage the file changes
           await git.add({ dir, filepath: change.filepath });
+          console.log(`🔧 Worker Debug - git.add successful for ${change.filepath}`);
         } else if (change.type === 'delete') {
+          console.log(`🔧 Worker Debug - About to remove ${change.filepath}`);
           await git.remove({ dir, filepath: change.filepath });
+          console.log(`🔧 Worker Debug - git.remove successful for ${change.filepath}`);
         }
       }
       
@@ -1219,15 +1515,40 @@ async function applyPatchAndPush({
       }
       
       // Push to all remotes with proper URL handling
+      const pushErrors: Array<{ remote: string; url: string; error: string; code: string; stack: string }> = [];
+      
       for (const remote of remotes) {
         try {
           console.log(`Attempting to push to remote: ${remote.remote} (${remote.url})`);
           
-          // Validate remote has URL
           if (!remote.url) {
+            const errorMsg = `Remote ${remote.remote} has no URL configured`;
             console.warn(`Remote ${remote.remote} has no URL configured`);
+            pushErrors.push({ remote: remote.remote, url: 'N/A', error: errorMsg, code: 'NO_URL', stack: '' });
             skippedRemotes.push(remote.remote);
             continue;
+          }
+          
+          // Log authentication status
+          const authCallback = getAuthCallback(remote.url);
+          if (authCallback) {
+            console.log(`🔐 Using authentication for ${remote.url}`);
+            console.log(`🔐 Available tokens for hosts:`, authConfig.tokens.map(t => t.host));
+            // Test the auth callback to see what credentials it provides
+            try {
+              const testAuth = authCallback();
+              console.log(`🔐 Auth callback returns:`, {
+                username: testAuth.username,
+                passwordLength: testAuth.password?.length || 0,
+                passwordPrefix: testAuth.password?.substring(0, 4) + '...' || 'none'
+              });
+            } catch (authError) {
+              console.error(`🔐 Auth callback failed:`, authError);
+            }
+          } else {
+            console.log(`🔓 No authentication configured for ${remote.url}`);
+            console.log(`🔓 Available tokens for hosts:`, authConfig.tokens.map(t => t.host));
+            console.log(`🔓 Remote hostname:`, new URL(remote.url).hostname);
           }
           
           // Use the remote URL to avoid "remote OR url" error
@@ -1235,14 +1556,31 @@ async function applyPatchAndPush({
             dir,
             url: remote.url,
             ref: effectiveTargetBranch,
-            // Include authentication if needed (this would need to be configured)
-            // onAuth: () => ({ username: 'token', password: authToken })
+            force: true, // Allow non-fast-forward pushes for patch merges
+            ...(authCallback && { onAuth: authCallback }),
           });
           
           console.log(`Successfully pushed to ${remote.remote}`);
           pushedRemotes.push(remote.remote);
-        } catch (pushError) {
-          console.warn(`Failed to push to remote ${remote.remote} (${remote.url}):`, pushError);
+        } catch (pushError: any) {
+          const errorMsg = pushError instanceof Error ? pushError.message : String(pushError);
+          const errorDetails = {
+            remote: remote.remote,
+            url: remote.url || 'N/A',
+            error: errorMsg,
+            code: pushError.code || 'UNKNOWN',
+            stack: pushError.stack || 'No stack trace'
+          };
+          
+          console.error(`Failed to push to remote ${remote.remote} (${remote.url}):`, {
+            error: errorMsg,
+            code: pushError.code,
+            data: pushError.data,
+            caller: pushError.caller,
+            fullError: pushError
+          });
+          
+          pushErrors.push(errorDetails);
           skippedRemotes.push(remote.remote);
         }
       }
@@ -1255,17 +1593,44 @@ async function applyPatchAndPush({
         success: true,
         mergeCommitOid,
         pushedRemotes,
-        skippedRemotes
+        skippedRemotes,
+        pushErrors: pushErrors.length > 0 ? pushErrors : undefined
       };
       
-    } catch (applyError: any) {
+    } catch (applyError) {
+      console.error('Failed to apply patch:', applyError);
+      
+      // Provide more detailed error information
+      let errorMessage = 'Unknown error occurred';
+      
+      if (applyError instanceof Error) {
+        errorMessage = applyError.message;
+        console.error('Error stack:', applyError.stack);
+      } else if (applyError && typeof applyError === 'object') {
+        errorMessage = JSON.stringify(applyError);
+      } else if (applyError !== null && applyError !== undefined) {
+        errorMessage = String(applyError);
+      }
+      
+      // Log patch data for debugging
+      console.error('Patch data debug info:', {
+        patchId: patchData?.id,
+        hasRawContent: !!patchData?.rawContent,
+        rawContentType: typeof patchData?.rawContent,
+        rawContentLength: patchData?.rawContent?.length,
+        baseBranch: patchData?.baseBranch,
+        targetBranch,
+        effectiveTargetBranch
+      });
+      
       return {
         success: false,
-        error: `Failed to apply patch: ${applyError instanceof Error ? applyError.message : String(applyError)}`
+        error: `Failed to apply patch: ${errorMessage}`
       };
     }
     
-  } catch (error: any) {
+  } catch (error) {
+    console.error('Merge operation failed:', error);
     return {
       success: false,
       error: `Merge operation failed: ${error instanceof Error ? error.message : String(error)}`
@@ -1294,7 +1659,14 @@ const cloneAndFork = async ({
   relays: string[];
 }) => {
   const dir = `${rootDir}/${sourceUrl}`;
-  await git.clone({ dir, url: sourceUrl, singleBranch: true, depth: 1 });
+  const authCallback = getAuthCallback(sourceUrl);
+  await git.clone({ 
+    dir, 
+    url: sourceUrl, 
+    singleBranch: true, 
+    depth: 1,
+    ...(authCallback && { onAuth: authCallback }),
+  });
 
   const remoteUrl = await createRemoteRepo(targetHost, targetToken, targetUsername, targetRepo);
 
@@ -1306,7 +1678,14 @@ const cloneAndFork = async ({
   if (originRemote && originRemote.url) {
     // Use robust branch resolution instead of hardcoded 'main'
     const resolvedBranch = await resolveRobustBranchInWorker(dir);
-    await git.push({ dir, url: originRemote.url, ref: resolvedBranch, force: true });
+    const authCallback = getAuthCallback(originRemote.url);
+    await git.push({ 
+      dir, 
+      url: originRemote.url, 
+      ref: resolvedBranch, 
+      force: true,
+      ...(authCallback && { onAuth: authCallback }),
+    });
   } else {
     console.warn('Origin remote not found or has no URL, skipping push');
   }
@@ -1358,6 +1737,101 @@ const createRemoteRepo = async (
   }
 };
 
+/**
+ * Reset local repository to match remote HEAD state
+ * This performs a hard reset to remove any local commits that diverge from remote
+ */
+const resetRepoToRemote = async ({
+  repoId,
+  branch
+}: {
+  repoId: string;
+  branch?: string;
+}) => {
+  const dir = `${rootDir}/${repoId}`;
+  
+  try {
+    // Use robust multi-fallback branch resolution
+    const targetBranch = await resolveRobustBranchInWorker(dir, branch);
+    
+    console.log(`Resetting repository ${repoId} to remote state on branch ${targetBranch}`);
+    
+    // Get the remote URL for fetching
+    const remotes = await git.listRemotes({ dir });
+    const originRemote = remotes.find((r: any) => r.remote === 'origin');
+    
+    if (!originRemote || !originRemote.url) {
+      throw new Error('No origin remote found - cannot reset to remote state');
+    }
+    
+    // Fetch latest from remote to ensure we have the latest remote state
+    const authCallback = getAuthCallback(originRemote.url);
+    await git.fetch({
+      dir,
+      url: originRemote.url,
+      ref: targetBranch,
+      singleBranch: true,
+      ...(authCallback && { onAuth: authCallback }),
+    });
+    
+    // Get the remote HEAD commit
+    const remoteRef = `refs/remotes/origin/${targetBranch}`;
+    let remoteCommit: string;
+    
+    try {
+      remoteCommit = await git.resolveRef({ dir, ref: remoteRef });
+    } catch (error) {
+      // Fallback: try to get remote commit from fetch
+      const remoteBranches = await git.listBranches({ dir, remote: 'origin' });
+      const remoteBranch = remoteBranches.find((b: string) => b.endsWith(targetBranch));
+      if (!remoteBranch) {
+        throw new Error(`Remote branch ${targetBranch} not found`);
+      }
+      remoteCommit = await git.resolveRef({ dir, ref: `refs/remotes/${remoteBranch}` });
+    }
+    
+    // Reset local branch to match remote commit (hard reset)
+    await git.checkout({
+      dir,
+      ref: remoteCommit,
+      force: true // Force checkout to discard local changes
+    });
+    
+    // Update the local branch reference to point to remote commit
+    await git.writeRef({
+      dir,
+      ref: `refs/heads/${targetBranch}`,
+      value: remoteCommit,
+      force: true
+    });
+    
+    // Checkout the branch to make it active
+    await git.checkout({
+      dir,
+      ref: targetBranch
+    });
+    
+    console.log(`Repository ${repoId} successfully reset to remote commit ${remoteCommit}`);
+    
+    return {
+      success: true,
+      repoId,
+      branch: targetBranch,
+      remoteCommit,
+      message: `Repository reset to remote state`
+    };
+    
+  } catch (error) {
+    console.error(`Error resetting repository ${repoId} to remote:`, error);
+    return {
+      success: false,
+      repoId,
+      branch,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+};
+
 expose({ 
   cloneAndFork, 
   clone, 
@@ -1371,5 +1845,7 @@ expose({
   getCommitCount,
   deleteRepo,
   analyzePatchMerge,
-  applyPatchAndPush
+  applyPatchAndPush,
+  resetRepoToRemote,
+  setAuthConfig
 });
