@@ -1,6 +1,7 @@
 import { WorkerManager } from "./WorkerManager";
 import { CacheManager } from "./CacheManager";
 import type { RepoAnnouncementEvent } from "@nostr-git/shared-types";
+import { toast } from "$lib/stores/toast";
 
 /**
  * Configuration options for FileManager
@@ -92,7 +93,7 @@ export interface FileListingResult {
 /**
  * FileManager handles all file-related operations including listing directories,
  * reading file content, checking file existence, and retrieving file history.
- * 
+ *
  * This component is part of the composition-based refactor of the Repo class,
  * extracting file-specific functionality into a focused, reusable component.
  */
@@ -100,13 +101,13 @@ export class FileManager {
   private workerManager: WorkerManager;
   private cacheManager?: CacheManager;
   private config: Required<FileManagerConfig>;
-  
+
   // Cache keys for different types of file operations
   private static readonly CACHE_KEYS = {
-    CONTENT: 'file_content',
-    LISTING: 'file_listing',
-    HISTORY: 'file_history',
-    EXISTS: 'file_exists',
+    CONTENT: "file_content",
+    LISTING: "file_listing",
+    HISTORY: "file_history",
+    EXISTS: "file_exists",
   } as const;
 
   constructor(
@@ -116,7 +117,7 @@ export class FileManager {
   ) {
     this.workerManager = workerManager;
     this.cacheManager = cacheManager;
-    
+
     // Set default configuration
     this.config = {
       enableCaching: config.enableCaching ?? true,
@@ -163,18 +164,18 @@ export class FileManager {
     useCache?: boolean;
   }): Promise<FileListingResult> {
     const shortBranch = this.getShortBranchName(branch);
-    const cacheKey = this.generateCacheKey('LISTING', repoEvent.id, path, shortBranch);
-    
+    const cacheKey = this.generateCacheKey("LISTING", repoEvent.id, path, shortBranch);
+
     // Try cache first if enabled
     if (this.config.enableCaching && useCache && this.cacheManager) {
       try {
-        const cached = await this.cacheManager.get('file_listing', cacheKey);
-        if (cached && typeof cached === 'object') {
+        const cached = await this.cacheManager.get("file_listing", cacheKey);
+        if (cached && typeof cached === "object") {
           console.log(`File listing cache hit for ${path} on ${shortBranch}`);
           return { ...(cached as FileListingResult), fromCache: true };
         }
       } catch (error) {
-        console.warn('Cache read failed for file listing:', error);
+        console.warn("Cache read failed for file listing:", error);
       }
     }
 
@@ -187,22 +188,24 @@ export class FileManager {
       });
 
       const fileListingResult: FileListingResult = {
-        files: result.map((file: any): FileInfo => ({
-          path: file.path || file.name,
-          type: file.type || 'file',
-          size: file.size,
-          mode: file.mode,
-          lastCommit: file.oid,
-        })),
+        files: result.map(
+          (file: any): FileInfo => ({
+            path: file.path || file.name,
+            type: file.type || "file",
+            size: file.size,
+            mode: file.mode,
+            lastCommit: file.oid,
+          })
+        ),
         path,
         ref: shortBranch,
-        fromCache: false
+        fromCache: false,
       };
 
       // Cache the result if enabled
       if (this.config.enableCaching && this.cacheManager) {
         await this.cacheManager.set(
-          'file_listing',
+          "file_listing",
           cacheKey,
           fileListingResult,
           this.config.listingCacheTTL
@@ -211,15 +214,11 @@ export class FileManager {
 
       return fileListingResult;
     } catch (error) {
-      console.error(`Failed to list repository files for branch '${shortBranch}':`, error);
-      
-      // If the error is about a missing branch, try common alternatives
-      if (error instanceof Error && error.message.includes('Could not find')) {
-        const alternatives = shortBranch === 'main' ? ['master', 'develop'] : ['main', 'master'];
-        
+      if (error instanceof Error && error.message.includes("Could not find")) {
+        const alternatives = shortBranch === "main" ? ["master", "develop"] : ["main", "master"];
+
         for (const altBranch of alternatives) {
           try {
-            console.log(`Trying alternative branch: ${altBranch}`);
             const result = await this.workerManager.listRepoFilesFromEvent({
               repoEvent,
               branch: altBranch,
@@ -227,37 +226,39 @@ export class FileManager {
             });
 
             const fileListingResult: FileListingResult = {
-              files: result.map((file: any): FileInfo => ({
-                path: file.path || file.name,
-                type: file.type || 'file',
-                size: file.size,
-                mode: file.mode,
-                lastCommit: file.oid,
-              })),
+              files: result.map(
+                (file: any): FileInfo => ({
+                  path: file.path || file.name,
+                  type: file.type || "file",
+                  size: file.size,
+                  mode: file.mode,
+                  lastCommit: file.oid,
+                })
+              ),
               path,
               ref: altBranch,
-              fromCache: false
+              fromCache: false,
             };
 
-            // Cache the result with the working branch
             if (this.config.enableCaching && this.cacheManager) {
               await this.cacheManager.set(
-                'file_listing',
+                "file_listing",
                 cacheKey.replace(shortBranch, altBranch),
                 fileListingResult,
                 this.config.listingCacheTTL
               );
             }
 
-            console.log(`Successfully used alternative branch: ${altBranch}`);
             return fileListingResult;
           } catch (altError) {
-            console.warn(`Alternative branch ${altBranch} also failed:`, altError);
             continue;
           }
         }
       }
-      
+      toast.push({
+        message: `Failed to list repository files for branch '${shortBranch}': ${error}`,
+        duration: 8000,
+      });
       throw error;
     }
   }
@@ -279,18 +280,18 @@ export class FileManager {
     useCache?: boolean;
   }): Promise<FileContent> {
     const ref = commit || this.getShortBranchName(branch);
-    const cacheKey = this.generateCacheKey('CONTENT', repoEvent.id, path, ref);
-    
+    const cacheKey = this.generateCacheKey("CONTENT", repoEvent.id, path, ref);
+
     // Try cache first if enabled
     if (this.config.enableCaching && useCache && this.cacheManager) {
       try {
-        const cached = await this.cacheManager.get('file_content', cacheKey);
-        if (cached && typeof cached === 'object') {
+        const cached = await this.cacheManager.get("file_content", cacheKey);
+        if (cached && typeof cached === "object") {
           console.log(`File content cache hit for ${path} at ${ref}`);
           return { ...(cached as FileContent), fromCache: true };
         }
       } catch (error) {
-        console.warn('Cache read failed for file content:', error);
+        console.warn("Cache read failed for file content:", error);
       }
     }
 
@@ -307,20 +308,25 @@ export class FileManager {
         content: content || "",
         path,
         ref,
-        encoding: 'utf-8', // Default encoding
+        encoding: "utf-8", // Default encoding
         size: content?.length || 0,
       };
 
       // Cache the result if enabled and file is not too large
       if (
-        this.config.enableCaching && 
-        this.cacheManager && 
+        this.config.enableCaching &&
+        this.cacheManager &&
         result.size <= this.config.maxCacheFileSize
       ) {
         try {
-          await this.cacheManager.set('file_content', cacheKey, result, this.config.contentCacheTTL);
+          await this.cacheManager.set(
+            "file_content",
+            cacheKey,
+            result,
+            this.config.contentCacheTTL
+          );
         } catch (error) {
-          console.warn('Cache write failed for file content:', error);
+          console.warn("Cache write failed for file content:", error);
         }
       }
 
@@ -348,18 +354,18 @@ export class FileManager {
     useCache?: boolean;
   }): Promise<boolean> {
     const ref = commit || this.getShortBranchName(branch);
-    const cacheKey = this.generateCacheKey('EXISTS', repoEvent.id, path, ref);
-    
+    const cacheKey = this.generateCacheKey("EXISTS", repoEvent.id, path, ref);
+
     // Try cache first if enabled
     if (this.config.enableCaching && useCache && this.cacheManager) {
       try {
-        const cached = await this.cacheManager.get('file_exists', cacheKey);
+        const cached = await this.cacheManager.get("file_exists", cacheKey);
         if (cached !== undefined) {
           console.log(`File exists cache hit for ${path} at ${ref}`);
           return cached as boolean;
         }
       } catch (error) {
-        console.warn('Cache read failed for file exists check:', error);
+        console.warn("Cache read failed for file exists check:", error);
       }
     }
 
@@ -375,9 +381,9 @@ export class FileManager {
       // Cache the result if enabled
       if (this.config.enableCaching && this.cacheManager) {
         try {
-          await this.cacheManager.set('file_exists', cacheKey, exists, this.config.listingCacheTTL);
+          await this.cacheManager.set("file_exists", cacheKey, exists, this.config.listingCacheTTL);
         } catch (error) {
-          console.warn('Cache write failed for file exists check:', error);
+          console.warn("Cache write failed for file exists check:", error);
         }
       }
 
@@ -405,18 +411,23 @@ export class FileManager {
     useCache?: boolean;
   }): Promise<FileHistoryEntry[]> {
     const shortBranch = this.getShortBranchName(branch);
-    const cacheKey = this.generateCacheKey('HISTORY', repoEvent.id, `${path}_${maxCount}`, shortBranch);
-    
+    const cacheKey = this.generateCacheKey(
+      "HISTORY",
+      repoEvent.id,
+      `${path}_${maxCount}`,
+      shortBranch
+    );
+
     // Try cache first if enabled
     if (this.config.enableCaching && useCache && this.cacheManager) {
       try {
-        const cached = await this.cacheManager.get('file_history', cacheKey);
+        const cached = await this.cacheManager.get("file_history", cacheKey);
         if (cached && Array.isArray(cached)) {
           console.log(`File history cache hit for ${path} on ${shortBranch}`);
           return cached as FileHistoryEntry[];
         }
       } catch (error) {
-        console.warn('Cache read failed for file history:', error);
+        console.warn("Cache read failed for file history:", error);
       }
     }
 
@@ -444,9 +455,14 @@ export class FileManager {
       // Cache the result if enabled
       if (this.config.enableCaching && this.cacheManager) {
         try {
-          await this.cacheManager.set('file_content', cacheKey, result, this.config.contentCacheTTL);
+          await this.cacheManager.set(
+            "file_content",
+            cacheKey,
+            result,
+            this.config.contentCacheTTL
+          );
         } catch (error) {
-          console.warn('Cache write failed for file history:', error);
+          console.warn("Cache write failed for file history:", error);
         }
       }
 
@@ -466,10 +482,8 @@ export class FileManager {
     try {
       if (repoId) {
         // Clear cache for specific repository
-        const patterns = Object.values(FileManager.CACHE_KEYS).map(
-          key => `${key}_${repoId}_*`
-        );
-        
+        const patterns = Object.values(FileManager.CACHE_KEYS).map((key) => `${key}_${repoId}_*`);
+
         for (const pattern of patterns) {
           // Note: This assumes CacheManager supports pattern-based clearing
           // If not, we'd need to track keys or implement pattern matching
@@ -477,15 +491,15 @@ export class FileManager {
         }
       } else {
         // Clear all file caches
-        await this.cacheManager.clear('file_listing');
-        await this.cacheManager.clear('file_content');
-        await this.cacheManager.clear('file_exists');
-        await this.cacheManager.clear('file_history');
+        await this.cacheManager.clear("file_listing");
+        await this.cacheManager.clear("file_content");
+        await this.cacheManager.clear("file_exists");
+        await this.cacheManager.clear("file_history");
       }
-      
-      console.log('File cache cleared');
+
+      console.log("File cache cleared");
     } catch (error) {
-      console.error('Failed to clear file cache:', error);
+      console.error("Failed to clear file cache:", error);
     }
   }
 
@@ -509,7 +523,7 @@ export class FileManager {
    */
   updateConfig(config: Partial<FileManagerConfig>): void {
     this.config = { ...this.config, ...config };
-    console.log('FileManager configuration updated:', this.config);
+    console.log("FileManager configuration updated:", this.config);
   }
 
   /**
@@ -517,6 +531,6 @@ export class FileManager {
    */
   dispose(): void {
     // Clear any pending operations or timers if needed
-    console.log('FileManager disposed');
+    console.log("FileManager disposed");
   }
 }

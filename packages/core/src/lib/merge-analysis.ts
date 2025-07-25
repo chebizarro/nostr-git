@@ -62,7 +62,19 @@ async function resolveRobustBranchInMergeAnalysis(
     }
   }
   
-  // If no candidates work, fall back to the preferred branch or 'main'
+  // If no candidates work, try to find any existing branch
+  try {
+    const branches = await git.listBranches({ dir: repoDir });
+    if (branches.length > 0) {
+      const firstBranch = branches[0];
+      console.warn(`All specific branch resolution attempts failed in merge analysis, using first available branch: ${firstBranch}`);
+      return firstBranch;
+    }
+  } catch (error) {
+    console.warn('Failed to list branches in merge analysis:', error);
+  }
+  
+  // Ultimate fallback
   return preferredBranch || 'main';
 }
 
@@ -76,16 +88,25 @@ export async function analyzePatchMergeability(
   targetBranch?: string
 ): Promise<MergeAnalysisResult> {
   try {
-    // Resolve the target branch using robust multi-fallback strategy
-    const resolvedBranch = await resolveRobustBranchInMergeAnalysis(git, repoDir, targetBranch);
+    // Use the already-resolved target branch (no need to resolve again)
+    const resolvedBranch = targetBranch || 'master'; // Branch is already resolved in the worker layer, fallback to master
     
-    // Ensure we have the latest state
-    await git.fetch({
-      dir: repoDir,
-      ref: resolvedBranch,
-      singleBranch: true,
-      depth: 1
-    });
+    // Get remote URL for fetch operation
+    const remotes = await git.listRemotes({ dir: repoDir });
+    const originRemote = remotes.find((r: any) => r.remote === 'origin');
+    
+    if (originRemote && originRemote.url) {
+      // Ensure we have the latest state
+      await git.fetch({
+        dir: repoDir,
+        url: originRemote.url,
+        ref: resolvedBranch,
+        singleBranch: true,
+        depth: 1
+      });
+    } else {
+      console.warn('Origin remote not found, skipping fetch in merge analysis');
+    }
 
     // Get current HEAD of target branch
     const targetCommit = await git.resolveRef({
@@ -296,7 +317,7 @@ async function analyzeDiffForConflicts(
           git,
           repoDir,
           filePath,
-          patch.baseBranch || 'main',
+          patch.baseBranch || targetBranch,
           targetBranch
         );
 

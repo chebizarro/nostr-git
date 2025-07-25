@@ -93,8 +93,9 @@ export async function listRepoFilesFromEvent(opts: {
   } else {
     oid = await resolveRobustBranch(git, dir, branch, {
       onBranchNotFound: (branchName, error) => {
+        throw error;
         // This will be handled by the UI layer if they provide a callback
-        console.warn(`Branch '${branchName}' from repository state not found in local git:`, error.message);
+        // console.warn(`Branch '${branchName}' from repository state not found in local git:`, error.message);
       }
     });
   }

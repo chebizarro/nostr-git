@@ -263,7 +263,7 @@ export function createStatusEvent(opts: {
   if (opts.replyId) tags.push(["e", opts.replyId, "", "reply"]);
   if (opts.recipients) opts.recipients.forEach(p => tags.push(["p", p]));
   if (opts.repoAddr) tags.push(["a", opts.repoAddr]);
-  if (opts.relays) tags.push(["r", opts.relays[0]]);
+  if (opts.relays && opts.relays.length) tags.push(["r", opts.relays[0]]);
   if (opts.mergedCommit) tags.push(["merge-commit", opts.mergedCommit]);
   if (opts.appliedCommits) tags.push(["applied-as-commits", opts.appliedCommits[0]]);
   if (opts.tags) tags.push(...opts.tags);

@@ -1,6 +1,7 @@
 import { WorkerManager } from "./WorkerManager";
 import { CacheManager } from "./CacheManager";
 import { context } from "$lib/stores/context";
+import { toast } from "$lib/stores/toast";
 import type { RepoAnnouncementEvent, RepoStateEvent } from "@nostr-git/shared-types";
 
 // Branch interface definition (since it's not exported from shared-types)
@@ -168,9 +169,7 @@ export class BranchManager {
     const fallbackBranches = ['main', 'master', 'develop', 'dev'];
     if (!fallbackBranches.includes(branchName)) {
       const message = `Branch '${branchName}' from repository state not found in local git repository`;
-      const details = `This branch may have been deleted, merged, or not fetched locally. The branch exists in the repository state but not in the current git clone.`;
-      
-      context.warning(message, details, 8000); // Show for 8 seconds
+      toast.push({ message, duration: 8000 }); // Show for 8 seconds
       console.warn(`Branch resolution warning: ${message}`, error);
     }
   }

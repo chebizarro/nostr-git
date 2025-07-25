@@ -222,6 +222,29 @@ export class WorkerManager {
   }
 
   /**
+   * Apply a patch and push to remotes
+   */
+  async applyPatchAndPush(params: {
+    repoId: string;
+    patchData: any;
+    targetBranch?: string;
+    mergeCommitMessage?: string;
+    authorName?: string;
+    authorEmail?: string;
+  }): Promise<{
+    success: boolean;
+    error?: string;
+    mergeCommitOid?: string;
+    pushedRemotes?: string[];
+    skippedRemotes?: string[];
+    warning?: string;
+  }> {
+    await this.initialize();
+    const result = await this.api.applyPatchAndPush(params);
+    return result;
+  }
+
+  /**
    * Check if worker is ready for operations
    */
   get isReady(): boolean {

@@ -8,7 +8,7 @@ import type { Patch } from '@nostr-git/shared-types';
 export async function analyzePatchMerge(
   repoId: string,
   patch: Patch,
-  targetBranch: string = 'main',
+  targetBranch?: string,
   onProgress?: (event: any) => void
 ): Promise<MergeAnalysisResult> {
   const { api, worker } = getGitWorker(onProgress);

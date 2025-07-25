@@ -33,17 +33,27 @@ async function resolveRobustBranchInWorker(dir: string, requestedBranch?: string
   
   for (const branchName of branchesToTry) {
     try {
-      await git.resolveRef({ dir, ref: branchName });
-      console.log(`Successfully resolved branch '${branchName}' in worker`);
+      const result = await git.resolveRef({ dir, ref: branchName });
       return branchName;
     } catch (error) {
-      console.log(`Failed to resolve branch '${branchName}' in worker:`, error instanceof Error ? error.message : String(error));
       continue;
     }
   }
   
-  // If all fails, return 'main' as ultimate fallback
-  console.warn('All branch resolution attempts failed, using main as ultimate fallback');
+  // If all specific branches fail, try to find any existing branch
+  try {
+    const branches = await git.listBranches({ dir });
+    if (branches.length > 0) {
+      const firstBranch = branches[0];
+      console.warn(`All specific branch resolution attempts failed, using first available branch: ${firstBranch}`);
+      return firstBranch;
+    }
+  } catch (error) {
+    console.warn('Failed to list branches:', error);
+  }
+  
+  // Ultimate fallback - this should rarely happen
+  throw new Error(`No branches found in repository at ${dir}. Tried: ${branchesToTry.join(', ')}`);
   return 'main';
 }
 
@@ -167,16 +177,22 @@ cacheManager.clearOldCache().catch(console.warn);
  * Check if repository needs updating by comparing remote HEAD with cached HEAD
  */
 async function needsUpdate(repoId: string, cloneUrls: string[], cache: RepoCache | null): Promise<boolean> {
-  if (!cache) return true;
+  console.log('[NEEDSUPDATE DEBUG] needsUpdate called for repoId:', repoId);
+  if (!cache) {
+    console.log('[NEEDSUPDATE DEBUG] No cache, needs update');
+    return true;
+  }
   
   // Check if cache is too old (older than 1 hour)
   const maxCacheAge = 60 * 60 * 1000; // 1 hour
   if (Date.now() - cache.lastUpdated > maxCacheAge) {
+    console.log('[NEEDSUPDATE DEBUG] Cache too old, needs update');
     return true;
   }
 
   try {
     // Check remote HEAD for the main branch
+    console.log('[NEEDSUPDATE DEBUG] Checking remote HEAD...');
     const cloneUrl = cloneUrls[0];
     if (!cloneUrl) return true;
 
@@ -187,14 +203,21 @@ async function needsUpdate(repoId: string, cloneUrls: string[], cache: RepoCache
       symrefs: true,
     });
 
+    console.log('[NEEDSUPDATE DEBUG] Available refs:', refs.map((r: any) => r.ref));
     const mainBranch = refs.find((ref: any) => 
       ref.ref === 'refs/heads/main' || ref.ref === 'refs/heads/master'
     );
+    console.log('[NEEDSUPDATE DEBUG] Found main branch:', mainBranch);
 
-    if (!mainBranch) return true;
+    if (!mainBranch) {
+      console.log('[NEEDSUPDATE DEBUG] No main/master branch found, needs update');
+      return true;
+    }
 
     // Compare with cached HEAD commit
-    return mainBranch.oid !== cache.headCommit;
+    const needsUpdate = mainBranch.oid !== cache.headCommit;
+    console.log('[NEEDSUPDATE DEBUG] Needs update:', needsUpdate, 'cached:', cache.headCommit, 'remote:', mainBranch.oid);
+    return needsUpdate;
   } catch (error) {
     console.warn(`Failed to check remote HEAD for ${repoId}:`, error);
     // If we can't check remote, assume we need update if cache is old
@@ -453,9 +476,18 @@ const ensureShallowClone = async ({
       sendProgress(progress.phase, progress.loaded, progress.total);
     };
 
+    // Get remote URL for fetch operation
+    const remotes = await git.listRemotes({ dir });
+    const originRemote = remotes.find((r: any) => r.remote === 'origin');
+    
+    if (!originRemote || !originRemote.url) {
+      throw new Error('Origin remote not found or has no URL configured');
+    }
+    
     // Fetch the specific branch with shallow clone
     await git.fetch({
       dir,
+      url: originRemote.url,
       ref: targetBranch,
       depth: 1,
       singleBranch: true,
@@ -490,7 +522,7 @@ const ensureShallowClone = async ({
     console.error(`Shallow clone failed for ${repoId}:`, error);
     // If targetBranch wasn't assigned due to error, use fallback
     if (!targetBranch) {
-      targetBranch = branch || 'main';
+      targetBranch = branch || 'main'; // Will be resolved below
     }
     return {
       success: false,
@@ -721,8 +753,11 @@ async function getCommitCount({
 
 async function isRepoCloned(dir: string): Promise<boolean> {
   try {
-    await git.resolveRef({ dir, ref: 'HEAD' });
-    return true;
+    // Check if .git directory exists instead of using git.resolveRef
+    const fs = new LightningFS('nostr-git');
+    const gitDir = `${dir}/.git`;
+    const stat = await fs.promises.stat(gitDir);
+    return stat.isDirectory();
   } catch {
     return false;
   }
@@ -775,10 +810,18 @@ const ensureFullClone = async ({
   sendProgress(`Fetching commit history (depth: ${depth})...`);
 
   try {
+    // Get remote URL for fetch operation
+    const remotes = await git.listRemotes({ dir });
+    const originRemote = remotes.find((r: any) => r.remote === 'origin');
+    
+    if (!originRemote || !originRemote.url) {
+      throw new Error('Origin remote not found or has no URL configured');
+    }
+    
     // Fetch more history - unshallow the repository
     await git.fetch({
       dir,
-      remote: 'origin',
+      url: originRemote.url,
       ref: targetBranch,
       depth: Math.min(depth, 100), // Cap at 100 to prevent excessive downloads
       singleBranch: true,
@@ -964,6 +1007,273 @@ async function analyzePatchMerge({
 }
 
 /**
+ * Parse patch content to extract file changes
+ */
+function parsePatchContent(patchLines: string[]): Array<{
+  filepath: string;
+  type: 'add' | 'modify' | 'delete';
+  content: string;
+}> {
+  const changes: Array<{
+    filepath: string;
+    type: 'add' | 'modify' | 'delete';
+    content: string;
+  }> = [];
+  
+  let currentFile: string | null = null;
+  let currentContent: string[] = [];
+  let isInContent = false;
+  
+  for (const line of patchLines) {
+    // Detect file headers
+    if (line.startsWith('diff --git')) {
+      // Save previous file if exists
+      if (currentFile) {
+        changes.push({
+          filepath: currentFile,
+          type: 'modify', // Default to modify, will be refined
+          content: currentContent.join('\n')
+        });
+      }
+      
+      // Extract file path from diff header
+      const match = line.match(/diff --git a\/(.*) b\/(.*)/);
+      currentFile = match ? match[2] : null;
+      currentContent = [];
+      isInContent = false;
+    } else if (line.startsWith('+++') && currentFile) {
+      // Start of new file content
+      isInContent = true;
+    } else if (line.startsWith('@@') && currentFile) {
+      // Hunk header - content follows
+      isInContent = true;
+    } else if (isInContent && currentFile) {
+      // Collect content lines (skip diff metadata)
+      if (line.startsWith('+') && !line.startsWith('+++')) {
+        currentContent.push(line.substring(1)); // Remove + prefix
+      } else if (!line.startsWith('-') && !line.startsWith('\\')) {
+        currentContent.push(line.startsWith(' ') ? line.substring(1) : line);
+      }
+    }
+  }
+  
+  // Save last file
+  if (currentFile) {
+    changes.push({
+      filepath: currentFile,
+      type: 'modify',
+      content: currentContent.join('\n')
+    });
+  }
+  
+  return changes;
+}
+
+/**
+ * Apply a patch to the repository and push to all remotes
+ */
+async function applyPatchAndPush({
+  repoId,
+  patchData,
+  targetBranch,
+  mergeCommitMessage,
+  authorName,
+  authorEmail,
+  onProgress
+}: {
+  repoId: string;
+  patchData: {
+    id: string;
+    commits: Array<{ oid: string; message: string; author: { name: string; email: string } }>;
+    baseBranch: string;
+    rawContent: string;
+  };
+  targetBranch?: string;
+  mergeCommitMessage?: string;
+  authorName: string;
+  authorEmail: string;
+  onProgress?: (step: string, progress: number) => void;
+}): Promise<{
+  success: boolean;
+  error?: string;
+  mergeCommitOid?: string;
+  pushedRemotes?: string[];
+  skippedRemotes?: string[];
+  warning?: string;
+}> {
+  const progress = onProgress || (() => {});
+  
+  try {
+    const dir = `${rootDir}/${repoId}`;
+    progress('Initializing merge...', 0);
+    
+    // Use robust multi-fallback branch resolution
+    const effectiveTargetBranch = await resolveRobustBranchInWorker(dir, targetBranch);
+    progress('Branch resolved', 10);
+    
+    // Ensure we have full clone for merge operations
+    await ensureFullClone({ repoId, branch: effectiveTargetBranch });
+    progress('Repository prepared', 20);
+    
+    // Check if patch can be merged cleanly first
+    const mergeAnalysis = await analyzePatchMerge({
+      repoId,
+      patchData,
+      targetBranch: effectiveTargetBranch
+    });
+    
+    if (!mergeAnalysis.canMerge) {
+      return {
+        success: false,
+        error: mergeAnalysis.hasConflicts 
+          ? `Merge conflicts detected in files: ${mergeAnalysis.conflictFiles.join(', ')}`
+          : mergeAnalysis.errorMessage || 'Patch cannot be merged'
+      };
+    }
+    
+    progress('Merge analysis complete', 30);
+    
+    // Checkout target branch
+    await git.checkout({ dir, ref: effectiveTargetBranch });
+    progress('Checked out target branch', 40);
+    
+    // Apply the patch using git apply
+    try {
+      // For now, we'll use a simpler approach: parse the patch and apply changes manually
+      // This is a simplified implementation - in production you'd want more robust patch parsing
+      
+      // Parse patch content to extract file changes
+      const patchLines = patchData.rawContent.split('\n');
+      const fileChanges = parsePatchContent(patchLines);
+      
+      // Apply each file change
+      for (const change of fileChanges) {
+        if (change.type === 'modify' || change.type === 'add') {
+          await git.writeBlob({ dir, blob: change.content });
+          await git.add({ dir, filepath: change.filepath });
+        } else if (change.type === 'delete') {
+          await git.remove({ dir, filepath: change.filepath });
+        }
+      }
+      
+      progress('Patch applied', 60);
+      
+      // Get status to verify changes
+      const status = await git.statusMatrix({ dir });
+      const hasChanges = status.some(([, , worktreeStatus]: [string, number, number]) => worktreeStatus !== 0);
+      
+      if (!hasChanges) {
+        return {
+          success: false,
+          error: 'No changes to apply - patch may already be merged or invalid'
+        };
+      }
+      
+      progress('Changes staged', 70);
+      
+      // Create merge commit
+      const defaultMessage = `Merge patch: ${patchData.id.slice(0, 8)}`;
+      const commitMessage = mergeCommitMessage || defaultMessage;
+      
+      const mergeCommitOid = await git.commit({
+        dir,
+        message: commitMessage,
+        author: {
+          name: authorName,
+          email: authorEmail
+        }
+      });
+      
+      progress('Merge commit created', 80);
+      
+      // Get all remotes
+      const remotes = await git.listRemotes({ dir });
+      const pushedRemotes: string[] = [];
+      const skippedRemotes: string[] = [];
+      
+      console.log(`Found ${remotes.length} remotes:`, remotes);
+      
+      // Check if any remotes are configured
+      if (remotes.length === 0) {
+        console.warn('No remotes configured for repository - merge commit created locally only');
+        return {
+          success: true,
+          mergeCommitOid,
+          pushedRemotes: [],
+          skippedRemotes: [],
+          warning: 'No remotes configured - changes only applied locally'
+        };
+      }
+      
+      // Check if any remotes have valid URLs
+      const validRemotes = remotes.filter((remote: any) => remote.url && remote.url.trim() !== '');
+      if (validRemotes.length === 0) {
+        console.warn('No remotes with valid URLs found - merge commit created locally only');
+        return {
+          success: true,
+          mergeCommitOid,
+          pushedRemotes: [],
+          skippedRemotes: remotes.map((r: any) => r.remote),
+          warning: 'No valid remote URLs - changes only applied locally'
+        };
+      }
+      
+      // Push to all remotes with proper URL handling
+      for (const remote of remotes) {
+        try {
+          console.log(`Attempting to push to remote: ${remote.remote} (${remote.url})`);
+          
+          // Validate remote has URL
+          if (!remote.url) {
+            console.warn(`Remote ${remote.remote} has no URL configured`);
+            skippedRemotes.push(remote.remote);
+            continue;
+          }
+          
+          // Use the remote URL to avoid "remote OR url" error
+          await git.push({
+            dir,
+            url: remote.url,
+            ref: effectiveTargetBranch,
+            // Include authentication if needed (this would need to be configured)
+            // onAuth: () => ({ username: 'token', password: authToken })
+          });
+          
+          console.log(`Successfully pushed to ${remote.remote}`);
+          pushedRemotes.push(remote.remote);
+        } catch (pushError) {
+          console.warn(`Failed to push to remote ${remote.remote} (${remote.url}):`, pushError);
+          skippedRemotes.push(remote.remote);
+        }
+      }
+      
+      progress('Push complete', 100);
+      
+      // No cleanup needed for this approach
+      
+      return {
+        success: true,
+        mergeCommitOid,
+        pushedRemotes,
+        skippedRemotes
+      };
+      
+    } catch (applyError: any) {
+      return {
+        success: false,
+        error: `Failed to apply patch: ${applyError instanceof Error ? applyError.message : String(applyError)}`
+      };
+    }
+    
+  } catch (error: any) {
+    return {
+      success: false,
+      error: `Merge operation failed: ${error instanceof Error ? error.message : String(error)}`
+    };
+  }
+}
+
+/**
  * Clone and fork a repository
  */
 const cloneAndFork = async ({
@@ -989,7 +1299,17 @@ const cloneAndFork = async ({
   const remoteUrl = await createRemoteRepo(targetHost, targetToken, targetUsername, targetRepo);
 
   //await git.addRemote({ dir, remote: 'origin', url: remoteUrl });
-  await git.push({ dir, remote: 'origin', ref: 'main', force: true });
+  // Get origin remote URL for push
+  const remotes = await git.listRemotes({ dir });
+  const originRemote = remotes.find((r: any) => r.remote === 'origin');
+  
+  if (originRemote && originRemote.url) {
+    // Use robust branch resolution instead of hardcoded 'main'
+    const resolvedBranch = await resolveRobustBranchInWorker(dir);
+    await git.push({ dir, url: originRemote.url, ref: resolvedBranch, force: true });
+  } else {
+    console.warn('Origin remote not found or has no URL, skipping push');
+  }
 
   const event = finalizeEvent({
     kind: 34,
@@ -1050,5 +1370,6 @@ expose({
   getCommitHistory,
   getCommitCount,
   deleteRepo,
-  analyzePatchMerge
+  analyzePatchMerge,
+  applyPatchAndPush
 });

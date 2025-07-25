@@ -234,12 +234,12 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
       try {
         targetBranch = await detectDefaultBranch(opts.repoEvent);
       } catch (error) {
-        console.warn('Failed to detect default branch, using main:', error);
-        targetBranch = 'main';
+        console.warn('Failed to detect default branch, will use robust resolution after clone:', error);
+        targetBranch = 'main'; // Temporary, will be resolved robustly after clone
       }
     } else {
       // For initial clone, try common defaults and let git figure it out
-      targetBranch = 'main'; // Start with main, will be corrected after clone
+      targetBranch = 'main'; // Temporary start, will be resolved robustly after clone
     }
   }
   
