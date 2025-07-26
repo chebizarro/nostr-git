@@ -281,6 +281,100 @@ async function needsUpdate(repoId: string, cloneUrls: string[], cache: RepoCache
 }
 
 /**
+ * Sync local repository with remote HEAD
+ * This ensures the local repo always points to the latest remote HEAD
+ */
+async function syncWithRemote({
+  repoId,
+  cloneUrls,
+  branch
+}: {
+  repoId: string;
+  cloneUrls: string[];
+  branch?: string;
+}) {
+  const dir = `${rootDir}/${repoId}`;
+  
+  try {
+    // Check if repo exists locally
+    const isCloned = await isRepoCloned(dir);
+    if (!isCloned) {
+      throw new Error('Repository not cloned locally. Clone first before syncing.');
+    }
+    
+    // Get the target branch using robust resolution
+    const targetBranch = branch || await resolveRobustBranchInWorker(dir);
+    
+    // Fetch latest changes from remote
+    const cloneUrl = cloneUrls[0];
+    if (!cloneUrl) {
+      throw new Error('No clone URL available');
+    }
+    
+    await git.fetch({
+      dir,
+      url: cloneUrl,
+      ref: targetBranch,
+      singleBranch: false,
+      depth: repoDataLevels.get(repoId) === 'full' ? undefined : 50
+    });
+    
+    // Get remote commit
+    const remoteRef = `refs/remotes/origin/${targetBranch}`;
+    const remoteCommit = await git.resolveRef({ dir, ref: remoteRef });
+    
+    // Update local branch to match remote
+    await git.writeRef({
+      dir,
+      ref: `refs/heads/${targetBranch}`,
+      value: remoteCommit,
+      force: true
+    });
+    
+    // Always update HEAD to point to the synced branch
+    // This ensures the working directory reflects the latest remote state
+    await git.writeRef({
+      dir,
+      ref: 'HEAD',
+      value: `ref: refs/heads/${targetBranch}`,
+      symbolic: true,
+      force: true
+    });
+    
+    // Update cache
+    const branches = await git.listBranches({ dir });
+    const newCache: RepoCache = {
+      repoId,
+      lastUpdated: Date.now(),
+      headCommit: remoteCommit,
+      dataLevel: repoDataLevels.get(repoId) || 'shallow',
+      branches: branches.map((name: string) => ({ 
+        name, 
+        commit: name === targetBranch ? remoteCommit : remoteCommit 
+      })),
+      cloneUrls,
+    };
+    
+    await cacheManager.setRepoCache(newCache);
+    
+    return {
+      success: true,
+      repoId,
+      branch: targetBranch,
+      headCommit: remoteCommit,
+      synced: true
+    };
+  } catch (error) {
+    console.error(`Failed to sync ${repoId} with remote:`, error);
+    return {
+      success: false,
+      repoId,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+/**
  * Smart repository initialization that checks cache and only updates when necessary
  */
 async function smartInitializeRepo({
@@ -324,24 +418,72 @@ async function smartInitializeRepo({
       };
     }
 
-    // Need to fetch from remote
+    // Need to fetch from remote or sync local repo
     sendProgress('Checking repository status');
     
     const dir = `${rootDir}/${repoId}`;
     const isAlreadyCloned = await isRepoCloned(dir);
     
     if (isAlreadyCloned && !forceUpdate) {
-      // Repository exists locally, just update cache
+      // Repository exists locally, sync with remote
       try {
-        const headCommit = await git.resolveRef({ dir, ref: 'HEAD' });
+        sendProgress('Syncing with remote');
+        
+        // Fetch latest changes from remote
+        const cloneUrl = cloneUrls[0];
+        if (cloneUrl) {
+          await git.fetch({
+            dir,
+            url: cloneUrl,
+            ref: await resolveRobustBranchInWorker(dir),
+            singleBranch: false, // Fetch all branches
+            depth: repoDataLevels.get(repoId) === 'full' ? undefined : 50
+          });
+        }
+        
+        // Get the main branch name using robust resolution
+        const mainBranch = await resolveRobustBranchInWorker(dir);
+        
+        // Update local branch to match remote HEAD
+        const remoteRef = `refs/remotes/origin/${mainBranch}`;
+        let remoteCommit: string;
+        
+        try {
+          remoteCommit = await git.resolveRef({ dir, ref: remoteRef });
+          
+          // Reset local branch to match remote
+          await git.writeRef({
+            dir,
+            ref: `refs/heads/${mainBranch}`,
+            value: remoteCommit
+          });
+          
+          // Update HEAD to point to the updated branch
+          await git.writeRef({
+            dir,
+            ref: 'HEAD',
+            value: `ref: refs/heads/${mainBranch}`,
+            symbolic: true
+          });
+          
+          sendProgress('Local repository synced with remote');
+        } catch (error) {
+          console.warn(`Failed to sync with remote for ${repoId}:`, error);
+          // Fall back to using local HEAD if remote sync fails
+          remoteCommit = await git.resolveRef({ dir, ref: 'HEAD' });
+        }
+        
         const branches = await git.listBranches({ dir });
         
         const newCache: RepoCache = {
           repoId,
           lastUpdated: Date.now(),
-          headCommit,
+          headCommit: remoteCommit,
           dataLevel: repoDataLevels.get(repoId) || 'shallow',
-          branches: branches.map((name: string) => ({ name, commit: headCommit })),
+          branches: branches.map((name: string) => ({ 
+            name, 
+            commit: name === mainBranch ? remoteCommit : remoteCommit 
+          })),
           cloneUrls,
         };
         
@@ -357,9 +499,10 @@ async function smartInitializeRepo({
           dataLevel: newCache.dataLevel,
           branches: newCache.branches,
           headCommit: newCache.headCommit,
+          synced: true
         };
       } catch (error) {
-        console.warn(`Failed to read existing repo ${repoId}, re-cloning:`, error);
+        console.warn(`Failed to sync existing repo ${repoId}, re-cloning:`, error);
       }
     }
 
@@ -1751,6 +1894,7 @@ expose({
   cloneAndFork, 
   clone, 
   smartInitializeRepo,
+  syncWithRemote,
   initializeRepo,
   ensureShallowClone,
   ensureFullClone,

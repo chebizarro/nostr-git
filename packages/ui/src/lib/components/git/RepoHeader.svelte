@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components";
   import { cn } from "$lib/utils";
-  import { GitBranch, Star, Eye, GitFork } from "@lucide/svelte";
+  import { GitBranch, Star, Eye, GitFork, RotateCcw } from "@lucide/svelte";
   import type { RepoAnnouncementEvent } from "@nostr-git/shared-types";
   import { parseRepoAnnouncementEvent } from "@nostr-git/shared-types";
   import AuthStatusIndicator from "./AuthStatusIndicator.svelte";
@@ -13,12 +13,16 @@
     children,
     watchRepo,
     isRepoWatched,
+    refreshRepo,
+    isRefreshing = false,
   }: {
     event: RepoAnnouncementEvent;
     activeTab?: string;
     children?: any;
     watchRepo?: () => void;
     isRepoWatched: boolean;
+    refreshRepo?: () => Promise<void>;
+    isRefreshing?: boolean;
   } = $props();
   const parsed = parseRepoAnnouncementEvent(event);
   const name = parsed.name ?? "";
@@ -43,6 +47,16 @@
       <Button variant="outline" size="sm" class="gap-1 sm:gap-2 px-2 sm:px-3">
         <GitFork class="h-4 w-4" />
         <span class="hidden sm:inline">Fork</span>
+      </Button>
+      <Button 
+        variant="outline" 
+        size="sm" 
+        class="gap-1 sm:gap-2 px-2 sm:px-3" 
+        onclick={refreshRepo}
+        disabled={isRefreshing}
+      >
+        <RotateCcw class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''}" />
+        <span class="hidden sm:inline">{isRefreshing ? 'Syncing...' : 'Refresh'}</span>
       </Button>
     </div>
   </div>

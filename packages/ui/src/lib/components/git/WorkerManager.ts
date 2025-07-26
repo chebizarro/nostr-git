@@ -104,6 +104,18 @@ export class WorkerManager {
   }
 
   /**
+   * Sync local repository with remote HEAD
+   * Ensures the local repo always points to the latest remote HEAD
+   */
+  async syncWithRemote(params: {
+    repoId: string;
+    cloneUrls: string[];
+    branch?: string;
+  }): Promise<any> {
+    return this.execute('syncWithRemote', params);
+  }
+
+  /**
    * Get repository data level (refs, shallow, full)
    */
   async getRepoDataLevel(repoId: string): Promise<string> {
