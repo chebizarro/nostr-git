@@ -149,15 +149,7 @@
     };
   });
 
-  // Debug info for development
-  const debugInfo = $derived.by(() => ({
-    tokenCount: tokenList.length,
-    repoHosts: repoHosts,
-    matchingTokens: matchingTokens.length,
-    isMaintainer,
-    hasTokensForRepo,
-    currentUserPubkey: $pubkey ? $pubkey.slice(0, 8) + '...' : 'none'
-  }));
+
 </script>
 
 <div class="flex items-center gap-2">
@@ -176,20 +168,7 @@
     </Badge>
   {/if}
   
-  <!-- Debug Info (development only) -->
-  {#if import.meta.env.DEV}
-    <details class="text-xs text-muted-foreground">
-      <summary class="cursor-pointer hover:text-foreground">Debug</summary>
-      <div class="mt-1 p-2 bg-muted rounded text-xs space-y-1">
-        <div><strong>Total tokens:</strong> {debugInfo.tokenCount}</div>
-        <div><strong>Repo hosts:</strong> {debugInfo.repoHosts.join(', ') || 'none'}</div>
-        <div><strong>Matching tokens:</strong> {debugInfo.matchingTokens}</div>
-        <div><strong>Is maintainer:</strong> {debugInfo.isMaintainer}</div>
-        <div><strong>Has tokens for repo:</strong> {debugInfo.hasTokensForRepo}</div>
-        <div><strong>User pubkey:</strong> {debugInfo.currentUserPubkey}</div>
-      </div>
-    </details>
-  {/if}
+
   
   <!-- Refresh Button (always available for debugging) -->
   <Button 
@@ -211,8 +190,4 @@
   {/if}
 </div>
 
-<style>
-  details[open] summary {
-    margin-bottom: 0.25rem;
-  }
-</style>
+

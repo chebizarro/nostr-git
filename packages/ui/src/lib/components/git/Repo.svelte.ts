@@ -177,7 +177,7 @@ export class Repo {
         // Invalidate branch cache when repo state changes
         this.invalidateBranchCache();
         
-        console.log('✅ Repository State event processed in Repo class:', event.id, 'with', event.tags.length, 'tags');
+
       }
     });
 
