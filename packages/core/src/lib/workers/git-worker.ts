@@ -1040,7 +1040,7 @@ async function analyzePatchMerge({
     // Ensure we have at least shallow clone data
     await ensureShallowClone({ repoId, branch: effectiveTargetBranch });
     
-    // Reconstruct a minimal patch object for analysis
+    // Create patch object for analysis
     const patch = {
       id: patchData.id,
       commits: patchData.commits,
@@ -1060,6 +1060,8 @@ async function analyzePatchMerge({
       conflictDetails: [],
       upToDate: false,
       fastForward: false,
+      targetCommit: undefined,
+      remoteCommit: undefined,
       patchCommits: [],
       analysis: 'error',
       errorMessage: error instanceof Error ? error.message : 'Unknown error'
@@ -1068,7 +1070,7 @@ async function analyzePatchMerge({
 }
 
 /**
- * Parse patch content to extract file changes
+ * Parse patch content to extract file changes with unified diff format preserved
  */
 function parsePatchContent(patchLines: string[]): Array<{
   filepath: string;
@@ -1083,9 +1085,12 @@ function parsePatchContent(patchLines: string[]): Array<{
   
   let currentFile: string | null = null;
   let currentContent: string[] = [];
-  let isInContent = false;
+  let currentType: 'add' | 'modify' | 'delete' = 'modify';
+  let inFileDiff = false;
   
-  for (const line of patchLines) {
+  for (let i = 0; i < patchLines.length; i++) {
+    const line = patchLines[i];
+    
     // Skip undefined or null lines
     if (!line || typeof line !== 'string') {
       continue;
@@ -1094,10 +1099,10 @@ function parsePatchContent(patchLines: string[]): Array<{
     // Detect file headers
     if (line.startsWith('diff --git')) {
       // Save previous file if exists
-      if (currentFile) {
+      if (currentFile && currentContent.length > 0) {
         changes.push({
           filepath: currentFile,
-          type: 'modify', // Default to modify, will be refined
+          type: currentType,
           content: currentContent.join('\n')
         });
       }
@@ -1106,28 +1111,27 @@ function parsePatchContent(patchLines: string[]): Array<{
       const match = line.match(/diff --git a\/(.*) b\/(.*)/);
       currentFile = match ? match[2] : null;
       currentContent = [];
-      isInContent = false;
-    } else if (line.startsWith('+++') && currentFile) {
-      // Start of new file content
-      isInContent = true;
-    } else if (line.startsWith('@@') && currentFile) {
-      // Hunk header - content follows
-      isInContent = true;
-    } else if (isInContent && currentFile) {
-      // Collect content lines (skip diff metadata)
-      if (line.startsWith('+') && !line.startsWith('+++')) {
-        currentContent.push(line.substring(1)); // Remove + prefix
-      } else if (!line.startsWith('-') && !line.startsWith('\\')) {
-        currentContent.push(line.startsWith(' ') ? line.substring(1) : line);
-      }
+      currentType = 'modify'; // Default
+      inFileDiff = false;
+    } else if (line.startsWith('new file mode')) {
+      currentType = 'add';
+    } else if (line.startsWith('deleted file mode')) {
+      currentType = 'delete';
+    } else if (line.startsWith('---') && currentFile) {
+      // Start collecting the unified diff content
+      currentContent.push(line);
+      inFileDiff = true;
+    } else if (inFileDiff && currentFile) {
+      // Preserve the entire unified diff format
+      currentContent.push(line);
     }
   }
   
   // Save last file
-  if (currentFile) {
+  if (currentFile && currentContent.length > 0) {
     changes.push({
       filepath: currentFile,
-      type: 'modify',
+      type: currentType,
       content: currentContent.join('\n')
     });
   }
@@ -1250,13 +1254,6 @@ async function applyPatchAndPush(params: {
   warning?: string;
   pushErrors?: Array<{ remote: string; url: string; error: string; code: string; stack: string }>;
 }> {
-  console.log('🚀 WORKER ENTRY - applyPatchAndPush called with:', {
-    hasParams: !!params,
-    paramsType: typeof params,
-    paramsKeys: params ? Object.keys(params) : 'no params',
-    timestamp: new Date().toISOString()
-  });
-  
   // Destructure parameters from the params object
   const {
     repoId,
@@ -1267,14 +1264,6 @@ async function applyPatchAndPush(params: {
     authorEmail,
     onProgress
   } = params;
-  
-  console.log('🚀 WORKER ENTRY - Parameters destructured:', {
-    hasRepoId: !!repoId,
-    hasPatchData: !!patchData,
-    hasTargetBranch: !!targetBranch,
-    hasAuthorName: !!authorName,
-    hasAuthorEmail: !!authorEmail
-  });
   const progress = onProgress || (() => {});
   
   try {
@@ -1317,15 +1306,6 @@ async function applyPatchAndPush(params: {
       // This is a simplified implementation - in production you'd want more robust patch parsing
       
       // Validate patch data
-      console.log('🔧 Worker Debug - patchData received:', {
-        hasPatchData: !!patchData,
-        hasRawContent: !!patchData?.rawContent,
-        rawContentType: typeof patchData?.rawContent,
-        rawContentLength: patchData?.rawContent?.length,
-        rawContentPreview: patchData?.rawContent?.substring(0, 100),
-        patchDataKeys: patchData ? Object.keys(patchData) : 'no patchData'
-      });
-      
       if (!patchData.rawContent) {
         throw new Error('Patch rawContent is missing or undefined');
       }
@@ -1334,60 +1314,18 @@ async function applyPatchAndPush(params: {
         throw new Error(`Patch rawContent must be a string, got: ${typeof patchData.rawContent}`);
       }
       
-      console.log('🔧 Worker Debug - About to split patch content');
-      
       // Parse patch content to extract file changes
       const patchLines = patchData.rawContent.split('\n');
-      
-      console.log('🔧 Worker Debug - Patch lines created:', {
-        linesCount: patchLines.length,
-        firstLineType: typeof patchLines[0],
-        firstLineContent: patchLines[0]?.substring(0, 50)
-      });
-      
       const fileChanges = parsePatchContent(patchLines);
-      
-      console.log('🔧 Worker Debug - File changes parsed:', {
-        changesCount: fileChanges.length,
-        changes: fileChanges.map(change => ({
-          filepath: change.filepath,
-          type: change.type,
-          contentType: typeof change.content,
-          contentLength: change.content?.length,
-          contentPreview: change.content?.substring(0, 100),
-          hasContent: !!change.content
-        }))
-      });
       
       // Apply each file change
       for (let i = 0; i < fileChanges.length; i++) {
         const change = fileChanges[i];
         
-        console.log(`🔧 Worker Debug - Processing change ${i + 1}/${fileChanges.length}:`, {
-          filepath: change.filepath,
-          type: change.type,
-          contentType: typeof change.content,
-          contentLength: change.content?.length,
-          hasContent: !!change.content
-        });
-        
         if (change.type === 'modify' || change.type === 'add') {
           if (!change.content || typeof change.content !== 'string') {
-            console.error('🔧 Worker Debug - Invalid content for patch application:', {
-              filepath: change.filepath,
-              contentType: typeof change.content,
-              content: change.content
-            });
             throw new Error(`Invalid content for file ${change.filepath}: expected string, got ${typeof change.content}`);
           }
-          
-          console.log(`🔧 Worker Debug - About to apply patch to ${change.filepath}`);
-          console.log(`🔧 Worker Debug - Patch content preview:`, {
-            contentType: typeof change.content,
-            contentLength: change.content?.length,
-            contentPreview: change.content?.substring(0, 200),
-            isUnifiedDiff: change.content?.includes('@@') && change.content?.includes('+++'),
-          });
           
           // Get the filesystem from the isomorphic-git provider
           const fs = (git as any).fs || (git as any).options?.fs;
@@ -1402,53 +1340,39 @@ async function applyPatchAndPush(params: {
           if (pathParts.length > 1) {
             const dirPath = pathParts.slice(0, -1).join('/');
             const fullDirPath = `${dir}/${dirPath}`;
-            console.log(`🔧 Worker Debug - Ensuring directory exists: ${fullDirPath}`);
             
             try {
               // Create directory structure if it doesn't exist
               await fs.promises.mkdir(fullDirPath, { recursive: true });
             } catch (error) {
               // Directory might already exist, that's fine
-              console.log(`🔧 Worker Debug - Directory creation result:`, error);
             }
           }
           
           let finalContent: string = '';
           
           if (change.type === 'add') {
-            // For new files, the patch content should be the entire file content
-            // But we need to extract it from the unified diff format
-            console.log(`🔧 Worker Debug - Processing new file addition`);
+            // For new files, extract content from the unified diff format
             finalContent = extractNewFileContentFromPatch(change.content);
           } else {
-            // For modifications, we need to apply the patch to the existing file
-            console.log(`🔧 Worker Debug - Processing file modification`);
-            
+            // For modifications, apply the patch to the existing file
             let existingContent = '';
             try {
               existingContent = await fs.promises.readFile(fullPath, 'utf8');
-              console.log(`🔧 Worker Debug - Read existing file, length: ${existingContent.length}`);
               // Apply the unified diff patch to the existing content
               finalContent = applyUnifiedDiffPatch(existingContent, change.content);
             } catch (error) {
-              console.log(`🔧 Worker Debug - File doesn't exist yet, treating as new file`);
               // File doesn't exist, treat as new file
               finalContent = extractNewFileContentFromPatch(change.content);
             }
           }
           
-          console.log(`🔧 Worker Debug - Writing final content to: ${fullPath}`);
-          console.log(`🔧 Worker Debug - Final content length: ${finalContent.length}`);
           await fs.promises.writeFile(fullPath, finalContent, 'utf8');
-          console.log(`🔧 Worker Debug - File write successful for ${change.filepath}`);
           
           // Stage the file changes
           await git.add({ dir, filepath: change.filepath });
-          console.log(`🔧 Worker Debug - git.add successful for ${change.filepath}`);
         } else if (change.type === 'delete') {
-          console.log(`🔧 Worker Debug - About to remove ${change.filepath}`);
           await git.remove({ dir, filepath: change.filepath });
-          console.log(`🔧 Worker Debug - git.remove successful for ${change.filepath}`);
         }
       }
       
@@ -1560,7 +1484,6 @@ async function applyPatchAndPush(params: {
             ...(authCallback && { onAuth: authCallback }),
           });
           
-          console.log(`Successfully pushed to ${remote.remote}`);
           pushedRemotes.push(remote.remote);
         } catch (pushError: any) {
           const errorMsg = pushError instanceof Error ? pushError.message : String(pushError);
@@ -1571,14 +1494,6 @@ async function applyPatchAndPush(params: {
             code: pushError.code || 'UNKNOWN',
             stack: pushError.stack || 'No stack trace'
           };
-          
-          console.error(`Failed to push to remote ${remote.remote} (${remote.url}):`, {
-            error: errorMsg,
-            code: pushError.code,
-            data: pushError.data,
-            caller: pushError.caller,
-            fullError: pushError
-          });
           
           pushErrors.push(errorDetails);
           skippedRemotes.push(remote.remote);

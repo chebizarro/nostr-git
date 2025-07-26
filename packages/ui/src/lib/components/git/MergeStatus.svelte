@@ -177,10 +177,14 @@
                 <li>• Or proceed with merge and use force push to update remote</li>
               </ul>
             </div>
-            {#if result.remoteCommit && result.targetCommit}
+            {#if result.targetCommit}
               <div class="text-xs text-muted-foreground">
                 <span class="font-medium">Local:</span> {result.targetCommit.slice(0, 8)}<br>
-                <span class="font-medium">Remote:</span> {result.remoteCommit.slice(0, 8)}
+                {#if result.remoteCommit}
+                  <span class="font-medium">Remote:</span> {result.remoteCommit.slice(0, 8)}
+                {:else}
+                  <span class="font-medium">Remote:</span> <span class="text-muted-foreground">unknown</span>
+                {/if}
               </div>
             {/if}
           </div>

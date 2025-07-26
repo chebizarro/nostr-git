@@ -88,16 +88,20 @@ export async function analyzePatchMergeability(
   patch: Patch | SimplifiedPatch,
   targetBranch?: string
 ): Promise<MergeAnalysisResult> {
+  // Declare variables outside try block to ensure they're in scope for catch block
+  let remoteCommit: string | undefined;
+  let targetCommit: string | undefined;
+  let patchCommits: string[] = [];
+  
   try {
-    // Use the already-resolved target branch (no need to resolve again)
-    const resolvedBranch = targetBranch || 'master'; // Branch is already resolved in the worker layer, fallback to master
+    // Use robust multi-fallback branch resolution
+    const resolvedBranch = await resolveRobustBranchInMergeAnalysis(git, repoDir, targetBranch);
     
     // Get remote URL for fetch operation
     const remotes = await git.listRemotes({ dir: repoDir });
     const originRemote = remotes.find((r: any) => r.remote === 'origin');
     
     let remoteDivergence = false;
-    let remoteCommit: string | undefined;
     
     if (originRemote && originRemote.url) {
       try {
@@ -127,7 +131,7 @@ export async function analyzePatchMergeability(
     }
 
     // Get current HEAD of local target branch
-    const targetCommit = await git.resolveRef({
+    targetCommit = await git.resolveRef({
       dir: repoDir,
       ref: `refs/heads/${resolvedBranch}`
     });
@@ -155,7 +159,7 @@ export async function analyzePatchMergeability(
     }
 
     // Parse patch to get commit information
-    const patchCommits = patch.commits.map(c => c.oid);
+    patchCommits = patch.commits.map(c => c.oid);
     
     if (patchCommits.length === 0) {
       return {
@@ -166,6 +170,7 @@ export async function analyzePatchMergeability(
         upToDate: false,
         fastForward: false,
         targetCommit,
+        remoteCommit,
         patchCommits: [],
         analysis: 'error',
         errorMessage: 'No commits found in patch'
@@ -183,12 +188,16 @@ export async function analyzePatchMergeability(
         upToDate: true,
         fastForward: false,
         targetCommit,
+        remoteCommit,
         patchCommits,
         analysis: 'up-to-date'
       };
     }
 
     // Find merge base between patch and target
+    if (!targetCommit) {
+      throw new Error('Failed to resolve target commit');
+    }
     const mergeBase = await findMergeBase(git, repoDir, patchCommits[0], targetCommit);
     
     // Check if it's a fast-forward merge
@@ -204,6 +213,7 @@ export async function analyzePatchMergeability(
         fastForward: true,
         mergeBase,
         targetCommit,
+        remoteCommit,
         patchCommits,
         analysis: 'clean'
       };
@@ -252,7 +262,9 @@ export async function analyzePatchMergeability(
       conflictDetails: [],
       upToDate: false,
       fastForward: false,
-      patchCommits: [],
+      targetCommit,
+      remoteCommit,
+      patchCommits,
       analysis: 'error',
       errorMessage: error instanceof Error ? error.message : 'Unknown error'
     };

@@ -52,10 +52,50 @@ export class PatchManager {
   }
 
   /**
-   * Get cached merge analysis result for a patch
+   * Get merge analysis result for a patch (cached or fresh)
    */
   async getMergeAnalysis(patch: PatchEvent, targetBranch: string, repoId: string): Promise<MergeAnalysisResult | null> {
-    return await this.cacheManager.get(patch, targetBranch, repoId);
+    // First try to get cached result
+    const cachedResult = await this.cacheManager.get(patch, targetBranch, repoId);
+    
+    // If we have a valid cached result that's not an error, return it
+    if (cachedResult && cachedResult.analysis !== 'error') {
+      return cachedResult;
+    }
+    
+    // If no cached result or cached result is an error, perform fresh analysis
+    try {
+      const freshResult = await this.analyzePatch(patch, targetBranch, repoId);
+      
+      if (freshResult) {
+        // Cache the fresh result
+        await this.cacheManager.set(patch, targetBranch, repoId, freshResult);
+      }
+      
+      return freshResult;
+    } catch (error) {
+      console.error('PatchManager fresh analysis failed:', error);
+      
+      // Return cached error result if we have one, otherwise create new error result
+      if (cachedResult && cachedResult.analysis === 'error') {
+        return cachedResult;
+      }
+      
+      // Create new error result
+      const errorResult: MergeAnalysisResult = {
+        canMerge: false,
+        hasConflicts: false,
+        conflictFiles: [],
+        conflictDetails: [],
+        upToDate: false,
+        fastForward: false,
+        patchCommits: [],
+        analysis: 'error',
+        errorMessage: error instanceof Error ? error.message : 'Unknown analysis error'
+      };
+      
+      return errorResult;
+    }
   }
 
   /**
@@ -96,7 +136,7 @@ export class PatchManager {
   /**
    * Analyze a single patch for merge conflicts
    */
-  private async analyzePatch(
+  async analyzePatch(
     patch: PatchEvent,
     targetBranch: string,
     repoId: string
