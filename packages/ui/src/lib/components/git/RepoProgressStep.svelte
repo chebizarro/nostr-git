@@ -27,7 +27,7 @@
 
 <div class="space-y-6">
   <div class="space-y-4">
-    <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">
+    <h2 class="text-xl font-semibold text-gray-100">
       {#if isCreating}
         Creating Repository...
       {:else if isComplete}
@@ -40,15 +40,15 @@
     </h2>
     
     {#if isCreating}
-      <p class="text-sm text-gray-600 dark:text-gray-400">
+      <p class="text-sm text-gray-300">
         Please wait while we set up your repository.
       </p>
     {:else if isComplete}
-      <p class="text-sm text-green-600 dark:text-green-400">
+      <p class="text-sm text-green-400">
         Your repository has been created and is ready to use.
       </p>
     {:else if hasErrors}
-      <p class="text-sm text-red-600 dark:text-red-400">
+      <p class="text-sm text-red-400">
         There was an error creating your repository. Please try again.
       </p>
     {/if}
@@ -58,8 +58,8 @@
   {#if isCreating || progress.length > 0}
     <div class="space-y-2">
       <div class="flex justify-between text-sm">
-        <span class="text-gray-600 dark:text-gray-400">Progress</span>
-        <span class="text-gray-600 dark:text-gray-400">{completedSteps}/{totalSteps}</span>
+        <span class="text-gray-400">Progress</span>
+        <span class="text-gray-400">{completedSteps}/{totalSteps}</span>
       </div>
       <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
         <div 
@@ -82,13 +82,13 @@
           <div class="flex-shrink-0 mt-0.5">
             {#if step.error}
               <div class="w-5 h-5 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
-                <svg class="w-3 h-3 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                <svg class="w-3 h-3 text-red-400" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
                 </svg>
               </div>
             {:else if step.completed}
               <div class="w-5 h-5 rounded-full bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
-                <svg class="w-3 h-3 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                <svg class="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
                 </svg>
               </div>
@@ -105,14 +105,14 @@
 
           <!-- Step Content -->
           <div class="flex-1 min-w-0">
-            <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
+            <div class="text-sm font-medium text-gray-100">
               {step.step}
             </div>
-            <div class="text-sm text-gray-600 dark:text-gray-400">
+            <div class="text-sm text-gray-400">
               {step.message}
             </div>
             {#if step.error}
-              <div class="text-sm text-red-600 dark:text-red-400 mt-1">
+              <div class="text-sm text-red-400 mt-1">
                 Error: {step.error}
               </div>
             {/if}

@@ -77,10 +77,10 @@
 
 <div class="space-y-6">
   <div class="space-y-4">
-    <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">
+    <h2 class="text-xl font-semibold text-gray-100">
       Advanced Settings
     </h2>
-    <p class="text-sm text-gray-600 dark:text-gray-400">
+    <p class="text-sm text-gray-300">
       Configure additional options for your repository.
     </p>
   </div>
@@ -88,11 +88,11 @@
   <div class="space-y-6">
     <!-- Author Information -->
     <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
-      <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Author Information</h3>
+      <h3 class="text-lg font-medium text-gray-100 mb-4">Author Information</h3>
       
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label for="author-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <label for="author-name" class="block text-sm font-medium text-gray-300 mb-2">
             Author Name *
           </label>
           <input
@@ -107,7 +107,7 @@
         </div>
         
         <div>
-          <label for="author-email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <label for="author-email" class="block text-sm font-medium text-gray-300 mb-2">
             Author Email *
           </label>
           <input
@@ -125,12 +125,12 @@
 
     <!-- NIP-34 Repository Metadata -->
     <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
-      <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Repository Metadata (NIP-34)</h3>
+      <h3 class="text-lg font-medium text-gray-100 mb-4">Repository Metadata (NIP-34)</h3>
       
       <div class="space-y-4">
         <!-- Web URL -->
         <div>
-          <label for="web-url" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <label for="web-url" class="block text-sm font-medium text-gray-300 mb-2">
             Web URL
           </label>
           <input
@@ -141,14 +141,14 @@
             placeholder="https://github.com/user/repo"
             class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
           />
-          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          <p class="mt-1 text-sm text-gray-400">
             URL for browsing the repository online
           </p>
         </div>
 
         <!-- Clone URL -->
         <div>
-          <label for="clone-url" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <label for="clone-url" class="block text-sm font-medium text-gray-300 mb-2">
             Clone URL
           </label>
           <input
@@ -159,14 +159,14 @@
             placeholder="https://github.com/user/repo.git"
             class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
           />
-          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          <p class="mt-1 text-sm text-gray-400">
             Git clone URL for the repository
           </p>
         </div>
 
         <!-- Tags -->
         <div>
-          <label for="tags" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <label for="tags" class="block text-sm font-medium text-gray-300 mb-2">
             Tags/Topics
           </label>
           <input
@@ -177,14 +177,14 @@
             placeholder="javascript, svelte, web-development"
             class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
           />
-          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          <p class="mt-1 text-sm text-gray-400">
             Comma-separated list of tags or topics for this repository
           </p>
         </div>
 
         <!-- Maintainers -->
         <div>
-          <label for="maintainers" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <label for="maintainers" class="block text-sm font-medium text-gray-300 mb-2">
             Additional Maintainers
           </label>
           <input
@@ -195,14 +195,14 @@
             placeholder="npub1abc..., npub1def..."
             class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
           />
-          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          <p class="mt-1 text-sm text-gray-400">
             Comma-separated list of additional maintainer public keys (npub format)
           </p>
         </div>
 
         <!-- Relays -->
         <div>
-          <label for="relays" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <label for="relays" class="block text-sm font-medium text-gray-300 mb-2">
             Preferred Relays
           </label>
           <input
@@ -213,7 +213,7 @@
             placeholder="wss://relay1.example.com, wss://relay2.example.com"
             class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
           />
-          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          <p class="mt-1 text-sm text-gray-400">
             Comma-separated list of preferred relay URLs for this repository
           </p>
         </div>
