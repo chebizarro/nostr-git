@@ -38,9 +38,11 @@ interface CommitCardProps {
   commit: GitCommitData;
   onReact?: (commitId: string, type: 'heart') => void;
   onComment?: (commitId: string, comment: string) => void;
+  onNavigate?: (commitId: string) => void;
+  href?: string; // Optional direct href for navigation
 }
 
-let { commit, onReact, onComment }: CommitCardProps = $props();
+let { commit, onReact, onComment, onNavigate, href }: CommitCardProps = $props();
 
 let showComments = $state(false);
 let newComment = $state('');
@@ -75,6 +77,17 @@ function handleComment() {
 // Get initials for avatar fallback
 function getInitials(name: string): string {
   return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+}
+
+// Handle commit card click for navigation
+function handleCommitClick(event: MouseEvent | KeyboardEvent) {
+  event.preventDefault();
+  
+  if (href) {
+    window.location.href = href;
+  } else if (onNavigate) {
+    onNavigate(commit.oid);
+  }
 }
 </script>
 
@@ -131,7 +144,18 @@ function getInitials(name: string): string {
           </DropdownMenu>
         </div>
         
-        <div class="mb-3">
+        <div 
+          class="mb-3 cursor-pointer hover:bg-muted/30 -mx-2 px-2 py-1 rounded transition-colors"
+          onclick={handleCommitClick}
+          role="button"
+          tabindex={0}
+          onkeydown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleCommitClick(e);
+            }
+          }}
+        >
           <h3 class="font-medium text-sm leading-tight mb-1 truncate">
             {commit.commit.message}
           </h3>

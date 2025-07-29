@@ -321,7 +321,7 @@ export class Repo {
   }
 
   get #maintainers(): string[] {
-    return this.repo?.maintainers || [];
+    return this.repo?.maintainers || [this.repo?.owner || ""];
   }
 
   // Public API for getting merge analysis result (requires patch object for proper validation)

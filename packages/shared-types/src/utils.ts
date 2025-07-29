@@ -181,10 +181,49 @@ export function createRepoStateEvent(opts: {
   if (opts.head) tags.push(["HEAD", `ref: refs/heads/${opts.head}`]);
   return {
     kind: 30618,
-    content: "",
     tags,
+    content: "",
     created_at: opts.created_at ?? Math.floor(Date.now() / 1000),
   } as RepoStateEvent;
+}
+
+/**
+ * Create a repository state event for a cloned repository
+ * This announces the cloned repository to the Nostr network
+ */
+export function createClonedRepoStateEvent(
+  repoId: string,
+  cloneUrl: string,
+  branches: string[] = [],
+  tags: string[] = [],
+  maintainers: string[] = []
+): Partial<RepoStateEvent> {
+  const eventTags: string[][] = [
+    ["d", repoId],
+    ["clone", cloneUrl],
+  ];
+
+  // Add branch references
+  branches.forEach(branch => {
+    eventTags.push(["r", `refs/heads/${branch}`]);
+  });
+
+  // Add tag references
+  tags.forEach(tag => {
+    eventTags.push(["r", `refs/tags/${tag}`]);
+  });
+
+  // Add maintainers
+  maintainers.forEach(maintainer => {
+    eventTags.push(["maintainer", maintainer]);
+  });
+
+  return {
+    kind: 30618,
+    tags: eventTags,
+    content: "",
+    created_at: Math.floor(Date.now() / 1000),
+  } as Partial<RepoStateEvent>;
 }
 
 /**

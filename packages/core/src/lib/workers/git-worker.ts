@@ -2168,6 +2168,690 @@ async function getLicenseTemplate(template: string, authorName: string): Promise
   return templates[template] || '';
 }
 
+/**
+ * Clone a remote repository with progress tracking
+ * Supports both shallow and full clones with authentication
+ */
+async function cloneRemoteRepo(options: {
+  url: string;
+  depth?: number;
+  dir: string;
+  token?: string;
+  onProgress?: (stage: string, pct?: number) => void;
+}): Promise<void> {
+  const { url, depth, dir, token, onProgress } = options;
+  
+  try {
+    onProgress?.('Validating repository URL...', 0);
+    
+    // Validate URL format
+    let repoUrl: URL;
+    try {
+      repoUrl = new URL(url);
+    } catch (error) {
+      throw new Error(`Invalid repository URL: ${url}`);
+    }
+    
+    // Set up authentication if token is provided
+    if (token) {
+      const hostname = repoUrl.hostname;
+      setAuthConfig({
+        tokens: [{ host: hostname, token }]
+      });
+    }
+    
+    onProgress?.('Discovering remote references...', 10);
+    
+    // Check if repository exists and get refs
+    const refs = await git.listServerRefs({
+      http,
+      url,
+      corsProxy: 'https://cors.isomorphic-git.org',
+      onAuth: getAuthCallback(url)
+    });
+    
+    if (!refs || refs.length === 0) {
+      throw new Error('Repository not found or no refs available');
+    }
+    
+    onProgress?.('Preparing local repository...', 20);
+    
+    // Initialize local repository
+    await git.init({ dir, defaultBranch: 'main' });
+    
+    // Add remote origin
+    await git.addRemote({
+      dir,
+      remote: 'origin',
+      url
+    });
+    
+    onProgress?.('Fetching repository data...', 30);
+    
+    // Perform clone with appropriate depth
+    const cloneOptions: any = {
+      dir,
+      http,
+      url,
+      corsProxy: 'https://cors.isomorphic-git.org',
+      onAuth: getAuthCallback(url),
+      singleBranch: false,
+      noCheckout: false,
+      onProgress: (progress: any) => {
+        if (progress.phase === 'Receiving objects') {
+          const pct = 30 + (progress.loaded / progress.total) * 50;
+          onProgress?.(`Downloading objects (${progress.loaded}/${progress.total})...`, pct);
+        } else if (progress.phase === 'Resolving deltas') {
+          const pct = 80 + (progress.loaded / progress.total) * 15;
+          onProgress?.(`Resolving deltas (${progress.loaded}/${progress.total})...`, pct);
+        }
+      }
+    };
+    
+    if (depth && depth > 0) {
+      cloneOptions.depth = depth;
+    }
+    
+    await git.clone(cloneOptions);
+    
+    onProgress?.('Setting up local branches...', 95);
+    
+    // Resolve and checkout the default branch
+    const defaultBranch = await resolveRobustBranchInWorker(dir);
+    await git.checkout({ dir, ref: defaultBranch });
+    
+    // Update cache with clone information
+    const headCommit = await git.resolveRef({ dir, ref: 'HEAD' });
+    const branches = await git.listBranches({ dir });
+    
+    const cache: RepoCache = {
+      repoId: dir,
+      lastUpdated: Date.now(),
+      headCommit,
+      dataLevel: depth ? 'shallow' : 'full',
+      branches: branches.map((name: string) => ({
+        name,
+        commit: ''
+      })),
+      cloneUrls: [url]
+    };
+    
+    await cacheManager.init();
+    await cacheManager.setRepoCache(cache);
+    
+    // Update in-memory tracking
+    clonedRepos.add(dir);
+    repoDataLevels.set(dir, depth ? 'shallow' : 'full');
+    
+    onProgress?.('Clone completed successfully!', 100);
+    
+  } catch (error) {
+    // Clean up on failure
+    try {
+      // Remove the directory from LightningFS
+      const fs = new LightningFS('nostr-git');
+      await fs.promises.rmdir(dir);
+    } catch (cleanupError) {
+      console.warn('Failed to clean up after clone error:', cleanupError);
+    }
+    
+    throw new Error(`Clone failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * Fork and clone a repository using GitHub API and isomorphic-git
+ * This creates a remote fork via API, polls until ready, then clones locally
+ */
+async function forkAndCloneRepo(options: {
+  owner: string;
+  repo: string;
+  forkName: string;
+  visibility: 'public' | 'private';
+  token: string;
+  dir: string;
+  onProgress?: (stage: string, pct?: number) => void;
+}): Promise<{
+  success: boolean;
+  repoId: string;
+  forkUrl: string;
+  defaultBranch: string;
+  branches: string[];
+  tags: string[];
+  error?: string;
+}> {
+  const { owner, repo, forkName, visibility, token, dir, onProgress } = options;
+  
+  try {
+    onProgress?.('Creating remote fork...', 10);
+    
+    // Step 1: Create remote fork via GitHub API
+    const forkResponse = await axios.post(
+      `https://api.github.com/repos/${owner}/${repo}/forks`,
+      {
+        name: forkName,
+        private: visibility === 'private'
+      },
+      {
+        headers: {
+          'Authorization': `token ${token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'nostr-git-client'
+        }
+      }
+    );
+    
+    if (forkResponse.status !== 201) {
+      throw new Error(`Failed to create fork: ${forkResponse.statusText}`);
+    }
+    
+    const forkData = forkResponse.data;
+    const forkOwner = forkData.owner.login;
+    const forkUrl = forkData.clone_url;
+    
+    onProgress?.('Waiting for fork to be ready...', 30);
+    
+    // Step 2: Poll until fork is ready (GitHub needs time to create the fork)
+    let pollAttempts = 0;
+    const maxPollAttempts = 30; // 30 seconds max
+    
+    while (pollAttempts < maxPollAttempts) {
+      try {
+        const checkResponse = await axios.get(
+          `https://api.github.com/repos/${forkOwner}/${forkName}`,
+          {
+            headers: {
+              'Authorization': `token ${token}`,
+              'Accept': 'application/vnd.github.v3+json',
+              'User-Agent': 'nostr-git-client'
+            }
+          }
+        );
+        
+        if (checkResponse.status === 200 && !checkResponse.data.empty) {
+          break; // Fork is ready
+        }
+      } catch (error: any) {
+        if (error.response?.status !== 404) {
+          throw error; // Unexpected error
+        }
+        // 404 means fork not ready yet, continue polling
+      }
+      
+      pollAttempts++;
+      onProgress?.(`Waiting for fork... (${pollAttempts}/${maxPollAttempts})`, 30 + (pollAttempts / maxPollAttempts) * 20);
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+    }
+    
+    if (pollAttempts >= maxPollAttempts) {
+      throw new Error('Fork creation timed out. The fork may still be processing.');
+    }
+    
+    onProgress?.('Cloning fork locally...', 60);
+    
+    // Step 3: Clone the fork locally using existing cloneRemoteRepo logic
+    await cloneRemoteRepo({
+      url: forkUrl,
+      dir,
+      depth: 0, // Full clone for forks
+      token,
+      onProgress: (message: string, percentage?: number) => {
+        onProgress?.(message, 60 + ((percentage || 0) * 0.35)); // Scale to 60-95%
+      }
+    });
+    
+    onProgress?.('Gathering repository metadata...', 95);
+    
+    // Get repository metadata after successful clone
+    const defaultBranch = await resolveRobustBranchInWorker(dir);
+    const branches = await git.listBranches({ dir });
+    const tags = await git.listTags({ dir });
+    
+    onProgress?.('Fork completed successfully!', 100);
+    
+    return {
+      success: true,
+      repoId: dir.split('/').pop() || forkName,
+      forkUrl,
+      defaultBranch,
+      branches,
+      tags
+    };
+    
+  } catch (error: any) {
+    console.error('Fork and clone failed:', error);
+    
+    // Cleanup partial clone on error
+    try {
+      const fs = new LightningFS('nostr-git');
+      await fs.promises.rmdir(dir).catch(() => {}); // Best effort cleanup
+    } catch {
+      // Ignore cleanup errors
+    }
+    
+    return {
+      success: false,
+      repoId: '',
+      forkUrl: '',
+      defaultBranch: '',
+      branches: [],
+      tags: [],
+      error: error.response?.data?.message || error.message || 'Fork operation failed'
+    };
+  }
+}
+
+/**
+ * Update remote repository metadata via GitHub API
+ * Updates name, description, and/or visibility of a remote repository
+ */
+async function updateRemoteRepoMetadata(options: {
+  owner: string;
+  repo: string;
+  updates: {
+    name?: string;
+    description?: string;
+    private?: boolean;
+  };
+  token: string;
+}): Promise<{
+  success: boolean;
+  updatedRepo?: any;
+  error?: string;
+}> {
+  const { owner, repo, updates, token } = options;
+  
+  try {
+    console.log(`Updating remote repository metadata for ${owner}/${repo}...`);
+    
+    // Prepare the update payload
+    const updatePayload: any = {};
+    if (updates.name !== undefined) updatePayload.name = updates.name;
+    if (updates.description !== undefined) updatePayload.description = updates.description;
+    if (updates.private !== undefined) updatePayload.private = updates.private;
+    
+    // Update remote repository via GitHub API
+    const response = await axios.patch(
+      `https://api.github.com/repos/${owner}/${repo}`,
+      updatePayload,
+      {
+        headers: {
+          'Authorization': `token ${token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'nostr-git-client'
+        }
+      }
+    );
+    
+    if (response.status !== 200) {
+      throw new Error(`Failed to update repository: ${response.statusText}`);
+    }
+    
+    console.log(`Successfully updated remote repository metadata`);
+    
+    return {
+      success: true,
+      updatedRepo: response.data
+    };
+    
+  } catch (error: any) {
+    console.error('Update remote repository metadata failed:', error);
+    
+    return {
+      success: false,
+      error: error.response?.data?.message || error.message || 'Failed to update repository metadata'
+    };
+  }
+}
+
+/**
+ * Update and push files to a repository
+ * Updates local files, commits changes, and pushes to remote
+ */
+async function updateAndPushFiles(options: {
+  dir: string;
+  files: Array<{ path: string; content: string }>;
+  commitMessage: string;
+  token: string;
+  onProgress?: (stage: string) => void;
+}): Promise<{
+  success: boolean;
+  commitId?: string;
+  error?: string;
+}> {
+  const { dir, files, commitMessage, token, onProgress } = options;
+  
+  try {
+    onProgress?.('Updating local files...');
+    
+    // Write files to the local repository
+    const fs = new LightningFS('nostr-git');
+    
+    for (const file of files) {
+      const filePath = `${dir}/${file.path}`;
+      
+      // Ensure directory exists
+      const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
+      if (dirPath !== dir) {
+        await fs.promises.mkdir(dirPath).catch(() => {}); // Best effort directory creation
+      }
+      
+      // Write file content
+      await fs.promises.writeFile(filePath, file.content, 'utf8');
+    }
+    
+    onProgress?.('Staging changes...');
+    
+    // Stage all changed files
+    for (const file of files) {
+      await git.add({ dir, filepath: file.path });
+    }
+    
+    onProgress?.('Creating commit...');
+    
+    // Create commit
+    const commitResult = await git.commit({
+      dir,
+      message: commitMessage,
+      author: {
+        name: 'Nostr Git User',
+        email: 'user@nostr-git.dev'
+      }
+    });
+    
+    onProgress?.('Pushing to remote...');
+    
+    // Push to remote with authentication
+    const remoteUrl = await git.getConfig({ dir, path: 'remote.origin.url' });
+    
+    await git.push({
+      dir,
+      http,
+      corsProxy: 'https://cors.isomorphic-git.org',
+      onAuth: () => ({
+        username: 'token',
+        password: token
+      }),
+      force: false
+    });
+    
+    onProgress?.('Files updated and pushed successfully!');
+    
+    return {
+      success: true,
+      commitId: commitResult
+    };
+    
+  } catch (error: any) {
+    console.error('Update and push files failed:', error);
+    
+    return {
+      success: false,
+      error: error.message || 'Failed to update and push files'
+    };
+  }
+}
+
+/**
+ * Get detailed information about a specific commit including metadata and file changes
+ */
+async function getCommitDetails({
+  repoId,
+  commitId,
+  branch,
+}: {
+  repoId: string;
+  commitId: string;
+  branch?: string;
+}): Promise<{
+  success: boolean;
+  meta?: {
+    sha: string;
+    author: string;
+    email: string;
+    date: number;
+    message: string;
+    parents: string[];
+  };
+  changes?: Array<{
+    path: string;
+    status: 'added' | 'modified' | 'deleted' | 'renamed';
+    diffHunks: Array<{
+      oldStart: number;
+      oldLines: number;
+      newStart: number;
+      newLines: number;
+      patches: Array<{ line: string; type: '+' | '-' | ' ' }>;
+    }>;
+  }>;
+  error?: string;
+}> {
+  const dir = `${rootDir}/${repoId}`;
+  
+  try {
+    // Ensure we have the repository with sufficient depth
+    const cloneResult = await ensureFullClone({ repoId, branch, depth: 100 });
+    if (!cloneResult.success) {
+      throw new Error(`Failed to ensure repository: ${cloneResult.error}`);
+    }
+
+    // Get commit metadata
+    const commits = await git.log({
+      dir,
+      depth: 1,
+      ref: commitId,
+    });
+
+    if (commits.length === 0) {
+      throw new Error(`Commit ${commitId} not found`);
+    }
+
+    const commit = commits[0];
+    const meta = {
+      sha: commit.oid,
+      author: commit.commit.author.name,
+      email: commit.commit.author.email,
+      date: commit.commit.author.timestamp * 1000, // Convert to milliseconds
+      message: commit.commit.message,
+      parents: commit.commit.parent || [],
+    };
+
+    // Get file changes and diffs
+    const changes: Array<{
+      path: string;
+      status: 'added' | 'modified' | 'deleted' | 'renamed';
+      diffHunks: Array<{
+        oldStart: number;
+        oldLines: number;
+        newStart: number;
+        newLines: number;
+        patches: Array<{ line: string; type: '+' | '-' | ' ' }>;
+      }>;
+    }> = [];
+
+    // If this is not the initial commit, compare with parent
+    if (commit.commit.parent && commit.commit.parent.length > 0) {
+      const parentCommit = commit.commit.parent[0];
+      
+      // Get the list of changed files
+      const changedFiles = await git.walk({
+        dir,
+        trees: [git.TREE({ ref: parentCommit }), git.TREE({ ref: commitId })],
+        map: async function (filepath: string, [A, B]: any[]) {
+          // Skip directories
+          if (filepath === '.') return;
+          
+          const Aoid = await A?.oid();
+          const Boid = await B?.oid();
+          
+          // Determine file status
+          let status: 'added' | 'modified' | 'deleted' | 'renamed' = 'modified';
+          if (Aoid === undefined && Boid !== undefined) {
+            status = 'added';
+          } else if (Aoid !== undefined && Boid === undefined) {
+            status = 'deleted';
+          } else if (Aoid !== Boid) {
+            status = 'modified';
+          } else {
+            return; // No change
+          }
+
+          // Get diff for this file
+          let diffHunks: Array<{
+            oldStart: number;
+            oldLines: number;
+            newStart: number;
+            newLines: number;
+            patches: Array<{ line: string; type: '+' | '-' | ' ' }>;
+          }> = [];
+
+          try {
+            if (status === 'added') {
+              // For added files, show entire content as additions
+              const content = await git.readBlob({ dir, oid: Boid!, filepath });
+              const lines = new TextDecoder().decode(content.blob).split('\n');
+              diffHunks = [{
+                oldStart: 0,
+                oldLines: 0,
+                newStart: 1,
+                newLines: lines.length,
+                patches: lines.map(line => ({ line, type: '+' as const }))
+              }];
+            } else if (status === 'deleted') {
+              // For deleted files, show entire content as deletions
+              const content = await git.readBlob({ dir, oid: Aoid!, filepath });
+              const lines = new TextDecoder().decode(content.blob).split('\n');
+              diffHunks = [{
+                oldStart: 1,
+                oldLines: lines.length,
+                newStart: 0,
+                newLines: 0,
+                patches: lines.map(line => ({ line, type: '-' as const }))
+              }];
+            } else {
+              // For modified files, compute actual diff
+              const oldContent = await git.readBlob({ dir, oid: Aoid!, filepath });
+              const newContent = await git.readBlob({ dir, oid: Boid!, filepath });
+              
+              const oldText = new TextDecoder().decode(oldContent.blob);
+              const newText = new TextDecoder().decode(newContent.blob);
+              
+              // Simple line-by-line diff (could be enhanced with proper diff algorithm)
+              const oldLines = oldText.split('\n');
+              const newLines = newText.split('\n');
+              
+              // Basic diff implementation
+              const patches: Array<{ line: string; type: '+' | '-' | ' ' }> = [];
+              let oldIndex = 0;
+              let newIndex = 0;
+              
+              while (oldIndex < oldLines.length || newIndex < newLines.length) {
+                const oldLine = oldLines[oldIndex];
+                const newLine = newLines[newIndex];
+                
+                if (oldIndex >= oldLines.length) {
+                  // Only new lines left
+                  patches.push({ line: newLine, type: '+' });
+                  newIndex++;
+                } else if (newIndex >= newLines.length) {
+                  // Only old lines left
+                  patches.push({ line: oldLine, type: '-' });
+                  oldIndex++;
+                } else if (oldLine === newLine) {
+                  // Lines match
+                  patches.push({ line: oldLine, type: ' ' });
+                  oldIndex++;
+                  newIndex++;
+                } else {
+                  // Lines differ - simple approach: mark old as deleted, new as added
+                  patches.push({ line: oldLine, type: '-' });
+                  patches.push({ line: newLine, type: '+' });
+                  oldIndex++;
+                  newIndex++;
+                }
+              }
+              
+              if (patches.length > 0) {
+                diffHunks = [{
+                  oldStart: 1,
+                  oldLines: oldLines.length,
+                  newStart: 1,
+                  newLines: newLines.length,
+                  patches
+                }];
+              }
+            }
+          } catch (diffError) {
+            console.warn(`Failed to generate diff for ${filepath}:`, diffError);
+            // Return empty diff hunks on error
+            diffHunks = [];
+          }
+
+          return {
+            path: filepath,
+            status,
+            diffHunks
+          };
+        }
+      });
+
+      // Filter out undefined results and add to changes
+      changes.push(...changedFiles.filter(Boolean));
+    } else {
+      // Initial commit - show all files as added
+      const files = await git.walk({
+        dir,
+        trees: [git.TREE({ ref: commitId })],
+        map: async function (filepath: string, [A]: any[]) {
+          if (filepath === '.') return;
+          
+          const oid = await A?.oid();
+          if (!oid) return;
+
+          try {
+            const content = await git.readBlob({ dir, oid, filepath });
+            const lines = new TextDecoder().decode(content.blob).split('\n');
+            
+            return {
+              path: filepath,
+              status: 'added' as const,
+              diffHunks: [{
+                oldStart: 0,
+                oldLines: 0,
+                newStart: 1,
+                newLines: lines.length,
+                patches: lines.map(line => ({ line, type: '+' as const }))
+              }]
+            };
+          } catch (error) {
+            console.warn(`Failed to read file ${filepath}:`, error);
+            return {
+              path: filepath,
+              status: 'added' as const,
+              diffHunks: []
+            };
+          }
+        }
+      });
+
+      changes.push(...files.filter(Boolean));
+    }
+
+    return {
+      success: true,
+      meta,
+      changes
+    };
+
+  } catch (error: any) {
+    console.error(`Error getting commit details for ${commitId}:`, error);
+    return {
+      success: false,
+      error: error.message || 'Failed to get commit details'
+    };
+  }
+}
+
 expose({ 
   cloneAndFork, 
   clone, 
@@ -2187,5 +2871,10 @@ expose({
   setAuthConfig,
   createLocalRepo,
   createRemoteRepo,
-  pushToRemote
+  pushToRemote,
+  cloneRemoteRepo,
+  forkAndCloneRepo,
+  updateRemoteRepoMetadata,
+  updateAndPushFiles,
+  getCommitDetails
 });
