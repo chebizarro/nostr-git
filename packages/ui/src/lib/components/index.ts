@@ -21,7 +21,7 @@ export { default as PatchSelector } from "./git/PatchSelector.svelte";
 export { default as CommitSelector } from "./git/CommitSelector.svelte";
 export { default as CommitCard } from "./git/CommitCard.svelte";
 export { default as FileMetadataPanel } from "./git/FileMetadataPanel.svelte";
-
+export { default as NewRepoWizard } from "./git/NewRepoWizard.svelte";
 export { Repo } from "./git/Repo.svelte";
 
 export { default as ImageViewer } from "./git/viewers/ImageViewer.svelte";

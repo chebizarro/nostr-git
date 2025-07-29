@@ -7,11 +7,13 @@ import {
   RepoState,
   type RepoAnnouncementEvent,
   type RepoStateEvent,
+  createRepoAnnouncementEvent,
+  createRepoStateEvent,
 } from "@nostr-git/shared-types";
 import {
-
   type MergeAnalysisResult,
 } from "@nostr-git/core";
+import { type Event as NostrEvent } from "nostr-tools";
 import { type Readable } from "svelte/store";
 import { context } from "$lib/stores/context";
 import { Token, tokens } from "$lib/stores/tokens";
@@ -644,6 +646,73 @@ export class Repo {
     }
     
     console.log('Repository reset complete');
+  }
+
+  /**
+   * Create repository announcement event data for NIP-34
+   * @param repoData Repository creation data
+   * @returns Unsigned event object for external signing and publishing
+   */
+  createRepoAnnouncementEvent(
+    repoData: {
+      name: string;
+      description?: string;
+      cloneUrl?: string;
+      webUrl?: string;
+      defaultBranch?: string;
+      maintainers?: string[];
+      relays?: string[];
+      hashtags?: string[];
+      earliestUniqueCommit?: string;
+    }
+  ): Omit<NostrEvent, 'id' | 'sig' | 'pubkey' | 'created_at'> {
+    // Use the shared-types utility function
+    return createRepoAnnouncementEvent({
+      repoId: repoData.name,
+      name: repoData.name,
+      description: repoData.description,
+      clone: repoData.cloneUrl ? [repoData.cloneUrl] : undefined,
+      web: repoData.webUrl ? [repoData.webUrl] : undefined,
+      relays: repoData.relays,
+      maintainers: repoData.maintainers,
+      hashtags: repoData.hashtags,
+      earliestUniqueCommit: repoData.earliestUniqueCommit || repoData.defaultBranch,
+    });
+  }
+  
+  /**
+   * Create repository state event data for NIP-34
+   * @param stateData Repository state data
+   * @returns Unsigned event object for external signing and publishing
+   */
+  createRepoStateEvent(
+    stateData: {
+      repositoryId: string;
+      headBranch?: string;
+      branches?: string[];
+      tags?: string[];
+      refs?: Array<{ type: "heads" | "tags", name: string, commit: string, ancestry?: string[] }>;
+    }
+  ): Omit<NostrEvent, 'id' | 'sig' | 'pubkey' | 'created_at'> {
+    // Use the shared-types utility function
+    return createRepoStateEvent({
+      repoId: stateData.repositoryId,
+      head: stateData.headBranch,
+      refs: stateData.refs || [
+        // Convert branches to refs format
+        ...(stateData.branches?.map(branch => ({
+          type: "heads" as const,
+          name: branch,
+          commit: "HEAD" // This would be the actual commit hash
+        })) || []),
+        // Convert tags to refs format
+        ...(stateData.tags?.map(tag => ({
+          type: "tags" as const,
+          name: tag,
+          commit: "HEAD" // This would be the actual commit hash
+        })) || [])
+      ]
+    });
   }
 
   dispose() {
