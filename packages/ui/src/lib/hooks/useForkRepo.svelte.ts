@@ -71,8 +71,8 @@ export function useForkRepo() {
 
     try {
       // Get the git worker instance using dynamic import
-      const { getGitWorker } = await import('$lib/git-worker');
-      const gitWorker = await getGitWorker();
+      const { getGitWorker } = await import('@nostr-git/core');
+      const { api } = getGitWorker();
 
       // Generate destination directory for the fork
       const destinationPath = `${currentUser}/${config.forkName}`;
@@ -86,8 +86,14 @@ export function useForkRepo() {
         };
       };
 
+      onProgress?.({ 
+        type: 'fork-progress', 
+        phase: 'forking', 
+        message: 'Creating fork...' 
+      });
+
       // Call git-worker to fork and clone
-      const result: ForkResult = await gitWorker.forkAndCloneRepo({
+      const result: ForkResult = await api.forkAndCloneRepo({
         owner: originalRepo.owner,
         repo: originalRepo.name,
         forkName: config.forkName,

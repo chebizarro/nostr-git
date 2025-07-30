@@ -4,7 +4,7 @@ import http from 'isomorphic-git/http/web';
 import axios from 'axios';
 import { finalizeEvent, SimplePool } from 'nostr-tools';
 import { GitProvider, IsomorphicGitProvider } from '@nostr-git/git-wrapper';
-import { ensureRepoFromEvent, rootDir, getDefaultBranch } from '../git.js';
+import { rootDir } from '../git.js';
 import { Buffer } from 'buffer';
 import { analyzePatchMergeability, type MergeAnalysisResult } from '../merge-analysis.js';
 
@@ -1774,7 +1774,7 @@ const createRemoteRepoLegacy = async (
   switch (host) {
     case 'github': {
       const { data } = await axios.post('https://api.github.com/user/repos', { name: repo }, {
-        headers: { Authorization: `token ${token}` }
+        headers: { Authorization: `Bearer ${token}` }
       });
       return data.clone_url;
     }
@@ -1786,7 +1786,7 @@ const createRemoteRepoLegacy = async (
     }
     case 'gitea': {
       const { data } = await axios.post(`https://gitea.com/api/v1/user/repos`, { name: repo }, {
-        headers: { Authorization: `token ${token}` }
+        headers: { Authorization: `Bearer ${token}` }
       });
       return data.clone_url;
     }
@@ -2003,6 +2003,11 @@ const createRemoteRepo = async ({
 }) => {
   try {
     console.log(`Creating remote repository on ${provider}: ${name}`);
+    console.log(`Token provided: ${token ? 'YES (length: ' + token.length + ')' : 'NO/EMPTY'}`);
+    
+    if (!token || token.trim() === '') {
+      throw new Error('No authentication token provided');
+    }
     
     let remoteUrl: string;
     
@@ -2018,7 +2023,7 @@ const createRemoteRepo = async ({
           },
           {
             headers: {
-              'Authorization': `token ${token}`,
+              'Authorization': `Bearer ${token}`,
               'Accept': 'application/vnd.github.v3+json'
             }
           }
@@ -2055,7 +2060,7 @@ const createRemoteRepo = async ({
           },
           {
             headers: {
-              'Authorization': `token ${token}`
+              'Authorization': `Bearer ${token}`
             }
           }
         );
@@ -2112,11 +2117,13 @@ const pushToRemote = async ({
     // Get auth callback if token provided
     const authCallback = token ? () => ({ username: 'token', password: token }) : getAuthCallback(remoteUrl);
     
-    // Push to remote
+    // Push to remote (use URL directly and force flag like working patch push)
     await git.push({
       dir,
-      remote: 'origin',
+      url: remoteUrl,
       ref: branch,
+      force: true, // Allow non-fast-forward pushes
+      corsProxy: 'https://cors.isomorphic-git.org',
       ...(authCallback && { onAuth: authCallback })
     });
     
@@ -2334,7 +2341,7 @@ async function forkAndCloneRepo(options: {
       },
       {
         headers: {
-          'Authorization': `token ${token}`,
+          'Authorization': `Bearer ${token}`,
           'Accept': 'application/vnd.github.v3+json',
           'User-Agent': 'nostr-git-client'
         }
@@ -2361,7 +2368,7 @@ async function forkAndCloneRepo(options: {
           `https://api.github.com/repos/${forkOwner}/${forkName}`,
           {
             headers: {
-              'Authorization': `token ${token}`,
+              'Authorization': `Bearer ${token}`,
               'Accept': 'application/vnd.github.v3+json',
               'User-Agent': 'nostr-git-client'
             }
@@ -2476,7 +2483,7 @@ async function updateRemoteRepoMetadata(options: {
       updatePayload,
       {
         headers: {
-          'Authorization': `token ${token}`,
+          'Authorization': `Bearer ${token}`,
           'Accept': 'application/vnd.github.v3+json',
           'User-Agent': 'nostr-git-client'
         }

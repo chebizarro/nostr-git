@@ -15,6 +15,7 @@
     isRepoWatched,
     refreshRepo,
     isRefreshing = false,
+    forkRepo,
   }: {
     event: RepoAnnouncementEvent;
     activeTab?: string;
@@ -22,6 +23,7 @@
     watchRepo?: () => void;
     isRepoWatched: boolean;
     refreshRepo?: () => Promise<void>;
+    forkRepo?: () => void;
     isRefreshing?: boolean;
   } = $props();
   const parsed = parseRepoAnnouncementEvent(event);
@@ -40,11 +42,21 @@
         <Star class="h-4 w-4" />
         <span class="hidden sm:inline">Star</span>
       </Button>
-      <Button variant="outline" size="sm" class="gap-1 sm:gap-2 px-2 sm:px-3" onclick={watchRepo}>
+      <Button
+        variant="outline"
+        size="sm"
+        class="gap-1 sm:gap-2 px-2 sm:px-3"
+        onclick={watchRepo}
+      >
         <Eye class="h-4 w-4" />
         <span class="hidden sm:inline">{isRepoWatched ? "Unwatch" : "Watch"}</span>
       </Button>
-      <Button variant="outline" size="sm" class="gap-1 sm:gap-2 px-2 sm:px-3">
+      <Button
+        variant="outline"
+        size="sm"
+        class="gap-1 sm:gap-2 px-2 sm:px-3"
+        onclick={forkRepo}
+      >
         <GitFork class="h-4 w-4" />
         <span class="hidden sm:inline">Fork</span>
       </Button>

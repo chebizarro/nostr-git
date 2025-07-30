@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { checkGitHubRepoAvailability } from '../../useNewRepo.svelte.js';
+  import { tokens as tokensStore, type Token } from '../../stores/tokens.js';
+  
   interface Props {
     repoName: string;
     description: string;
@@ -33,6 +36,18 @@
     onLicenseChange,
     validationErrors = {}
   }: Props = $props();
+  
+  // State for real-time repository name validation
+  let isCheckingAvailability = $state(false);
+  let availabilityStatus = $state<'available' | 'unavailable' | 'error' | null>(null);
+  let availabilityMessage = $state<string>('');
+  let lastCheckedName = $state<string>('');
+  let tokens = $state<Token[]>([]);
+  
+  // Subscribe to token store
+  tokensStore.subscribe((t) => {
+    tokens = t;
+  });
 
   const gitignoreOptions = [
     { value: '', label: 'None' },
@@ -86,9 +101,70 @@
     return undefined;
   }
 
+  async function checkRepoNameAvailability(name: string) {
+    // Reset state
+    availabilityStatus = null;
+    availabilityMessage = '';
+    
+    // Skip check if name is empty or invalid
+    const basicValidation = validateRepoName(name);
+    if (basicValidation || !name.trim()) {
+      return;
+    }
+    
+    // Skip if we already checked this name
+    if (name === lastCheckedName) {
+      return;
+    }
+    
+    // Get GitHub token
+    const githubToken = tokens.find((t: Token) => t.host === "github.com")?.token;
+    if (!githubToken) {
+      availabilityStatus = 'error';
+      availabilityMessage = 'GitHub token required for availability check';
+      return;
+    }
+    
+    isCheckingAvailability = true;
+    lastCheckedName = name;
+    
+    try {
+      const result = await checkGitHubRepoAvailability(name, githubToken);
+      
+      if (result.available) {
+        availabilityStatus = 'available';
+        availabilityMessage = result.username ? `${result.username}/${name} is available` : 'Repository name is available';
+      } else {
+        availabilityStatus = 'unavailable';
+        availabilityMessage = result.reason || 'Repository name is not available';
+      }
+    } catch (error) {
+      availabilityStatus = 'error';
+      availabilityMessage = 'Could not check availability';
+      console.warn('Error checking repo availability:', error);
+    } finally {
+      isCheckingAvailability = false;
+    }
+  }
+
   function handleNameInput(event: Event) {
     const target = event.target as HTMLInputElement;
     onRepoNameChange(target.value);
+    
+    // Reset availability status when user types
+    if (target.value !== lastCheckedName) {
+      availabilityStatus = null;
+      availabilityMessage = '';
+    }
+  }
+  
+  function handleNameBlur(event: Event) {
+    const target = event.target as HTMLInputElement;
+    const name = target.value.trim();
+    
+    if (name && name !== lastCheckedName) {
+      checkRepoNameAvailability(name);
+    }
   }
 
   function handleDescriptionInput(event: Event) {
@@ -120,20 +196,54 @@
       <label for="repo-name" class="block text-sm font-medium text-gray-300 mb-2">
         Repository name *
       </label>
-      <input
-        id="repo-name"
-        type="text"
-        value={repoName}
-        oninput={handleNameInput}
-        placeholder="my-awesome-project"
-        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
-        class:border-red-500={validationErrors.name}
-        class:focus:ring-red-500={validationErrors.name}
-        class:focus:border-red-500={validationErrors.name}
-      />
+      <div class="relative">
+        <input
+          id="repo-name"
+          type="text"
+          value={repoName}
+          oninput={handleNameInput}
+          onblur={handleNameBlur}
+          placeholder="my-awesome-project"
+          class="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
+          class:border-red-500={validationErrors.name || availabilityStatus === 'unavailable'}
+          class:border-green-500={availabilityStatus === 'available'}
+          class:focus:ring-red-500={validationErrors.name || availabilityStatus === 'unavailable'}
+          class:focus:ring-green-500={availabilityStatus === 'available'}
+          class:focus:border-red-500={validationErrors.name || availabilityStatus === 'unavailable'}
+          class:focus:border-green-500={availabilityStatus === 'available'}
+        />
+        
+        <!-- Loading/Status Indicator -->
+        <div class="absolute inset-y-0 right-0 flex items-center pr-3">
+          {#if isCheckingAvailability}
+            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+          {:else if availabilityStatus === 'available'}
+            <svg class="h-4 w-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+          {:else if availabilityStatus === 'unavailable'}
+            <svg class="h-4 w-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          {:else if availabilityStatus === 'error'}
+            <svg class="h-4 w-4 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          {/if}
+        </div>
+      </div>
+      
+      <!-- Error Messages -->
       {#if validationErrors.name}
         <p class="mt-1 text-sm text-red-400">
           {validationErrors.name}
+        </p>
+      {:else if availabilityMessage}
+        <p class="mt-1 text-sm" 
+           class:text-green-400={availabilityStatus === 'available'}
+           class:text-red-400={availabilityStatus === 'unavailable'}
+           class:text-yellow-400={availabilityStatus === 'error'}>
+          {availabilityMessage}
         </p>
       {/if}
     </div>

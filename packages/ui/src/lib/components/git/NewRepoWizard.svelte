@@ -167,10 +167,6 @@
     }
   }
 
-
-
-
-
   function handleRetry() {
     // Reset progress and try again using the hook
     reset();
@@ -195,8 +191,6 @@
     // Update validation errors after change
     updateValidationErrors();
   }
-
-
 
   function handleReadmeChange(initialize: boolean) {
     repoDetails.initializeWithReadme = initialize;

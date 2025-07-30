@@ -67,7 +67,7 @@ export function useEditRepo() {
 
     try {
       // Get the git worker instance using dynamic import
-      const { getGitWorker } = await import('$lib/git-worker');
+      const { getGitWorker } = await import('@nostr-git/core');
       const gitWorker = await getGitWorker();
 
       // Extract current repository info

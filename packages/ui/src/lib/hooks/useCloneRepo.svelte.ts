@@ -42,8 +42,8 @@ export function useCloneRepo(options: CloneRepoOptions): CloneRepoHook {
 
       // Get the git worker instance using dynamic import
       // This avoids circular dependency issues
-      const { getGitWorker } = await import('$lib/git-worker');
-      const gitWorker = await getGitWorker();
+      const { getGitWorker } = await import('@nostr-git/core');
+      const { api } = getGitWorker();
 
       // Validate inputs
       if (!url.trim()) {
@@ -77,7 +77,7 @@ export function useCloneRepo(options: CloneRepoOptions): CloneRepoHook {
       onProgress?.('Starting clone operation...', 10);
 
       // Perform the clone operation using the git worker
-      await gitWorker.cloneRemoteRepo({
+      const result = await api.cloneRemoteRepo({
         url,
         dir: sanitizedPath,
         depth,
