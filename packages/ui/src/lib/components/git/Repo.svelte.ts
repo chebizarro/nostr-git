@@ -13,7 +13,6 @@ import {
 import {
   type MergeAnalysisResult,
 } from "@nostr-git/core";
-import { type Event as NostrEvent } from "nostr-tools";
 import { type Readable } from "svelte/store";
 import { context } from "$lib/stores/context";
 import { Token, tokens } from "$lib/stores/tokens";
@@ -438,6 +437,94 @@ export class Repo {
     return this.branchManager.getBranches();
   }
 
+  /**
+   * Get all repository references (branches and tags) with robust fallback logic
+   * This method encapsulates the sophisticated branch/ref handling logic that includes:
+   * - NIP-34 reference processing
+   * - Fallback to processed branches when NIP-34 refs aren't available
+   * - Unified ref structure for both heads and tags
+   * - Automatic branch loading with error handling
+   * @returns Promise<Array<{name: string; type: "heads" | "tags"; fullRef: string; commitId: string}>>
+   */
+  async getAllRefsWithFallback(): Promise<Array<{name: string; type: "heads" | "tags"; fullRef: string; commitId: string}>> {
+    // Process repo state event if available and not already processed
+    if (this.repoStateEvent && this.repoStateEvent.tags) {
+      const hasProcessedState = this.branchManager?.getAllNIP34References().size > 0;
+      if (!hasProcessedState) {
+        this.branchManager?.processRepoStateEvent(this.repoStateEvent);
+      }
+    } else if (!this.repoStateEvent) {
+      // Load branches from repository if not available and we have a repo event
+      if (
+        this.branchManager &&
+        this.branchManager.getBranches().length === 0 &&
+        this.repoEvent
+      ) {
+        try {
+          await this.branchManager.loadBranchesFromRepo(this.repoEvent);
+        } catch (error) {
+          console.error('Failed to load branches from git repository:', error);
+          // Continue with empty branches rather than throwing
+        }
+      }
+    }
+
+    // Get NIP-34 references first (preferred)
+    const nip34Refs = this.branchManager?.getAllNIP34References() || new Map();
+    const processedBranches = this.branchManager?.getBranches() || [];
+
+    const refs: Array<{name: string; type: "heads" | "tags"; fullRef: string; commitId: string}> = [];
+
+    // Process NIP-34 references first
+    for (const [shortName, ref] of nip34Refs) {
+      refs.push({
+        name: shortName,
+        type: ref.type,
+        fullRef: ref.fullRef,
+        commitId: ref.commitId,
+      });
+    }
+
+    // Fallback to processed branches if no NIP-34 refs available
+    if (refs.length === 0 && processedBranches.length > 0) {
+      for (const branch of processedBranches) {
+        const refObj = {
+          name: branch.name,
+          type: "heads" as const,
+          fullRef: `refs/heads/${branch.name}`,
+          commitId: branch.oid || "",
+        };
+        refs.push(refObj);
+      }
+    }
+
+    // Sort refs: heads first, then tags, alphabetically within each type
+    return refs.sort((a, b) => {
+      if (a.type !== b.type) {
+        return a.type === "heads" ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  /**
+   * Get branch names only (for backward compatibility)
+   * @returns Promise<string[]>
+   */
+  async getBranchNames(): Promise<string[]> {
+    const refs = await this.getAllRefsWithFallback();
+    return refs.filter(ref => ref.type === "heads").map(ref => ref.name);
+  }
+
+  /**
+   * Get tag names only
+   * @returns Promise<string[]>
+   */
+  async getTagNames(): Promise<string[]> {
+    const refs = await this.getAllRefsWithFallback();
+    return refs.filter(ref => ref.type === "tags").map(ref => ref.name);
+  }
+
   get selectedBranch() {
     return this.branchManager.getSelectedBranch();
   }
@@ -657,22 +744,25 @@ export class Repo {
     repoData: {
       name: string;
       description?: string;
-      cloneUrl?: string;
-      webUrl?: string;
+      cloneUrl?: string; // Legacy single URL support
+      webUrl?: string; // Legacy single URL support
+      clone?: string[]; // NIP-34 multiple clone URLs
+      web?: string[]; // NIP-34 multiple web URLs
       defaultBranch?: string;
       maintainers?: string[];
       relays?: string[];
       hashtags?: string[];
       earliestUniqueCommit?: string;
     }
-  ): Omit<NostrEvent, 'id' | 'sig' | 'pubkey' | 'created_at'> {
+  ): RepoAnnouncementEvent {
     // Use the shared-types utility function
     return createRepoAnnouncementEvent({
       repoId: repoData.name,
       name: repoData.name,
       description: repoData.description,
-      clone: repoData.cloneUrl ? [repoData.cloneUrl] : undefined,
-      web: repoData.webUrl ? [repoData.webUrl] : undefined,
+      // Support both legacy single URLs and new array format
+      clone: repoData.clone || (repoData.cloneUrl ? [repoData.cloneUrl] : undefined),
+      web: repoData.web || (repoData.webUrl ? [repoData.webUrl] : undefined),
       relays: repoData.relays,
       maintainers: repoData.maintainers,
       hashtags: repoData.hashtags,
@@ -693,7 +783,7 @@ export class Repo {
       tags?: string[];
       refs?: Array<{ type: "heads" | "tags", name: string, commit: string, ancestry?: string[] }>;
     }
-  ): Omit<NostrEvent, 'id' | 'sig' | 'pubkey' | 'created_at'> {
+  ): RepoStateEvent {
     // Use the shared-types utility function
     return createRepoStateEvent({
       repoId: stateData.repositoryId,

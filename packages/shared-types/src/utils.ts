@@ -430,6 +430,7 @@ export interface RepoAnnouncement {
   relays?: string[];
   maintainers?: string[];
   hashtags?: string[];
+  earliestUniqueCommit?: string; // NIP-34 r tag with 'euc' marker
   createdAt: string;
   raw: RepoAnnouncementEvent;
 }
@@ -438,6 +439,11 @@ export function parseRepoAnnouncementEvent(event: RepoAnnouncementEvent): RepoAn
   const getTag = (name: string) => event.tags.find(t => t[0] === name)?.[1];
   const getAllTags = (name: string) => event.tags.filter(t => t[0] === name).map(t => t[1]);
   const getMultiTag = (name: string) => event.tags.filter(t => t[0] === name).flatMap(t => t.slice(1));
+  
+  // Extract earliest unique commit from r tag with 'euc' marker
+  const eucTag = event.tags.find(t => t[0] === "r" && t[2] === "euc");
+  const earliestUniqueCommit = eucTag?.[1];
+  
   return {
     id: event.id,
     repoId: getTag("d") || "",
@@ -450,6 +456,7 @@ export function parseRepoAnnouncementEvent(event: RepoAnnouncementEvent): RepoAn
     relays: getMultiTag("relays"),
     maintainers: getMultiTag("maintainers"),
     hashtags: getAllTags("t"),
+    earliestUniqueCommit,
     createdAt: new Date(event.created_at * 1000).toISOString(),
     raw: event
   };
