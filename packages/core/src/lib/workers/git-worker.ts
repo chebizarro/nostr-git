@@ -2221,24 +2221,13 @@ async function cloneRemoteRepo(options: {
       throw new Error('Repository not found or no refs available');
     }
     
-    onProgress?.('Preparing local repository...', 20);
+    onProgress?.('Cloning repository...', 20);
     
-    // Initialize local repository
-    await git.init({ dir, defaultBranch: 'main' });
+    console.log('🔍 Clone debug - dir:', dir, 'url:', url);
     
-    // Add remote origin
-    await git.addRemote({
-      dir,
-      remote: 'origin',
-      url
-    });
-    
-    onProgress?.('Fetching repository data...', 30);
-    
-    // Perform clone with appropriate depth
+    // Use GitProvider's clone method which handles directory creation and setup properly
     const cloneOptions: any = {
       dir,
-      http,
       url,
       corsProxy: 'https://cors.isomorphic-git.org',
       onAuth: getAuthCallback(url),
@@ -2246,7 +2235,7 @@ async function cloneRemoteRepo(options: {
       noCheckout: false,
       onProgress: (progress: any) => {
         if (progress.phase === 'Receiving objects') {
-          const pct = 30 + (progress.loaded / progress.total) * 50;
+          const pct = 20 + (progress.loaded / progress.total) * 60;
           onProgress?.(`Downloading objects (${progress.loaded}/${progress.total})...`, pct);
         } else if (progress.phase === 'Resolving deltas') {
           const pct = 80 + (progress.loaded / progress.total) * 15;
@@ -2337,7 +2326,7 @@ async function forkAndCloneRepo(options: {
       `https://api.github.com/repos/${owner}/${repo}/forks`,
       {
         name: forkName,
-        private: visibility === 'private'
+        private: (visibility || 'public') === 'private' // Default to public since NIP-34 doesn't support private repos
       },
       {
         headers: {
@@ -2348,11 +2337,33 @@ async function forkAndCloneRepo(options: {
       }
     );
     
-    if (forkResponse.status !== 201) {
-      throw new Error(`Failed to create fork: ${forkResponse.statusText}`);
+    // GitHub returns 201 for new forks, 202 for existing forks
+    if (forkResponse.status !== 201 && forkResponse.status !== 202) {
+      let errorMessage = forkResponse.statusText || 'Unknown error';
+      try {
+        // Try to get detailed error from response body
+        if (forkResponse.data && typeof forkResponse.data === 'object') {
+          const errorData = forkResponse.data as any;
+          if (errorData.message) {
+            errorMessage = errorData.message;
+          }
+          if (errorData.errors && Array.isArray(errorData.errors)) {
+            const errorDetails = errorData.errors.map((e: any) => e.message || e.code || e).join(', ');
+            errorMessage += ` (${errorDetails})`;
+          }
+        }
+      } catch (e) {
+        // Fallback to status text if parsing fails
+      }
+      throw new Error(`Failed to create fork: ${errorMessage}`);
     }
     
     const forkData = forkResponse.data;
+    
+    // Check if GitHub ignored our custom fork name (happens when fork already exists)
+    if (forkData.name !== forkName) {
+      throw new Error(`Fork already exists with name "${forkData.name}". GitHub does not support renaming existing forks. Please delete the existing fork first or choose a different name.`);
+    }
     const forkOwner = forkData.owner.login;
     const forkUrl = forkData.clone_url;
     

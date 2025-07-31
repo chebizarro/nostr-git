@@ -31,7 +31,6 @@
     description: string;
     visibility: 'public' | 'private';
     defaultBranch: string;
-    readmeContent: string;
     maintainers: string[];
     relays: string[];
     webUrls: string[];
@@ -65,7 +64,6 @@
         description: "",
         visibility: "public" as "public" | "private",
         defaultBranch: "main",
-        readmeContent: "",
         maintainers: [],
         relays: [],
         webUrls: [],
@@ -90,7 +88,6 @@
       description: repoData.description || "",
       visibility: isPrivate ? "private" : ("public" as "public" | "private"),
       defaultBranch,
-      readmeContent: "# " + (repoData.name || "") + "\n\n" + (repoData.description || ""),
       maintainers: repoData.maintainers || [],
       relays: repoData.relays || [],
       webUrls: repoData.web || [],
@@ -174,11 +171,6 @@
       errors.defaultBranch = "Default branch is required";
     } else if (!/^[a-zA-Z0-9._/-]+$/.test(formData.defaultBranch)) {
       errors.defaultBranch = "Invalid branch name format";
-    }
-
-    // README validation
-    if (formData.readmeContent.length > 10000) {
-      errors.readmeContent = "README content must be 10,000 characters or less";
     }
 
     // Maintainers validation (npub format)
@@ -310,12 +302,6 @@
       await onPublishEvent(updatedAnnouncementEvent);
       await onPublishEvent(updatedStateEvent);
 
-      // TODO: Update README file if changed
-      if (formData.readmeContent !== extractCurrentValues().readmeContent) {
-        // This would require git worker integration to update the README file
-        console.log("README content changed - would need to update file via git worker");
-      }
-
       back();
     } catch (error) {
       console.error("Failed to save repository changes:", error);
@@ -342,8 +328,7 @@
       formData.name !== original.name ||
       formData.description !== original.description ||
       formData.visibility !== original.visibility ||
-      formData.defaultBranch !== original.defaultBranch ||
-      formData.readmeContent !== original.readmeContent
+      formData.defaultBranch !== original.defaultBranch
     );
   });
 
@@ -776,47 +761,6 @@
           </p>
         </div>
 
-        <!-- README Editor -->
-        <div>
-          <div class="flex items-center justify-between mb-2">
-            <label class="block text-sm font-medium text-gray-300">
-              <FileText class="w-4 h-4 inline mr-1" />
-              README.md
-            </label>
-            <button
-              onclick={() => (showReadmePreview = !showReadmePreview)}
-              disabled={isEditing}
-              class="text-sm text-blue-400 hover:text-blue-300 disabled:opacity-50"
-            >
-              {showReadmePreview ? "Edit" : "Preview"}
-            </button>
-          </div>
-
-          {#if showReadmePreview}
-            <!-- README Preview -->
-            <div
-              class="w-full min-h-[200px] p-3 bg-gray-800 border border-gray-600 rounded-lg text-white prose prose-invert max-w-none"
-            >
-              {@html formData.readmeContent.replace(/\n/g, "<br>")}
-            </div>
-          {:else}
-            <!-- README Editor -->
-            <textarea
-              bind:value={formData.readmeContent}
-              disabled={isEditing}
-              rows="10"
-              class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed resize-y font-mono text-sm"
-              placeholder="# Repository Name&#10;&#10;Description of your repository..."
-            ></textarea>
-          {/if}
-          {#if validationErrors.readmeContent}
-            <p class="text-red-400 text-sm mt-1 flex items-center space-x-1">
-              <AlertCircle class="w-4 h-4" />
-              <span>{validationErrors.readmeContent}</span>
-            </p>
-          {/if}
-        </div>
-
         <!-- Progress Display -->
         {#if isEditing && progress}
           <div class="space-y-4">
@@ -913,71 +857,3 @@
   </div>
 </div>
 
-<style>
-  /* Additional styles for radio buttons */
-  input[type="radio"]:checked {
-    background-color: #3b82f6;
-    border-color: #3b82f6;
-  }
-
-  /* Screen reader only class */
-  .sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
-
-  /* Prose styles for README preview */
-  .prose h1 {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: white;
-    margin-bottom: 1rem;
-  }
-  .prose h2 {
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: white;
-    margin-bottom: 0.75rem;
-  }
-  .prose h3 {
-    font-size: 1.125rem;
-    font-weight: 500;
-    color: white;
-    margin-bottom: 0.5rem;
-  }
-  .prose p {
-    color: #d1d5db;
-    margin-bottom: 0.5rem;
-  }
-  .prose ul {
-    list-style-type: disc;
-    list-style-position: inside;
-    color: #d1d5db;
-    margin-bottom: 0.5rem;
-  }
-  .prose ol {
-    list-style-type: decimal;
-    list-style-position: inside;
-    color: #d1d5db;
-    margin-bottom: 0.5rem;
-  }
-  .prose code {
-    background-color: #374151;
-    padding: 0.125rem 0.25rem;
-    border-radius: 0.25rem;
-    font-size: 0.875rem;
-  }
-  .prose pre {
-    background-color: #374151;
-    padding: 0.75rem;
-    border-radius: 0.25rem;
-    overflow-x: auto;
-  }
-</style>

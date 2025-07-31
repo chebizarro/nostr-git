@@ -145,10 +145,11 @@ export function createRepoAnnouncementEvent(opts: {
   ];
   if (opts.name) tags.push(["name", opts.name]);
   if (opts.description) tags.push(["description", opts.description]);
-  if (opts.web && opts.web.length) tags.push(["web", ...opts.web]);
-  if (opts.clone && opts.clone.length) tags.push(["clone", ...opts.clone]);
-  if (opts.relays && opts.relays.length) tags.push(["relays", ...opts.relays]);
-  if (opts.maintainers && opts.maintainers.length) tags.push(["maintainers", ...opts.maintainers]);
+  // NIP-34: web and clone tags can have multiple values, each as separate tag
+  if (opts.web) opts.web.forEach(url => tags.push(["web", url]));
+  if (opts.clone) opts.clone.forEach(url => tags.push(["clone", url]));
+  if (opts.relays) opts.relays.forEach(relay => tags.push(["relays", relay]));
+  if (opts.maintainers) opts.maintainers.forEach(maintainer => tags.push(["maintainers", maintainer]));
   if (opts.hashtags) opts.hashtags.forEach(t => tags.push(["t", t]));
   if (opts.earliestUniqueCommit) tags.push(["r", opts.earliestUniqueCommit, "euc"]);
   return {
@@ -160,7 +161,8 @@ export function createRepoAnnouncementEvent(opts: {
 }
 
 /**
- * Create a repo state event (kind 30618)
+ * Create a repo state event (kind 30618) - NIP-34 compliant
+ * Repository state events only contain refs and HEAD according to NIP-34
  */
 export function createRepoStateEvent(opts: {
   repoId: string;
@@ -169,16 +171,29 @@ export function createRepoStateEvent(opts: {
   created_at?: number;
 }): RepoStateEvent {
   const tags: RepoStateTag[] = [["d", opts.repoId]];
+  
+  // Add refs (branches and tags) according to NIP-34
   if (opts.refs) {
     for (const ref of opts.refs) {
-      tags.push([
-        `refs/${ref.type}/${ref.name}`,
-        ref.commit,
-        ...(ref.ancestry ?? [])
-      ]);
+      if (ref.ancestry && ref.ancestry.length > 0) {
+        // Extended format with ancestry
+        tags.push([
+          `refs/${ref.type}/${ref.name}`,
+          ref.commit,
+          ...ref.ancestry
+        ]);
+      } else {
+        // Basic format
+        tags.push([`refs/${ref.type}/${ref.name}`, ref.commit]);
+      }
     }
   }
-  if (opts.head) tags.push(["HEAD", `ref: refs/heads/${opts.head}`]);
+  
+  // Add HEAD reference according to NIP-34
+  if (opts.head) {
+    tags.push(["HEAD", `ref: refs/heads/${opts.head}`]);
+  }
+  
   return {
     kind: 30618,
     tags,
@@ -189,7 +204,7 @@ export function createRepoStateEvent(opts: {
 
 /**
  * Create a repository state event for a cloned repository
- * This announces the cloned repository to the Nostr network
+ * This is a simple wrapper around createRepoStateEvent for backward compatibility
  */
 export function createClonedRepoStateEvent(
   repoId: string,
@@ -197,33 +212,26 @@ export function createClonedRepoStateEvent(
   branches: string[] = [],
   tags: string[] = [],
   maintainers: string[] = []
-): Partial<RepoStateEvent> {
-  const eventTags: string[][] = [
-    ["d", repoId],
-    ["clone", cloneUrl],
+): RepoStateEvent {
+  // Convert branches and tags to refs format
+  const refs = [
+    ...branches.map(branch => ({
+      type: "heads" as const,
+      name: branch,
+      commit: "" // Will be filled by the actual implementation
+    })),
+    ...tags.map(tag => ({
+      type: "tags" as const,
+      name: tag,
+      commit: "" // Will be filled by the actual implementation
+    }))
   ];
 
-  // Add branch references
-  branches.forEach(branch => {
-    eventTags.push(["r", `refs/heads/${branch}`]);
+  return createRepoStateEvent({
+    repoId,
+    refs,
+    head: branches.length > 0 ? branches[0] : undefined
   });
-
-  // Add tag references
-  tags.forEach(tag => {
-    eventTags.push(["r", `refs/tags/${tag}`]);
-  });
-
-  // Add maintainers
-  maintainers.forEach(maintainer => {
-    eventTags.push(["maintainer", maintainer]);
-  });
-
-  return {
-    kind: 30618,
-    tags: eventTags,
-    content: "",
-    created_at: Math.floor(Date.now() / 1000),
-  } as Partial<RepoStateEvent>;
 }
 
 /**

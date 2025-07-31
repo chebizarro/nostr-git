@@ -25,6 +25,7 @@ export { default as SplitDiff } from "./git/SplitDiff.svelte";
 export { default as FileMetadataPanel } from "./git/FileMetadataPanel.svelte";
 export { default as NewRepoWizard } from "./git/NewRepoWizard.svelte";
 export { default as EditRepoPanel } from "./git/EditRepoPanel.svelte";
+export { default as ForkRepoDialog } from "./git/ForkRepoDialog.svelte";
 export { Repo } from "./git/Repo.svelte";
 
 export { default as ImageViewer } from "./git/viewers/ImageViewer.svelte";
