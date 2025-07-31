@@ -22,8 +22,8 @@
   "scripts": {
     "format": "prettier --write .",
     "build": "svelte-package && cp src/index.css dist/index.css",
-    "prepare": "npm run build",
-    "watch": "svelte-package --watch & npm run watch-css",
+    "prepare": "pnpm run build",
+    "watch": "cp src/index.css dist/index.css && svelte-package --watch & pnpm run watch-css",
     "watch-css": "nodemon --watch src/index.css --exec 'cp src/index.css dist/index.css'"
   },
   "peerDependencies": {
