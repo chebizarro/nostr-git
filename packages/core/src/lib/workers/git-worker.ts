@@ -1765,34 +1765,50 @@ const cloneAndFork = async ({
   return remoteUrl;
 };
 
+/**
+ * Create a remote repository using the multi-vendor GitProvider system
+ */
+const createRemoteRepoWithVendor = async (
+  targetHost: string,
+  token: string,
+  user: string,
+  repo: string,
+  options: {
+    description?: string;
+    isPrivate?: boolean;
+    hasIssues?: boolean;
+    hasWiki?: boolean;
+    autoInit?: boolean;
+    licenseTemplate?: string;
+    gitignoreTemplate?: string;
+  } = {}
+): Promise<string> => {
+  const { getMultiVendorGitProvider } = await import('../git-provider.js');
+  const gitProvider = getMultiVendorGitProvider();
+  
+  // Set the token for this host
+  gitProvider.setTokens([{ host: targetHost, token }]);
+  
+  try {
+    const repoMetadata = await gitProvider.createRemoteRepo(repo, {
+      ...options,
+      targetHost
+    });
+    
+    return repoMetadata.cloneUrl;
+  } catch (error) {
+    throw new Error(`Failed to create repository on ${targetHost}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+// Keep legacy function for backward compatibility
 const createRemoteRepoLegacy = async (
   host: string,
   token: string,
   user: string,
   repo: string
 ): Promise<string> => {
-  switch (host) {
-    case 'github': {
-      const { data } = await axios.post('https://api.github.com/user/repos', { name: repo }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      return data.clone_url;
-    }
-    case 'gitlab': {
-      const { data } = await axios.post('https://gitlab.com/api/v4/projects', { name: repo }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      return data.http_url_to_repo;
-    }
-    case 'gitea': {
-      const { data } = await axios.post(`https://gitea.com/api/v1/user/repos`, { name: repo }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      return data.clone_url;
-    }
-    default:
-      throw new Error(`Unknown targetHost: ${host}`);
-  }
+  return createRemoteRepoWithVendor(host, token, user, repo);
 };
 
 /**
@@ -2321,51 +2337,22 @@ async function forkAndCloneRepo(options: {
   try {
     onProgress?.('Creating remote fork...', 10);
     
-    // Step 1: Create remote fork via GitHub API
-    const forkResponse = await axios.post(
-      `https://api.github.com/repos/${owner}/${repo}/forks`,
-      {
-        name: forkName,
-        private: (visibility || 'public') === 'private' // Default to public since NIP-34 doesn't support private repos
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': 'nostr-git-client'
-        }
-      }
-    );
+    // Step 1: Create remote fork using multi-vendor GitProvider
+    const { getMultiVendorGitProvider } = await import('../git-provider.js');
+    const gitProvider = getMultiVendorGitProvider();
     
-    // GitHub returns 201 for new forks, 202 for existing forks
-    if (forkResponse.status !== 201 && forkResponse.status !== 202) {
-      let errorMessage = forkResponse.statusText || 'Unknown error';
-      try {
-        // Try to get detailed error from response body
-        if (forkResponse.data && typeof forkResponse.data === 'object') {
-          const errorData = forkResponse.data as any;
-          if (errorData.message) {
-            errorMessage = errorData.message;
-          }
-          if (errorData.errors && Array.isArray(errorData.errors)) {
-            const errorDetails = errorData.errors.map((e: any) => e.message || e.code || e).join(', ');
-            errorMessage += ` (${errorDetails})`;
-          }
-        }
-      } catch (e) {
-        // Fallback to status text if parsing fails
-      }
-      throw new Error(`Failed to create fork: ${errorMessage}`);
+    // Set the token for GitHub
+    gitProvider.setTokens([{ host: 'github.com', token }]);
+    
+    const sourceUrl = `https://github.com/${owner}/${repo}`;
+    const forkResult = await gitProvider.forkRemoteRepo(sourceUrl, forkName);
+    
+    // Check if the fork name was honored
+    if (forkResult.name !== forkName) {
+      throw new Error(`Fork already exists with name "${forkResult.name}". GitHub does not support renaming existing forks. Please delete the existing fork first or choose a different name.`);
     }
-    
-    const forkData = forkResponse.data;
-    
-    // Check if GitHub ignored our custom fork name (happens when fork already exists)
-    if (forkData.name !== forkName) {
-      throw new Error(`Fork already exists with name "${forkData.name}". GitHub does not support renaming existing forks. Please delete the existing fork first or choose a different name.`);
-    }
-    const forkOwner = forkData.owner.login;
-    const forkUrl = forkData.clone_url;
+    const forkOwner = forkResult.owner;
+    const forkUrl = forkResult.cloneUrl;
     
     onProgress?.('Waiting for fork to be ready...', 30);
     
