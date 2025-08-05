@@ -2276,6 +2276,7 @@ async function forkAndCloneRepo(options: {
   visibility: 'public' | 'private';
   token: string;
   dir: string;
+  provider?: string;
   onProgress?: (stage: string, pct?: number) => void;
 }): Promise<{
   success: boolean;
@@ -2286,36 +2287,39 @@ async function forkAndCloneRepo(options: {
   tags: string[];
   error?: string;
 }> {
-  const { owner, repo, forkName, visibility, token, dir, onProgress } = options;
+  const { owner, repo, forkName, visibility, token, dir, provider = 'github', onProgress } = options;
   
   try {
     onProgress?.('Creating remote fork...', 10);
     
-    // Step 1: Create remote fork using multi-vendor GitProvider
-    const { getMultiVendorGitProvider } = await import('../git-provider.js');
-    const gitProvider = getMultiVendorGitProvider();
+    // Step 1: Create remote fork using GitServiceApi abstraction
+    const { getGitServiceApi } = await import('../git/factory.js');
+    const gitServiceApi = getGitServiceApi(provider as any, token);
     
-    // Set the token for GitHub
-    gitProvider.setTokens([{ host: 'github.com', token }]);
+    // Determine source URL based on provider
+    const providerHost = provider === 'github' ? 'github.com' : 
+                        provider === 'gitlab' ? 'gitlab.com' :
+                        provider === 'gitea' ? 'gitea.com' :
+                        provider === 'bitbucket' ? 'bitbucket.org' : 'github.com';
     
-    const sourceUrl = `https://github.com/${owner}/${repo}`;
-    const forkResult = await gitProvider.forkRemoteRepo(sourceUrl, forkName);
+    const sourceUrl = `https://${providerHost}/${owner}/${repo}`;
+    const forkResult = await gitServiceApi.forkRepo(owner, repo, { name: forkName });
     
     // Check if the fork name was honored
     if (forkResult.name !== forkName) {
-      throw new Error(`Fork already exists with name "${forkResult.name}". GitHub does not support renaming existing forks. Please delete the existing fork first or choose a different name.`);
+      throw new Error(`Fork already exists with name "${forkResult.name}". ${provider} does not support renaming existing forks. Please delete the existing fork first or choose a different name.`);
     }
     const forkOwner = forkResult.owner;
     const forkUrl = forkResult.cloneUrl;
     
     onProgress?.('Waiting for fork to be ready...', 30);
     
-    // Step 2: Poll until fork is ready (GitHub needs time to create the fork)
+    // Step 2: Poll until fork is ready (Git providers need time to create the fork)
     let pollAttempts = 0;
     const maxPollAttempts = 30; // 30 seconds max
     
     // Use GitServiceApi abstraction for fork polling
-    const api = getGitServiceApi('github', token);
+    const api = gitServiceApi; // Reuse the same API instance
     
     while (pollAttempts < maxPollAttempts) {
       try {

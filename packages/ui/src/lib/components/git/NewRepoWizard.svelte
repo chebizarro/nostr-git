@@ -2,9 +2,12 @@
   import RepoDetailsStep from './RepoDetailsStep.svelte';
   import AdvancedSettingsStep from './AdvancedSettingsStep.svelte';
   import RepoProgressStep from './RepoProgressStep.svelte';
+  import ProviderSelectionStep from './ProviderSelectionStep.svelte';
   import { type Event as NostrEvent } from 'nostr-tools';
   import { useRegistry } from '../../useRegistry';
   import { useNewRepo, type NewRepoResult } from '$lib/useNewRepo.svelte';
+  import { tokens as tokensStore, type Token } from '$lib/stores/tokens.js';
+  import { getGitServiceApi } from '@nostr-git/core';
   
   const { Button } = useRegistry();
 
@@ -33,9 +36,18 @@
     onPublishEvent: onPublishEvent
   });
 
+  // Token management
+  let tokens = $state<Token[]>([]);
+  let selectedProvider = $state<string>('');
+
+  // Subscribe to token store changes
+  tokensStore.subscribe((t) => {
+    tokens = t;
+  });
+
   // Step management
   let currentStep = $state(1);
-  const totalSteps = 3;
+  const totalSteps = 4; // Updated to include provider selection step
 
   // Repository details (Step 1)
   let repoDetails = $state({
@@ -129,7 +141,9 @@
     if (currentStep === 1 && validateStep1()) {
       currentStep = 2;
     } else if (currentStep === 2) {
-      currentStep = 3;
+      currentStep = 3; // Go to provider selection
+    } else if (currentStep === 3 && selectedProvider) {
+      currentStep = 4; // Go to creation progress
       startRepositoryCreation();
     }
   }
@@ -137,9 +151,16 @@
   function prevStep() {
     if (currentStep === 2) {
       currentStep = 1;
-    } else if (currentStep === 3 && !isCreating) {
+    } else if (currentStep === 3) {
       currentStep = 2;
+    } else if (currentStep === 4 && !isCreating()) {
+      currentStep = 3;
     }
+  }
+
+  // Provider selection handler
+  function handleProviderChange(provider: string) {
+    selectedProvider = provider;
   }
 
   // Repository creation using useNewRepo hook
@@ -292,6 +313,21 @@
       >
         {currentStep > 3 ? '✓' : '3'}
       </div>
+      <span class="text-sm font-medium text-foreground">Choose Service</span>
+    </div>
+    
+    <div class="w-12 h-px bg-border"></div>
+    
+    <div class="flex items-center space-x-2">
+      <div 
+        class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium"
+        class:bg-accent={currentStep >= 4}
+        class:text-accent-foreground={currentStep >= 4}
+        class:bg-muted={currentStep < 4}
+        class:text-muted-foreground={currentStep < 4}
+      >
+        {currentStep > 4 ? '✓' : '4'}
+      </div>
       <span class="text-sm font-medium text-foreground">Create Repository</span>
     </div>
   </div>
@@ -338,6 +374,11 @@
         onCloneUrlChange={handleCloneUrlChange}
       />
     {:else if currentStep === 3}
+      <ProviderSelectionStep
+        selectedProvider={selectedProvider}
+        onProviderChange={handleProviderChange}
+      />
+    {:else if currentStep === 4}
       <RepoProgressStep
         isCreating={isCreating()}
         progress={progressSteps}
@@ -348,7 +389,7 @@
   </div>
 
   <!-- Navigation Buttons -->
-  {#if currentStep < 3}
+  {#if currentStep < 4}
     <div class="flex justify-between pt-4">
       <Button
         onclick={onCancel}
@@ -373,12 +414,12 @@
         
         <Button
           onclick={nextStep}
-          disabled={currentStep === 1 && !validateStep1()}
+          disabled={(currentStep === 1 && !validateStep1()) || (currentStep === 3 && !selectedProvider)}
           variant="git"
           size="sm"
           class="h-8 px-3 py-0 text-xs font-medium rounded-md transition"
         >
-          {currentStep === 2 ? 'Create Repository' : 'Next'}
+          {currentStep === 3 ? 'Create Repository' : 'Next'}
         </Button>
       </div>
     </div>

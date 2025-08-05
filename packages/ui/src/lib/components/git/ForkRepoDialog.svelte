@@ -6,6 +6,7 @@
   import type { RepoAnnouncementEvent, RepoStateEvent } from '@nostr-git/shared-types';
   import type { Token } from '../../stores/tokens.js';
   import { getGitServiceApi } from '@nostr-git/core';
+  import { toast } from '$lib/stores/toast';
 
   // Component props
   interface Props {
@@ -176,7 +177,10 @@
         try {
           await api.getRepo(username, forkName);
           // Fork exists
-          errorMessage = `Fork '${forkName}' already exists in your GitHub account`;
+          toast.push({
+            message: `Fork '${forkName}' already exists in your GitHub account`,
+            theme: 'error'
+          });
           return;
         } catch (error: any) {
           // Fork doesn't exist (good!) - continue with fork creation
@@ -281,18 +285,16 @@
     });
 
     try {
-      // Check if selected service is supported
-      if (selectedService !== 'github.com') {
-        console.error('❌ ForkRepoDialog: Selected service not supported:', selectedService);
-        // Show error message to user that this service is not yet supported
-        const errorMessage = `Fork operation is not yet implemented for ${selectedService}. Currently only GitHub is supported.`;
-        // Since we can't directly set the forkState error, we'll throw an error that gets caught
-        throw new Error(errorMessage);
-      }
+      // All services are now supported via GitServiceApi abstraction
+      console.log('🚀 ForkRepoDialog: Fork operation supported for service:', selectedService);
 
       const result = await forkState.forkRepository(originalRepo, {
         forkName,
-        visibility: 'public'
+        visibility: 'public',
+        provider: selectedService === 'github.com' ? 'github' : 
+                 selectedService === 'gitlab.com' ? 'gitlab' :
+                 selectedService === 'gitea.com' ? 'gitea' :
+                 selectedService === 'bitbucket.org' ? 'bitbucket' : 'github'
       });
       
       if (result) {

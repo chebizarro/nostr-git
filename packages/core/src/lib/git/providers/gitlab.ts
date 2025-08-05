@@ -150,22 +150,72 @@ export class GitLabApi implements GitServiceApi {
   }
 
   async forkRepo(owner: string, repo: string, options?: GitForkOptions): Promise<RepoMetadata> {
-    const projectId = await this.getProjectId(owner, repo);
-    
-    const body: any = {};
-    if (options?.name) {
-      body.name = options.name;
-      body.path = options.name;
-    }
-    if (options?.organization) {
-      body.namespace_id = options.organization;
-    }
+    // First, try to find the project on GitLab (same-provider forking)
+    try {
+      const projectId = await this.getProjectId(owner, repo);
+      
+      const body: any = {};
+      if (options?.name) {
+        body.name = options.name;
+        body.path = options.name;
+      }
+      if (options?.organization) {
+        body.namespace_id = options.organization;
+      }
 
-    const data = await this.request<any>(`/projects/${projectId}/fork`, {
+      const data = await this.request<any>(`/projects/${projectId}/fork`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      
+      return {
+        id: data.id.toString(),
+        name: data.name,
+        fullName: data.path_with_namespace,
+        description: data.description,
+        defaultBranch: data.default_branch,
+        isPrivate: data.visibility === 'private',
+        cloneUrl: data.http_url_to_repo,
+        htmlUrl: data.web_url,
+        owner: {
+          login: data.namespace.path,
+          type: data.namespace.kind === 'user' ? 'User' : 'Organization',
+        },
+      };
+    } catch (error: any) {
+      // If project not found on GitLab, attempt cross-provider import from GitHub
+      if (error.message?.includes('404') || error.message?.includes('Project Not Found')) {
+        return this.importFromGitHub(owner, repo, options);
+      }
+      throw error;
+    }
+  }
+  
+  /**
+   * Import a repository from GitHub to GitLab (cross-provider forking)
+   */
+  private async importFromGitHub(owner: string, repo: string, options?: GitForkOptions): Promise<RepoMetadata> {
+    const githubUrl = `https://github.com/${owner}/${repo}.git`;
+    const projectName = options?.name || repo;
+    const projectPath = options?.name || repo;
+    
+    const importBody = {
+      name: projectName,
+      path: projectPath,
+      import_url: githubUrl,
+      visibility: 'public', // Default to public, could be made configurable
+      description: `Imported from GitHub: ${owner}/${repo}`,
+    };
+
+    const data = await this.request<any>('/projects', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(importBody),
     });
+    
+    // Wait for import to complete before returning
+    await this.waitForImportCompletion(data.id);
 
     return {
       id: data.id.toString(),
@@ -181,6 +231,46 @@ export class GitLabApi implements GitServiceApi {
         type: data.namespace.kind === 'group' ? 'Organization' : 'User',
       },
     };
+  }
+  
+  /**
+   * Wait for GitLab import to complete
+   */
+  private async waitForImportCompletion(projectId: number): Promise<void> {
+    const maxAttempts = 60; // 5 minutes max (5 second intervals)
+    let attempts = 0;
+    
+    while (attempts < maxAttempts) {
+      try {
+        // Check import status via project API
+        const project = await this.request<any>(`/projects/${projectId}`);
+        
+        // GitLab sets import_status field during import
+        if (project.import_status === 'finished' || project.import_status === 'none' || !project.import_status) {
+          // Import completed successfully
+          return;
+        }
+        
+        if (project.import_status === 'failed') {
+          throw new Error('GitLab repository import failed');
+        }
+        
+        // Import still in progress, wait and retry
+        await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+        attempts++;
+        
+      } catch (error: any) {
+        // If we can't check status, assume import is complete after a reasonable wait
+        if (attempts > 6) { // After 30 seconds, assume it's ready
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        attempts++;
+      }
+    }
+    
+    // Timeout reached, but don't fail - the import might still be working
+    console.warn('GitLab import status check timed out, proceeding with clone attempt');
   }
 
   /**

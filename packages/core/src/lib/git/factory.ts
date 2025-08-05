@@ -11,13 +11,15 @@ import { GitHubApi } from './providers/github.js';
 import { GitLabApi } from './providers/gitlab.js';
 import { GiteaApi } from './providers/gitea.js';
 import { BitbucketApi } from './providers/bitbucket.js';
+import { GraspApi, type Signer } from './providers/grasp.js';
 
 /**
  * Create a GitServiceApi instance for the specified provider
  * 
- * @param provider - The Git service provider ('github', 'gitlab', 'gitea', 'bitbucket')
- * @param token - Authentication token for the provider
- * @param baseUrl - Optional custom base URL (for self-hosted instances)
+ * @param provider - The Git service provider ('github', 'gitlab', 'gitea', 'bitbucket', 'grasp')
+ * @param token - Authentication token for the provider (or pubkey for GRASP)
+ * @param baseUrl - Optional custom base URL (for self-hosted instances) or relay URL for GRASP
+ * @param signer - Optional Nostr signer (required for GRASP)
  * @returns GitServiceApi implementation for the provider
  * 
  * @example
@@ -28,14 +30,15 @@ import { BitbucketApi } from './providers/bitbucket.js';
  * // Self-hosted GitLab
  * const gitlabApi = getGitServiceApi('gitlab', 'glpat-xxxxxxxxxxxx', 'https://gitlab.example.com');
  * 
- * // Self-hosted Gitea
- * const giteaApi = getGitServiceApi('gitea', 'xxxxxxxxxxxxxxxx', 'https://gitea.example.com');
+ * // GRASP relay
+ * const graspApi = getGitServiceApi('grasp', pubkey, 'wss://relay.example.com', signer);
  * ```
  */
 export function getGitServiceApi(
   provider: GitVendor, 
   token: string, 
-  baseUrl?: string
+  baseUrl?: string,
+  signer?: Signer
 ): GitServiceApi {
   switch (provider) {
     case 'github':
@@ -50,11 +53,20 @@ export function getGitServiceApi(
     case 'bitbucket':
       return new BitbucketApi(token, baseUrl);
     
+    case 'grasp':
+      if (!baseUrl) {
+        throw new Error('GRASP provider requires a relay URL as baseUrl parameter');
+      }
+      if (!signer) {
+        throw new Error('GRASP provider requires a signer parameter');
+      }
+      return new GraspApi(baseUrl, token, signer);
+    
     case 'generic':
-      throw new Error('Generic Git provider does not support REST API operations. Use a specific provider (github, gitlab, gitea, bitbucket).');
+      throw new Error('Generic Git provider does not support REST API operations. Use a specific provider (github, gitlab, gitea, bitbucket, grasp).');
     
     default:
-      throw new Error(`Unknown Git provider: ${provider}. Supported providers: github, gitlab, gitea, bitbucket`);
+      throw new Error(`Unknown Git provider: ${provider}. Supported providers: github, gitlab, gitea, bitbucket, grasp`);
   }
 }
 
@@ -113,7 +125,7 @@ export function getGitServiceApiFromUrl(url: string, token: string): GitServiceA
  * @returns Array of supported Git service provider names
  */
 export function getAvailableProviders(): GitVendor[] {
-  return ['github', 'gitlab', 'gitea', 'bitbucket'];
+  return ['github', 'gitlab', 'gitea', 'bitbucket', 'grasp'];
 }
 
 /**
@@ -123,7 +135,7 @@ export function getAvailableProviders(): GitVendor[] {
  * @returns true if the provider supports REST API operations
  */
 export function supportsRestApi(provider: GitVendor): boolean {
-  return ['github', 'gitlab', 'gitea', 'bitbucket'].includes(provider);
+  return ['github', 'gitlab', 'gitea', 'bitbucket', 'grasp'].includes(provider);
 }
 
 /**
@@ -142,6 +154,8 @@ export function getDefaultApiBaseUrl(provider: GitVendor): string {
       throw new Error('Gitea requires a custom base URL for self-hosted instances');
     case 'bitbucket':
       return 'https://api.bitbucket.org/2.0';
+    case 'grasp':
+      throw new Error('GRASP provider requires a custom relay URL');
     case 'generic':
       throw new Error('Generic provider does not have a default API base URL');
     default:

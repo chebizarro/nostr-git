@@ -1,7 +1,7 @@
 // Multi-vendor Git provider system
 // Supports GitHub, GitLab, Gitea, Bitbucket and generic Git providers
 
-export type GitVendor = 'github' | 'gitlab' | 'gitea' | 'bitbucket' | 'generic';
+export type GitVendor = 'github' | 'gitlab' | 'gitea' | 'bitbucket' | 'generic' | 'grasp';
 
 export interface RepoMetadata {
   id: string;

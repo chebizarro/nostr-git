@@ -96,7 +96,7 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
    */
   async function forkRepository(
     originalRepo: { owner: string; name: string; description?: string },
-    config: ForkConfig
+    config: ForkConfig & { provider?: string }
   ): Promise<ForkResult | null> {
     if (isForking) {
       throw new Error('Fork operation already in progress');
@@ -107,17 +107,23 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
     progress = [];
 
     try {
-      // Step 1: Validate GitHub token
-      updateProgress('validate', 'Validating GitHub token...', 'running');
-      const githubToken = tokens.find(t => t.host === 'github.com')?.token;
-      if (!githubToken) {
-        throw new Error('GitHub token not found. Please add a GitHub token in settings.');
+      // Step 1: Determine provider and validate token
+      const provider = config.provider || 'github'; // Default to GitHub for backward compatibility
+      const providerHost = provider === 'github' ? 'github.com' : 
+                          provider === 'gitlab' ? 'gitlab.com' :
+                          provider === 'gitea' ? 'gitea.com' :
+                          provider === 'bitbucket' ? 'bitbucket.org' : 'github.com';
+      
+      updateProgress('validate', `Validating ${provider} token...`, 'running');
+      const providerToken = tokens.find(t => t.host === providerHost)?.token;
+      if (!providerToken) {
+        throw new Error(`${provider} token not found. Please add a ${provider} token in settings.`);
       }
-      updateProgress('validate', 'GitHub token validated', 'completed');
+      updateProgress('validate', `${provider} token validated`, 'completed');
 
       // Step 2: Get current user using GitServiceApi
       updateProgress('user', 'Getting current user info...', 'running');
-      const gitServiceApi = getGitServiceApi('github', githubToken);
+      const gitServiceApi = getGitServiceApi(provider as any, providerToken);
       const userData = await gitServiceApi.getCurrentUser();
       const currentUser = userData.login;
       updateProgress('user', `Current user: ${currentUser}`, 'completed');
@@ -135,7 +141,8 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
         repo: originalRepo.name,
         forkName: config.forkName,
         visibility: config.visibility,
-        token: githubToken,
+        token: providerToken,
+        provider: provider,
         dir: destinationPath
         // Note: onProgress callback removed - functions cannot be serialized through Comlink
       });
