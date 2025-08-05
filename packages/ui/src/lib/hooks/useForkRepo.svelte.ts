@@ -1,5 +1,6 @@
 import { createRepoAnnouncementEvent, createRepoStateEvent, RepoAnnouncementEvent, RepoStateEvent } from '@nostr-git/shared-types';
 import { tokens as tokensStore } from '../stores/tokens.js';
+import { getGitServiceApi } from '@nostr-git/core';
 
 // Types for fork configuration and progress
 export interface ForkConfig {
@@ -114,32 +115,22 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
       }
       updateProgress('validate', 'GitHub token validated', 'completed');
 
-      // Step 2: Get current user
+      // Step 2: Get current user using GitServiceApi
       updateProgress('user', 'Getting current user info...', 'running');
-      const userResponse = await fetch('https://api.github.com/user', {
-        headers: {
-          'Authorization': `Bearer ${githubToken}`,
-          'Accept': 'application/vnd.github.v3+json'
-        }
-      });
-      
-      if (!userResponse.ok) {
-        throw new Error('Failed to get GitHub user info');
-      }
-      
-      const userData = await userResponse.json();
+      const gitServiceApi = getGitServiceApi('github', githubToken);
+      const userData = await gitServiceApi.getCurrentUser();
       const currentUser = userData.login;
       updateProgress('user', `Current user: ${currentUser}`, 'completed');
 
       // Step 3: Fork and clone repository using git-worker
       updateProgress('fork', 'Creating fork and cloning repository...', 'running');
       const { getGitWorker } = await import('@nostr-git/core');
-      const { api } = getGitWorker();
+      const { api: gitWorkerApi } = getGitWorker();
 
       // Use just the fork name as directory path (browser virtual file system)
       const destinationPath = config.forkName;
 
-      const workerResult = await api.forkAndCloneRepo({
+      const workerResult = await gitWorkerApi.forkAndCloneRepo({
         owner: originalRepo.owner,
         repo: originalRepo.name,
         forkName: config.forkName,

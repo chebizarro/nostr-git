@@ -1,8 +1,11 @@
 <script lang="ts">
-  import { X, GitFork, AlertCircle, CheckCircle2, Loader2 } from '@lucide/svelte';
+  import { X, GitFork, AlertCircle, CheckCircle2, Loader2, ChevronDown, ExternalLink } from '@lucide/svelte';
   import { Repo } from './Repo.svelte';
   import { useForkRepo } from '../../hooks/useForkRepo.svelte';
+  import { tokens } from '../../stores/tokens.js';
   import type { RepoAnnouncementEvent, RepoStateEvent } from '@nostr-git/shared-types';
+  import type { Token } from '../../stores/tokens.js';
+  import { getGitServiceApi } from '@nostr-git/core';
 
   // Component props
   interface Props {
@@ -47,10 +50,37 @@
   };
     // Form state
   let forkName = $state(`${originalRepo.name}-fork`);
+  let selectedService = $state<string>('github.com'); // Default to GitHub
+  let isCheckingExistingFork = $state(false);
+  let existingForkInfo = $state<{ exists: boolean; url?: string; message?: string; service?: string; error?: string } | null>(null);
+
+  // Get available git services from tokens
+  let tokenList = $state<Token[]>([]);
+  tokens.subscribe((t) => {
+    tokenList = t;
+  });
+
+  const availableServices = $derived.by(() => {
+    const services = tokenList
+      .filter(token => ['github.com', 'gitlab.com', 'bitbucket.org'].includes(token.host))
+      .map(token => ({
+        host: token.host,
+        label: token.host === 'github.com' ? 'GitHub' : 
+               token.host === 'gitlab.com' ? 'GitLab' : 
+               token.host === 'bitbucket.org' ? 'Bitbucket' : token.host
+      }));
+    
+    // Ensure selected service is available, fallback to first available or GitHub
+    if (services.length > 0 && !services.some(s => s.host === selectedService)) {
+      selectedService = services[0].host;
+    }
+    
+    return services;
+  });
 
   // Debug initial state
   console.log('🏁 ForkRepoDialog: Initial state', { 
-    originalRepo 
+    originalRepo
   });
 
   // Computed properties
@@ -81,6 +111,116 @@
   $effect(() => {
     validationError = validateForkName(forkName);
   });
+
+  // Debounced fork checking to prevent excessive API calls
+  let checkTimeout: ReturnType<typeof setTimeout> | undefined;
+  let lastCheckedKey = $state<string>('');
+
+  // Check for existing fork when service or fork name changes (debounced)
+  $effect(() => {
+    const currentKey = `${selectedService}:${forkName.trim()}`;
+    
+    // Clear existing timeout
+    if (checkTimeout) {
+      clearTimeout(checkTimeout);
+    }
+    
+    // Skip if we already checked this combination
+    if (currentKey === lastCheckedKey || !selectedService || !forkName.trim() || availableServices.length === 0) {
+      return;
+    }
+    
+    // Reset existing fork info immediately to show we're about to check
+    existingForkInfo = null;
+    
+    // Debounce the API call by 500ms
+    checkTimeout = setTimeout(() => {
+      checkExistingFork(currentKey);
+    }, 500);
+  });
+
+  // Function to check if fork already exists on selected service
+  async function checkExistingFork(checkKey: string) {
+    // Prevent concurrent checks and validate inputs
+    if (isCheckingExistingFork || !selectedService || !forkName.trim()) {
+      return;
+    }
+    
+    // Skip if this check is already outdated (user changed inputs)
+    const currentKey = `${selectedService}:${forkName.trim()}`;
+    if (checkKey !== currentKey) {
+      return;
+    }
+
+    isCheckingExistingFork = true;
+    existingForkInfo = null;
+
+    try {
+      const token = tokenList.find(t => t.host === selectedService)?.token;
+      if (!token) {
+        existingForkInfo = {
+          exists: false,
+          message: `No token found for ${selectedService}`
+        };
+        return;
+      }
+
+      // Check if fork exists based on service
+      if (selectedService === 'github.com') {
+        // Get current user info and check if fork already exists
+        const api = getGitServiceApi('github', token);
+        const userData = await api.getCurrentUser();
+        const username = userData.login;
+        
+        // Check if fork already exists
+        try {
+          await api.getRepo(username, forkName);
+          // Fork exists
+          errorMessage = `Fork '${forkName}' already exists in your GitHub account`;
+          return;
+        } catch (error: any) {
+          // Fork doesn't exist (good!) - continue with fork creation
+          if (!error.message?.includes('404') && !error.message?.includes('Not Found')) {
+            // Some other error occurred
+            throw error;
+          }
+        }
+
+        // Repository check is already done above - fork doesn't exist, so we can proceed
+        existingForkInfo = {
+          exists: false,
+          service: selectedService
+        };
+      } else {
+        // For other services, show placeholder
+        existingForkInfo = {
+          exists: false,
+          service: selectedService,
+          message: `Fork checking not yet implemented for ${selectedService}`
+        };
+      }
+      
+      // Mark this combination as checked to prevent redundant calls
+      lastCheckedKey = checkKey;
+    } catch (error) {
+      console.error('Error checking existing fork:', error);
+      existingForkInfo = {
+        exists: false,
+        service: selectedService,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+      // Don't update lastCheckedKey on error so we can retry
+    } finally {
+      isCheckingExistingFork = false;
+    }
+  }
+
+  // Handle service selection change
+  function handleServiceChange(event: Event) {
+    const target = event.target as HTMLSelectElement;
+    selectedService = target.value;
+    existingForkInfo = null; // Reset fork check when service changes
+  }
 
   // Computed properties for progress handling
   const isProgressComplete = $derived.by(() => {
@@ -113,7 +253,19 @@
   }
 
   async function handleFork() {
-    console.log('🚀 ForkRepoDialog: handleFork called', { forkName, originalRepo });
+    console.log('🚀 ForkRepoDialog: handleFork called', { forkName, originalRepo, selectedService });
+    
+    // Validate service availability
+    if (availableServices.length === 0) {
+      console.log('❌ ForkRepoDialog: No git services available');
+      return;
+    }
+
+    // Check if fork already exists
+    if (existingForkInfo?.exists) {
+      console.log('❌ ForkRepoDialog: Fork already exists');
+      return;
+    }
     
     const nameError = validateForkName(forkName);
     if (nameError) {
@@ -122,15 +274,37 @@
       return;
     }
 
-    console.log('✅ ForkRepoDialog: Validation passed, calling forkRepository');
+    console.log('🚀 ForkRepoDialog: Starting fork operation with config:', {
+      forkName,
+      selectedService,
+      visibility: 'public'
+    });
+
     try {
+      // Check if selected service is supported
+      if (selectedService !== 'github.com') {
+        console.error('❌ ForkRepoDialog: Selected service not supported:', selectedService);
+        // Show error message to user that this service is not yet supported
+        const errorMessage = `Fork operation is not yet implemented for ${selectedService}. Currently only GitHub is supported.`;
+        // Since we can't directly set the forkState error, we'll throw an error that gets caught
+        throw new Error(errorMessage);
+      }
+
       const result = await forkState.forkRepository(originalRepo, {
-        forkName: forkName.trim()
+        forkName,
+        visibility: 'public'
       });
-      console.log('🎉 ForkRepoDialog: forkRepository completed', result);
+      
+      if (result) {
+        console.log('✅ ForkRepoDialog: Fork completed successfully:', result);
+      }
     } catch (error) {
-      console.error('💥 ForkRepoDialog: Fork failed:', error);
-      // Error is handled by the useForkRepo hook
+      console.error('❌ ForkRepoDialog: Fork failed:', error);
+    }
+    
+    // Note: handleClose is called by onForkCompleted callback
+    if (!isForking) {
+      handleClose();
     }
   }
 
@@ -206,6 +380,43 @@
         <!-- Fork Configuration -->
         {#if !isForking && !isProgressComplete}
           <div class="space-y-4">
+            <!-- Git Service Selection -->
+            {#if availableServices.length > 0}
+              <div>
+                <label for="git-service" class="block text-sm font-medium text-gray-300 mb-2">
+                  Git Service *
+                </label>
+                <div class="relative">
+                  <select
+                    id="git-service"
+                    bind:value={selectedService}
+                    onchange={handleServiceChange}
+                    class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none pr-10"
+                  >
+                    {#each availableServices as service}
+                      <option value={service.host}>{service.label}</option>
+                    {/each}
+                  </select>
+                  <ChevronDown class="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+                <p class="mt-1 text-xs text-gray-400">
+                  Fork will be created on {availableServices.find(s => s.host === selectedService)?.label || selectedService}
+                </p>
+              </div>
+            {:else}
+              <div class="bg-yellow-900/50 border border-yellow-500 rounded-lg p-4">
+                <div class="flex items-start space-x-3">
+                  <AlertCircle class="w-5 h-5 text-yellow-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <h4 class="text-yellow-400 font-medium mb-1">No Git Service Tokens</h4>
+                    <p class="text-yellow-300 text-sm">
+                      You need to add authentication tokens for git services (GitHub, GitLab, etc.) to fork repositories.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            {/if}
+
             <!-- Fork Name -->
             <div>
               <label for="fork-name" class="block text-sm font-medium text-gray-300 mb-2">
@@ -215,17 +426,52 @@
                 id="fork-name"
                 type="text"
                 bind:value={forkName}
-                disabled={isForking}
-                class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                 placeholder="Enter fork name"
+                disabled={availableServices.length === 0}
+                class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
               />
               {#if validationError}
-                <p class="text-red-400 text-sm mt-1 flex items-center space-x-1">
+                <p class="mt-1 text-sm text-red-400 flex items-center space-x-1">
                   <AlertCircle class="w-4 h-4" />
                   <span>{validationError}</span>
                 </p>
               {/if}
             </div>
+
+            <!-- Existing Fork Status -->
+            {#if isCheckingExistingFork}
+              <div class="bg-gray-800 border border-gray-600 rounded-lg p-3">
+                <div class="flex items-center space-x-2 text-sm text-gray-300">
+                  <Loader2 class="w-4 h-4 animate-spin" />
+                  <span>Checking if fork already exists...</span>
+                </div>
+              </div>
+            {:else if existingForkInfo}
+              <div class="bg-gray-800 border border-gray-600 rounded-lg p-3">
+                <div class="flex items-start space-x-2 text-sm">
+                  {#if existingForkInfo.exists}
+                    <AlertCircle class="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
+                    <div class="flex-1">
+                      <p class="text-yellow-400 font-medium">{existingForkInfo.message}</p>
+                      {#if existingForkInfo.url}
+                        <a 
+                          href={existingForkInfo.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          class="inline-flex items-center space-x-1 text-blue-400 hover:text-blue-300 mt-1"
+                        >
+                          <span>View existing repository</span>
+                          <ExternalLink class="w-3 h-3" />
+                        </a>
+                      {/if}
+                    </div>
+                  {:else}
+                    <CheckCircle2 class="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
+                    <p class="text-green-400">{existingForkInfo.message}</p>
+                  {/if}
+                </div>
+              </div>
+            {/if}
           </div>
         {/if}
 
@@ -297,7 +543,7 @@
           </button>
           <button
             onclick={handleFork}
-            disabled={isForking || !!validationError || !forkName.trim()}
+            disabled={isForking || !!validationError || !forkName.trim() || availableServices.length === 0 || existingForkInfo?.exists}
             class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
           >
             {#if isForking}

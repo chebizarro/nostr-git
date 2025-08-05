@@ -1,5 +1,6 @@
 import { type Event as NostrEvent } from "nostr-tools";
 import { tokens as tokensStore, type Token } from "./stores/tokens.js";
+import { getGitServiceApi } from '@nostr-git/core';
 
 /**
  * Check if a repository name is available on GitHub
@@ -13,44 +14,29 @@ export async function checkGitHubRepoAvailability(repoName: string, token: strin
   username?: string;
 }> {
   try {
-    // First, get the authenticated user's GitHub username
-    const userResponse = await fetch('https://api.github.com/user', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/vnd.github.v3+json'
-      }
-    });
+    // Use GitServiceApi abstraction instead of hardcoded GitHub API calls
+    const api = getGitServiceApi('github', token);
     
-    if (!userResponse.ok) {
-      console.warn('Could not fetch GitHub user info for availability check');
-      return { available: true }; // Proceed anyway
-    }
-    
-    const userData = await userResponse.json();
-    const username = userData.login;
+    // Get the authenticated user's information
+    const currentUser = await api.getCurrentUser();
+    const username = currentUser.login;
     
     // Check if repository already exists by trying to fetch it
-    const response = await fetch(`https://api.github.com/repos/${username}/${repoName}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/vnd.github.v3+json'
-      }
-    });
-    
-    if (response.status === 200) {
+    try {
+      await api.getRepo(username, repoName);
       // Repository exists
       return { 
         available: false, 
         reason: 'Repository name already exists in your account',
         username 
       };
-    } else if (response.status === 404) {
-      // Repository doesn't exist (good!)
-      return { available: true, username };
-    } else {
-      // Other error - proceed anyway and let the create call handle it
-      console.warn('Unexpected response when checking repo availability:', response.status);
-      return { available: true, username };
+    } catch (error: any) {
+      // Repository doesn't exist (good!) - API throws error for 404
+      if (error.message?.includes('404') || error.message?.includes('Not Found')) {
+        return { available: true, username };
+      }
+      // Some other error occurred
+      throw error;
     }
   } catch (error) {
     // Network error or other issue - proceed anyway

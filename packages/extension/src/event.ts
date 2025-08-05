@@ -250,6 +250,8 @@ export async function generateNostrIssueThread(
   repoEvent: NostrEvent,
   relays: string[] = []
 ): Promise<IssueEventBundle> {
+  // TODO: Refactor to use GitServiceApi abstraction
+  // For now, keeping the direct API call but adding a note for future refactoring
   const issueRes = await fetch(
     `https://api.github.com/repos/${issueInfo.owner}/${issueInfo.repo}/issues/${issueInfo.issueNumber}`
   );

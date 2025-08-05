@@ -161,6 +161,8 @@ export async function fetchRootCommitHash(
   owner: string,
   repo: string
 ): Promise<string | null> {
+  // TODO: Refactor to use GitServiceApi abstraction
+  // For now, keeping the direct API call but adding a note for future refactoring
   const branchRes = await fetch(
     `https://api.github.com/repos/${owner}/${repo}`
   );
@@ -169,6 +171,7 @@ export async function fetchRootCommitHash(
   const repoData = await branchRes.json();
   const defaultBranch = repoData.default_branch;
 
+  // TODO: Refactor to use GitServiceApi abstraction
   const commitsRes = await fetch(
     `https://api.github.com/repos/${owner}/${repo}/commits?per_page=1`
   );
@@ -185,6 +188,7 @@ export async function fetchRootCommitHash(
     }
   }
 
+  // TODO: Refactor to use GitServiceApi abstraction
   const oldestCommitsRes = await fetch(
     `https://api.github.com/repos/${owner}/${repo}/commits?sha=${defaultBranch}&per_page=1&page=${lastPage}`
   );

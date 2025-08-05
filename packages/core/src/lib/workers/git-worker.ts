@@ -7,6 +7,9 @@ import { GitProvider, IsomorphicGitProvider } from '@nostr-git/git-wrapper';
 import { rootDir } from '../git.js';
 import { Buffer } from 'buffer';
 import { analyzePatchMergeability, type MergeAnalysisResult } from '../merge-analysis.js';
+import { getGitServiceApi } from '../git/factory.js';
+import type { GitServiceApi } from '../git/api.js';
+import type { GitVendor } from '../vendor-providers.js';
 
 // Authentication configuration
 interface AuthToken {
@@ -2011,7 +2014,7 @@ const createRemoteRepo = async ({
   description,
   isPrivate = false
 }: {
-  provider: 'github' | 'gitlab' | 'gitea';
+  provider: GitVendor;
   token: string;
   name: string;
   description?: string;
@@ -2025,67 +2028,18 @@ const createRemoteRepo = async ({
       throw new Error('No authentication token provided');
     }
     
-    let remoteUrl: string;
+    // Use GitServiceApi abstraction instead of hardcoded API calls
+    const api = getGitServiceApi(provider, token);
     
-    switch (provider) {
-      case 'github': {
-        const response = await axios.post(
-          'https://api.github.com/user/repos',
-          {
-            name,
-            description,
-            private: isPrivate,
-            auto_init: false // We'll push our own initial commit
-          },
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Accept': 'application/vnd.github.v3+json'
-            }
-          }
-        );
-        remoteUrl = response.data.clone_url;
-        break;
-      }
-      case 'gitlab': {
-        const response = await axios.post(
-          'https://gitlab.com/api/v4/projects',
-          {
-            name,
-            description,
-            visibility: isPrivate ? 'private' : 'public',
-            initialize_with_readme: false
-          },
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          }
-        );
-        remoteUrl = response.data.http_url_to_repo;
-        break;
-      }
-      case 'gitea': {
-        const response = await axios.post(
-          'https://gitea.com/api/v1/user/repos',
-          {
-            name,
-            description,
-            private: isPrivate,
-            auto_init: false
-          },
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          }
-        );
-        remoteUrl = response.data.clone_url;
-        break;
-      }
-      default:
-        throw new Error(`Unsupported provider: ${provider}`);
-    }
+    // Create repository using unified API
+    const repoMetadata = await api.createRepo({
+      name,
+      description,
+      private: isPrivate,
+      autoInit: false // We'll push our own initial commit
+    });
+    
+    const remoteUrl = repoMetadata.cloneUrl;
     
     console.log(`Remote repository created: ${remoteUrl}`);
     
@@ -2360,27 +2314,24 @@ async function forkAndCloneRepo(options: {
     let pollAttempts = 0;
     const maxPollAttempts = 30; // 30 seconds max
     
+    // Use GitServiceApi abstraction for fork polling
+    const api = getGitServiceApi('github', token);
+    
     while (pollAttempts < maxPollAttempts) {
       try {
-        const checkResponse = await axios.get(
-          `https://api.github.com/repos/${forkOwner}/${forkName}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Accept': 'application/vnd.github.v3+json',
-              'User-Agent': 'nostr-git-client'
-            }
-          }
-        );
+        // Use GitServiceApi to check if fork is ready
+        const repoMetadata = await api.getRepo(forkOwner.login, forkName);
         
-        if (checkResponse.status === 200 && !checkResponse.data.empty) {
+        if (repoMetadata && repoMetadata.id) {
           break; // Fork is ready
         }
       } catch (error: any) {
-        if (error.response?.status !== 404) {
+        // Repository not found yet, continue polling
+        if (error.message?.includes('404') || error.message?.includes('Not Found')) {
+          // 404 means fork not ready yet, continue polling
+        } else {
           throw error; // Unexpected error
         }
-        // 404 means fork not ready yet, continue polling
       }
       
       pollAttempts++;
@@ -2469,34 +2420,21 @@ async function updateRemoteRepoMetadata(options: {
   try {
     console.log(`Updating remote repository metadata for ${owner}/${repo}...`);
     
-    // Prepare the update payload
-    const updatePayload: any = {};
-    if (updates.name !== undefined) updatePayload.name = updates.name;
-    if (updates.description !== undefined) updatePayload.description = updates.description;
-    if (updates.private !== undefined) updatePayload.private = updates.private;
+    // Use GitServiceApi abstraction instead of hardcoded GitHub API calls
+    const api = getGitServiceApi('github', token);
     
-    // Update remote repository via GitHub API
-    const response = await axios.patch(
-      `https://api.github.com/repos/${owner}/${repo}`,
-      updatePayload,
-      {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': 'nostr-git-client'
-        }
-      }
-    );
-    
-    if (response.status !== 200) {
-      throw new Error(`Failed to update repository: ${response.statusText}`);
-    }
+    // Update repository using unified API
+    const updatedRepo = await api.updateRepo(owner, repo, {
+      name: updates.name,
+      description: updates.description,
+      private: updates.private,
+    });
     
     console.log(`Successfully updated remote repository metadata`);
     
     return {
       success: true,
-      updatedRepo: response.data
+      updatedRepo
     };
     
   } catch (error: any) {
