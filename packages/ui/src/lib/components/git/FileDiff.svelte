@@ -1,9 +1,9 @@
 <script lang="ts">
   import { Plus, Minus, MessageSquarePlus, FileText, FilePlus, FileX, FileIcon } from '@lucide/svelte';
-  import type { FileDiff as FileDiffType } from './useDiffStore.js';
+  import type { FileDiff } from '@nostr-git/shared-types';
 
   interface Props {
-    fileDiff: FileDiffType;
+    fileDiff: FileDiff;
     expanded?: boolean;
     onToggleExpansion?: () => void;
     onSelectFile?: (filePath: string) => void;
@@ -56,7 +56,7 @@
   };
 
   // Get status icon and color
-  const getStatusInfo = (status: FileDiffType['status']) => {
+  const getStatusInfo = (status: FileDiff['status']) => {
     switch (status) {
       case 'added':
         return { icon: FilePlus, color: 'text-green-600', bg: 'bg-green-50', label: 'A' };
@@ -72,7 +72,7 @@
   };
 
   // Calculate line numbers for display
-  const calculateLineNumbers = (hunk: FileDiffType['diffHunks'][0]) => {
+  const calculateLineNumbers = (hunk: FileDiff['diffHunks'][0]) => {
     const lines: Array<{
       oldLineNum: number | null;
       newLineNum: number | null;

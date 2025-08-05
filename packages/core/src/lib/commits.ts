@@ -1,16 +1,7 @@
 // Commit-related git functions for @nostr-git/core
 import { getGitProvider } from './git-provider.js';
 import { rootDir } from './git.js';
-
-export interface Commit {
-  oid: string;
-  message: string;
-  author: { name: string; email: string; timestamp?: number };
-  committer?: { name: string; email: string; timestamp?: number };
-  parent?: string[];
-  tree?: string;
-  date?: number;
-}
+import type { Commit } from '@nostr-git/shared-types';
 
 /**
  * Get commit log for a repo/branch.

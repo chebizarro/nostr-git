@@ -1,13 +1,14 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import CommitDiff from './CommitDiff.svelte';
-  import { diffStore, type CommitMeta, type CommitDiff as CommitDiffType } from './useDiffStore.js';
-  import { Loader2, AlertCircle, RefreshCw } from '@lucide/svelte';
+  import { onMount } from "svelte";
+  import { diffStore } from "./useDiffStore.js";
+  import type { Commit, CommitDiff as CommitDiffType } from "@nostr-git/shared-types";
+  import CommitDiff from "./CommitDiff.svelte";
+  import { Loader2, AlertCircle, RefreshCw } from "@lucide/svelte";
+  import type { Repo } from "./Repo.svelte.js";
 
   interface Props {
-    commits: CommitMeta[];
-    repoPath: string;
-    worker: any; // GitWorker from nostr-git/core
+    commits: Commit[];
+    repo: Repo;
     highlightedFiles?: string[];
     onSelectFileDiff?: (filePath: string) => void;
     autoExpandFirst?: boolean;
@@ -17,13 +18,12 @@
 
   let {
     commits,
-    repoPath,
-    worker,
+    repo,
     highlightedFiles = [],
     onSelectFileDiff,
     autoExpandFirst = true,
     enableVirtualization = false,
-    maxVisibleCommits = 50
+    maxVisibleCommits = 50,
   }: Props = $props();
 
   // Local state
@@ -39,7 +39,7 @@
     expandedCommits: new Set(),
     expandedFiles: new Map(),
     highlightedFiles: [],
-    errors: new Map()
+    errors: new Map(),
   });
 
   // Virtualization state
@@ -51,21 +51,21 @@
     const unsubscribe = diffStore.subscribe((state) => {
       storeState = state;
     });
-    
+
     // Set highlighted files
     if (highlightedFiles.length > 0) {
       diffStore.setHighlightedFiles(highlightedFiles);
     }
-    
+
     // Auto-expand first commit if requested
     if (autoExpandFirst && commits.length > 0) {
       const firstCommit = commits[0];
-      diffStore.expandCommit(firstCommit.sha);
-      loadCommitDiff(firstCommit.sha);
+      diffStore.expandCommit(firstCommit.oid);
+      loadCommitDiff(firstCommit.oid);
     }
-    
+
     isInitialized = true;
-    
+
     // Return cleanup function
     return () => {
       unsubscribe();
@@ -89,34 +89,38 @@
     diffStore.setCommitLoading(commitSha, true);
 
     try {
-      const result = await worker.getCommitDetails({
-        repoId: repoPath,
-        commitId: commitSha
-      });
+      const result = await repo.workerManager.execute('getCommitDetails', {
+        repoId: repo.repoEvent.id,
+        commitId: commitSha,
+      }) as { success: boolean; meta?: any; changes?: any; error?: string };
 
       if (result.success && result.meta && result.changes) {
         const commitDiff: CommitDiffType = {
           meta: {
-            sha: result.meta.sha,
-            author: result.meta.author,
-            email: result.meta.email,
-            date: result.meta.date,
+            oid: result.meta.sha ?? result.meta.oid,
             message: result.meta.message,
-            parents: result.meta.parents
+            author: {
+              name: result.meta.author,
+              email: result.meta.email,
+              // Optionally add timestamp if available
+              timestamp: result.meta.date,
+            },
+            parent: result.meta.parents,
+            date: result.meta.date,
           },
-          changes: result.changes.map(change => ({
+          changes: result.changes.map((change) => ({
             path: change.path,
             status: change.status,
-            diffHunks: change.diffHunks
-          }))
+            diffHunks: change.diffHunks,
+          })),
         };
 
         diffStore.setCommitDiff(commitSha, commitDiff);
       } else {
-        diffStore.setCommitError(commitSha, result.error || 'Failed to load commit details');
+        diffStore.setCommitError(commitSha, result.error || "Failed to load commit details");
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
       diffStore.setCommitError(commitSha, errorMessage);
     }
   };
@@ -124,7 +128,7 @@
   // Handle commit expansion
   const handleToggleCommitExpansion = (commitSha: string) => {
     const isExpanded = storeState.expandedCommits.has(commitSha);
-    
+
     if (isExpanded) {
       diffStore.collapseCommit(commitSha);
     } else {
@@ -145,22 +149,22 @@
 
   // Handle retry for failed commits
   const handleRetryCommit = (commitSha: string) => {
-    diffStore.setCommitError(commitSha, ''); // Clear error
+    diffStore.setCommitError(commitSha, ""); // Clear error
     loadCommitDiff(commitSha);
   };
 
   // Expand all commits
   const expandAllCommits = () => {
-    commits.forEach(commit => {
-      diffStore.expandCommit(commit.sha);
-      loadCommitDiff(commit.sha);
+    commits.forEach((commit) => {
+      diffStore.expandCommit(commit.oid);
+      loadCommitDiff(commit.oid);
     });
   };
 
   // Collapse all commits
   const collapseAllCommits = () => {
-    commits.forEach(commit => {
-      diffStore.collapseCommit(commit.sha);
+    commits.forEach((commit) => {
+      diffStore.collapseCommit(commit.oid);
     });
   };
 
@@ -179,17 +183,14 @@
   // Handle scroll for virtualization
   const handleScroll = (event: Event) => {
     if (!enableVirtualization) return;
-    
+
     const target = event.target as HTMLDivElement;
     const scrollTop = target.scrollTop;
     const itemHeight = 200; // Approximate height per commit
-    
+
     const newStartIndex = Math.floor(scrollTop / itemHeight);
-    const newEndIndex = Math.min(
-      newStartIndex + maxVisibleCommits,
-      commits.length
-    );
-    
+    const newEndIndex = Math.min(newStartIndex + maxVisibleCommits, commits.length);
+
     if (newStartIndex !== visibleStartIndex || newEndIndex !== visibleEndIndex) {
       visibleStartIndex = newStartIndex;
       visibleEndIndex = newEndIndex;
@@ -205,23 +206,25 @@
 
 <div class="stacked-diff-container" bind:this={containerElement}>
   <!-- Header Controls -->
-  <div class="flex items-center justify-between mb-6 p-4 bg-muted/20 rounded-lg border border-border">
+  <div
+    class="flex items-center justify-between mb-6 p-4 bg-muted/20 rounded-lg border border-border"
+  >
     <div class="flex items-center gap-4">
       <h2 class="text-lg font-semibold">
-        Commit Stack ({commits.length} commit{commits.length !== 1 ? 's' : ''})
+        Commit Stack ({commits.length} commit{commits.length !== 1 ? "s" : ""})
       </h2>
-      
+
       {#if totalLoadingCommits > 0}
         <div class="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 class="h-4 w-4 animate-spin" />
-          Loading {totalLoadingCommits} commit{totalLoadingCommits !== 1 ? 's' : ''}...
+          Loading {totalLoadingCommits} commit{totalLoadingCommits !== 1 ? "s" : ""}...
         </div>
       {/if}
-      
+
       {#if hasErrors}
         <div class="flex items-center gap-2 text-sm text-red-600">
           <AlertCircle class="h-4 w-4" />
-          {storeState.errors.size} error{storeState.errors.size !== 1 ? 's' : ''}
+          {storeState.errors.size} error{storeState.errors.size !== 1 ? "s" : ""}
         </div>
       {/if}
     </div>
@@ -234,7 +237,7 @@
       >
         Expand All
       </button>
-      
+
       <button
         onclick={collapseAllCommits}
         class="px-3 py-1.5 text-sm bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 transition-colors"
@@ -242,7 +245,7 @@
       >
         Collapse All
       </button>
-      
+
       <button
         onclick={clearCache}
         class="px-3 py-1.5 text-sm bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 transition-colors"
@@ -262,7 +265,7 @@
       </div>
       <p class="text-red-700">{globalError}</p>
       <button
-        onclick={() => globalError = null}
+        onclick={() => (globalError = null)}
         class="mt-2 px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
       >
         Dismiss
@@ -271,7 +274,7 @@
   {/if}
 
   <!-- Commit List -->
-  <div 
+  <div
     class="space-y-0"
     class:overflow-y-auto={enableVirtualization}
     class:max-h-screen={enableVirtualization}
@@ -283,35 +286,38 @@
         <div class="text-sm">The commit stack is empty.</div>
       </div>
     {:else}
-      {#each visibleCommits as commit, index (commit.sha)}
-        {@const commitDiff = storeState.commitDiffs.get(commit.sha)}
-        {@const isLoading = storeState.loadingCommits.has(commit.sha)}
-        {@const error = storeState.errors.get(commit.sha)}
-        {@const isExpanded = storeState.expandedCommits.has(commit.sha)}
-        {@const expandedFiles = storeState.expandedFiles.get(commit.sha) || new Set()}
-        
+      {#each visibleCommits as commit, index (commit.oid)}
+        {@const commitDiff = storeState.commitDiffs.get(commit.oid)}
+        {@const isLoading = storeState.loadingCommits.has(commit.oid)}
+        {@const error = storeState.errors.get(commit.oid)}
+        {@const isExpanded = storeState.expandedCommits.has(commit.oid)}
+        {@const expandedFiles = storeState.expandedFiles.get(commit.oid) || new Set()}
+
         <CommitDiff
-          commitSha={commit.sha}
-          {commitDiff}
+          commitSha={commit.oid}
+          commitDiff={commitDiff}
           loading={isLoading}
-          {error}
+          error={error}
           expanded={isExpanded}
-          {expandedFiles}
-          {highlightedFiles}
-          onToggleExpansion={() => handleToggleCommitExpansion(commit.sha)}
-          onToggleFileExpansion={(filePath) => handleToggleFileExpansion(commit.sha, filePath)}
+          expandedFiles={expandedFiles}
+          highlightedFiles={highlightedFiles}
+          onToggleExpansion={() => handleToggleCommitExpansion(commit.oid)}
+          onToggleFileExpansion={(filePath) => handleToggleFileExpansion(commit.oid, filePath)}
           onSelectFile={handleSelectFile}
-          onLoadCommit={() => handleRetryCommit(commit.sha)}
+          onLoadCommit={() => handleRetryCommit(commit.oid)}
         />
       {/each}
-      
+
       <!-- Virtualization spacers -->
       {#if enableVirtualization}
         {#if visibleStartIndex > 0}
           <div style="height: {visibleStartIndex * 200}px" class="bg-muted/10"></div>
         {/if}
         {#if visibleEndIndex < commits.length}
-          <div style="height: {(commits.length - visibleEndIndex) * 200}px" class="bg-muted/10"></div>
+          <div
+            style="height: {(commits.length - visibleEndIndex) * 200}px"
+            class="bg-muted/10"
+          ></div>
         {/if}
       {/if}
     {/if}
@@ -322,14 +328,14 @@
     <div class="mt-6 p-4 bg-muted/10 rounded-lg text-sm text-muted-foreground">
       <div class="flex items-center justify-between">
         <div>
-          {commits.length} total commits • 
-          {totalExpandedCommits} expanded • 
+          {commits.length} total commits •
+          {totalExpandedCommits} expanded •
           {storeState.commitDiffs.size} loaded
         </div>
-        
+
         {#if highlightedFiles.length > 0}
           <div>
-            Highlighting {highlightedFiles.length} file{highlightedFiles.length !== 1 ? 's' : ''}
+            Highlighting {highlightedFiles.length} file{highlightedFiles.length !== 1 ? "s" : ""}
           </div>
         {/if}
       </div>
@@ -347,11 +353,6 @@
   /* Smooth scrolling for virtualization */
   .overflow-y-auto {
     scroll-behavior: smooth;
-  }
-
-  /* Loading states */
-  .animate-spin {
-    animation: spin 1s linear infinite;
   }
 
   @keyframes spin {

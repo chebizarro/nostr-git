@@ -4,3 +4,4 @@ export * from './utils.js';
 export type { Patch, Issue, RepoAnnouncement, RepoState, Status } from './utils.js';
 export * from './nip22.js';
 export * from './utils-comment.js';
+export type { Commit, FileDiff, CommitDiff } from './core.js';

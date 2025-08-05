@@ -353,8 +353,17 @@
   <div class="border border-border rounded-lg p-1">
     <StackedDiff
       commits={currentStory.commits}
-      repoPath="demo-repo"
-      worker={mockWorker}
+      repo={{
+        repoEvent: { id: 'demo-repo', kind: 30617, tags: [], content: '', created_at: 0, pubkey: '', sig: '' } as any,
+        workerManager: { 
+          execute: async (operation: string, params: any) => {
+            if (operation === 'getCommitDetails') {
+              return await mockWorker.getCommitDetails(params);
+            }
+            throw new Error(`Unknown operation: ${operation}`);
+          }
+        }
+      } as any}
       highlightedFiles={currentStory.highlightedFiles}
       autoExpandFirst={currentStory.autoExpandFirst || autoExpandFirst}
       enableVirtualization={enableVirtualization}

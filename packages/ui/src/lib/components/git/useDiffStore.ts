@@ -1,30 +1,7 @@
 import { writable, derived } from 'svelte/store';
 
-export interface CommitMeta {
-  sha: string;
-  author: string;
-  email: string;
-  date: number;
-  message: string;
-  parents: string[];
-}
+import type { CommitDiff } from '@nostr-git/shared-types';
 
-export interface FileDiff {
-  path: string;
-  status: 'added' | 'modified' | 'deleted' | 'renamed';
-  diffHunks: Array<{
-    oldStart: number;
-    oldLines: number;
-    newStart: number;
-    newLines: number;
-    patches: Array<{ line: string; type: '+' | '-' | ' ' }>;
-  }>;
-}
-
-export interface CommitDiff {
-  meta: CommitMeta;
-  changes: FileDiff[];
-}
 
 export interface DiffStoreState {
   commitDiffs: Map<string, CommitDiff>;

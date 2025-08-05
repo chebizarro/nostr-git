@@ -2,7 +2,6 @@ import { Patch, PatchEvent, Profile } from '@nostr-git/shared-types';
 import { parseGitPatch } from 'parse-patch';
 import parseDiff from 'parse-diff';
 import { getGitProvider } from './git-provider.js';
-import { rootDir } from './git.js';
 import { GitMergeResult } from '@nostr-git/git-wrapper';
 
 export function parseGitPatchFromEvent(event: PatchEvent): Patch {

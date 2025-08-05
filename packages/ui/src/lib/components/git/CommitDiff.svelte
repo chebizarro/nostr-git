@@ -2,11 +2,11 @@
   import { GitCommit, User, Calendar, ChevronDown, ChevronRight, Loader2 } from '@lucide/svelte';
   import { formatDistanceToNow } from 'date-fns';
   import FileDiff from './FileDiff.svelte';
-  import type { CommitDiff as CommitDiffType } from './useDiffStore.js';
+  import type { CommitDiff } from '@nostr-git/shared-types';
 
   interface Props {
     commitSha: string;
-    commitDiff?: CommitDiffType;
+    commitDiff?: CommitDiff;
     loading?: boolean;
     error?: string;
     expanded?: boolean;
