@@ -1,63 +1,286 @@
 # @nostr-git/shared-types
 
-Shared TypeScript types for Nostr NIP-34 Git collaboration events, fully compatible with [nostr-tools](https://github.com/nbd-wtf/nostr-tools).
+Shared TypeScript types and constants for Git/Nostr event structures, providing type-safe interfaces for NIP-34 Git collaboration events.
 
-## Installation
+## 🎯 Purpose
+
+This package provides comprehensive TypeScript definitions for all Git-related Nostr events, ensuring type safety across the entire Nostr-Git ecosystem while maintaining full compatibility with [nostr-tools](https://github.com/nbd-wtf/nostr-tools).
+
+## ✨ Features
+
+### Event Type Definitions
+- **Repository Events**: Types for repository announcements (kind 30617) and state events (kind 30618)
+- **Patch Events**: Strongly typed patch events (kind 1617) with Git diff structures
+- **Issue Events**: Issue tracking event types (kind 1621) for decentralized bug reporting
+- **Status Events**: Repository status and metadata event types
+
+### Type Safety Features
+- **Discriminated Unions**: Type-safe event discrimination with TypeScript
+- **Type Guards**: Runtime type checking functions for event validation
+- **Utility Types**: Helper types for common Git/Nostr patterns
+- **Constant Definitions**: All NIP-34 event kind constants
+
+### Compatibility
+- **nostr-tools Integration**: Full compatibility with canonical Nostr types
+- **Zero Dependencies**: Pure TypeScript definitions with no runtime dependencies
+- **ESM Support**: Modern ES module exports with proper TypeScript declarations
+
+## 📦 Installation
 
 ```bash
+# Using pnpm (recommended)
 pnpm add @nostr-git/shared-types
-# or
+
+# Using npm
 npm install @nostr-git/shared-types
+
+# Using yarn
+yarn add @nostr-git/shared-types
 ```
 
-## Usage
+## 🚀 Quick Start
 
-```ts
-import type { Nip34Event, RepoAnnouncementEvent, isPatchEvent } from '@nostr-git/shared-types';
-import type { Event as NostrEvent } from 'nostr-tools';
+### Basic Type Usage
+
+```typescript
+import type { 
+  NostrEvent, 
+  GitRepoEvent, 
+  GitPatchEvent,
+  GitIssueEvent 
+} from '@nostr-git/shared-types';
 
 // Type-safe event handling
-function handle(event: Nip34Event) {
-  if (isPatchEvent(event)) {
-    // event is PatchEvent
-    console.log(event.content);
+function handleGitEvent(event: NostrEvent) {
+  switch (event.kind) {
+    case 30617: // Repository announcement
+      const repoEvent = event as GitRepoEvent;
+      console.log(`Repository: ${repoEvent.tags.find(t => t[0] === 'name')?.[1]}`);
+      break;
+      
+    case 1617: // Patch event
+      const patchEvent = event as GitPatchEvent;
+      console.log(`Patch: ${patchEvent.content}`);
+      break;
+      
+    case 1621: // Issue event
+      const issueEvent = event as GitIssueEvent;
+      console.log(`Issue: ${issueEvent.content}`);
+      break;
   }
 }
 ```
 
-## Features
-- **Strict types for all NIP-34 event kinds** (repo, patch, issue, status, etc)
-- **Type guards** for easy event discrimination
-- **Kind label utility** for UI display
-- **Full compatibility with nostr-tools** (imported canonical Event type)
-- **Source code in `src/` directory** for clean project structure
+### Using Type Guards
 
-## API
+```typescript
+import { 
+  isRepoAnnouncementEvent,
+  isPatchEvent,
+  isIssueEvent 
+} from '@nostr-git/shared-types';
 
-### Types
-- `Nip34Event` — Union of all NIP-34 event types
-- `RepoAnnouncementEvent`, `RepoStateEvent`, `PatchEvent`, `IssueEvent`, `StatusEvent` — Strongly typed event kinds
-- `NostrEvent` — Canonical event type from nostr-tools
+function processEvent(event: NostrEvent) {
+  if (isRepoAnnouncementEvent(event)) {
+    // TypeScript knows this is a GitRepoEvent
+    console.log('Repository:', event.tags);
+  } else if (isPatchEvent(event)) {
+    // TypeScript knows this is a GitPatchEvent
+    console.log('Patch content:', event.content);
+  } else if (isIssueEvent(event)) {
+    // TypeScript knows this is a GitIssueEvent
+    console.log('Issue:', event.content);
+  }
+}
+```
+
+### Event Kind Constants
+
+```typescript
+import { 
+  GIT_REPO_ANNOUNCEMENT,
+  GIT_REPO_STATE,
+  GIT_PATCH,
+  GIT_ISSUE 
+} from '@nostr-git/shared-types';
+
+// Use constants instead of magic numbers
+const repoEvent = {
+  kind: GIT_REPO_ANNOUNCEMENT, // 30617
+  content: JSON.stringify({ name: 'my-repo' }),
+  // ... other event properties
+};
+```
+
+## 📚 API Reference
+
+### Core Types
+
+#### `NostrEvent`
+Canonical Nostr event type from nostr-tools.
+
+```typescript
+interface NostrEvent {
+  id: string;
+  pubkey: string;
+  created_at: number;
+  kind: number;
+  tags: string[][];
+  content: string;
+  sig: string;
+}
+```
+
+#### `GitRepository`
+Repository metadata structure.
+
+```typescript
+interface GitRepository {
+  name: string;
+  url: string;
+  description?: string;
+  maintainers: string[];
+  defaultBranch?: string;
+}
+```
+
+#### `GitPatch`
+Git patch structure with metadata.
+
+```typescript
+interface GitPatch {
+  title: string;
+  description?: string;
+  diff: string;
+  commits: GitCommit[];
+  repoUrl: string;
+  targetBranch?: string;
+}
+```
+
+### Event Types
+
+#### Repository Events
+- `GitRepoEvent` - Repository announcement event (kind 30617)
+- `GitRepoStateEvent` - Repository state event (kind 30618)
+
+#### Collaboration Events
+- `GitPatchEvent` - Patch submission event (kind 1617)
+- `GitIssueEvent` - Issue creation event (kind 1621)
+
+### Type Guards
+
+#### Event Type Checking
+```typescript
+// Repository events
+isRepoAnnouncementEvent(event: NostrEvent): event is GitRepoEvent
+isRepoStateEvent(event: NostrEvent): event is GitRepoStateEvent
+
+// Collaboration events
+isPatchEvent(event: NostrEvent): event is GitPatchEvent
+isIssueEvent(event: NostrEvent): event is GitIssueEvent
+
+// Generic Git event check
+isGitEvent(event: NostrEvent): event is GitEvent
+```
 
 ### Utility Functions
-- `isRepoAnnouncementEvent(event)`
-- `isRepoStateEvent(event)`
-- `isPatchEvent(event)`
-- `isIssueEvent(event)`
-- `isStatusEvent(event)`
-- `getNip34KindLabel(kind)`
 
-## Directory Structure
+#### Event Kind Labels
+```typescript
+// Get human-readable labels for event kinds
+getNip34KindLabel(kind: number): string
+
+// Examples:
+getNip34KindLabel(30617) // "Repository Announcement"
+getNip34KindLabel(1617)  // "Patch"
+getNip34KindLabel(1621)  // "Issue"
+```
+
+#### Tag Utilities
+```typescript
+// Extract specific tags from events
+getRepoUrlFromTags(tags: string[][]): string | undefined
+getRepoNameFromTags(tags: string[][]): string | undefined
+getBranchFromTags(tags: string[][]): string | undefined
+```
+
+## 🏗️ Architecture
+
+The package is organized for maximum type safety and developer experience:
 
 ```
-/packages/shared-types
-  /src
-    index.ts         # Barrel export
-    nip34.ts         # NIP-34 event types
-    utils.ts         # Type guards & helpers
-  package.json
-  tsconfig.json
-  README.md
+src/
+├── index.ts          # Barrel exports for all public APIs
+├── nip34.ts          # NIP-34 event type definitions and constants
+├── utils.ts          # Type guards and utility functions
+├── git-types.ts      # Git-specific type definitions
+└── nostr-types.ts    # Nostr protocol type extensions
+```
+
+### Design Principles
+
+- **Zero Runtime Dependencies**: Pure TypeScript definitions
+- **Strict Type Safety**: Discriminated unions and type guards
+- **Compatibility First**: Works seamlessly with nostr-tools
+- **Developer Experience**: Clear, self-documenting types
+
+## 🔧 Configuration
+
+### TypeScript Configuration
+
+This package requires TypeScript 4.7+ for proper discriminated union support:
+
+```json
+{
+  "compilerOptions": {
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true
+  }
+}
+```
+
+### ESM Imports
+
+All imports use `.js` extensions for ESM compatibility:
+
+```typescript
+// ✅ Correct
+import type { GitEvent } from './nip34.js';
+
+// ❌ Incorrect
+import type { GitEvent } from './nip34';
+```
+
+## 🧪 Testing
+
+```bash
+# Run type tests
+pnpm test
+
+# Type checking only
+pnpm typecheck
+
+# Build and validate exports
+pnpm build
+```
+
+## 🤝 Contributing
+
+See the main project's [DEVELOPMENT.md](../../DEVELOPMENT.md) for development setup and [CODING_STANDARDS.md](../../CODING_STANDARDS.md) for code style guidelines.
+
+### Adding New Types
+
+1. **Define the type** in the appropriate file (`nip34.ts`, `git-types.ts`)
+2. **Add type guards** in `utils.ts` if needed
+3. **Export from index.ts** for public API
+4. **Add tests** to verify type safety
+5. **Update documentation** with examples
+
+## 📄 License
+
+MIT License - see [LICENSE](../../LICENSE) for details.
 ```
 
 ## License

@@ -1,12 +1,25 @@
+# pnpm workspace configuration for Nostr-Git monorepo
+# This file defines which directories contain packages and workspace-specific settings
+
+# Package discovery patterns - pnpm will treat directories matching these patterns as packages
 packages:
+  # Main packages directory containing core libraries and applications
   - packages/*
+  # GitHub Actions workflows (separate subdirectory structure)
   - packages/actions/*
 
+# Dependencies that should only be built from source, not downloaded as pre-built binaries
+# This ensures consistent builds across different platforms and environments
 onlyBuiltDependencies:
+  # esbuild: JavaScript bundler used by various packages
   - esbuild
+  # svelte-preprocess: Svelte preprocessing for TypeScript, SCSS, etc.
   - svelte-preprocess
 
+# Package version overrides for workspace-specific linking
+# Forces packages to use local workspace versions instead of published versions
 overrides:
+  # Always use the local UI package for consistent development
   '@nostr-git/ui': link:packages/ui
   '@nostr-git/core': link:packages/core
   '@nostr-git/git-wrapper': link:packages/git-wrapper

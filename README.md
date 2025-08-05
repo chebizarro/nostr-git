@@ -1,33 +1,95 @@
-# Git-Nostr Monorepo
+# Nostr-Git Integration Platform
 
-This is the Git-Nostr monorepo containing shared packages and apps for integrating Git and Nostr.
+A comprehensive TypeScript monorepo for integrating Git workflows with the Nostr protocol, enabling decentralized Git collaboration through NIP-34 events.
 
-## Packages
+## 🎯 Purpose
 
-- **[@nostr-git/core](packages/core/)** – Core TypeScript library for creating, parsing, and publishing Git-related Nostr events.
-- **[@nostr-git/ui](packages/ui/)** – Svelte component library for rendering Git and Nostr UI elements.
-- **[@nostr-git/shared-types](packages/shared-types/)** – Shared TypeScript types for Git/Nostr event structures.
-- **Extension** – Browser extension that adds Nostr publishing buttons to GitHub.
-- **VSCode-ngit** – VS Code extension adding Nostr Git (`ngit`) support to the IDE.
-- **Actions** – GitHub Actions for publishing Nostr Git events automatically on push, issue creation, etc.
+This platform bridges Git version control with Nostr's decentralized network, allowing developers to:
+- Publish Git repositories, patches, and issues as Nostr events
+- Enable decentralized code collaboration without centralized platforms
+- Integrate Git workflows with Nostr clients and relays
+- Build Git-aware applications on the Nostr protocol
 
-## Development
+## 📦 Packages
 
+### Core Libraries
+- **[@nostr-git/core](packages/core/)** – Core TypeScript library for creating, parsing, and publishing Git-related Nostr events (NIP-34)
+- **[@nostr-git/shared-types](packages/shared-types/)** – Shared TypeScript types and constants for Git/Nostr event structures
+- **[@nostr-git/git-wrapper](packages/git-wrapper/)** – Git operations wrapper with Nostr integration
+- **[@nostr-git/ui](packages/ui/)** – Svelte 5 component library with TailwindCSS for rendering Git and Nostr UI elements
+
+### Applications & Extensions
+- **[Extension](packages/extension/)** – Browser extension that adds Nostr publishing capabilities to GitHub
+- **[VSCode-ngit](packages/vscode-ngit/)** – VS Code extension adding Nostr Git (`ngit`) support to the IDE
+- **[Actions](packages/actions/)** – GitHub Actions for automatically publishing Nostr Git events on push, issue creation, etc.
+- **[Storybook](packages/storybook/)** – Component development and documentation environment
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Node.js 18+
+- pnpm 8+
+
+### Installation
 ```bash
+# Clone the repository
+git clone https://github.com/your-org/nostr-git.git
+cd nostr-git
+
+# Install dependencies
 pnpm install
+
+# Build all packages
+pnpm build
+```
+
+### Development
+```bash
+# Start development mode for all packages
+pnpm watch:all
+
+# Or watch specific packages
+pnpm watch:core
+pnpm watch:ui
+
+# Run Storybook for UI development
 cd packages/storybook
 pnpm storybook
 ```
 
-## Publish
+## 🏗️ Architecture
 
-Each package can be built and published independently.
+This monorepo follows a modular architecture where each package serves a specific purpose:
 
-```bash
-cd packages/core
-pnpm publish --access public
-```
+- **Core**: Event creation, parsing, and Nostr protocol integration
+- **UI**: Reusable Svelte components for Git/Nostr interfaces
+- **Extensions**: Platform-specific integrations (GitHub, VSCode)
+- **Actions**: CI/CD automation for Nostr event publishing
 
-## License
+## 📖 Documentation
 
-MIT License unless otherwise stated.
+- [Architecture Guide](ARCHITECTURE.md) - System design and component relationships
+- [Development Guide](DEVELOPMENT.md) - Local setup and development workflow
+- [AI Context](AI_CONTEXT.md) - LLM-specific coding context and patterns
+- [Coding Standards](CODING_STANDARDS.md) - Code style and conventions
+- [Deployment Guide](DEPLOYMENT.md) - Build and deployment processes
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes following our [coding standards](CODING_STANDARDS.md)
+4. Run tests: `pnpm test`
+5. Commit your changes: `git commit -m 'Add amazing feature'`
+6. Push to the branch: `git push origin feature/amazing-feature`
+7. Open a Pull Request
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## 🔗 Links
+
+- [NIP-34 Specification](https://github.com/nostr-protocol/nips/blob/master/34.md)
+- [Nostr Protocol](https://nostr.com/)
+- [Project Documentation](docs/)
