@@ -45,6 +45,99 @@ export async function checkGitHubRepoAvailability(repoName: string, token: strin
   }
 }
 
+/**
+ * Check repository name availability across all providers the user has tokens for
+ * @param repoName - The repository name to check
+ * @param tokens - Array of user tokens
+ * @returns Promise with availability results for each provider
+ */
+export async function checkMultiProviderRepoAvailability(repoName: string, tokens: Token[]): Promise<{
+  results: Array<{
+    provider: string;
+    host: string;
+    available: boolean;
+    reason?: string;
+    username?: string;
+    error?: string;
+  }>;
+  hasConflicts: boolean;
+  availableProviders: string[];
+  conflictProviders: string[];
+}> {
+  const providerHosts: Record<string, string> = {
+    'github.com': 'github',
+    'gitlab.com': 'gitlab',
+    'gitea.com': 'gitea',
+    'bitbucket.org': 'bitbucket'
+  };
+
+  const results = [];
+  const availableProviders = [];
+  const conflictProviders = [];
+
+  // Check availability for each provider the user has tokens for
+  for (const token of tokens) {
+    const provider = providerHosts[token.host];
+    if (!provider) {
+      // Skip unknown providers
+      continue;
+    }
+
+    try {
+      const api = getGitServiceApi(provider as any, token.token);
+      
+      // Get the authenticated user's information
+      const currentUser = await api.getCurrentUser();
+      const username = currentUser.login;
+      
+      // Check if repository already exists
+      try {
+        await api.getRepo(username, repoName);
+        // Repository exists - conflict
+        results.push({
+          provider,
+          host: token.host,
+          available: false,
+          reason: `Repository name already exists in your ${provider} account`,
+          username
+        });
+        conflictProviders.push(provider);
+      } catch (error: any) {
+        // Repository doesn't exist (good!)
+        if (error.message?.includes('404') || error.message?.includes('Not Found')) {
+          results.push({
+            provider,
+            host: token.host,
+            available: true,
+            username
+          });
+          availableProviders.push(provider);
+        } else {
+          // Some other error occurred
+          throw error;
+        }
+      }
+    } catch (error) {
+      // Network error or API issue
+      console.warn(`Error checking repo availability on ${provider}:`, error);
+      results.push({
+        provider,
+        host: token.host,
+        available: true, // Assume available if we can't check
+        error: error instanceof Error ? error.message : String(error)
+      });
+      availableProviders.push(provider); // Assume available
+    }
+  }
+
+  return {
+    results,
+    hasConflicts: conflictProviders.length > 0,
+    availableProviders,
+    conflictProviders
+  };
+}
+
 export interface NewRepoConfig {
   name: string;
   description: string;
@@ -52,6 +145,7 @@ export interface NewRepoConfig {
   gitignoreTemplate: string;
   licenseTemplate: string;
   defaultBranch: string;
+  provider: string; // Git provider (github, gitlab, gitea, etc.)
   // Author information
   authorName: string;
   authorEmail: string;
@@ -254,11 +348,38 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
   }
 
   async function checkRepoAvailability(config: NewRepoConfig, token: string) {
-    const result = await checkGitHubRepoAvailability(config.name, token);
-    if (result.username) {
-      console.log('🚀 Checking availability for:', `${result.username}/${config.name}`);
+    try {
+      // Use GitServiceApi abstraction instead of hardcoded GitHub API calls
+      const api = getGitServiceApi(config.provider as any, token);
+      
+      // Get the authenticated user's information
+      const currentUser = await api.getCurrentUser();
+      const username = currentUser.login;
+      
+      console.log('🚀 Checking availability for:', `${username}/${config.name}`, 'on', config.provider);
+      
+      // Check if repository already exists by trying to fetch it
+      try {
+        await api.getRepo(username, config.name);
+        // Repository exists
+        return { 
+          available: false, 
+          reason: `Repository name already exists in your ${config.provider} account`,
+          username 
+        };
+      } catch (error: any) {
+        // Repository doesn't exist (good!) - API throws error for 404
+        if (error.message?.includes('404') || error.message?.includes('Not Found')) {
+          return { available: true, username };
+        }
+        // Some other error occurred
+        throw error;
+      }
+    } catch (error) {
+      // Network error or other issue - proceed anyway
+      console.warn(`Error checking repo availability on ${config.provider}:`, error);
+      return { available: true };
     }
-    return result;
   }
 
   async function createRemoteRepo(config: NewRepoConfig) {
@@ -268,31 +389,42 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       const { api } = getGitWorker();
       console.log('🚀 Git worker obtained successfully');
 
-      // Get GitHub token from the reactive token store (following established pattern)
+      // Get the provider-specific host for token lookup
+      const providerHosts: Record<string, string> = {
+        'github': 'github.com',
+        'gitlab': 'gitlab.com',
+        'gitea': 'gitea.com',
+        'bitbucket': 'bitbucket.org'
+      };
+      
+      const providerHost = providerHosts[config.provider] || config.provider;
+      
+      // Get token for the selected provider from the reactive token store
       console.log('🔐 Current tokens in store:', tokens.length, 'tokens');
       console.log('🔐 Token hosts:', tokens.map(t => t.host));
+      console.log('🔐 Looking for provider:', config.provider, 'with host:', providerHost);
       
-      let finalToken = tokens.find((t: Token) => t.host === "github.com")?.token;
+      let finalToken = tokens.find((t: Token) => t.host === providerHost)?.token;
       
-      console.log('🔐 GitHub token found:', finalToken ? 'YES (length: ' + finalToken.length + ', starts: ' + finalToken.substring(0, 8) + ', ends: ' + finalToken.substring(finalToken.length - 8) + ')' : 'NO');
+      console.log('🔐 Provider token found:', finalToken ? 'YES (length: ' + finalToken.length + ', starts: ' + finalToken.substring(0, 8) + ', ends: ' + finalToken.substring(finalToken.length - 8) + ')' : 'NO');
 
       if (!finalToken) {
         // Try to wait for tokens to load if they're not available yet
-        console.log('🔐 No GitHub token found, waiting for token store initialization...');
+        console.log('🔐 No token found for provider, waiting for token store initialization...');
         await tokensStore.waitForInitialization();
         
         // Refresh tokens after waiting
         await tokensStore.refresh();
         
         // Try again after waiting and refreshing
-        finalToken = tokens.find((t: Token) => t.host === "github.com")?.token;
+        finalToken = tokens.find((t: Token) => t.host === providerHost)?.token;
         
         console.log('🔐 Tokens after refresh:', tokens.length, 'tokens');
-        console.log('🔐 GitHub token found after retry:', finalToken ? 'YES (length: ' + finalToken.length + ')' : 'NO');
+        console.log('🔐 Provider token found after retry:', finalToken ? 'YES (length: ' + finalToken.length + ')' : 'NO');
         
         if (!finalToken) {
           throw new Error(
-            "No GitHub authentication token found. Please add a GitHub token in settings."
+            `No ${config.provider} authentication token found. Please add a ${config.provider} token in settings.`
           );
         }
       }
@@ -307,7 +439,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       
       console.log('🚀 Repository name is available, proceeding with creation...');
       console.log('🚀 Calling createRemoteRepo API with:', {
-        provider: "github",
+        provider: config.provider,
         name: config.name,
         description: config.description,
         tokenLength: finalToken.length,
@@ -316,7 +448,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       });
       
       const result = await api.createRemoteRepo({
-        provider: "github",
+        provider: config.provider as any,
         token: finalToken,
         name: config.name,
         description: config.description,
@@ -347,22 +479,33 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
     const { getGitWorker } = await import("@nostr-git/core");
     const { api } = getGitWorker();
 
-    // Get GitHub token for push authentication
-    const githubToken = tokens.find((t: Token) => t.host === "github.com")?.token;
+    // Get the provider-specific host for token lookup
+    const providerHosts: Record<string, string> = {
+      'github': 'github.com',
+      'gitlab': 'gitlab.com',
+      'gitea': 'gitea.com',
+      'bitbucket': 'bitbucket.org'
+    };
+    
+    const providerHost = providerHosts[config.provider] || config.provider;
+    
+    // Get token for the selected provider for push authentication
+    const providerToken = tokens.find((t: Token) => t.host === providerHost)?.token;
     
     console.log('🚀 Pushing to remote with URL:', remoteRepo.url);
     console.log('🚀 Push config:', {
       repoId: config.name,
       remoteUrl: remoteRepo.url,
       branch: config.defaultBranch,
-      hasToken: !!githubToken
+      provider: config.provider,
+      hasToken: !!providerToken
     });
     
     const result = await api.pushToRemote({
       repoId: config.name,
       remoteUrl: remoteRepo.url,
       branch: config.defaultBranch,
-      token: githubToken, // Add token for authentication
+      token: providerToken, // Add token for authentication
     });
     
     console.log('🚀 Push result:', result);

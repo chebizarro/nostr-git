@@ -8,9 +8,11 @@
   interface Props {
     selectedProvider?: string;
     onProviderChange: (provider: string) => void;
+    disabledProviders?: string[];
+    tokens?: Token[];
   }
 
-  const { selectedProvider, onProviderChange }: Props = $props();
+  const { selectedProvider, onProviderChange, disabledProviders = [], tokens: propTokens }: Props = $props();
 
   // Token management
   let tokens = $state<Token[]>([]);
@@ -21,11 +23,13 @@
     icon: string;
     description: string;
     hasToken: boolean;
+    disabled?: boolean;
+    disabledReason?: string;
   }[]>([]);
 
   // Subscribe to token store changes
   tokensStore.subscribe((t) => {
-    tokens = t;
+    tokens = propTokens || t;
     updateAvailableProviders();
   });
 
@@ -79,7 +83,17 @@
       }
     ];
 
-    availableProviders = providers;
+    // Mark providers as disabled if they have name conflicts
+    availableProviders = providers.map(provider => {
+      const isDisabled = disabledProviders.includes(provider.id);
+      return {
+        ...provider,
+        disabled: isDisabled,
+        disabledReason: isDisabled ? 'Repository name already exists' : undefined,
+        // A provider is available if it has a token AND is not disabled due to name conflict
+        hasToken: provider.hasToken && !isDisabled
+      };
+    });
 
     // Auto-select first available provider if none selected
     if (!selectedProvider && providers.some(p => p.hasToken)) {
@@ -118,7 +132,9 @@
                 {#if selectedProvider === provider.id}
                   <div class="w-2 h-2 bg-accent rounded-full"></div>
                 {/if}
-                {#if !provider.hasToken}
+                {#if provider.disabled}
+                  <span class="text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 px-2 py-1 rounded">Name Conflict</span>
+                {:else if !provider.hasToken}
                   <span class="text-xs bg-muted text-muted-foreground px-2 py-1 rounded">No Token</span>
                 {/if}
               </div>

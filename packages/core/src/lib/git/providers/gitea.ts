@@ -30,7 +30,7 @@ export class GiteaApi implements GitServiceApi {
   private readonly token: string;
   private readonly baseUrl: string;
 
-  constructor(token: string, baseUrl: string) {
+  constructor(token: string, baseUrl?: string) {
     if (!baseUrl) {
       throw new Error('Gitea requires a base URL for self-hosted instances');
     }

@@ -5,7 +5,7 @@
   import ProviderSelectionStep from './ProviderSelectionStep.svelte';
   import { type Event as NostrEvent } from 'nostr-tools';
   import { useRegistry } from '../../useRegistry';
-  import { useNewRepo, type NewRepoResult } from '$lib/useNewRepo.svelte';
+  import { useNewRepo, type NewRepoResult, checkMultiProviderRepoAvailability } from '$lib/useNewRepo.svelte';
   import { tokens as tokensStore, type Token } from '$lib/stores/tokens.js';
   import { getGitServiceApi } from '@nostr-git/core';
   
@@ -39,6 +39,22 @@
   // Token management
   let tokens = $state<Token[]>([]);
   let selectedProvider = $state<string>('');
+  
+  // Repository name availability tracking
+  let nameAvailabilityResults = $state<{
+    results: Array<{
+      provider: string;
+      host: string;
+      available: boolean;
+      reason?: string;
+      username?: string;
+      error?: string;
+    }>;
+    hasConflicts: boolean;
+    availableProviders: string[];
+    conflictProviders: string[];
+  } | null>(null);
+  let isCheckingAvailability = $state(false);
 
   // Subscribe to token store changes
   tokensStore.subscribe((t) => {
@@ -88,6 +104,36 @@
 
   let validationErrors = $state<ValidationErrors>({});
 
+  // Check repository name availability across all providers
+  async function checkNameAvailability(name: string) {
+    if (!name.trim() || tokens.length === 0) {
+      nameAvailabilityResults = null;
+      return;
+    }
+
+    isCheckingAvailability = true;
+    try {
+      const results = await checkMultiProviderRepoAvailability(name, tokens);
+      nameAvailabilityResults = results;
+    } catch (error) {
+      console.error('Error checking name availability:', error);
+      nameAvailabilityResults = null;
+    } finally {
+      isCheckingAvailability = false;
+    }
+  }
+
+  // Debounced name availability check
+  let nameCheckTimeout: number | null = null;
+  function debouncedNameCheck(name: string) {
+    if (nameCheckTimeout) {
+      clearTimeout(nameCheckTimeout);
+    }
+    nameCheckTimeout = setTimeout(() => {
+      checkNameAvailability(name);
+    }, 500) as any;
+  }
+
   // Validation functions
   function validateRepoName(name: string): string | undefined {
     if (!name.trim()) {
@@ -102,6 +148,10 @@
     if (!/^[a-zA-Z0-9._-]+$/.test(name)) {
       return 'Repository name can only contain letters, numbers, dots, hyphens, and underscores';
     }
+    
+    // Note: We no longer block form progression for name conflicts
+    // This allows users to proceed even with conflicts, but we'll disable those providers later
+    
     return undefined;
   }
 
@@ -175,6 +225,7 @@
         gitignoreTemplate: advancedSettings.gitignoreTemplate,
         licenseTemplate: advancedSettings.licenseTemplate,
         defaultBranch: advancedSettings.defaultBranch,
+        provider: selectedProvider, // Pass the selected provider
         authorName: advancedSettings.authorName,
         authorEmail: advancedSettings.authorEmail,
         maintainers: advancedSettings.maintainers,
@@ -203,6 +254,8 @@
   // Step component event handlers
   function handleRepoNameChange(name: string) {
     repoDetails.name = name;
+    // Trigger debounced availability check
+    debouncedNameCheck(name);
     // Update validation errors after change
     updateValidationErrors();
   }
@@ -349,6 +402,8 @@
         onGitignoreChange={handleGitignoreChange}
         onLicenseChange={handleLicenseChange}
         validationErrors={validationErrors}
+        nameAvailabilityResults={nameAvailabilityResults}
+        isCheckingAvailability={isCheckingAvailability}
       />
     {:else if currentStep === 2}
       <AdvancedSettingsStep
@@ -375,8 +430,10 @@
       />
     {:else if currentStep === 3}
       <ProviderSelectionStep
+        tokens={tokens}
         selectedProvider={selectedProvider}
         onProviderChange={handleProviderChange}
+        disabledProviders={nameAvailabilityResults?.conflictProviders || []}
       />
     {:else if currentStep === 4}
       <RepoProgressStep
