@@ -38,8 +38,9 @@
 
   // Token management
   let tokens = $state<Token[]>([]);
-  let selectedProvider = $state<string>('');
-  
+  let selectedProvider = $state<string | undefined>(undefined);
+  let graspRelayUrl = $state<string>('');
+
   // Repository name availability tracking
   let nameAvailabilityResults = $state<{
     results: Array<{
@@ -192,7 +193,7 @@
       currentStep = 2;
     } else if (currentStep === 2) {
       currentStep = 3; // Go to provider selection
-    } else if (currentStep === 3 && selectedProvider) {
+    } else if (currentStep === 3 && selectedProvider && isValidGraspConfig()) {
       currentStep = 4; // Go to creation progress
       startRepositoryCreation();
     }
@@ -213,6 +214,17 @@
     selectedProvider = provider;
   }
 
+  // GRASP relay URL handler
+  function handleRelayUrlChange(url: string) {
+    graspRelayUrl = url;
+  }
+
+  // Validate relay URL for GRASP provider
+  function isValidGraspConfig(): boolean {
+    if (selectedProvider !== 'grasp') return true;
+    return graspRelayUrl.trim() !== '' && (graspRelayUrl.startsWith('wss://') || graspRelayUrl.startsWith('ws://'));
+  }
+
   // Repository creation using useNewRepo hook
   async function startRepositoryCreation() {
     if (!validateStep1()) return;
@@ -226,6 +238,7 @@
         licenseTemplate: advancedSettings.licenseTemplate,
         defaultBranch: advancedSettings.defaultBranch,
         provider: selectedProvider, // Pass the selected provider
+        relayUrl: selectedProvider === 'grasp' ? graspRelayUrl : undefined, // Pass relay URL for GRASP
         authorName: advancedSettings.authorName,
         authorEmail: advancedSettings.authorEmail,
         maintainers: advancedSettings.maintainers,
@@ -434,6 +447,8 @@
         selectedProvider={selectedProvider}
         onProviderChange={handleProviderChange}
         disabledProviders={nameAvailabilityResults?.conflictProviders || []}
+        relayUrl={graspRelayUrl}
+        onRelayUrlChange={handleRelayUrlChange}
       />
     {:else if currentStep === 4}
       <RepoProgressStep
@@ -471,7 +486,7 @@
         
         <Button
           onclick={nextStep}
-          disabled={(currentStep === 1 && !validateStep1()) || (currentStep === 3 && !selectedProvider)}
+          disabled={(currentStep === 1 && !validateStep1()) || (currentStep === 3 && (!selectedProvider || (selectedProvider === 'grasp' && !isValidGraspConfig())))}
           variant="git"
           size="sm"
           class="h-8 px-3 py-0 text-xs font-medium rounded-md transition"

@@ -1,6 +1,8 @@
 import { type Event as NostrEvent } from "nostr-tools";
 import { tokens as tokensStore, type Token } from "./stores/tokens.js";
 import { getGitServiceApi } from '@nostr-git/core';
+import { signer as signerStore } from "./stores/signer";
+import type { Signer as NostrGitSigner } from "./stores/signer";
 
 /**
  * Check if a repository name is available on GitHub
@@ -64,11 +66,12 @@ export async function checkMultiProviderRepoAvailability(repoName: string, token
   availableProviders: string[];
   conflictProviders: string[];
 }> {
+  // Map between provider names and their API hosts
   const providerHosts: Record<string, string> = {
-    'github.com': 'github',
-    'gitlab.com': 'gitlab',
-    'gitea.com': 'gitea',
-    'bitbucket.org': 'bitbucket'
+    'github': 'github.com',
+    'gitlab': 'gitlab.com',
+    'gitea': 'gitea.com',
+    'bitbucket': 'bitbucket.org'
   };
 
   const results = [];
@@ -77,8 +80,18 @@ export async function checkMultiProviderRepoAvailability(repoName: string, token
 
   // Check availability for each provider the user has tokens for
   for (const token of tokens) {
-    const provider = providerHosts[token.host];
+    // Handle both standard providers and GRASP relays
+    let provider;
+    
+    if (token.host === 'grasp.relay') {
+      provider = 'grasp';
+    } else {
+      // Map host to provider name (github.com -> github)
+      provider = Object.entries(providerHosts).find(([providerName, host]) => host === token.host)?.[0];
+    }
+    
     if (!provider) {
+      console.warn(`Unknown provider for host: ${token.host}`);
       // Skip unknown providers
       continue;
     }
@@ -140,15 +153,16 @@ export async function checkMultiProviderRepoAvailability(repoName: string, token
 
 export interface NewRepoConfig {
   name: string;
-  description: string;
-  initializeWithReadme: boolean;
-  gitignoreTemplate: string;
-  licenseTemplate: string;
+  description?: string;
   defaultBranch: string;
+  initializeWithReadme?: boolean;
+  gitignoreTemplate?: string;
+  licenseTemplate?: string;
+  authorName?: string;
+  authorEmail?: string;
   provider: string; // Git provider (github, gitlab, gitea, etc.)
+  relayUrl?: string; // For GRASP provider
   // Author information
-  authorName: string;
-  authorEmail: string;
   // NIP-34 metadata
   maintainers?: string[]; // Additional maintainer pubkeys
   relays?: string[]; // Preferred relays for this repo
@@ -394,21 +408,50 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
         'github': 'github.com',
         'gitlab': 'gitlab.com',
         'gitea': 'gitea.com',
-        'bitbucket': 'bitbucket.org'
+        'bitbucket': 'bitbucket.org',
+        'grasp': 'grasp.relay'
       };
       
-      const providerHost = providerHosts[config.provider] || config.provider;
-      
-      // Get token for the selected provider from the reactive token store
-      console.log('🔐 Current tokens in store:', tokens.length, 'tokens');
-      console.log('🔐 Token hosts:', tokens.map(t => t.host));
-      console.log('🔐 Looking for provider:', config.provider, 'with host:', providerHost);
-      
-      let finalToken = tokens.find((t: Token) => t.host === providerHost)?.token;
+      let providerHost;
+      let finalToken;
+      let nostrSigner: NostrGitSigner | null = null;
+
+      if (config.provider === 'grasp') {
+        // For GRASP, we need to use the Nostr signer instead of a token
+        console.log('🔐 Setting up GRASP with Nostr signer');
+        
+        // Get the signer from the store
+        signerStore.subscribe(value => {
+          nostrSigner = value;
+        })();
+        
+        if (!nostrSigner) {
+          throw new Error('No Nostr signer available for GRASP provider');
+        }
+        
+        if (!config.relayUrl) {
+          throw new Error('GRASP provider requires a relay URL');
+        }
+        
+        // For GRASP, the token is actually the pubkey
+        const pubkey = await nostrSigner.getPubkey();
+        finalToken = pubkey;
+        providerHost = config.relayUrl;
+      } else {
+        // For standard Git providers, use the host mapping
+        providerHost = providerHosts[config.provider] || config.provider;
+        
+        // Get token for the selected provider from the reactive token store
+        console.log('🔐 Current tokens in store:', tokens.length, 'tokens');
+        console.log('🔐 Token hosts:', tokens.map(t => t.host));
+        console.log('🔐 Looking for provider:', config.provider, 'with host:', providerHost);
+        
+        finalToken = tokens.find((t: Token) => t.host === providerHost)?.token;
+      }
       
       console.log('🔐 Provider token found:', finalToken ? 'YES (length: ' + finalToken.length + ', starts: ' + finalToken.substring(0, 8) + ', ends: ' + finalToken.substring(finalToken.length - 8) + ')' : 'NO');
 
-      if (!finalToken) {
+      if (!finalToken && config.provider !== 'grasp') {
         // Try to wait for tokens to load if they're not available yet
         console.log('🔐 No token found for provider, waiting for token store initialization...');
         await tokensStore.waitForInitialization();
@@ -428,8 +471,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
           );
         }
       }
-
-      // Check if repository name is available before attempting to create
+      
       console.log('🚀 Checking repository name availability...');
       const availability = await checkRepoAvailability(config, finalToken);
       
@@ -442,18 +484,92 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
         provider: config.provider,
         name: config.name,
         description: config.description,
-        tokenLength: finalToken.length,
-        tokenStart: finalToken.substring(0, 8),
-        tokenEnd: finalToken.substring(finalToken.length - 8)
+        tokenLength: finalToken ? finalToken.length : 'N/A',
+        tokenStart: finalToken ? finalToken.substring(0, 8) : 'N/A',
+        tokenEnd: finalToken ? finalToken.substring(finalToken.length - 8) : 'N/A'
       });
       
-      const result = await api.createRemoteRepo({
-        provider: config.provider as any,
-        token: finalToken,
-        name: config.name,
-        description: config.description,
-        isPrivate: false, // Default to public for now
-      });
+      let result;
+      
+      if (config.provider === 'grasp') {
+        console.log('🔐 Setting up GRASP repository creation with message-based signing');
+        
+        if (!nostrSigner) throw new Error('No Nostr signer available');
+        if (!config.relayUrl) throw new Error('GRASP provider requires a relay URL');
+        
+        // Get the Git worker - IMPORTANT: We need to use the same worker instance for both API calls and event signing
+        const { getGitWorker } = await import("@nostr-git/core");
+        const { api, worker } = getGitWorker(); // Get both API and worker from the same call
+        
+        // Register the event signing function with the worker
+        // This enables the message-based signing protocol
+        // We need to use a proxy approach since functions can't be cloned across worker boundaries
+        console.log('🔐 Setting up event signer proxy for worker');
+        
+        // We'll set up a message handler directly instead of using a separate function
+        
+        try {
+          // Set up a message handler for event signing requests
+          console.log('🔐 Setting up event signing message handler');
+          
+          // Set up a message handler for event signing requests
+          worker.addEventListener('message', async (event) => {
+            if (event.data.type === 'request-event-signing') {
+              try {
+                console.log('🔐 Received event signing request:', event.data);
+                const signedEvent = await nostrSigner.sign(event.data.event);
+                console.log('🔐 Event signed successfully');
+                
+                // Send the signed event back to the worker
+                worker.postMessage({
+                  type: 'event-signed',
+                  requestId: event.data.requestId,
+                  signedEvent
+                });
+              } catch (error) {
+                console.error('🔐 Error signing event:', error);
+                
+                // Send the error back to the worker
+                worker.postMessage({
+                  type: 'event-signing-error',
+                  requestId: event.data.requestId,
+                  error: error instanceof Error ? error.message : String(error)
+                });
+              }
+            }
+          });
+          
+          // Tell the worker that event signing is available
+          worker.postMessage({ type: 'register-event-signer' });
+          
+          console.log('🔐 Event signing setup complete');
+        } catch (error) {
+          console.error('🔐 Error setting up event signing:', error);
+          throw new Error('Failed to set up event signing: ' + (error instanceof Error ? error.message : String(error)));
+        }
+        
+        // Now we can use the worker API for GRASP repository creation
+        // This maintains our API abstraction and keeps all Git operations in the worker
+        result = await api.createRemoteRepo({
+          provider: config.provider as any,
+          token: finalToken, // This is the pubkey for GRASP
+          name: config.name,
+          description: config.description || '',
+          isPrivate: false,
+          baseUrl: config.relayUrl // Pass the relay URL
+        });
+        
+        console.log('🔐 GRASP repository created successfully:', result);
+      } else {
+        // Standard Git providers
+        result = await api.createRemoteRepo({
+          provider: config.provider as any,
+          token: finalToken,
+          name: config.name,
+          description: config.description,
+          isPrivate: false, // Default to public for now
+        });
+      }
       
       console.log('🚀 API call completed, result:', result);
 
@@ -477,7 +593,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
   async function pushToRemote(config: NewRepoConfig, remoteRepo: any) {
     console.log('🚀 Starting pushToRemote function...');
     const { getGitWorker } = await import("@nostr-git/core");
-    const { api } = getGitWorker();
+    const { api, worker } = getGitWorker();
 
     // Get the provider-specific host for token lookup
     const providerHosts: Record<string, string> = {
@@ -485,36 +601,83 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       'gitlab': 'gitlab.com',
       'gitea': 'gitea.com',
       'bitbucket': 'bitbucket.org'
-    };
+    }; 
     
-    const providerHost = providerHosts[config.provider] || config.provider;
-    
-    // Get token for the selected provider for push authentication
-    const providerToken = tokens.find((t: Token) => t.host === providerHost)?.token;
+    let providerToken;
+    let nostrSigner: NostrGitSigner | null = null;
+
+    if (config.provider === 'grasp') {
+      // For GRASP, we need the Nostr signer
+      signerStore.subscribe(value => {
+        nostrSigner = value;
+      })();
+      
+      if (!nostrSigner) {
+        throw new Error('No Nostr signer available for GRASP provider');
+      }
+      
+      // For GRASP, we use the pubkey as the token
+      providerToken = await nostrSigner.getPubkey();
+      
+      // Set up message-based signing for GRASP
+      console.log('🔐 Setting up event signing message handler for GRASP push');
+      
+      // Set up a message handler for event signing requests
+      worker.addEventListener('message', async (event) => {
+        if (event.data.type === 'request-event-signing') {
+          try {
+            console.log('🔐 Received event signing request for push:', event.data);
+            const signedEvent = await nostrSigner!.sign(event.data.event);
+            console.log('🔐 Event signed successfully for push');
+            
+            // Send the signed event back to the worker
+            worker.postMessage({
+              type: 'event-signed',
+              requestId: event.data.requestId,
+              signedEvent
+            });
+          } catch (error) {
+            console.error('🔐 Error signing event for push:', error);
+            
+            // Send the error back to the worker
+            worker.postMessage({
+              type: 'event-signing-error',
+              requestId: event.data.requestId,
+              error: error instanceof Error ? error.message : String(error)
+            });
+          }
+        }
+      });
+      
+      // Tell the worker that event signing is available
+      worker.postMessage({ type: 'register-event-signer' });
+      
+      console.log('🔐 Event signing setup complete for GRASP push');
+    } else {
+      const providerHost = providerHosts[config.provider] || config.provider;
+      providerToken = tokens.find((t: Token) => t.host === providerHost)?.token;
+    }
     
     console.log('🚀 Pushing to remote with URL:', remoteRepo.url);
     console.log('🚀 Push config:', {
-      repoId: config.name,
-      remoteUrl: remoteRepo.url,
-      branch: config.defaultBranch,
       provider: config.provider,
-      hasToken: !!providerToken
+      repoPath: config.name,
+      defaultBranch: config.defaultBranch,
+      remoteUrl: remoteRepo.url,
+      tokenLength: providerToken ? providerToken.length : 'No token'
     });
-    
-    const result = await api.pushToRemote({
+
+    // Push to remote repository
+    // Note: For GRASP, we don't pass a signer object since signing is handled via message protocol
+    await api.pushToRemote({
       repoId: config.name,
       remoteUrl: remoteRepo.url,
       branch: config.defaultBranch,
-      token: providerToken, // Add token for authentication
+      token: providerToken,
+      provider: config.provider
     });
-    
-    console.log('🚀 Push result:', result);
 
-    if (!result.success) {
-      throw new Error(result.error || "Failed to push to remote repository");
-    }
-
-    return result;
+    return remoteRepo;
   }
 
   function createRepoAnnouncementEvent(
@@ -568,10 +731,31 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
     }
 
     // Add relays
-    if (config.relays && config.relays.length > 0) {
-      config.relays.forEach((relay) => {
+    const relaysToAdd = [...(config.relays || [])];
+    // For GRASP providers, ensure the relay URL is included
+    if (config.provider === 'grasp' && config.relayUrl && !relaysToAdd.includes(config.relayUrl)) {
+      relaysToAdd.push(config.relayUrl);
+    }
+    
+    if (relaysToAdd.length > 0) {
+      relaysToAdd.forEach((relay) => {
         tags.push(["relay", relay]);
       });
+    }
+
+    // For GRASP providers, also add the relay URL to clone tags
+    if (config.provider === 'grasp' && config.relayUrl) {
+      // Add to existing clone URLs or create new clone tag
+      const cloneTagIndex = tags.findIndex(tag => tag[0] === 'clone');
+      if (cloneTagIndex !== -1) {
+        // Add to existing clone tag if not already present
+        if (!tags[cloneTagIndex].includes(config.relayUrl)) {
+          tags[cloneTagIndex].push(config.relayUrl);
+        }
+      } else {
+        // Create new clone tag with the relay URL
+        tags.push(["clone", config.relayUrl]);
+      }
     }
 
     // Add tags/topics

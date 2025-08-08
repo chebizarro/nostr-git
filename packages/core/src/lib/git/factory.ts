@@ -112,8 +112,12 @@ export function getGitServiceApiFromUrl(url: string, token: string): GitServiceA
   } else if (normalizedUrl.includes('bitbucket.org') || normalizedUrl.includes('bitbucket.')) {
     provider = 'bitbucket';
     baseUrl = 'https://api.bitbucket.org/2.0';
+  } else if (normalizedUrl.startsWith('ws://') || normalizedUrl.startsWith('wss://')) {
+    // GRASP URLs start with ws:// or wss:// protocols
+    provider = 'grasp';
+    baseUrl = url; // For GRASP, the URL is the relay URL
   } else {
-    throw new Error(`Unable to detect Git provider from URL: ${url}. Supported providers: GitHub, GitLab, Gitea, Bitbucket`);
+    throw new Error(`Unable to detect Git provider from URL: ${url}. Supported providers: GitHub, GitLab, Gitea, Bitbucket, GRASP`);
   }
   
   return getGitServiceApi(provider, token, baseUrl);

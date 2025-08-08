@@ -10,12 +10,15 @@
     onProviderChange: (provider: string) => void;
     disabledProviders?: string[];
     tokens?: Token[];
+    relayUrl?: string;
+    onRelayUrlChange?: (url: string) => void;
   }
 
-  const { selectedProvider, onProviderChange, disabledProviders = [], tokens: propTokens }: Props = $props();
+  const { selectedProvider, onProviderChange, disabledProviders = [], tokens: propTokens, relayUrl = '', onRelayUrlChange }: Props = $props();
 
   // Token management
   let tokens = $state<Token[]>([]);
+  let graspRelayUrl = $state<string>(relayUrl || '');
   let availableProviders = $state<{
     id: string;
     name: string;
@@ -107,6 +110,18 @@
   function handleProviderSelect(providerId: string) {
     onProviderChange(providerId);
   }
+
+  function handleRelayUrlChange(e: Event) {
+    const value = (e.target as HTMLInputElement).value;
+    graspRelayUrl = value;
+    if (onRelayUrlChange) {
+      onRelayUrlChange(value);
+    }
+  }
+
+  function isValidRelayUrl(url: string): boolean {
+    return url.trim() !== '' && (url.startsWith('wss://') || url.startsWith('ws://'));
+  }
 </script>
 
 <div class="space-y-6">
@@ -183,6 +198,39 @@
       <p class="text-sm text-muted-foreground">
         Please select a Git service to continue.
       </p>
+    </div>
+  {:else if selectedProvider === 'grasp'}
+    <div class="bg-muted/50 rounded-lg p-4 space-y-4">
+      <div class="flex items-center space-x-2">
+        <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+        <p class="text-sm text-foreground">
+          Ready to create repository on <strong>{availableProviders.find(p => p.id === selectedProvider)?.name}</strong>
+        </p>
+      </div>
+      
+      <div class="space-y-2">
+        <label for="relay-url" class="block text-sm font-medium text-foreground">
+          GRASP Relay URL
+        </label>
+        <input
+          id="relay-url"
+          type="text"
+          class="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
+          class:border-red-500={selectedProvider === 'grasp' && !isValidRelayUrl(graspRelayUrl)}
+          value={graspRelayUrl}
+          oninput={handleRelayUrlChange}
+          placeholder="wss://relay.example.com"
+        />
+        {#if selectedProvider === 'grasp' && graspRelayUrl && !isValidRelayUrl(graspRelayUrl)}
+          <p class="text-sm text-destructive mt-1">
+            Please enter a valid WebSocket URL (must start with ws:// or wss://)
+          </p>
+        {:else}
+          <p class="text-xs text-muted-foreground">
+            Enter the WebSocket URL of the GRASP relay where you want to create the repository
+          </p>
+        {/if}
+      </div>
     </div>
   {:else}
     <div class="bg-muted/50 rounded-lg p-4">

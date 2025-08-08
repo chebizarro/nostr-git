@@ -54,6 +54,7 @@ import { GitHubApi } from './providers/github.js';
 import { GitLabApi } from './providers/gitlab.js';
 import { GiteaApi } from './providers/gitea.js';
 import { BitbucketApi } from './providers/bitbucket.js';
+import { detectVendorFromUrl } from '../vendor-providers.js';
 
 export const git = {
   files,
@@ -74,4 +75,5 @@ export const git = {
     GiteaApi,
     BitbucketApi,
   },
+  detectVendorFromUrl
 };

@@ -24,6 +24,9 @@ import type {
 } from '../api.js';
 import { SimplePool, type EventTemplate, type NostrEvent, nip19 } from 'nostr-tools';
 
+// Import or declare the requestEventSigning function
+declare const requestEventSigning: ((event: EventTemplate) => Promise<NostrEvent>) | undefined;
+
 /**
  * Signer interface for signing Nostr events
  */
@@ -122,7 +125,22 @@ export class GraspApi implements GitServiceApi {
    * Publish Nostr event to relay
    */
   private async publishEvent(event: EventTemplate): Promise<NostrEvent> {
-    const signedEvent = await this.signer.signEvent(event);
+    let signedEvent;
+    
+    // Check if we're in a worker context and need to use the message-based signing protocol
+    if (typeof requestEventSigning === 'function') {
+      console.log('Using message-based signing protocol for GRASP event');
+      try {
+        // Request signing from the UI thread
+        signedEvent = await requestEventSigning(event);
+      } catch (error) {
+        throw new Error(`Failed to sign event via message protocol: ${error}`);
+      }
+    } else {
+      // Direct signing when not in worker context or for backward compatibility
+      console.log('Using direct signing for GRASP event');
+      signedEvent = await this.signer.signEvent(event);
+    }
     
     // Simplified approach using the pool directly
     try {

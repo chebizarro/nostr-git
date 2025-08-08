@@ -72,6 +72,9 @@ export function detectVendorFromUrl(url: string): GitVendor {
     return 'gitea';
   } else if (normalizedUrl.includes('bitbucket.org') || normalizedUrl.includes('bitbucket.')) {
     return 'bitbucket';
+  } else if (normalizedUrl.startsWith('ws://') || normalizedUrl.startsWith('wss://')) {
+    // GRASP URLs start with ws:// or wss:// protocols
+    return 'grasp';
   }
   
   return 'generic';

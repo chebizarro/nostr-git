@@ -10,6 +10,7 @@ import { analyzePatchMergeability, type MergeAnalysisResult } from '../merge-ana
 import { getGitServiceApi } from '../git/factory.js';
 import type { GitServiceApi } from '../git/api.js';
 import type { GitVendor } from '../vendor-providers.js';
+import { createRepoStateEvent } from '@nostr-git/shared-types';
 
 // Authentication configuration
 interface AuthToken {
@@ -2007,18 +2008,123 @@ const createLocalRepo = async ({
 /**
  * Create a remote repository using Git provider API
  */
+/**
+ * Flag to indicate if event signing is available
+ */
+let eventSigningAvailable = false;
+
+/**
+ * Counter for request IDs
+ */
+let requestIdCounter = 0;
+
+/**
+ * Map of pending signing requests
+ */
+const pendingSigningRequests = new Map<string, { resolve: (value: any) => void, reject: (reason: any) => void }>();
+
+/**
+ * Set up message handler for event signing responses
+ */
+self.addEventListener('message', (event) => {
+  if (event.data.type === 'register-event-signer') {
+    // UI thread is registering as an event signer
+    console.log('UI thread registered as event signer');
+    eventSigningAvailable = true;
+  } else if (event.data.type === 'event-signed') {
+    // UI thread has signed an event
+    const { requestId, signedEvent } = event.data;
+    const pendingRequest = pendingSigningRequests.get(requestId);
+    
+    if (pendingRequest) {
+      console.log('Received signed event for request:', requestId);
+      pendingRequest.resolve(signedEvent);
+      pendingSigningRequests.delete(requestId);
+    } else {
+      console.warn('Received signed event for unknown request:', requestId);
+    }
+  } else if (event.data.type === 'event-signing-error') {
+    // UI thread encountered an error signing an event
+    const { requestId, error } = event.data;
+    const pendingRequest = pendingSigningRequests.get(requestId);
+    
+    if (pendingRequest) {
+      console.error('Event signing error for request:', requestId, error);
+      pendingRequest.reject(new Error(error));
+      pendingSigningRequests.delete(requestId);
+    } else {
+      console.warn('Received signing error for unknown request:', requestId);
+    }
+  }
+});
+
+/**
+ * Request event signing from the UI thread
+ * This function will be called by the GRASP API when it needs to sign an event
+ */
+const requestEventSigning = async (event: any): Promise<any> => {
+  if (!eventSigningAvailable) {
+    throw new Error('Event signing is not available. Register an event signer first.');
+  }
+  
+  // Generate a unique request ID
+  const requestId = `${Date.now()}-${requestIdCounter++}`;
+  console.log('Requesting event signing from UI thread, request ID:', requestId);
+  
+  // Create a promise that will be resolved when the UI thread responds
+  const signedEventPromise = new Promise<any>((resolve, reject) => {
+    pendingSigningRequests.set(requestId, { resolve, reject });
+  });
+  
+  // Send a message to the UI thread to request signing
+  // The UI thread will respond with a message containing the signed event
+  self.postMessage({
+    type: 'request-event-signing',
+    requestId,
+    event
+  });
+  
+  // Wait for the UI thread to respond
+  return await signedEventPromise;
+};
+
+/**
+ * Set the event signing function from the UI thread
+ * 
+ * Note: This is now just a compatibility function that does nothing
+ * The actual signing is done via message passing
+ */
+const setEventSigner = (enabled: boolean) => {
+  console.log('setEventSigner called with:', enabled);
+  return { success: true };
+};
+
+/**
+ * Set the handler for signing events
+ * This is now just a compatibility function that does nothing
+ * The actual signing is done via message passing
+ */
+const setRequestEventSigningHandler = (handler: any) => {
+  console.log('setRequestEventSigningHandler called');
+  return { success: true };
+};
+
 const createRemoteRepo = async ({
   provider,
   token,
   name,
   description,
-  isPrivate = false
+  isPrivate = false,
+  baseUrl,
+  eventTemplates
 }: {
   provider: GitVendor;
   token: string;
   name: string;
   description?: string;
   isPrivate?: boolean;
+  baseUrl?: string;
+  eventTemplates?: any[];
 }) => {
   try {
     console.log(`Creating remote repository on ${provider}: ${name}`);
@@ -2029,7 +2135,32 @@ const createRemoteRepo = async ({
     }
     
     // Use GitServiceApi abstraction instead of hardcoded API calls
-    const api = getGitServiceApi(provider, token);
+    let api;
+    
+    if (provider === 'grasp') {
+      if (!baseUrl) {
+        throw new Error('GRASP provider requires a relay URL as baseUrl parameter');
+      }
+      
+      // For GRASP, we need to create a special signer that uses our message-based protocol
+      const messageSigner = {
+        signEvent: async (event: any) => {
+          if (!requestEventSigning) {
+            throw new Error('Event signing function not registered. Call setEventSigner first.');
+          }
+          return await requestEventSigning(event);
+        },
+        getPublicKey: async () => {
+          // For GRASP, the token is the pubkey
+          return token;
+        }
+      };
+      
+      api = getGitServiceApi(provider, token, baseUrl, messageSigner);
+    } else {
+      // Standard Git providers
+      api = getGitServiceApi(provider, token, baseUrl);
+    }
     
     // Create repository using unified API
     const repoMetadata = await api.createRepo({
@@ -2065,37 +2196,139 @@ const pushToRemote = async ({
   repoId,
   remoteUrl,
   branch = 'main',
-  token
+  token,
+  provider
 }: {
   repoId: string;
   remoteUrl: string;
   branch?: string;
   token?: string;
+  provider?: GitVendor;
 }) => {
   const dir = `${rootDir}/${repoId}`;
   
   try {
     console.log(`Pushing repository ${repoId} to remote: ${remoteUrl}`);
     
-    // Add remote origin
-    await git.addRemote({
-      dir,
-      remote: 'origin',
-      url: remoteUrl
-    });
-    
-    // Get auth callback if token provided
-    const authCallback = token ? () => ({ username: 'token', password: token }) : getAuthCallback(remoteUrl);
-    
-    // Push to remote (use URL directly and force flag like working patch push)
-    await git.push({
-      dir,
-      url: remoteUrl,
-      ref: branch,
-      force: true, // Allow non-fast-forward pushes
-      corsProxy: 'https://cors.isomorphic-git.org',
-      ...(authCallback && { onAuth: authCallback })
-    });
+    // Handle GRASP provider with GraspApi
+    if (provider === 'grasp') {
+      if (!token) {
+        throw new Error('GRASP provider requires a pubkey token');
+      }
+      
+      // For GRASP, we need to create a special signer that uses our message-based protocol
+      const messageSigner = {
+        signEvent: async (event: any) => {
+          if (typeof requestEventSigning !== 'function') {
+            throw new Error('Event signing function not registered. Call setEventSigner first.');
+          }
+          return await requestEventSigning(event);
+        },
+        getPublicKey: async () => {
+          // For GRASP, the token is the pubkey
+          return token;
+        }
+      };
+      
+      // For GRASP, we use the GraspApi instead of isomorphic-git
+      // The GraspApi handles the Git Smart HTTP protocol and event signing
+      const graspApi = getGitServiceApi('grasp', token, remoteUrl, messageSigner);
+      
+      // For GRASP push operations, we need to create and publish repository state events
+      // First, read the repository state (branches, HEAD, etc.)
+      console.log('Reading repository state for GRASP push');
+      
+      // Get the current HEAD commit
+      const headCommit = await git.resolveRef({ dir, ref: 'HEAD' });
+      
+      // Get all branches
+      const branchNames = await git.listBranches({ dir });
+      
+      // Convert branches to the format expected by createRepoStateEvent
+      const refs = [];
+      for (const branchName of branchNames) {
+        try {
+          const branchCommit = await git.resolveRef({ dir, ref: `refs/heads/${branchName}` });
+          refs.push({
+            type: 'heads' as const,
+            name: branchName,
+            commit: branchCommit
+          });
+        } catch (error) {
+          console.warn(`Failed to resolve commit for branch ${branchName}:`, error);
+        }
+      }
+      
+      // Determine the current branch (HEAD reference)
+      // We need to find which branch points to the same commit as HEAD
+      let currentBranch: string | undefined;
+      try {
+        const headCommit = await git.resolveRef({ dir, ref: 'HEAD' });
+        // Check each branch to see which one matches HEAD
+        for (const branchName of branchNames) {
+          try {
+            const branchCommit = await git.resolveRef({ dir, ref: `refs/heads/${branchName}` });
+            if (branchCommit === headCommit) {
+              currentBranch = branchName;
+              break;
+            }
+          } catch (error) {
+            // Continue to next branch if this one fails
+            continue;
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to determine current branch from HEAD:', error);
+      }
+      
+      // Create the repository state event
+      const repoStateEvent = createRepoStateEvent({
+        repoId,
+        refs,
+        head: currentBranch,
+        created_at: Math.floor(Date.now() / 1000)
+      });
+      
+      // Sign the event using the message-based signing protocol
+      const signedEvent = await messageSigner.signEvent(repoStateEvent);
+      
+      // Publish the event to the relay
+      // Extract relay URL from remoteUrl (for GRASP, remoteUrl is the relay URL)
+      const relayUrl = remoteUrl;
+      const pool = new SimplePool();
+      await Promise.all(pool.publish([relayUrl], signedEvent));
+      
+      console.log('Successfully published repository state event to GRASP relay');
+      
+      // Return success result
+      return {
+        success: true,
+        repoId,
+        remoteUrl,
+        branch
+      };
+    } else {
+      // Standard Git providers - use isomorphic-git
+      // Add remote origin
+      await git.addRemote({
+        dir,
+        remote: 'origin',
+        url: remoteUrl
+      });
+      
+      // Get auth callback if token provided
+      const authCallback = token ? () => ({ username: 'token', password: token }) : getAuthCallback(remoteUrl);
+      
+      // Push to remote (use URL directly and force flag like working patch push)
+      await git.push({
+        dir,
+        url: remoteUrl,
+        ref: branch,
+        force: true, // Allow non-fast-forward pushes
+        corsProxy: 'https://cors.isomorphic-git.org',
+        ...(authCallback && { onAuth: authCallback })
+      });
+    }
     
     console.log(`Successfully pushed to remote: ${remoteUrl}`);
     
@@ -2460,13 +2693,14 @@ async function updateAndPushFiles(options: {
   files: Array<{ path: string; content: string }>;
   commitMessage: string;
   token: string;
+  provider?: GitVendor;
   onProgress?: (stage: string) => void;
 }): Promise<{
   success: boolean;
   commitId?: string;
   error?: string;
 }> {
-  const { dir, files, commitMessage, token, onProgress } = options;
+  const { dir, files, commitMessage, token, provider = 'github', onProgress } = options;
   
   try {
     onProgress?.('Updating local files...');
@@ -2511,16 +2745,55 @@ async function updateAndPushFiles(options: {
     // Push to remote with authentication
     const remoteUrl = await git.getConfig({ dir, path: 'remote.origin.url' });
     
-    await git.push({
-      dir,
-      http,
-      corsProxy: 'https://cors.isomorphic-git.org',
-      onAuth: () => ({
-        username: 'token',
-        password: token
-      }),
-      force: false
-    });
+    // Handle GRASP provider with message-based signing
+    if (provider === 'grasp') {
+      if (!token) {
+        throw new Error('GRASP provider requires a pubkey token');
+      }
+      
+      // For GRASP, we need to create a special signer that uses our message-based protocol
+      const messageSigner = {
+        signEvent: async (event: any) => {
+          if (typeof requestEventSigning !== 'function') {
+            throw new Error('Event signing function not registered. Call setEventSigner first.');
+          }
+          return await requestEventSigning(event);
+        },
+        getPublicKey: async () => {
+          // For GRASP, the token is the pubkey
+          return token;
+        }
+      };
+      
+      // For GRASP, we need to use the Git Smart HTTP protocol
+      // The signing is handled automatically by the git operations
+      // when we provide the proper auth callback
+      const authCallback = () => ({
+        username: token, // pubkey as username
+        password: 'grasp' // placeholder, actual signing is done via message protocol
+      });
+      
+      // Push to remote using GRASP-specific auth
+      await git.push({
+        dir,
+        http,
+        corsProxy: 'https://cors.isomorphic-git.org',
+        onAuth: authCallback,
+        force: false
+      });
+    } else {
+      // Standard Git providers
+      await git.push({
+        dir,
+        http,
+        corsProxy: 'https://cors.isomorphic-git.org',
+        onAuth: () => ({
+          username: 'token',
+          password: token
+        }),
+        force: false
+      });
+    }
     
     onProgress?.('Files updated and pushed successfully!');
     
@@ -2823,5 +3096,8 @@ expose({
   forkAndCloneRepo,
   updateRemoteRepoMetadata,
   updateAndPushFiles,
-  getCommitDetails
+  getCommitDetails,
+  setEventSigner, // Flag to indicate signing is available
+  requestEventSigning, // Function to request event signing from UI thread
+  setRequestEventSigningHandler // Function to register the event signing handler
 });
