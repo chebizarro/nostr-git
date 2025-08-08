@@ -3,7 +3,73 @@
 [![Visual Studio Marketplace](https://img.shields.io/visual-studio-marketplace/v/nostr-git.vscode-ngit)](https://marketplace.visualstudio.com/items?itemName=nostr-git.vscode-ngit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../../LICENSE)
 
-VSCode extension that brings Nostr-based Git collaboration directly into your IDE, enabling decentralized code review and repository management through NIP-34 events.
+This is a Visual Studio Code extension for decentralized Git repository discovery and collaboration over Nostr.
+
+## Features
+
+- Discover Git repositories announced on Nostr (kind:30617)
+- Announce your own repositories to the Nostr network
+- List and interact with Nostr-based Pull Requests
+- Integrate with `git-remote-nostr` for decentralized Git operations
+- Custom explorer view for browsing Nostr repositories
+- Multi-workspace folder support
+- Progress notifications for long-running operations
+- Context menu commands for copying clone and web URLs
+- NIP-46 remote signing support
+
+## Requirements
+
+- VS Code 1.88+
+- `ngit` CLI tool installed and in PATH
+- `git-remote-nostr` installed
+
+## Extension Settings
+
+This extension contributes the following settings:
+
+* `ngit-vscode.relayUrls`: Array of Nostr relay URLs to connect to
+* `ngit-vscode.authorNpub`: Your Nostr public key (npub) for filtering
+
+## Usage
+
+1. **Discover Repositories**: The extension automatically discovers repositories announced on Nostr and displays them in the "Nostr Repos" explorer view.
+
+2. **Announce Repository**: Use the "Nostr: Announce Repository" command to announce your local repository to the Nostr network.
+
+3. **List PRs**: Use the "Nostr: List PRs" command to list pull requests for the current repository.
+
+4. **Initialize Repository**: Use the "Nostr: Initialize Repository" command to initialize a repository for Nostr collaboration.
+
+5. **Copy URLs**: Right-click on any repository in the explorer view to copy its clone or web URL.
+
+## Known Issues
+
+None yet. Please report issues on GitHub.
+
+## Release Notes
+
+### 0.1.0
+
+Initial release of ngit-vscode with full VS Code API 1.88+ compatibility
+
+### Features
+- Nostr repository discovery and announcement
+- Git integration with ngit CLI tool
+- Custom explorer view for Nostr repositories
+- Support for NIP-46 remote signing
+- Multi-workspace folder support
+- Progress notifications
+- Context menu commands
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed changes.
+
+## Contributing
+
+Contributions are welcome! Please see the [main repository](https://github.com/budabit/nostr-git) for contribution guidelines.
+
+## License
+
+MIT
 
 ## 🎯 Purpose
 

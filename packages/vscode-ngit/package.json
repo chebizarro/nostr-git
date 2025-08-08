@@ -4,62 +4,85 @@
   "description": "Interact with Nostr-backed Git repositories using ngit.",
   "repository": {
     "type": "git",
-    "url": "https://github.com/chebizarro/nostr-git.git"
+    "url": "https://github.com/budabit/nostr-git.git"
   },
-  "publisher": "biz",
-  "version": "0.0.1",
-  "icon": "icon.png",
+  "publisher": "budabit",
+  "version": "0.1.0",
+  "icon": "media/icon.png",
   "engines": {
-    "vscode": "^1.100.0"
+    "vscode": "^1.88.0"
   },
+  "categories": [
+    "Other"
+  ],
   "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "contributes": {
     "commands": [
       {
         "command": "ngit.listPRs",
-        "title": "List Nostr PRs"
+        "title": "List Nostr PRs",
+        "category": "Nostr Git"
       },
       {
         "command": "ngit.initRepo",
-        "title": "Initialize Nostr Repo"
+        "title": "Initialize Nostr Repo",
+        "category": "Nostr Git"
       },
       {
         "command": "ngit.copyCloneUrl",
-        "title": "Copy Clone URL"
+        "title": "Copy Clone URL",
+        "category": "Nostr Git"
       },
       {
         "command": "ngit.copyWebUrl",
-        "title": "Copy Web URL"
+        "title": "Copy Web URL",
+        "category": "Nostr Git"
       },
       {
         "command": "ngit.announceRepo",
-        "title": "Generate Repo Announcement"
+        "title": "Generate Repo Announcement",
+        "category": "Nostr Git"
       },
       {
         "command": "ngit.parseRepoEvent",
-        "title": "Parse Repo Announcement"
+        "title": "Parse Repo Announcement",
+        "category": "Nostr Git"
       },
       {
         "command": "ngit.nip46Connect",
-        "title": "Connect to NIP-46 Signer"
+        "title": "Connect to NIP-46 Signer",
+        "category": "Nostr Git"
       }
     ],
-    "views": {
-      "explorer": [
+    "viewsContainers": {
+      "activitybar": [
         {
-          "icon": "icon.png",
-          "id": "nostrRepos",
-          "name": "Nostr Repos"
-        }
-      ],
-      "nostr-git": [
-        {
-          "icon": "icon.png",
-          "id": "nostrGit",
-          "name": "Nostr Git"
+          "id": "nostr-git",
+          "title": "Nostr Git",
+          "icon": "media/icon.svg"
         }
       ]
     },
+    "views": {
+      "nostr-git": [
+        {
+          "id": "nostrRepos",
+          "name": "Nostr Repositories",
+          "icon": "media/icon.svg",
+          "contextualTitle": "Nostr Repositories"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "nostrRepos",
+        "contents": "No Nostr repositories found.\n[Parse Repo Event](command:ngit.parseRepoEvent)\n[Connect NIP-46 Signer](command:ngit.nip46Connect)\nTo learn more about Nostr Git integration, [read our docs](https://github.com/nostr-protocol/nips/blob/master/34.md).",
+        "when": "!nostrRepos.hasRepos"
+      }
+    ],
     "menus": {
       "view/item/context": [
         {
@@ -72,21 +95,34 @@
           "when": "view == nostrRepos && viewItem == nostrRepo",
           "group": "inline"
         }
+      ],
+      "commandPalette": [
+        {
+          "command": "ngit.listPRs",
+          "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "ngit.initRepo",
+          "when": "workspaceFolderCount > 0"
+        }
       ]
     }
   },
   "scripts": {
+    "vscode:prepublish": "npm run bundle",
     "compile": "tsc -p ./",
+    "bundle": "node build.js",
     "watch": "tsc -p ./ --watch",
     "package": "npx vsce package",
-    "clean": "rm -r dist/"
+    "clean": "rm -rf out/"
   },
   "devDependencies": {
     "@types/node": "^22.14.1",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "^1.88.0",
+    "esbuild": "^0.25.4",
     "typescript": "^5.3.0"
   },
   "dependencies": {
-    "nostr-tools": "^2.12.0"
+    "nostr-tools": "^2.16.2"
   }
 }

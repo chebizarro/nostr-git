@@ -3,6 +3,8 @@
 node_modules/**
 src/**
 .gitignore
+!media/**
+
 .yarnrc
 webpack.config.js
 vsc-extension-quickstart.md
@@ -12,11 +14,8 @@ vsc-extension-quickstart.md
 **/*.ts
 
 # Exclude parent directories and other packages
-../**
-**/../**
 ../actions/**
 ../core/**
-../extension/**
 ../git-wrapper/**
 ../shared-types/**
 ../storybook/**
@@ -40,4 +39,9 @@ test/**
 
 ../../.git/
 ../../.vscode/
+../../.windsurf/
+../extension/**
+../extension/.gitignore
+../extension/dist/
+../extension/docs/
 ../../*
