@@ -231,10 +231,32 @@ class RepoCacheManager {
   }
 }
 
+function toPlain<T>(val: T): T {
+  try { return JSON.parse(JSON.stringify(val)); } catch { return val; }
+}
+
 const cacheManager = new RepoCacheManager();
 
 // Initialize cache cleanup on worker start
 cacheManager.clearOldCache().catch(console.warn);
+
+// Lightweight message-based RPC for calls that may trip Comlink cloning issues
+self.addEventListener('message', async (event: MessageEvent) => {
+  const msg: any = event.data;
+  if (!msg || typeof msg !== 'object') return;
+  if (msg.type === 'rpc:syncWithRemote') {
+    const { id, args } = msg;
+    try {
+      const res = await syncWithRemote(args);
+      // Ensure plain, cloneable result
+      // @ts-ignore postMessage in worker scope
+      self.postMessage({ type: 'rpc:syncWithRemote:result', id, ok: true, result: toPlain(res) });
+    } catch (e: any) {
+      // @ts-ignore postMessage in worker scope
+      self.postMessage({ type: 'rpc:syncWithRemote:result', id, ok: false, error: e?.message || String(e) });
+    }
+  }
+});
 
 /**
  * Check if repository needs updating by comparing remote HEAD with cached HEAD
@@ -325,7 +347,8 @@ async function syncWithRemote({
       url: cloneUrl,
       ref: targetBranch,
       singleBranch: false,
-      depth: repoDataLevels.get(key) === 'full' ? undefined : 50
+      depth: repoDataLevels.get(key) === 'full' ? undefined : 50,
+      corsProxy: 'https://cors.isomorphic-git.org',
     });
     
     // Get remote commit
@@ -366,20 +389,21 @@ async function syncWithRemote({
     
     await cacheManager.setRepoCache(newCache);
     
-    return {
+    return JSON.parse(JSON.stringify({
       success: true,
       repoId,
       branch: targetBranch,
       headCommit: remoteCommit,
-      synced: true
-    };
+      synced: true,
+      serializable: true,
+    }));
   } catch (error) {
     console.error(`Failed to sync ${repoId} with remote:`, error);
-    return {
+    return JSON.parse(JSON.stringify({
       success: false,
       repoId,
-      error: error instanceof Error ? error.message : String(error)
-    };
+      error: error instanceof Error ? error.message : String(error),
+    }));
   }
 }
 
@@ -3098,7 +3122,8 @@ expose({
   cloneAndFork, 
   clone, 
   smartInitializeRepo,
-  syncWithRemote,
+  // Ensure syncWithRemote always returns structured-cloneable data
+  syncWithRemote: async (args: any) => toPlain(await syncWithRemote(args)),
   initializeRepo,
   ensureShallowClone,
   ensureFullClone,

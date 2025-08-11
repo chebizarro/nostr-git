@@ -255,6 +255,11 @@ export class Repo {
 
           // Load commits after successful initialization
           this.#loadCommitsFromRepo();
+
+          // Ensure background merge analysis runs once worker is ready
+          if (this.patches.length > 0) {
+            await this.#performMergeAnalysis(this.patches);
+          }
         } else {
           throw new Error(result.error || "Smart initialization failed");
         }
@@ -338,8 +343,9 @@ export class Repo {
     
     const repoId = this.canonicalKey;
     const branch = targetBranch || this.mainBranch?.split("/").pop();
-    
-    return await this.patchManager.getMergeAnalysis(patch, branch, repoId);
+    // Use workerRepoId (event id) for worker calls when available
+    const workerRepoId = this.repoEvent?.id;
+    return await this.patchManager.getMergeAnalysis(patch, branch, repoId, workerRepoId);
   }
 
   // Check if merge analysis is available for a patch ID
@@ -353,8 +359,9 @@ export class Repo {
 
     const repoId = this.canonicalKey;
     const branch = targetBranch || this.mainBranch?.split("/").pop();
-    
-    return await this.patchManager.refreshMergeAnalysis(patch, branch, repoId);
+    // Use workerRepoId (event id) for worker calls when available
+    const workerRepoId = this.repoEvent?.id;
+    return await this.patchManager.refreshMergeAnalysis(patch, branch, repoId, workerRepoId);
   }
 
   // Public API for clearing merge analysis cache
@@ -849,8 +856,9 @@ export class Repo {
     
     const repoId = this.canonicalKey;
     const targetBranch = this.mainBranch?.split("/").pop() || "main";
+    const workerRepoId = this.repoEvent?.id;
     
     // Delegate to PatchManager for background processing
-    await this.patchManager.processInBackground(patches, targetBranch, repoId);
+    await this.patchManager.processInBackground(patches, targetBranch, repoId, workerRepoId);
   }
 }

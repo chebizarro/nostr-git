@@ -10,7 +10,17 @@ export interface CloneProgressEvent {
 }
 
 export function getGitWorker(onProgress?: (event: CloneProgressEvent) => void) {
-  const worker = new Worker(new URL('./workers/git-worker.js', import.meta.url), { type: 'module' });
+  // Append a cache-busting query param in typical dev environments (localhost/127.0.0.1)
+  const u = new URL('./workers/git-worker.js', import.meta.url);
+  try {
+    const isLikelyDev = typeof location !== 'undefined' && (
+      location.hostname === 'localhost' || location.hostname === '127.0.0.1'
+    );
+    if (isLikelyDev) {
+      u.searchParams.set('v', String(Date.now()));
+    }
+  } catch {}
+  const worker = new Worker(u, { type: 'module' });
   
   if (onProgress) {
     worker.addEventListener('message', (event) => {

@@ -54,16 +54,19 @@ export class WorkerManager {
    * Initialize the git worker and API
    */
   async initialize(): Promise<void> {
-    if (this.isInitialized) {
-      return;
+    // Always recreate worker to avoid stale instances across HMR/dev
+    if (this.worker) {
+      try { this.worker.terminate(); } catch (e) { /* ignore terminate errors */ }
+      this.worker = null;
+      this.api = null as any;
+      this.isInitialized = false;
     }
-
+    const { worker, api } = getGitWorker(this.progressCallback);
+    this.worker = worker;
+    this.api = api as any;
+    this.isInitialized = true;
+    
     try {
-      const { api, worker } = getGitWorker(this.progressCallback);
-      this.worker = worker;
-      this.api = api;
-      this.isInitialized = true;
-      
       // Set authentication configuration in the worker
       if (this.authConfig.tokens.length > 0) {
         await this.api.setAuthConfig(this.authConfig);
@@ -83,9 +86,42 @@ export class WorkerManager {
     }
 
     try {
-      const result = await this.api[operation](params);
-      return result;
+      // Bypass Comlink for syncWithRemote due to clone issues; use raw RPC channel
+      if (operation === 'syncWithRemote' && this.worker) {
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const safeArgs = (() => { try { return JSON.parse(JSON.stringify(params)); } catch { return params; } })();
+        const worker = this.worker;
+        return await new Promise<T>((resolve, reject) => {
+          const onMessage = (ev: MessageEvent) => {
+            const msg: any = ev.data;
+            if (!msg || msg.type !== 'rpc:syncWithRemote:result' || msg.id !== id) return;
+            worker.removeEventListener('message', onMessage);
+            if (msg.ok) {
+              try { resolve(JSON.parse(JSON.stringify(msg.result)) as T); } catch { resolve(msg.result as T); }
+            } else {
+              reject(new Error(msg.error || 'syncWithRemote failed'));
+            }
+          };
+          worker.addEventListener('message', onMessage);
+          worker.postMessage({ type: 'rpc:syncWithRemote', id, args: safeArgs });
+        });
+      }
+      // Ensure params are structured-cloneable before crossing into Comlink
+      let safeParams = params;
+      try { safeParams = JSON.parse(JSON.stringify(params)); } catch { /* fall back to original */ }
+      const result = await (this.api as any)[operation](safeParams);
+      // Ensure result is structured-cloneable; drop functions/proxies
+      try {
+        return JSON.parse(JSON.stringify(result)) as T;
+      } catch {
+        return result as T;
+      }
     } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg && msg.includes('Proxy object could not be cloned')) {
+        // Normalize the error so upstream can handle gracefully
+        throw new Error(`Worker returned a non-transferable value for '${operation}'.`);
+      }
       console.error(`Git operation '${operation}' failed:`, error);
       throw error;
     }
@@ -113,6 +149,19 @@ export class WorkerManager {
     branch?: string;
   }): Promise<any> {
     return this.execute('syncWithRemote', params);
+  }
+
+  /**
+   * Push local repository to a remote
+   */
+  async pushToRemote(params: {
+    repoId: string;
+    remoteUrl: string;
+    branch?: string;
+    token?: string;
+    provider?: string;
+  }): Promise<any> {
+    return this.execute('pushToRemote', params);
   }
 
   /**
@@ -185,7 +234,7 @@ export class WorkerManager {
    */
   async listRepoFilesFromEvent(params: {
     repoEvent: RepoAnnouncementEvent;
-    branch: string;
+    branch?: string;
     path?: string;
     repoKey?: string;
   }): Promise<any> {
@@ -197,7 +246,7 @@ export class WorkerManager {
    */
   async getRepoFileContentFromEvent(params: {
     repoEvent: RepoAnnouncementEvent;
-    branch: string;
+    branch?: string;
     path: string;
     commit?: string;
     repoKey?: string;
@@ -210,7 +259,7 @@ export class WorkerManager {
    */
   async fileExistsAtCommit(params: {
     repoEvent: RepoAnnouncementEvent;
-    branch: string;
+    branch?: string;
     path: string;
     commit?: string;
     repoKey?: string;

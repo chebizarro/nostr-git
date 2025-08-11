@@ -108,7 +108,8 @@ export async function listRepoFilesFromEvent(opts: {
   const treePath = rawPath.replace(/^\/+|\/+$/g, ''); // Remove leading/trailing slashes
   
   try {
-    const { tree } = await git.readTree({ dir, oid, filepath: treePath });
+    const fp: any = treePath ? treePath : undefined;
+    const { tree } = await git.readTree({ dir, oid, filepath: fp });
     return tree.map((entry: any) => ({
       name: entry.path,
       path: treePath ? `${treePath}/${entry.path}` : entry.path,
@@ -121,7 +122,8 @@ export async function listRepoFilesFromEvent(opts: {
       console.warn(`Tree not found for ${oid}, attempting to deepen repository further...`);
       try {
         await ensureRepoFromEvent({ repoEvent: event, branch }, 1000);
-        const { tree } = await git.readTree({ dir, oid, filepath: treePath });
+        const fp2: any = treePath ? treePath : undefined;
+        const { tree } = await git.readTree({ dir, oid, filepath: fp2 });
         return tree.map((entry: any) => ({
           name: entry.path,
           path: treePath ? `${treePath}/${entry.path}` : entry.path,

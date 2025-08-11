@@ -80,3 +80,6 @@ export { default as FunctionProvider } from "../FunctionProvider.svelte";
 export { PermalinkExtension, type PermalinkExtensionOptions } from "./editor/PermalinkExtension";
 export { default as EventRenderer } from "./events/EventRenderer.svelte";
 export { default as Spinner } from "./editor/Spinner.svelte";
+export { default as Terminal } from "./terminal/Terminal.svelte";
+export { createTerminalFeedBridge } from "./terminal/feed-bridge"; 
+
