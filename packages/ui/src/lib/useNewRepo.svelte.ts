@@ -1,6 +1,6 @@
 import { type Event as NostrEvent } from "nostr-tools";
 import { tokens as tokensStore, type Token } from "./stores/tokens.js";
-import { getGitServiceApi } from '@nostr-git/core';
+import { getGitServiceApi, canonicalRepoKey } from '@nostr-git/core';
 import { signer as signerStore } from "./stores/signer";
 import type { Signer as NostrGitSigner } from "./stores/signer";
 
@@ -257,6 +257,39 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
     onProgress?.(progress);
   }
 
+  // Resolve the canonical repo key for this creation flow
+  async function computeCanonicalKey(config: NewRepoConfig): Promise<string> {
+    let owner = "";
+    if (config.provider === 'grasp') {
+      let signer: NostrGitSigner | null = null;
+      signerStore.subscribe((v) => (signer = v))();
+      if (!signer) throw new Error('No Nostr signer available for GRASP provider');
+      const pubkey = await signer.getPubkey();
+      // Use "owner:name" form which canonicalRepoKey will normalize
+      return canonicalRepoKey(`${pubkey}:${config.name}`);
+    }
+    // Standard Git providers: resolve owner via provider API
+    // Try to find a token for the selected provider
+    let tokens: Token[] = [];
+    {
+      const unsub = tokensStore.subscribe((v) => (tokens = v));
+      unsub();
+    }
+    const providerHosts: Record<string, string> = {
+      github: 'github.com',
+      gitlab: 'gitlab.com',
+      gitea: 'gitea.com',
+      bitbucket: 'bitbucket.org',
+    };
+    const host = providerHosts[config.provider] || config.provider;
+    const token = tokens.find((t: Token) => t.host === host)?.token;
+    if (!token) throw new Error(`No ${config.provider} token found to resolve owner`);
+    const api = getGitServiceApi(config.provider as any, token);
+    const currentUser = await api.getCurrentUser();
+    owner = currentUser.login;
+    return canonicalRepoKey(`${owner}/${config.name}`);
+  }
+
   async function createRepository(config: NewRepoConfig): Promise<NewRepoResult | null> {
     if (isCreating) {
       throw new Error("Repository creation already in progress");
@@ -267,9 +300,12 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       error = null;
       progress = [];
 
+      // Compute canonical key up-front so all subsequent steps use it
+      const canonicalKey = await computeCanonicalKey(config);
+
       // Step 1: Create local repository
       updateProgress("local", "Creating local repository...", "running");
-      const localRepo = await createLocalRepo(config);
+      const localRepo = await createLocalRepo({ ...config }, canonicalKey);
       updateProgress("local", "Local repository created successfully", "completed");
 
       // Step 2: Create remote repository (optional)
@@ -289,7 +325,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
           defaultBranch: config.defaultBranch,
           localRepo: localRepo
         });
-        await pushToRemote(config, remoteRepo);
+        await pushToRemote({ ...config }, remoteRepo, canonicalKey);
         updateProgress("push", "Successfully pushed to remote repository", "completed");
       }
 
@@ -333,12 +369,12 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
     }
   }
 
-  async function createLocalRepo(config: NewRepoConfig) {
+  async function createLocalRepo(config: NewRepoConfig, canonicalKey?: string) {
     const { getGitWorker } = await import("@nostr-git/core");
     const { api } = getGitWorker();
 
     const result = await api.createLocalRepo({
-      repoId: config.name,
+      repoId: canonicalKey ?? config.name,
       name: config.name,
       description: config.description,
       defaultBranch: config.defaultBranch,
@@ -354,7 +390,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
     }
 
     return {
-      repoId: config.name,
+      repoId: canonicalKey ?? config.name,
       path: result.repoPath,
       branch: config.defaultBranch,
       initialCommit: result.initialCommit,
@@ -472,11 +508,13 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
         }
       }
       
-      console.log('🚀 Checking repository name availability...');
-      const availability = await checkRepoAvailability(config, finalToken);
-      
-      if (!availability.available) {
-        throw new Error(availability.reason || 'Repository name is not available');
+      // Skip availability check for GRASP; providers with tokens are checked
+      if (config.provider !== 'grasp') {
+        console.log('🚀 Checking repository name availability...');
+        const availability = await checkRepoAvailability(config, finalToken);
+        if (!availability.available) {
+          throw new Error(availability.reason || 'Repository name is not available');
+        }
       }
       
       console.log('🚀 Repository name is available, proceeding with creation...');
@@ -590,7 +628,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
     }
   }
 
-  async function pushToRemote(config: NewRepoConfig, remoteRepo: any) {
+  async function pushToRemote(config: NewRepoConfig, remoteRepo: any, canonicalKey?: string) {
     console.log('🚀 Starting pushToRemote function...');
     const { getGitWorker } = await import("@nostr-git/core");
     const { api, worker } = getGitWorker();
@@ -661,7 +699,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
     console.log('🚀 Pushing to remote with URL:', remoteRepo.url);
     console.log('🚀 Push config:', {
       provider: config.provider,
-      repoPath: config.name,
+      repoPath: canonicalKey ?? config.name,
       defaultBranch: config.defaultBranch,
       remoteUrl: remoteRepo.url,
       tokenLength: providerToken ? providerToken.length : 'No token'
@@ -670,7 +708,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
     // Push to remote repository
     // Note: For GRASP, we don't pass a signer object since signing is handled via message protocol
     await api.pushToRemote({
-      repoId: config.name,
+      repoId: canonicalKey ?? config.name,
       remoteUrl: remoteRepo.url,
       branch: config.defaultBranch,
       token: providerToken,

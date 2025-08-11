@@ -6,6 +6,7 @@ import {
 } from "@nostr-git/core";
 import { WorkerManager } from "./WorkerManager";
 import { MergeAnalysisCacheManager } from "./CacheManager";
+import { writable, type Readable } from "svelte/store";
 
 /**
  * Configuration options for PatchManager
@@ -34,6 +35,9 @@ export class PatchManager {
   // Track ongoing operations
   private activeAnalysis = new Set<string>();
   private batchTimeouts = new Set<number>();
+  // Reactive store of latest analysis results by patchId
+  private analysisMap = new Map<string, MergeAnalysisResult>();
+  private analysisStore = writable(this.analysisMap);
 
   constructor(
     workerManager: WorkerManager,
@@ -52,11 +56,50 @@ export class PatchManager {
   }
 
   /**
+   * Public readable store of merge analyses keyed by patchId
+   */
+  getAnalysisStore(): Readable<Map<string, MergeAnalysisResult>> {
+    return this.analysisStore;
+  }
+
+  /**
+   * Convenience accessor for a single patch's analysis from the in-memory map
+   */
+  getAnalysisFor(patchId: string): MergeAnalysisResult | undefined {
+    return this.analysisMap.get(patchId);
+  }
+
+  /**
+   * Update the reactive store for a given patch
+   */
+  private updateStore(patchId: string, result: MergeAnalysisResult | null): void {
+    if (!result) return;
+    this.analysisMap.set(patchId, result);
+    // Re-emit the same map reference is fine if subscribers do immutable checks by entries
+    // but to be safe for change detection, emit a new Map instance
+    this.analysisStore.set(new Map(this.analysisMap));
+  }
+
+  /**
+   * Remove a patch's analysis from the reactive store
+   */
+  private removeFromStore(patchId: string): void {
+    if (this.analysisMap.delete(patchId)) {
+      this.analysisStore.set(new Map(this.analysisMap));
+    }
+  }
+
+  /**
    * Get merge analysis result for a patch (cached or fresh)
    */
-  async getMergeAnalysis(patch: PatchEvent, targetBranch: string, repoId: string): Promise<MergeAnalysisResult | null> {
+  async getMergeAnalysis(
+    patch: PatchEvent,
+    targetBranch: string,
+    canonicalKey: string,
+    workerRepoId?: string
+  ): Promise<MergeAnalysisResult | null> {
     // First try to get cached result
-    const cachedResult = await this.cacheManager.get(patch, targetBranch, repoId);
+    const cachedResult = await this.cacheManager.get(patch, targetBranch, canonicalKey);
     
     // If we have a valid cached result that's not an error, return it
     if (cachedResult && cachedResult.analysis !== 'error') {
@@ -65,11 +108,13 @@ export class PatchManager {
     
     // If no cached result or cached result is an error, perform fresh analysis
     try {
-      const freshResult = await this.analyzePatch(patch, targetBranch, repoId);
+      const freshResult = await this.analyzePatch(patch, targetBranch, canonicalKey, workerRepoId);
       
       if (freshResult) {
         // Cache the fresh result
-        await this.cacheManager.set(patch, targetBranch, repoId, freshResult);
+        await this.cacheManager.set(patch, targetBranch, canonicalKey, freshResult);
+        // Publish to reactive store
+        this.updateStore(patch.id, freshResult);
       }
       
       return freshResult;
@@ -111,19 +156,22 @@ export class PatchManager {
   async refreshMergeAnalysis(
     patch: PatchEvent, 
     targetBranch: string, 
-    repoId: string
+    canonicalKey: string,
+    workerRepoId?: string
   ): Promise<MergeAnalysisResult | null> {
     try {
       // Remove from cache to force refresh
       await this.cacheManager.remove(patch.id);
+      this.removeFromStore(patch.id);
 
       // Perform fresh analysis
-      const result = await this.analyzePatch(patch, targetBranch, repoId);
+      const result = await this.analyzePatch(patch, targetBranch, canonicalKey, workerRepoId);
       
       if (result) {
         // Cache the new result
-        await this.cacheManager.set(patch, targetBranch, repoId, result);
-
+        await this.cacheManager.set(patch, targetBranch, canonicalKey, result);
+        // Publish to reactive store
+        this.updateStore(patch.id, result);
       }
       
       return result;
@@ -139,7 +187,8 @@ export class PatchManager {
   async analyzePatch(
     patch: PatchEvent,
     targetBranch: string,
-    repoId: string
+    canonicalKey: string,
+    workerRepoId?: string
   ): Promise<MergeAnalysisResult | null> {
     // Prevent duplicate analysis
     if (this.activeAnalysis.has(patch.id)) {
@@ -156,7 +205,7 @@ export class PatchManager {
       
       // Use WorkerManager to perform the analysis
       const result = await this.workerManager.analyzePatchMerge({
-        repoId,
+        repoId: workerRepoId || canonicalKey,
         patchData: {
           id: parsedPatch.id,
           commits: parsedPatch.commits.map(c => ({
@@ -185,7 +234,8 @@ export class PatchManager {
   async processInBackground(
     patches: PatchEvent[],
     targetBranch: string,
-    repoId: string
+    canonicalKey: string,
+    workerRepoId?: string
   ): Promise<void> {
     if (!patches.length) return;
 
@@ -205,7 +255,7 @@ export class PatchManager {
       
       // Schedule batch processing with staggered delays
       const timeoutId = window.setTimeout(async () => {
-        await this.processBatch(batch, targetBranch, repoId);
+        await this.processBatch(batch, targetBranch, canonicalKey, workerRepoId);
         this.batchTimeouts.delete(timeoutId);
       }, i * batchDelay);
       
@@ -219,26 +269,29 @@ export class PatchManager {
   private async processBatch(
     patches: PatchEvent[],
     targetBranch: string,
-    repoId: string
+    canonicalKey: string,
+    workerRepoId?: string
   ): Promise<void> {
     for (const patch of patches) {
       try {
         // Check if we already have a cached result
-        const cachedResult = await this.cacheManager.get(patch, targetBranch, repoId);
+        const cachedResult = await this.cacheManager.get(patch, targetBranch, canonicalKey);
         if (cachedResult) {
-
+          // Ensure store reflects cached value
+          this.updateStore(patch.id, cachedResult);
           continue;
         }
 
 
         
         // Perform analysis
-        const result = await this.analyzePatch(patch, targetBranch, repoId);
+        const result = await this.analyzePatch(patch, targetBranch, canonicalKey, workerRepoId);
         
         if (result) {
           // Cache the result
-          await this.cacheManager.set(patch, targetBranch, repoId, result);
-
+          await this.cacheManager.set(patch, targetBranch, canonicalKey, result);
+          // Publish to reactive store
+          this.updateStore(patch.id, result);
         }
       } catch (error) {
         console.warn(`Background merge analysis failed for patch ${patch.id}:`, error);
@@ -252,7 +305,9 @@ export class PatchManager {
    */
   async clearCache(): Promise<void> {
     await this.cacheManager.clear();
-
+    // Clear reactive store as well
+    this.analysisMap.clear();
+    this.analysisStore.set(new Map());
   }
 
   /**
@@ -277,8 +332,9 @@ export class PatchManager {
     
     // Clear all batch timeouts
     this.clearBatchTimeouts();
-    
-
+    // Clear reactive store
+    this.analysisMap.clear();
+    this.analysisStore.set(new Map());
   }
 
   /**
@@ -296,6 +352,6 @@ export class PatchManager {
    */
   updateConfig(config: Partial<PatchManagerConfig>): void {
     this.config = { ...this.config, ...config };
-
+    // No-op: config update currently does not require store changes
   }
 }

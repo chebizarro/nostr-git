@@ -1,5 +1,5 @@
 import { WorkerManager } from "./WorkerManager";
-import { CacheManager } from "./CacheManager";
+import { CacheManager, CacheType } from "./CacheManager";
 import { context } from "$lib/stores/context";
 
 /**
@@ -49,6 +49,11 @@ export class CommitManager {
   private workerManager: WorkerManager;
   private cacheManager?: CacheManager;
   private config: Required<CommitManagerConfig>;
+  // Repo identifiers
+  private canonicalKey?: string; // for caches and internal maps
+  private workerRepoId?: string; // for worker API calls
+  // Cache
+  private readonly COMMIT_CACHE_NAME = "commit_history";
   
   // Commit state
   private commits: any[] = [];
@@ -83,6 +88,25 @@ export class CommitManager {
     };
     
     this.commitsPerPage = this.config.defaultCommitsPerPage;
+
+    // Register commit cache if available
+    if (this.cacheManager) {
+      this.cacheManager.registerCache(this.COMMIT_CACHE_NAME, {
+        type: CacheType.LOCAL_STORAGE,
+        keyPrefix: 'commit_history_cache_',
+        defaultTTL: 15 * 60 * 1000,
+        autoCleanup: true,
+        cleanupInterval: 5 * 60 * 1000,
+      });
+    }
+  }
+
+  /**
+   * Set the current repository identifiers
+   */
+  setRepoKeys(keys: { canonicalKey?: string; workerRepoId?: string }) {
+    if (keys.canonicalKey) this.canonicalKey = keys.canonicalKey;
+    if (keys.workerRepoId) this.workerRepoId = keys.workerRepoId;
   }
 
   /**
@@ -179,7 +203,8 @@ export class CommitManager {
   async refreshCommits(): Promise<CommitLoadResult> {
     // Clear cache if enabled
     if (this.config.enableCaching && this.cacheManager) {
-      // TODO: Implement commit cache clearing when needed
+      // Clear commit history cache to force fresh load
+      await this.cacheManager.clear(this.COMMIT_CACHE_NAME);
     }
     
     return await this.loadCommits();
@@ -193,7 +218,8 @@ export class CommitManager {
     branch?: string,
     mainBranch?: string
   ): Promise<CommitLoadResult> {
-    if (!repoId || !mainBranch) {
+    const effectiveRepoId = repoId || this.workerRepoId;
+    if (!effectiveRepoId || !mainBranch) {
       return { success: false, error: "Repository ID and main branch are required" };
     }
 
@@ -205,20 +231,54 @@ export class CommitManager {
 
       this.loadingIds.commits = context.loading("Loading commits...");
 
-      // Extract short branch name, let git-worker handle robust branch resolution
+    // Try cache first if enabled
+    const cacheEnabled = !!(this.config.enableCaching && this.cacheManager && this.canonicalKey);
     const branchName = (branch || mainBranch).split("/").pop();
+    const pageKey = cacheEnabled
+      ? `${this.canonicalKey}:${branchName}:p${this.currentPage}:s${this.commitsPerPage}`
+      : undefined;
+    type CommitPageCacheEntry = {
+      commits: any[];
+      total?: number;
+      page: number;
+      pageSize: number;
+      branch: string;
+      repoKey: string;
+    };
+    if (cacheEnabled && pageKey) {
+      const cached = await this.cacheManager!.get<CommitPageCacheEntry>(this.COMMIT_CACHE_NAME, pageKey);
+      if (cached && cached.repoKey === this.canonicalKey && cached.branch === branchName) {
+        // Apply cached state
+        this.commits = cached.commits;
+        this.totalCommits = cached.total;
+        this.hasMoreCommits = cached.total
+          ? this.currentPage * this.commitsPerPage < cached.total
+          : cached.commits.length === this.commitsPerPage; // heuristic if no total
+
+        if (this.loadingIds.commits) {
+          context.remove(this.loadingIds.commits);
+          this.loadingIds.commits = null;
+        }
+        return {
+          success: true,
+          commits: this.commits,
+          totalCount: this.totalCommits,
+          fromCache: true,
+        };
+      }
+    }
 
       // Calculate the depth needed for current page
       const requiredDepth = this.commitsPerPage * this.currentPage;
 
       // Check current data level
-      const dataLevel = await this.workerManager.getRepoDataLevel(repoId);
+      const dataLevel = await this.workerManager.getRepoDataLevel(effectiveRepoId);
 
       // For commit history, we need full clone to avoid NotFoundError
       if (dataLevel !== "full") {
         console.log(`Upgrading to full clone for commit history (current: ${dataLevel})`);
         const upgradeResult = await this.workerManager.ensureFullClone({
-          repoId,
+          repoId: effectiveRepoId,
           branch: branchName,
           depth: Math.max(requiredDepth, this.config.defaultDepth),
         });
@@ -230,7 +290,7 @@ export class CommitManager {
 
       // Load commits with the worker's optimized method
       const commitsResult = await this.workerManager.getCommitHistory({
-        repoId,
+        repoId: effectiveRepoId,
         branch: branchName,
         depth: requiredDepth,
       });
@@ -257,7 +317,7 @@ export class CommitManager {
           } else {
             // Get total count separately (this might be cached)
             const countResult = await this.workerManager.getCommitCount({
-              repoId,
+              repoId: effectiveRepoId,
               branch: branchName,
             });
 

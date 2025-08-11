@@ -15,3 +15,4 @@ export * from './lib/patches.js';
 export * from './lib/merge-analysis.js';
 export * from './lib/merge.js';
 export * from './lib/git/index.js';
+export * from './lib/utils/canonicalRepoKey.js';

@@ -1,4 +1,5 @@
 import { getGitProvider } from './git-provider.js';
+import { canonicalRepoKey } from './utils/canonicalRepoKey.js';
 import { fileTypeFromBuffer } from 'file-type';
 import { lookup as mimeLookup } from 'mime-types';
 import { createPatch } from 'diff';
@@ -18,9 +19,9 @@ export const rootDir = '/repos';
  * @param repoEvent Repository event
  * @returns Promise resolving to the default branch name
  */
-export async function detectDefaultBranch(repoEvent: RepoAnnouncement): Promise<string> {
+export async function detectDefaultBranch(repoEvent: RepoAnnouncement, repoKey?: string): Promise<string> {
   const git = getGitProvider();
-  const dir = `${rootDir}/${repoEvent.id}`;
+  const dir = `${rootDir}/${repoKey || canonicalRepoKey(repoEvent.repoId)}`;
   
   try {
     // First try to get the symbolic ref for HEAD
@@ -62,14 +63,14 @@ export async function detectDefaultBranch(repoEvent: RepoAnnouncement): Promise<
  */
 const defaultBranchCache = new Map<string, string>();
 
-export async function getDefaultBranch(repoEvent: RepoAnnouncement): Promise<string> {
-  const cacheKey = repoEvent.id;
+export async function getDefaultBranch(repoEvent: RepoAnnouncement, repoKey?: string): Promise<string> {
+  const cacheKey = repoKey || canonicalRepoKey(repoEvent.repoId);
   
   if (defaultBranchCache.has(cacheKey)) {
     return defaultBranchCache.get(cacheKey)!;
   }
   
-  const defaultBranch = await detectDefaultBranch(repoEvent);
+  const defaultBranch = await detectDefaultBranch(repoEvent, repoKey);
   defaultBranchCache.set(cacheKey, defaultBranch);
   
   return defaultBranch;
@@ -199,9 +200,9 @@ export async function ensureRepo(opts: { host: string; owner: string; repo: stri
   }
 }
 
-export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; branch?: string }, depth: number = 1) {
+export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; branch?: string; repoKey?: string }, depth: number = 1) {
   const git = getGitProvider();
-  const dir = `${rootDir}/${opts.repoEvent.id}`;
+  const dir = `${rootDir}/${opts.repoKey || canonicalRepoKey(opts.repoEvent.repoId)}`;
 
   // Prefer HTTPS clone URL
   let cloneUrl = opts.repoEvent.clone?.find((url) => url.startsWith("https://"));
@@ -232,7 +233,7 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
     if (isCloned) {
       // If repo exists, detect the actual default branch
       try {
-        targetBranch = await detectDefaultBranch(opts.repoEvent);
+        targetBranch = await detectDefaultBranch(opts.repoEvent, opts.repoKey);
       } catch (error) {
         console.warn('Failed to detect default branch, will use robust resolution after clone:', error);
         targetBranch = 'main'; // Temporary, will be resolved robustly after clone
@@ -278,8 +279,8 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
       
       // After successful clone, detect the actual default branch
       try {
-        const actualDefault = await detectDefaultBranch(opts.repoEvent);
-        defaultBranchCache.set(opts.repoEvent.id, actualDefault);
+        const actualDefault = await detectDefaultBranch(opts.repoEvent, opts.repoKey);
+        defaultBranchCache.set(opts.repoKey || canonicalRepoKey(opts.repoEvent.repoId), actualDefault);
         console.log(`Detected default branch: ${actualDefault}`);
       } catch (error) {
         console.warn('Failed to detect default branch after clone:', error);

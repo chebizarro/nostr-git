@@ -11,6 +11,9 @@ import { getGitServiceApi } from '../git/factory.js';
 import type { GitServiceApi } from '../git/api.js';
 import type { GitVendor } from '../vendor-providers.js';
 import { createRepoStateEvent } from '@nostr-git/shared-types';
+import { canonicalRepoKey } from '../utils/canonicalRepoKey.js';
+
+// canonicalRepoKey is now imported from '../utils/canonicalRepoKey.js'
 
 // Authentication configuration
 interface AuthToken {
@@ -117,6 +120,7 @@ async function resolveRobustBranchInWorker(dir: string, requestedBranch?: string
 }
 
 // In-memory tracking (for current session)
+// Always key by canonicalRepoKey(repoId)
 const clonedRepos = new Set<string>();
 const repoDataLevels = new Map<string, 'refs' | 'shallow' | 'full'>();
 
@@ -297,7 +301,8 @@ async function syncWithRemote({
   cloneUrls: string[];
   branch?: string;
 }) {
-  const dir = `${rootDir}/${repoId}`;
+  const key = canonicalRepoKey(repoId);
+  const dir = `${rootDir}/${key}`;
   
   try {
     // Check if repo exists locally
@@ -320,7 +325,7 @@ async function syncWithRemote({
       url: cloneUrl,
       ref: targetBranch,
       singleBranch: false,
-      depth: repoDataLevels.get(repoId) === 'full' ? undefined : 50
+      depth: repoDataLevels.get(key) === 'full' ? undefined : 50
     });
     
     // Get remote commit
@@ -348,10 +353,10 @@ async function syncWithRemote({
     // Update cache
     const branches = await git.listBranches({ dir });
     const newCache: RepoCache = {
-      repoId,
+      repoId: key,
       lastUpdated: Date.now(),
       headCommit: remoteCommit,
-      dataLevel: repoDataLevels.get(repoId) || 'shallow',
+      dataLevel: repoDataLevels.get(key) || 'shallow',
       branches: branches.map((name: string) => ({ 
         name, 
         commit: name === targetBranch ? remoteCommit : remoteCommit 
@@ -403,14 +408,15 @@ async function smartInitializeRepo({
 
   try {
     // Check cache first
-    const cache = await cacheManager.getRepoCache(repoId);
+    const key = canonicalRepoKey(repoId);
+    const cache = await cacheManager.getRepoCache(key);
     const needsUpdateCheck = forceUpdate || await needsUpdate(repoId, cloneUrls, cache);
     
     if (cache && !needsUpdateCheck) {
       // Use cached data
       sendProgress('Using cached data');
-      repoDataLevels.set(repoId, cache.dataLevel);
-      clonedRepos.add(repoId);
+      repoDataLevels.set(key, cache.dataLevel);
+      clonedRepos.add(key);
       
       return {
         success: true,
@@ -425,7 +431,7 @@ async function smartInitializeRepo({
     // Need to fetch from remote or sync local repo
     sendProgress('Checking repository status');
     
-    const dir = `${rootDir}/${repoId}`;
+    const dir = `${rootDir}/${key}`;
     const isAlreadyCloned = await isRepoCloned(dir);
     
     if (isAlreadyCloned && !forceUpdate) {
@@ -441,7 +447,7 @@ async function smartInitializeRepo({
             url: cloneUrl,
             ref: await resolveRobustBranchInWorker(dir),
             singleBranch: false, // Fetch all branches
-            depth: repoDataLevels.get(repoId) === 'full' ? undefined : 50
+            depth: repoDataLevels.get(key) === 'full' ? undefined : 50
           });
         }
         
@@ -480,10 +486,10 @@ async function smartInitializeRepo({
         const branches = await git.listBranches({ dir });
         
         const newCache: RepoCache = {
-          repoId,
+          repoId: key,
           lastUpdated: Date.now(),
           headCommit: remoteCommit,
-          dataLevel: repoDataLevels.get(repoId) || 'shallow',
+          dataLevel: repoDataLevels.get(key) || 'shallow',
           branches: branches.map((name: string) => ({ 
             name, 
             commit: name === mainBranch ? remoteCommit : remoteCommit 
@@ -492,8 +498,8 @@ async function smartInitializeRepo({
         };
         
         await cacheManager.setRepoCache(newCache);
-        repoDataLevels.set(repoId, newCache.dataLevel);
-        clonedRepos.add(repoId);
+        repoDataLevels.set(key, newCache.dataLevel);
+        clonedRepos.add(key);
         
         sendProgress('Repository ready');
         return {
@@ -547,40 +553,47 @@ const initializeRepo = async ({
   };
 
   try {
-    const dir = `${rootDir}/${repoId}`;
+    const key = canonicalRepoKey(repoId);
+    const dir = `${rootDir}/${key}`;
     sendProgress('Initializing repository');
 
-    // Try each clone URL until one works
+    // Try each clone URL with robust ref fallbacks until one works
     let lastError: Error | null = null;
     let cloneResult = null;
 
     for (const cloneUrl of cloneUrls) {
-      try {
-        sendProgress('Fetching repository metadata', 0, 1);
-        
-        const onProgress = (progress: { phase: string; loaded?: number; total?: number }) => {
-          sendProgress(progress.phase, progress.loaded, progress.total);
-        };
+      sendProgress('Fetching repository metadata', 0, 1);
+      const onProgress = (progress: { phase: string; loaded?: number; total?: number }) => {
+        sendProgress(progress.phase, progress.loaded, progress.total);
+      };
 
-        // Initialize with minimal clone (refs only)
-        const authCallback = getAuthCallback(cloneUrl);
-        cloneResult = await git.clone({
-          dir,
-          url: cloneUrl,
-          ref: 'HEAD',
-          singleBranch: false, // We want all branches for refs
-          depth: 1, // Minimal depth for refs
-          noCheckout: true, // Don't checkout files yet
-          noTags: true, // Skip tags for speed
-          onProgress,
-          ...(authCallback && { onAuth: authCallback }),
-        });
+      const authCallback = getAuthCallback(cloneUrl);
+      const refCandidates = ['HEAD', 'main', 'master', 'develop', 'dev'];
 
-        break; // Success, exit loop
-      } catch (error: any) {
-        console.warn(`Clone failed for URL ${cloneUrl}:`, error);
-        lastError = error;
-        continue; // Try next URL
+      for (const refCandidate of refCandidates) {
+        try {
+          cloneResult = await git.clone({
+            dir,
+            url: cloneUrl,
+            ref: refCandidate,
+            singleBranch: true, // fetch minimal branch data for speed
+            depth: 1,
+            noCheckout: true, // avoid checkout during init
+            noTags: true,
+            onProgress,
+            ...(authCallback && { onAuth: authCallback }),
+          });
+          // Success for this URL/ref
+          break;
+        } catch (error: any) {
+          // If NotFoundError on refs/heads/<ref>, try next candidate
+          lastError = error;
+          continue;
+        }
+      }
+
+      if (cloneResult) {
+        break; // Exit outer loop on success
       }
     }
 
@@ -593,12 +606,12 @@ const initializeRepo = async ({
     const headCommit = await git.resolveRef({ dir, ref: 'HEAD' });
 
     // Update tracking
-    repoDataLevels.set(repoId, 'refs');
-    clonedRepos.add(repoId);
+    repoDataLevels.set(key, 'refs');
+    clonedRepos.add(key);
 
     // Cache the results
     const cache: RepoCache = {
-      repoId,
+      repoId: key,
       lastUpdated: Date.now(),
       headCommit,
       dataLevel: 'refs',
@@ -649,13 +662,14 @@ const ensureShallowClone = async ({
     });
   };
 
-  const dir = `${rootDir}/${repoId}`;
+  const key = canonicalRepoKey(repoId);
+  const dir = `${rootDir}/${key}`;
   
   // Use robust multi-fallback branch resolution
   let targetBranch: string = branch || 'main'; // Initialize with fallback
   try {
     targetBranch = await resolveRobustBranchInWorker(dir, branch);
-    const currentLevel = repoDataLevels.get(repoId);
+    const currentLevel = repoDataLevels.get(key);
 
     // If we already have shallow or full data, no need to fetch
     if (currentLevel === 'shallow' || currentLevel === 'full') {
@@ -670,7 +684,7 @@ const ensureShallowClone = async ({
     }
 
     // Check if we need to initialize first
-    if (!clonedRepos.has(repoId)) {
+    if (!clonedRepos.has(key)) {
       throw new Error('Repository not initialized. Call initializeRepo first.');
     }
 
@@ -707,10 +721,10 @@ const ensureShallowClone = async ({
     });
 
     // Update tracking
-    repoDataLevels.set(repoId, 'shallow');
+    repoDataLevels.set(key, 'shallow');
 
     // Update cache
-    const cache = await cacheManager.getRepoCache(repoId);
+    const cache = await cacheManager.getRepoCache(key);
     if (cache) {
       cache.dataLevel = 'shallow';
       cache.lastUpdated = Date.now();
@@ -815,19 +829,20 @@ const clearCloneCache = async () => {
  */
 async function deleteRepo({ repoId }: { repoId: string }) {
   // Remove from tracked sets
-  clonedRepos.delete(repoId);
-  repoDataLevels.delete(repoId);
+  const key = canonicalRepoKey(repoId);
+  clonedRepos.delete(key);
+  repoDataLevels.delete(key);
 
   // Remove from persistent cache
   try {
-    await cacheManager.deleteRepoCache(repoId);
+    await cacheManager.deleteRepoCache(key);
   } catch (error) {
     console.warn(`Failed to delete cache for ${repoId}:`, error);
   }
 
   // Remove directory from LightningFS
   const fs = new LightningFS('nostr-git');
-  const dir = `${rootDir}/${repoId}`;
+  const dir = `${rootDir}/${key}`;
   try {
     // Recursively delete all files and subdirectories
     async function rmrf(path: string) {
@@ -873,7 +888,8 @@ async function getCommitCount({
   fromCache?: boolean;
   error?: string;
 }> {
-  const dir = `${rootDir}/${repoId}`;
+  const key = canonicalRepoKey(repoId);
+  const dir = `${rootDir}/${key}`;
   
   // Use robust multi-fallback branch resolution
   let targetBranch: string = branch || 'main'; // Initialize with fallback
@@ -881,7 +897,7 @@ async function getCommitCount({
     targetBranch = await resolveRobustBranchInWorker(dir, branch);
     
     // First check if we already have the full history
-    const currentLevel = repoDataLevels.get(repoId);
+    const currentLevel = repoDataLevels.get(key);
     if (currentLevel === 'full') {
       // If we have full history, we can count commits locally
       const commits = await git.log({
@@ -899,7 +915,7 @@ async function getCommitCount({
     
     // If we don't have full history, do a lightweight remote count
     // This uses git's protocol to get just the commit count
-    const cloneUrl = `https://github.com/${repoId}.git`;
+    const cloneUrl = `https://github.com/${key}.git`;
     
     // This is a lightweight operation that doesn't download the full history
     const refs = await git.listServerRefs({
@@ -981,17 +997,18 @@ const ensureFullClone = async ({
   branch?: string;
   depth?: number;
 }) => {
-  const dir = `${rootDir}/${repoId}`;
+  const key = canonicalRepoKey(repoId);
+  const dir = `${rootDir}/${key}`;
   
   // Use robust multi-fallback branch resolution
   const targetBranch = await resolveRobustBranchInWorker(dir, branch);
-  const currentLevel = repoDataLevels.get(repoId);
+  const currentLevel = repoDataLevels.get(key);
   if (currentLevel === 'full') {
     return { success: true, repoId, cached: true, level: currentLevel };
   }
 
-  if (!clonedRepos.has(repoId)) {
-    if(!await isRepoCloned(`${rootDir}/${repoId}`)) {
+  if (!clonedRepos.has(key)) {
+    if(!await isRepoCloned(`${rootDir}/${key}`)) {
       return {
         success: false,
         repoId,
@@ -1042,7 +1059,7 @@ const ensureFullClone = async ({
     sendProgress('Full clone completed');
 
     // Update data level
-    repoDataLevels.set(repoId, 'full');
+    repoDataLevels.set(key, 'full');
     console.log(`Repository ${repoId} upgraded to full clone successfully`);
 
     return { success: true, repoId, cached: false, level: 'full' };
@@ -1056,8 +1073,9 @@ const ensureFullClone = async ({
  * Get the current data level for a repository
  */
 const getRepoDataLevel = (repoId: string): 'none' | 'refs' | 'shallow' | 'full' => {
-  if (!clonedRepos.has(repoId)) return 'none';
-  return repoDataLevels.get(repoId) || 'none';
+  const key = canonicalRepoKey(repoId);
+  if (!clonedRepos.has(key)) return 'none';
+  return repoDataLevels.get(key) || 'none';
 };
 
 /**
@@ -1073,7 +1091,8 @@ const getCommitHistory = async ({
   branch?: string;
   depth?: number;
 }) => {
-  const dir = `${rootDir}/${repoId}`;
+  const key = canonicalRepoKey(repoId);
+  const dir = `${rootDir}/${key}`;
   
   // Use robust multi-fallback branch resolution
   const targetBranch = await resolveRobustBranchInWorker(dir, branch);
@@ -1091,13 +1110,13 @@ const getCommitHistory = async ({
       }
 
       // Verify the repository has the expected data level
-      const actualDataLevel = repoDataLevels.get(repoId);
+      const actualDataLevel = repoDataLevels.get(key);
       if (actualDataLevel !== 'full') {
         console.warn(`Expected full clone but got ${actualDataLevel}, forcing full clone...`);
         // Force a full clone by temporarily removing from cache
-        const wasCloned = clonedRepos.has(repoId);
-        clonedRepos.delete(repoId);
-        repoDataLevels.delete(repoId);
+        const wasCloned = clonedRepos.has(key);
+        clonedRepos.delete(key);
+        repoDataLevels.delete(key);
         
         const retryResult = await ensureFullClone({ repoId, branch, depth: currentDepth });
         if (!retryResult.success) {
@@ -1105,7 +1124,7 @@ const getCommitHistory = async ({
         }
         
         if (wasCloned) {
-          clonedRepos.add(repoId);
+          clonedRepos.add(key);
         }
       }
 
@@ -1138,8 +1157,8 @@ const getCommitHistory = async ({
         } else if (error.message.includes('shallow') && attempt < maxAttempts - 1) {
           console.warn(`Shallow clone issue for ${repoId}, forcing full clone...`);
           // Force re-clone by clearing cache
-          clonedRepos.delete(repoId);
-          repoDataLevels.delete(repoId);
+          clonedRepos.delete(key);
+          repoDataLevels.delete(key);
           currentDepth = Math.max(currentDepth, 100);
           attempt++;
           continue;
@@ -1179,7 +1198,8 @@ async function analyzePatchMerge({
   targetBranch?: string;
 }): Promise<MergeAnalysisResult> {
   try {
-    const dir = `${rootDir}/${repoId}`;
+    const key = canonicalRepoKey(repoId);
+    const dir = `${rootDir}/${key}`;
     
     // Use robust multi-fallback branch resolution
     const effectiveTargetBranch = await resolveRobustBranchInWorker(dir, targetBranch);
@@ -1414,7 +1434,8 @@ async function applyPatchAndPush(params: {
   const progress = onProgress || (() => {});
   
   try {
-    const dir = `${rootDir}/${repoId}`;
+    const key = canonicalRepoKey(repoId);
+    const dir = `${rootDir}/${key}`;
     progress('Initializing merge...', 0);
     
     // Use robust multi-fallback branch resolution
@@ -1826,7 +1847,8 @@ const resetRepoToRemote = async ({
   repoId: string;
   branch?: string;
 }) => {
-  const dir = `${rootDir}/${repoId}`;
+  const key = canonicalRepoKey(repoId);
+  const dir = `${rootDir}/${key}`;
   
   try {
     // Use robust multi-fallback branch resolution
@@ -1934,7 +1956,8 @@ const createLocalRepo = async ({
   authorName: string;
   authorEmail: string;
 }) => {
-  const dir = `${rootDir}/${repoId}`;
+  const key = canonicalRepoKey(repoId);
+  const dir = `${rootDir}/${key}`;
   
   try {
     console.log(`Creating local repository: ${name}`);
@@ -1982,9 +2005,9 @@ const createLocalRepo = async ({
       }
     });
     
-    // Update tracking
-    clonedRepos.add(repoId);
-    repoDataLevels.set(repoId, 'full');
+    // Update tracking using canonical key
+    clonedRepos.add(key);
+    repoDataLevels.set(key, 'full');
     
     console.log(`Local repository created successfully: ${commitSha}`);
     
@@ -2205,7 +2228,8 @@ const pushToRemote = async ({
   token?: string;
   provider?: GitVendor;
 }) => {
-  const dir = `${rootDir}/${repoId}`;
+  const key = canonicalRepoKey(repoId);
+  const dir = `${rootDir}/${key}`;
   
   try {
     console.log(`Pushing repository ${repoId} to remote: ${remoteUrl}`);
@@ -2477,10 +2501,7 @@ async function cloneRemoteRepo(options: {
     
     await cacheManager.init();
     await cacheManager.setRepoCache(cache);
-    
-    // Update in-memory tracking
-    clonedRepos.add(dir);
-    repoDataLevels.set(dir, depth ? 'shallow' : 'full');
+    // Do not update global tracking here; higher-level callers manage it by canonical key
     
     onProgress?.('Clone completed successfully!', 100);
     
@@ -2846,7 +2867,8 @@ async function getCommitDetails({
   }>;
   error?: string;
 }> {
-  const dir = `${rootDir}/${repoId}`;
+  const key = canonicalRepoKey(repoId);
+  const dir = `${rootDir}/${key}`;
   
   try {
     // Ensure we have the repository with sufficient depth

@@ -90,7 +90,7 @@
 
     try {
       const result = await repo.workerManager.execute('getCommitDetails', {
-        repoId: repo.repoEvent.id,
+        repoId: repo.canonicalKey,
         commitId: commitSha,
       }) as { success: boolean; meta?: any; changes?: any; error?: string };
 

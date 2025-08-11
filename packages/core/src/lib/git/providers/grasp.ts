@@ -395,7 +395,7 @@ export class GraspApi implements GitServiceApi {
       tags: [
         ['a', repoId],
         ['subject', issue.title],
-        ...(issue.labels?.map(label => ['label', label]) || []),
+        ...(issue.labels?.map((label: string) => ['label', label]) || []),
       ],
       content: issue.body || '',
     };
@@ -413,7 +413,7 @@ export class GraspApi implements GitServiceApi {
         avatarUrl: undefined,
       },
       assignees: [],
-      labels: issue.labels?.map(label => ({
+      labels: issue.labels?.map((label: string) => ({
         name: label,
         color: '#000000',
         description: undefined,

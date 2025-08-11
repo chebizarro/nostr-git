@@ -1,5 +1,6 @@
 import { getGitProvider } from './git-provider.js';
 import { ensureRepo, ensureRepoFromEvent, rootDir, getDefaultBranch, resolveRobustBranch } from './git.js';
+import { canonicalRepoKey } from './utils/canonicalRepoKey.js';
 import { parseRepoAnnouncementEvent, type RepoAnnouncementEvent } from '@nostr-git/shared-types';
 import { Buffer } from 'buffer';
 
@@ -50,15 +51,17 @@ export async function listRepoFilesFromEvent(opts: {
   branch?: string;
   commit?: string;
   path?: string;
+  // Optional, when caller already computed canonical repo key (e.g. "owner/name" or "owner:name")
+  repoKey?: string;
 }): Promise<FileEntry[]> {
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main'; // Will be resolved robustly later
-  const dir = `${rootDir}/${opts.repoEvent.id}`;
+  const dir = `${rootDir}/${opts.repoKey || canonicalRepoKey(event.repoId)}`;
   
   // Ensure adequate repository depth for file operations
   // If accessing a specific commit, we need more than shallow clone
   const requiredDepth = opts.commit ? 100 : 10; // More depth if accessing specific commit
-  await ensureRepoFromEvent({ repoEvent: event, branch }, requiredDepth);
+  await ensureRepoFromEvent({ repoEvent: event, branch, repoKey: opts.repoKey }, requiredDepth);
 
   const git = getGitProvider();
   let oid: string;
@@ -73,7 +76,7 @@ export async function listRepoFilesFromEvent(opts: {
         console.warn(`Commit ${opts.commit} not found, attempting to deepen repository...`);
         try {
           // Try with much deeper history
-          await ensureRepoFromEvent({ repoEvent: event, branch }, 500);
+          await ensureRepoFromEvent({ repoEvent: event, branch, repoKey: opts.repoKey }, 500);
           // Retry reading the commit
           await git.readCommit({ dir, oid });
         } catch (deepenError: any) {
@@ -146,15 +149,16 @@ export async function getRepoFileContentFromEvent(opts: {
   branch?: string;
   commit?: string;
   path: string;
+  repoKey?: string;
 }): Promise<string> {
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main'; // Will be resolved robustly in git operations
-  const dir = `${rootDir}/${opts.repoEvent.id}`;
+  const dir = `${rootDir}/${opts.repoKey || canonicalRepoKey(event.repoId)}`;
   
   // Ensure adequate repository depth for file operations
   // If accessing a specific commit, we need more than shallow clone
   const requiredDepth = opts.commit ? 100 : 10; // More depth if accessing specific commit
-  await ensureRepoFromEvent({ repoEvent: event, branch }, requiredDepth);
+  await ensureRepoFromEvent({ repoEvent: event, branch, repoKey: opts.repoKey }, requiredDepth);
 
   const git = getGitProvider();
   let oid: string;
@@ -169,7 +173,7 @@ export async function getRepoFileContentFromEvent(opts: {
         console.warn(`Commit ${opts.commit} not found, attempting to deepen repository...`);
         try {
           // Try with much deeper history
-          await ensureRepoFromEvent({ repoEvent: event, branch }, 500);
+          await ensureRepoFromEvent({ repoEvent: event, branch, repoKey: opts.repoKey }, 500);
           // Retry reading the commit
           await git.readCommit({ dir, oid });
         } catch (deepenError: any) {
@@ -205,7 +209,7 @@ export async function getRepoFileContentFromEvent(opts: {
       // If file not found, try to deepen repository and retry
       console.warn(`File '${opts.path}' not found, attempting to deepen repository...`);
       try {
-        await ensureRepoFromEvent({ repoEvent: event, branch: opts.branch }, 1000);
+        await ensureRepoFromEvent({ repoEvent: event, branch: opts.branch, repoKey: opts.repoKey }, 1000);
         const { blob } = await git.readBlob({ dir, oid, filepath: opts.path });
         // Return raw binary data as string to preserve binary files
         return Array.from(new Uint8Array(blob)).map(byte => String.fromCharCode(byte)).join('');
@@ -286,6 +290,7 @@ export async function fileExistsAtCommit(opts: {
   branch?: string;
   commit?: string;
   path: string;
+  repoKey?: string;
 }): Promise<boolean> {
   try {
     await getRepoFileContentFromEvent(opts);
@@ -312,7 +317,7 @@ export async function getCommitInfo(opts: {
   parent: string[];
 }> {
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
-  const dir = `${rootDir}/${opts.repoEvent.id}`;
+  const dir = `${rootDir}/${canonicalRepoKey(event.repoId)}`;
   await ensureRepoFromEvent({ repoEvent: event });
   
   const git = getGitProvider();
@@ -340,6 +345,7 @@ export async function getFileHistory(opts: {
   path: string;
   branch?: string;
   maxCount?: number;
+  repoKey?: string;
 }): Promise<Array<{
   oid: string;
   message: string;
@@ -348,8 +354,8 @@ export async function getFileHistory(opts: {
 }>> {
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main'; // Will be resolved robustly in git operations
-  const dir = `${rootDir}/${opts.repoEvent.id}`;
-  await ensureRepoFromEvent({ repoEvent: event, branch: opts.branch });
+  const dir = `${rootDir}/${opts.repoKey || canonicalRepoKey(event.repoId)}`;
+  await ensureRepoFromEvent({ repoEvent: event, branch: opts.branch, repoKey: opts.repoKey });
   
   const git = getGitProvider();
   const commits = await git.log({
@@ -389,7 +395,7 @@ export async function getCommitHistory(opts: {
 }>> {
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main'; // Will be resolved robustly in git operations
-  const dir = `${rootDir}/${opts.repoEvent.id}`;
+  const dir = `${rootDir}/${canonicalRepoKey(event.repoId)}`;
   const depth = opts.depth || 50;
   
   console.log(`getCommitHistory: requesting ${depth} commits for branch ${branch}`);

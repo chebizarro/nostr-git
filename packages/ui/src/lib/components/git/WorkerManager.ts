@@ -187,6 +187,7 @@ export class WorkerManager {
     repoEvent: RepoAnnouncementEvent;
     branch: string;
     path?: string;
+    repoKey?: string;
   }): Promise<any> {
     return await listRepoFilesFromEvent(params);
   }
@@ -199,6 +200,7 @@ export class WorkerManager {
     branch: string;
     path: string;
     commit?: string;
+    repoKey?: string;
   }): Promise<any> {
     return await getRepoFileContentFromEvent(params);
   }
@@ -211,6 +213,7 @@ export class WorkerManager {
     branch: string;
     path: string;
     commit?: string;
+    repoKey?: string;
   }): Promise<any> {
     return await fileExistsAtCommit(params);
   }
@@ -233,6 +236,7 @@ export class WorkerManager {
     path: string;
     branch: string;
     maxCount?: number;
+    repoKey?: string;
   }): Promise<any> {
     return await getFileHistory(params);
   }

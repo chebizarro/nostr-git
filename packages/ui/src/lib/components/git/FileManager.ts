@@ -1,6 +1,8 @@
 import { WorkerManager } from "./WorkerManager";
 import { CacheManager } from "./CacheManager";
 import type { RepoAnnouncementEvent } from "@nostr-git/shared-types";
+import { parseRepoAnnouncementEvent } from "@nostr-git/shared-types";
+import { canonicalRepoKey } from "@nostr-git/core";
 import { toast } from "$lib/stores/toast";
 
 /**
@@ -129,15 +131,39 @@ export class FileManager {
   }
 
   /**
+   * Compute a canonical repo key for stable UI cache keys
+   */
+  private getCanonicalRepoKey(repoEvent: RepoAnnouncementEvent): string {
+    try {
+      const parsed = parseRepoAnnouncementEvent(repoEvent as any);
+      // Prefer NIP-34 identifier ('d' tag) if present
+      const dTag = (repoEvent as any).tags?.find((t: any[]) => t?.[0] === "d");
+      const idFromD = dTag?.[1];
+      if (idFromD) {
+        return canonicalRepoKey(String(idFromD));
+      }
+      // Fallbacks: parsed.repoId or owner/name
+      if ((parsed as any)?.repoId) {
+        return canonicalRepoKey(String((parsed as any).repoId));
+      }
+      throw new Error("Invalid repo announcement event: missing canonical repoId ('d' tag) and parsed.repoId");
+    } catch {
+      // Fall back to canonicalizing whatever ID we have
+      // (helper will warn if it's an event id-like string)
+      throw new Error("Invalid repoId: unable to compute canonical key from RepoAnnouncementEvent");
+    }
+  }
+
+  /**
    * Generate cache key for file operations
    */
   private generateCacheKey(
     type: keyof typeof FileManager.CACHE_KEYS,
-    repoId: string,
+    repoKey: string,
     path: string,
     ref: string
   ): string {
-    return `${FileManager.CACHE_KEYS[type]}_${repoId}_${ref}_${path}`;
+    return `${FileManager.CACHE_KEYS[type]}_${repoKey}_${ref}_${path}`;
   }
 
   /**
@@ -154,17 +180,20 @@ export class FileManager {
    */
   async listRepoFiles({
     repoEvent,
+    repoKey: providedRepoKey,
     branch,
     path = "",
     useCache = true,
   }: {
     repoEvent: RepoAnnouncementEvent;
+    repoKey?: string;
     branch: string;
     path?: string;
     useCache?: boolean;
   }): Promise<FileListingResult> {
     const shortBranch = this.getShortBranchName(branch);
-    const cacheKey = this.generateCacheKey("LISTING", repoEvent.id, path, shortBranch);
+    const repoKey = providedRepoKey || this.getCanonicalRepoKey(repoEvent);
+    const cacheKey = this.generateCacheKey("LISTING", repoKey, path, shortBranch);
 
     // Try cache first if enabled
     if (this.config.enableCaching && useCache && this.cacheManager) {
@@ -185,6 +214,7 @@ export class FileManager {
         repoEvent,
         branch: shortBranch,
         path,
+        repoKey,
       });
 
       const fileListingResult: FileListingResult = {
@@ -223,6 +253,7 @@ export class FileManager {
               repoEvent,
               branch: altBranch,
               path,
+              repoKey,
             });
 
             const fileListingResult: FileListingResult = {
@@ -268,19 +299,22 @@ export class FileManager {
    */
   async getFileContent({
     repoEvent,
+    repoKey: providedRepoKey,
     path,
     branch,
     commit,
     useCache = true,
   }: {
     repoEvent: RepoAnnouncementEvent;
+    repoKey?: string;
     path: string;
     branch?: string;
     commit?: string;
     useCache?: boolean;
   }): Promise<FileContent> {
-    const ref = commit || this.getShortBranchName(branch);
-    const cacheKey = this.generateCacheKey("CONTENT", repoEvent.id, path, ref);
+    const repoKey = providedRepoKey || this.getCanonicalRepoKey(repoEvent);
+    const ref = commit || this.getShortBranchName(branch || "");
+    const cacheKey = this.generateCacheKey("CONTENT", repoKey, path, ref);
 
     // Try cache first if enabled
     if (this.config.enableCaching && useCache && this.cacheManager) {
@@ -299,9 +333,10 @@ export class FileManager {
       // Get content from worker
       const content = await this.workerManager.getRepoFileContentFromEvent({
         repoEvent,
-        branch: branch ? this.getShortBranchName(branch) : undefined,
-        commit,
+        branch: commit ? ("" as any) : ref,
         path,
+        commit: commit || undefined,
+        repoKey,
       });
 
       const result: FileContent = {
@@ -342,19 +377,22 @@ export class FileManager {
    */
   async fileExistsAtCommit({
     repoEvent,
+    repoKey: providedRepoKey,
     path,
     branch,
     commit,
     useCache = true,
   }: {
     repoEvent: RepoAnnouncementEvent;
+    repoKey?: string;
     path: string;
     branch?: string;
     commit?: string;
     useCache?: boolean;
   }): Promise<boolean> {
-    const ref = commit || this.getShortBranchName(branch);
-    const cacheKey = this.generateCacheKey("EXISTS", repoEvent.id, path, ref);
+    const repoKey = providedRepoKey || this.getCanonicalRepoKey(repoEvent);
+    const ref = commit || this.getShortBranchName(branch || "");
+    const cacheKey = this.generateCacheKey("EXISTS", repoKey, path, ref);
 
     // Try cache first if enabled
     if (this.config.enableCaching && useCache && this.cacheManager) {
@@ -373,9 +411,10 @@ export class FileManager {
       // Check existence via worker
       const exists = await this.workerManager.fileExistsAtCommit({
         repoEvent,
-        branch: branch ? this.getShortBranchName(branch) : undefined,
-        commit,
+        branch: commit ? ("" as any) : ref,
         path,
+        commit: commit || undefined,
+        repoKey,
       });
 
       // Cache the result if enabled
@@ -399,21 +438,24 @@ export class FileManager {
    */
   async getFileHistory({
     repoEvent,
+    repoKey: providedRepoKey,
     path,
     branch,
     maxCount = 50,
     useCache = true,
   }: {
     repoEvent: RepoAnnouncementEvent;
+    repoKey?: string;
     path: string;
     branch?: string;
     maxCount?: number;
     useCache?: boolean;
   }): Promise<FileHistoryEntry[]> {
     const shortBranch = this.getShortBranchName(branch);
+    const repoKey = providedRepoKey || this.getCanonicalRepoKey(repoEvent);
     const cacheKey = this.generateCacheKey(
       "HISTORY",
-      repoEvent.id,
+      repoKey,
       `${path}_${maxCount}`,
       shortBranch
     );
@@ -438,6 +480,7 @@ export class FileManager {
         path,
         branch: shortBranch,
         maxCount,
+        repoKey,
       });
 
       // Transform to FileHistoryEntry format
@@ -456,7 +499,7 @@ export class FileManager {
       if (this.config.enableCaching && this.cacheManager) {
         try {
           await this.cacheManager.set(
-            "file_content",
+            "file_history",
             cacheKey,
             result,
             this.config.contentCacheTTL

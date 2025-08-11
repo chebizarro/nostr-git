@@ -1,5 +1,6 @@
 import { getGitProvider } from './git-provider.js';
 import { rootDir } from './git.js';
+import { canonicalRepoKey } from './utils/canonicalRepoKey.js';
 import { parseRepoAnnouncementEvent, RepoAnnouncementEvent } from '@nostr-git/shared-types';
 
 export interface Branch {
@@ -10,7 +11,7 @@ export interface Branch {
 
 export async function listBranchesFromEvent(opts: { repoEvent: RepoAnnouncementEvent; }): Promise<Branch[]> {
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
-  const dir = `${rootDir}/${opts.repoEvent.id}`;
+  const dir = `${rootDir}/${canonicalRepoKey(event.repoId)}`;
   const git = getGitProvider();
   const branches = await git.listBranches({dir});
   return branches.map((name: string) => ({ name }));

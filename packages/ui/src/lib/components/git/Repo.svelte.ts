@@ -13,6 +13,7 @@ import {
 import {
   type MergeAnalysisResult,
 } from "@nostr-git/core";
+import { canonicalRepoKey } from "@nostr-git/core";
 import { type Readable } from "svelte/store";
 import { context } from "$lib/stores/context";
 import { Token, tokens } from "$lib/stores/tokens";
@@ -30,6 +31,8 @@ export class Repo {
   state: RepoState | undefined = $state(undefined);
   issues = $state<IssueEvent[]>([]);
   patches = $state<PatchEvent[]>([]);
+  // Stable, canonical key used for all UI caches and internal maps
+  canonicalKey: string = $state("");
   
   // Manager components
   workerManager!: WorkerManager;
@@ -151,6 +154,12 @@ export class Repo {
       if (event) {
         this.repoEvent = event;
         this.repo = parseRepoAnnouncementEvent(event);
+        const repoId = `${this.repoEvent.pubkey}:${this.repo.name}`;
+        this.canonicalKey = canonicalRepoKey(repoId);
+        this.commitManager.setRepoKeys({
+          canonicalKey: this.canonicalKey,
+          workerRepoId: this.repoEvent.id,
+        });
         
         // Invalidate branch cache when repo event changes
         this.invalidateBranchCache();
@@ -221,7 +230,7 @@ export class Repo {
           await this.#loadBranchesFromRepo(initialRepoEvent);
         }
         
-        const repoId = this.repoEvent?.id;
+        const repoId = this.canonicalKey;
         const cloneUrls = [...(this.repo?.clone || [])];
 
         if (!repoId || !cloneUrls.length) {
@@ -327,10 +336,10 @@ export class Repo {
   async getMergeAnalysis(patch: PatchEvent, targetBranch?: string): Promise<MergeAnalysisResult | null> {
     if (!this.repoEvent) return null;
     
-    const repoId = this.repoEvent.id;
+    const repoId = this.canonicalKey;
     const branch = targetBranch || this.mainBranch?.split("/").pop();
     
-    return await this.patchManager.getMergeAnalysis(patch, branch, repoId);
+    return await this.patchManager.getMergeAnalysis(patch, branch, repoId, this.repoEvent.id);
   }
 
   // Check if merge analysis is available for a patch ID
@@ -342,15 +351,29 @@ export class Repo {
   async refreshMergeAnalysis(patch: PatchEvent, targetBranch?: string): Promise<MergeAnalysisResult | null> {
     if (!this.repoEvent) return null;
 
-    const repoId = this.repoEvent.id;
+    const repoId = this.canonicalKey;
     const branch = targetBranch || this.mainBranch?.split("/").pop();
     
-    return await this.patchManager.refreshMergeAnalysis(patch, branch, repoId);
+    return await this.patchManager.refreshMergeAnalysis(patch, branch, repoId, this.repoEvent.id);
   }
 
   // Public API for clearing merge analysis cache
   async clearMergeAnalysisCache(): Promise<void> {
     await this.patchManager.clearCache();
+  }
+
+  /**
+   * Expose a readable store of merge analyses keyed by patchId for UI subscription
+   */
+  getPatchAnalysisStore(): Readable<Map<string, MergeAnalysisResult>> {
+    return this.patchManager.getAnalysisStore();
+  }
+
+  /**
+   * Convenience accessor for a single patch's latest analysis in memory
+   */
+  getPatchAnalysisFor(patchId: string): MergeAnalysisResult | undefined {
+    return this.patchManager.getAnalysisFor(patchId);
   }
 
   setCommitsPerPage(count: number) {
@@ -362,7 +385,7 @@ export class Repo {
     if (!this.repoEvent) return;
 
     try {
-      const repoId = this.repoEvent.id;
+      const repoId = this.canonicalKey;
       const cloneUrls = [...(this.repo?.clone || [])];
 
       if (!repoId || !cloneUrls.length) {
@@ -409,7 +432,7 @@ export class Repo {
 
     // Delegate to CommitManager
     await this.commitManager.loadCommits(
-      this.repoEvent.id,
+      this.canonicalKey,
       undefined, // branch (will use mainBranch)
       this.mainBranch
     );
@@ -426,7 +449,7 @@ export class Repo {
   }
 
   get repoId() {
-    return this.repo?.repoId;
+    return this.canonicalKey;
   }
 
   get mainBranch() {
@@ -577,9 +600,8 @@ export class Repo {
   async loadPage(page: number) {
     try {
       
-      // Use repoEvent.id as the primary repository ID since that's what gets initialized
-      // The repoId getter may return a different value that doesn't match the initialized repo
-      const effectiveRepoId = this.repoEvent?.id || this.repoId;
+      // Use canonical repo ID consistently for worker calls
+      const effectiveRepoId = this.repoId;
       
       // Get the actual resolved default branch with fallback
       let effectiveMainBranch: string;
@@ -624,6 +646,7 @@ export class Repo {
     const targetBranch = branch || this.branchManager.getMainBranch();
     return this.fileManager.listRepoFiles({
       repoEvent: this.repoEvent,
+      repoKey: this.canonicalKey,
       branch: targetBranch,
       path: path || "/"
     });
@@ -633,6 +656,7 @@ export class Repo {
     const targetBranch = branch || this.branchManager.getMainBranch();
     return this.fileManager.getFileContent({
       repoEvent: this.repoEvent,
+      repoKey: this.canonicalKey,
       path,
       branch: targetBranch,
       commit
@@ -643,6 +667,7 @@ export class Repo {
     const targetBranch = branch || this.branchManager.getMainBranch();
     return this.fileManager.fileExistsAtCommit({
       repoEvent: this.repoEvent,
+      repoKey: this.canonicalKey,
       path,
       branch: targetBranch,
       commit
@@ -653,6 +678,7 @@ export class Repo {
     const targetBranch = branch || this.branchManager.getMainBranch();
     return this.fileManager.getFileHistory({
       repoEvent: this.repoEvent,
+      repoKey: this.canonicalKey,
       path,
       branch: targetBranch,
       maxCount
@@ -662,7 +688,7 @@ export class Repo {
   async getCommitHistory({ branch, depth }: { branch?: string; depth?: number }) {
     const targetBranch = branch || this.branchManager.getMainBranch();
     return await this.workerManager.getCommitHistory({
-      repoId: this.repoEvent.id,
+      repoId: this.canonicalKey,
       branch: targetBranch,
       depth,
     });
@@ -757,7 +783,8 @@ export class Repo {
   ): RepoAnnouncementEvent {
     // Use the shared-types utility function
     return createRepoAnnouncementEvent({
-      repoId: repoData.name,
+      // Ensure repoId is canonicalized (owner/name or owner:name)
+      repoId: canonicalRepoKey(repoData.name),
       name: repoData.name,
       description: repoData.description,
       // Support both legacy single URLs and new array format
@@ -820,10 +847,10 @@ export class Repo {
   async #performMergeAnalysis(patches: PatchEvent[]) {
     if (!this.repoEvent || !patches.length) return;
 
-    const repoId = this.repoEvent.id;
+    const repoId = this.canonicalKey;
     const targetBranch = this.mainBranch?.split("/").pop();
 
     // Delegate to PatchManager for background processing
-    await this.patchManager.processInBackground(patches, targetBranch, repoId);
+    await this.patchManager.processInBackground(patches, targetBranch, repoId, this.repoEvent.id);
   }
 }

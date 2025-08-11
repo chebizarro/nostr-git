@@ -13,18 +13,19 @@
       "require": "./dist/index.js"
     },
     "./tailwind.preset.js": "./tailwind.preset.js",
-    "./index.css": "./dist/index.css"
+    "./index.css": "./index.css"
   },
   "files": [
     "dist",
+    "index.css",
     "tailwind.preset.js"
   ],
   "scripts": {
     "format": "prettier --write .",
-    "build": "svelte-package && cp src/index.css dist/index.css",
+    "build": "mkdir -p dist && svelte-package && cp src/index.css dist/index.css",
     "prepare": "pnpm run build",
-    "watch": "cp src/index.css dist/index.css && svelte-package --watch & pnpm run watch-css",
-    "watch-css": "nodemon --watch src/index.css --exec 'cp src/index.css dist/index.css'"
+    "watch": "mkdir -p dist && cp src/index.css dist/index.css && (svelte-package --watch & pnpm run watch-css)",
+    "watch-css": "nodemon --watch src/index.css --ext css --exec \"bash -lc 'mkdir -p dist; if [ ! -f dist/index.css ] || ! cmp -s src/index.css dist/index.css; then cp src/index.css dist/index.css; fi'\""
   },
   "peerDependencies": {
     "svelte": "^5.28.2"
