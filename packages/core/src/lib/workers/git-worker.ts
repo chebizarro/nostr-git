@@ -2555,6 +2555,7 @@ async function forkAndCloneRepo(options: {
   token: string;
   dir: string;
   provider?: string;
+  baseUrl?: string; // For GRASP relay URL
   onProgress?: (stage: string, pct?: number) => void;
 }): Promise<{
   success: boolean;
@@ -2565,14 +2566,14 @@ async function forkAndCloneRepo(options: {
   tags: string[];
   error?: string;
 }> {
-  const { owner, repo, forkName, visibility, token, dir, provider = 'github', onProgress } = options;
+  const { owner, repo, forkName, visibility, token, dir, provider = 'github', baseUrl, onProgress } = options;
   
   try {
     onProgress?.('Creating remote fork...', 10);
     
     // Step 1: Create remote fork using GitServiceApi abstraction
     const { getGitServiceApi } = await import('../git/factory.js');
-    const gitServiceApi = getGitServiceApi(provider as any, token);
+    const gitServiceApi = getGitServiceApi(provider as any, token, baseUrl);
     
     // Determine source URL based on provider
     const providerHost = provider === 'github' ? 'github.com' : 
@@ -2588,7 +2589,7 @@ async function forkAndCloneRepo(options: {
       throw new Error(`Fork already exists with name "${forkResult.name}". ${provider} does not support renaming existing forks. Please delete the existing fork first or choose a different name.`);
     }
     const forkOwner = forkResult.owner;
-    const forkUrl = forkResult.cloneUrl;
+    let forkUrl = forkResult.cloneUrl;
     
     onProgress?.('Waiting for fork to be ready...', 30);
     
@@ -2628,8 +2629,13 @@ async function forkAndCloneRepo(options: {
     onProgress?.('Cloning fork locally...', 60);
     
     // Step 3: Clone the fork locally using existing cloneRemoteRepo logic
+    // For GRASP, convert ws(s) relay scheme to http(s) for Smart HTTP
+    const cloneUrl = provider === 'grasp'
+      ? forkUrl.replace('ws://', 'http://').replace('wss://', 'https://')
+      : forkUrl;
+
     await cloneRemoteRepo({
-      url: forkUrl,
+      url: cloneUrl,
       dir,
       depth: 0, // Full clone for forks
       token,

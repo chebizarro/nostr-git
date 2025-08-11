@@ -54,6 +54,9 @@
   let selectedService = $state<string>('github.com'); // Default to GitHub
   let isCheckingExistingFork = $state(false);
   let existingForkInfo = $state<{ exists: boolean; url?: string; message?: string; service?: string; error?: string } | null>(null);
+  // GRASP-specific state
+  let relayUrl = $state('');
+  let relayUrlError = $state<string | undefined>();
 
   // Get available git services from tokens
   let tokenList = $state<Token[]>([]);
@@ -70,10 +73,13 @@
                token.host === 'gitlab.com' ? 'GitLab' : 
                token.host === 'bitbucket.org' ? 'Bitbucket' : token.host
       }));
+
+    // Always include GRASP option regardless of tokens
+    services.push({ host: 'grasp', label: 'GRASP (Nostr)' });
     
-    // Ensure selected service is available, fallback to first available or GitHub
-    if (services.length > 0 && !services.some(s => s.host === selectedService)) {
-      selectedService = services[0].host;
+    // Ensure selected service is available, fallback to GitHub or GRASP
+    if (!services.some(s => s.host === selectedService)) {
+      selectedService = services.find(s => s.host === 'github.com')?.host || 'grasp';
     }
     
     return services;
@@ -153,6 +159,13 @@
       return;
     }
 
+    // For GRASP, skip remote fork existence checks (event-based system)
+    if (selectedService === 'grasp') {
+      existingForkInfo = { exists: false, service: 'grasp', message: 'Fork existence check is not applicable for GRASP.' };
+      lastCheckedKey = checkKey;
+      return;
+    }
+
     isCheckingExistingFork = true;
     existingForkInfo = null;
 
@@ -224,6 +237,10 @@
     const target = event.target as HTMLSelectElement;
     selectedService = target.value;
     existingForkInfo = null; // Reset fork check when service changes
+    // Reset relay URL error when switching services
+    if (selectedService !== 'grasp') {
+      relayUrlError = undefined;
+    }
   }
 
   // Computed properties for progress handling
@@ -288,13 +305,32 @@
       // All services are now supported via GitServiceApi abstraction
       console.log('🚀 ForkRepoDialog: Fork operation supported for service:', selectedService);
 
+      // Validate relay URL when GRASP is selected
+      let relayParam: string | undefined = undefined;
+      if (selectedService === 'grasp') {
+        const val = relayUrl.trim();
+        if (!val) {
+          relayUrlError = 'Relay URL is required for GRASP';
+          return;
+        }
+        const ok = /^wss?:\/\//i.test(val);
+        if (!ok) {
+          relayUrlError = 'Invalid relay URL. Must start with ws:// or wss://';
+          return;
+        }
+        relayUrlError = undefined;
+        relayParam = val;
+      }
+
       const result = await forkState.forkRepository(originalRepo, {
         forkName,
         visibility: 'public',
         provider: selectedService === 'github.com' ? 'github' : 
                  selectedService === 'gitlab.com' ? 'gitlab' :
                  selectedService === 'gitea.com' ? 'gitea' :
-                 selectedService === 'bitbucket.org' ? 'bitbucket' : 'github'
+                 selectedService === 'bitbucket.org' ? 'bitbucket' :
+                 selectedService === 'grasp' ? 'grasp' : 'github',
+        relayUrl: relayParam
       });
       
       if (result) {
@@ -405,6 +441,23 @@
                   Fork will be created on {availableServices.find(s => s.host === selectedService)?.label || selectedService}
                 </p>
               </div>
+              {#if selectedService === 'grasp'}
+                <div>
+                  <label for="relay-url" class="block text-sm font-medium text-gray-300 mb-2">
+                    GRASP Relay URL (ws:// or wss://) *
+                  </label>
+                  <input
+                    id="relay-url"
+                    type="text"
+                    bind:value={relayUrl}
+                    placeholder="wss://relay.example.com"
+                    class="w-full px-3 py-2 bg-gray-800 border {relayUrlError ? 'border-red-500' : 'border-gray-600'} rounded-lg text-white focus:outline-none focus:ring-2 {relayUrlError ? 'focus:ring-red-500' : 'focus:ring-blue-500'} focus:border-transparent"
+                  />
+                  {#if relayUrlError}
+                    <p class="mt-1 text-sm text-red-400 flex items-center gap-1"><AlertCircle class="w-4 h-4" /> {relayUrlError}</p>
+                  {/if}
+                </div>
+              {/if}
             {:else}
               <div class="bg-yellow-900/50 border border-yellow-500 rounded-lg p-4">
                 <div class="flex items-start space-x-3">

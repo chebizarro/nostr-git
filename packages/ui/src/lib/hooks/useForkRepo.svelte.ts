@@ -6,6 +6,8 @@ import { getGitServiceApi } from '@nostr-git/core';
 export interface ForkConfig {
   forkName: string;
   visibility?: 'public' | 'private'; // Optional since NIP-34 doesn't support private/public repos yet
+  provider?: 'github' | 'gitlab' | 'gitea' | 'bitbucket' | 'grasp';
+  relayUrl?: string; // Required for GRASP
 }
 
 export interface ForkProgress {
@@ -96,7 +98,7 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
    */
   async function forkRepository(
     originalRepo: { owner: string; name: string; description?: string },
-    config: ForkConfig & { provider?: string }
+    config: ForkConfig
   ): Promise<ForkResult | null> {
     if (isForking) {
       throw new Error('Fork operation already in progress');
@@ -107,23 +109,45 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
     progress = [];
 
     try {
-      // Step 1: Determine provider and validate token
+      // Step 1: Determine provider and validate token (skip token for GRASP)
       const provider = config.provider || 'github'; // Default to GitHub for backward compatibility
       const providerHost = provider === 'github' ? 'github.com' : 
                           provider === 'gitlab' ? 'gitlab.com' :
                           provider === 'gitea' ? 'gitea.com' :
                           provider === 'bitbucket' ? 'bitbucket.org' : 'github.com';
       
-      updateProgress('validate', `Validating ${provider} token...`, 'running');
-      const providerToken = tokens.find(t => t.host === providerHost)?.token;
-      if (!providerToken) {
-        throw new Error(`${provider} token not found. Please add a ${provider} token in settings.`);
+      let providerToken: string | undefined;
+      let pubkey: string | undefined;
+      let relayUrl: string | undefined;
+
+      if (provider === 'grasp') {
+        updateProgress('validate', 'Validating Nostr signer and relay URL...', 'running');
+        // Get signer from global store (same as new repo flow)
+        const { signer: signerStore } = await import('../stores/signer');
+        let nostrSigner: any = null;
+        signerStore.subscribe((v: any) => (nostrSigner = v))();
+        if (!nostrSigner) {
+          throw new Error('No Nostr signer available for GRASP');
+        }
+        if (!config.relayUrl) {
+          throw new Error('GRASP requires a relay URL');
+        }
+        relayUrl = config.relayUrl;
+        pubkey = await nostrSigner.getPubkey();
+        providerToken = pubkey; // Use pubkey as token identifier
+        updateProgress('validate', 'Nostr signer and relay URL validated', 'completed');
+      } else {
+        updateProgress('validate', `Validating ${provider} token...`, 'running');
+        providerToken = tokens.find(t => t.host === providerHost)?.token;
+        if (!providerToken) {
+          throw new Error(`${provider} token not found. Please add a ${provider} token in settings.`);
+        }
+        updateProgress('validate', `${provider} token validated`, 'completed');
       }
-      updateProgress('validate', `${provider} token validated`, 'completed');
 
       // Step 2: Get current user using GitServiceApi
       updateProgress('user', 'Getting current user info...', 'running');
-      const gitServiceApi = getGitServiceApi(provider as any, providerToken);
+      const gitServiceApi = getGitServiceApi(provider as any, providerToken!, relayUrl);
       const userData = await gitServiceApi.getCurrentUser();
       const currentUser = userData.login;
       updateProgress('user', `Current user: ${currentUser}`, 'completed');
@@ -131,18 +155,46 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
       // Step 3: Fork and clone repository using git-worker
       updateProgress('fork', 'Creating fork and cloning repository...', 'running');
       const { getGitWorker } = await import('@nostr-git/core');
-      const { api: gitWorkerApi } = getGitWorker();
+      const { api: gitWorkerApi, worker } = getGitWorker();
 
       // Use just the fork name as directory path (browser virtual file system)
       const destinationPath = config.forkName;
+
+      // If GRASP, set up message-based signing so worker can request signatures
+      if (provider === 'grasp') {
+        // Register message handler for signing requests
+        worker.addEventListener('message', async (event: MessageEvent) => {
+          if ((event as any).data?.type === 'request-event-signing') {
+            try {
+              const { signer: signerStore } = await import('../stores/signer');
+              let nostrSigner: any = null;
+              signerStore.subscribe((v: any) => (nostrSigner = v))();
+              const signedEvent = await nostrSigner.sign((event as any).data.event);
+              worker.postMessage({
+                type: 'event-signed',
+                requestId: (event as any).data.requestId,
+                signedEvent
+              });
+            } catch (e: any) {
+              worker.postMessage({
+                type: 'event-signing-error',
+                requestId: (event as any).data.requestId,
+                error: e?.message || String(e)
+              });
+            }
+          }
+        });
+        worker.postMessage({ type: 'register-event-signer' });
+      }
 
       const workerResult = await gitWorkerApi.forkAndCloneRepo({
         owner: originalRepo.owner,
         repo: originalRepo.name,
         forkName: config.forkName,
         visibility: config.visibility,
-        token: providerToken,
+        token: providerToken!,
         provider: provider,
+        baseUrl: relayUrl,
         dir: destinationPath
         // Note: onProgress callback removed - functions cannot be serialized through Comlink
       });

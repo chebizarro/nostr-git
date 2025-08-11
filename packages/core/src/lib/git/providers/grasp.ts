@@ -55,11 +55,11 @@ interface RelayInfo {
 export class GraspApi implements GitServiceApi {
   private readonly relayUrl: string;
   private readonly pubkey: string;
-  private readonly signer: Signer;
+  private readonly signer?: Signer;
   private readonly pool: SimplePool;
   private relayInfo?: RelayInfo;
 
-  constructor(relayUrl: string, pubkey: string, signer: Signer) {
+  constructor(relayUrl: string, pubkey: string, signer?: Signer) {
     this.relayUrl = relayUrl.replace(/\/$/, ''); // Remove trailing slash
     this.pubkey = pubkey;
     this.signer = signer;
@@ -139,6 +139,9 @@ export class GraspApi implements GitServiceApi {
     } else {
       // Direct signing when not in worker context or for backward compatibility
       console.log('Using direct signing for GRASP event');
+      if (!this.signer) {
+        throw new Error('No signer available for direct signing and message-based signing not configured');
+      }
       signedEvent = await this.signer.signEvent(event);
     }
     

@@ -19,7 +19,7 @@ import { GraspApi, type Signer } from './providers/grasp.js';
  * @param provider - The Git service provider ('github', 'gitlab', 'gitea', 'bitbucket', 'grasp')
  * @param token - Authentication token for the provider (or pubkey for GRASP)
  * @param baseUrl - Optional custom base URL (for self-hosted instances) or relay URL for GRASP
- * @param signer - Optional Nostr signer (required for GRASP)
+ * @param signer - Optional Nostr signer (for direct signing in UI thread; not required when using message-based signing)
  * @returns GitServiceApi implementation for the provider
  * 
  * @example
@@ -57,9 +57,7 @@ export function getGitServiceApi(
       if (!baseUrl) {
         throw new Error('GRASP provider requires a relay URL as baseUrl parameter');
       }
-      if (!signer) {
-        throw new Error('GRASP provider requires a signer parameter');
-      }
+      // signer is optional when using message-based signing across worker boundary
       return new GraspApi(baseUrl, token, signer);
     
     case 'generic':
