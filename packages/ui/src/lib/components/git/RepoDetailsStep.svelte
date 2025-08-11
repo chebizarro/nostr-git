@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { checkMultiProviderRepoAvailability } from '../../useNewRepo.svelte.js';
   import { tokens as tokensStore, type Token } from '../../stores/tokens.js';
   
   interface Props {
@@ -191,7 +190,7 @@
           {#if isCheckingAvailability}
             <div class="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
               <div class="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
-              <span>Checking availability across providers...</span>
+              <span>Checking availability on selected provider...</span>
             </div>
           {:else if nameAvailabilityResults}
             <div class="space-y-2">
@@ -218,12 +217,11 @@
               
               {#if nameAvailabilityResults.hasConflicts}
                 <div class="mt-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-700 dark:text-red-400">
-                  <strong>Warning:</strong> Repository name is already taken on {nameAvailabilityResults.conflictProviders.join(', ')}.
-                  You can still create it on {nameAvailabilityResults.availableProviders.join(', ')}.                  
+                  <strong>Warning:</strong> This repository name is already taken on the selected provider{#if nameAvailabilityResults.conflictProviders[0]} ({nameAvailabilityResults.conflictProviders[0]}){/if}.
                 </div>
               {:else if nameAvailabilityResults.availableProviders.length > 0}
                 <div class="mt-2 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded text-sm text-green-700 dark:text-green-400">
-                  <strong>Good news!</strong> Repository name is available on all your configured providers.
+                  <strong>Good news!</strong> Repository name is available on the selected provider{#if nameAvailabilityResults.availableProviders[0]} ({nameAvailabilityResults.availableProviders[0]}){/if}.
                 </div>
               {/if}
             </div>

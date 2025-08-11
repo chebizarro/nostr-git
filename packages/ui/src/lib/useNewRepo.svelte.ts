@@ -48,6 +48,148 @@ export async function checkGitHubRepoAvailability(repoName: string, token: strin
 }
 
 /**
+ * Check repository name availability for a single selected provider
+ * @param provider - one of 'github' | 'gitlab' | 'gitea' | 'bitbucket' | 'grasp'
+ * @param repoName - repository name to check
+ * @param tokens - user tokens
+ * @param relayUrl - optional relay URL for GRASP (not used for availability, informational only)
+ */
+export async function checkProviderRepoAvailability(
+  provider: string,
+  repoName: string,
+  tokens: Token[],
+  relayUrl?: string
+): Promise<{
+  results: Array<{
+    provider: string;
+    host: string;
+    available: boolean;
+    reason?: string;
+    username?: string;
+    error?: string;
+  }>;
+  hasConflicts: boolean;
+  availableProviders: string[];
+  conflictProviders: string[];
+}> {
+  // Special-case GRASP: there is no conventional org/user namespace availability to check.
+  if (provider === 'grasp') {
+    return {
+      results: [
+        {
+          provider,
+          host: relayUrl || 'nostr-relay',
+          available: true,
+          reason: 'Availability not enforced for GRASP relays',
+        },
+      ],
+      hasConflicts: false,
+      availableProviders: ['grasp'],
+      conflictProviders: [],
+    };
+  }
+
+  // Map provider to token host matching strategy (aligns with ProviderSelectionStep)
+  const hostMatchers: Record<string, (host: string) => boolean> = {
+    github: (h) => h === 'github.com',
+    gitlab: (h) => h === 'gitlab.com' || h.endsWith('.gitlab.com'),
+    gitea: (h) => h.includes('gitea'),
+    bitbucket: (h) => h === 'bitbucket.org',
+  };
+
+  const match = hostMatchers[provider as keyof typeof hostMatchers];
+  const tokenEntry = tokens.find((t) => match?.(t.host));
+
+  if (!tokenEntry) {
+    // No token: we cannot query provider API, treat as unknown but do not block
+    return {
+      results: [
+        {
+          provider,
+          host: 'unknown',
+          available: true,
+          reason: 'No token configured; unable to check. Assuming available.',
+        },
+      ],
+      hasConflicts: false,
+      availableProviders: [provider],
+      conflictProviders: [],
+    };
+  }
+
+  try {
+    const api = getGitServiceApi(provider as any, tokenEntry.token);
+    const currentUser = await api.getCurrentUser();
+    const username = (currentUser as any).login || (currentUser as any).username || 'me';
+
+    try {
+      await api.getRepo(username, repoName);
+      // Exists → conflict
+      return {
+        results: [
+          {
+            provider,
+            host: tokenEntry.host,
+            available: false,
+            reason: `Repository name already exists in your ${provider} account`,
+            username,
+          },
+        ],
+        hasConflicts: true,
+        availableProviders: [],
+        conflictProviders: [provider],
+      };
+    } catch (error: any) {
+      if (error?.message?.includes('404') || error?.message?.includes('Not Found')) {
+        return {
+          results: [
+            {
+              provider,
+              host: tokenEntry.host,
+              available: true,
+              username,
+            },
+          ],
+          hasConflicts: false,
+          availableProviders: [provider],
+          conflictProviders: [],
+        };
+      }
+      // Unknown error: return soft-OK to avoid blocking
+      return {
+        results: [
+          {
+            provider,
+            host: tokenEntry.host,
+            available: true,
+            error: String(error?.message || error),
+            username,
+          },
+        ],
+        hasConflicts: false,
+        availableProviders: [provider],
+        conflictProviders: [],
+      };
+    }
+  } catch (e: any) {
+    // Network or API error; soft-OK
+    return {
+      results: [
+        {
+          provider,
+          host: 'unknown',
+          available: true,
+          error: String(e?.message || e),
+        },
+      ],
+      hasConflicts: false,
+      availableProviders: [provider],
+      conflictProviders: [],
+    };
+  }
+}
+
+/**
  * Check repository name availability across all providers the user has tokens for
  * @param repoName - The repository name to check
  * @param tokens - Array of user tokens

@@ -2,12 +2,11 @@
   import RepoDetailsStep from './RepoDetailsStep.svelte';
   import AdvancedSettingsStep from './AdvancedSettingsStep.svelte';
   import RepoProgressStep from './RepoProgressStep.svelte';
-  import ProviderSelectionStep from './ProviderSelectionStep.svelte';
+  import StepChooseService from './steps/StepChooseService.svelte';
   import { type Event as NostrEvent } from 'nostr-tools';
   import { useRegistry } from '../../useRegistry';
-  import { useNewRepo, type NewRepoResult, checkMultiProviderRepoAvailability } from '$lib/useNewRepo.svelte';
+  import { useNewRepo, type NewRepoResult, checkProviderRepoAvailability } from '$lib/useNewRepo.svelte';
   import { tokens as tokensStore, type Token } from '$lib/stores/tokens.js';
-  import { getGitServiceApi } from '@nostr-git/core';
   
   const { Button } = useRegistry();
 
@@ -62,9 +61,9 @@
     tokens = t;
   });
 
-  // Step management
+  // Step management (1: Choose Service, 2: Repo Details, 3: Advanced, 4: Create)
   let currentStep = $state(1);
-  const totalSteps = 4; // Updated to include provider selection step
+  const totalSteps = 4;
 
   // Repository details (Step 1)
   let repoDetails = $state({
@@ -107,14 +106,19 @@
 
   // Check repository name availability across all providers
   async function checkNameAvailability(name: string) {
-    if (!name.trim() || tokens.length === 0) {
+    if (!name.trim() || tokens.length === 0 || !selectedProvider) {
       nameAvailabilityResults = null;
       return;
     }
 
     isCheckingAvailability = true;
     try {
-      const results = await checkMultiProviderRepoAvailability(name, tokens);
+      const results = await checkProviderRepoAvailability(
+        selectedProvider as string,
+        name,
+        tokens,
+        selectedProvider === 'grasp' ? graspRelayUrl : undefined
+      );
       nameAvailabilityResults = results;
     } catch (error) {
       console.error('Error checking name availability:', error);
@@ -189,11 +193,14 @@
 
   // Navigation
   function nextStep() {
-    if (currentStep === 1 && validateStep1()) {
-      currentStep = 2;
-    } else if (currentStep === 2) {
-      currentStep = 3; // Go to provider selection
-    } else if (currentStep === 3 && selectedProvider && isValidGraspConfig()) {
+    if (currentStep === 1) {
+      // Require provider selection (and valid GRASP relay when applicable)
+      if (selectedProvider && isValidGraspConfig()) {
+        currentStep = 2;
+      }
+    } else if (currentStep === 2 && validateStep1()) {
+      currentStep = 3;
+    } else if (currentStep === 3) {
       currentStep = 4; // Go to creation progress
       startRepositoryCreation();
     }
@@ -212,11 +219,21 @@
   // Provider selection handler
   function handleProviderChange(provider: string) {
     selectedProvider = provider;
+    // Clear previous availability results when provider changes
+    nameAvailabilityResults = null;
+    // Auto re-check if a name is already entered
+    if (repoDetails.name && repoDetails.name.trim().length > 0) {
+      debouncedNameCheck(repoDetails.name);
+    }
   }
 
   // GRASP relay URL handler
   function handleRelayUrlChange(url: string) {
     graspRelayUrl = url;
+    // For GRASP, re-check availability when relay changes and name is present
+    if (selectedProvider === 'grasp' && repoDetails.name && repoDetails.name.trim().length > 0) {
+      debouncedNameCheck(repoDetails.name);
+    }
   }
 
   // Validate relay URL for GRASP provider
@@ -349,7 +366,7 @@
       >
         {currentStep > 1 ? '✓' : '1'}
       </div>
-      <span class="text-sm font-medium text-foreground">Repository Details</span>
+      <span class="text-sm font-medium text-foreground">Choose Service</span>
     </div>
     
     <div class="w-12 h-px bg-border"></div>
@@ -364,7 +381,7 @@
       >
         {currentStep > 2 ? '✓' : '2'}
       </div>
-      <span class="text-sm font-medium text-foreground">Advanced Settings</span>
+      <span class="text-sm font-medium text-foreground">Repository Details</span>
     </div>
     
     <div class="w-12 h-px bg-border"></div>
@@ -379,7 +396,7 @@
       >
         {currentStep > 3 ? '✓' : '3'}
       </div>
-      <span class="text-sm font-medium text-foreground">Choose Service</span>
+      <span class="text-sm font-medium text-foreground">Advanced Settings</span>
     </div>
     
     <div class="w-12 h-px bg-border"></div>
@@ -399,8 +416,17 @@
   </div>
 
   <!-- Step Content -->
-  <div class="bg-card text-card-foreground rounded-lg border shadow-sm p-6">
+  <div class="bg-card text-card-foreground rounded-lg border shadow-sm p-6 max-h-[70vh] overflow-auto">
     {#if currentStep === 1}
+      <StepChooseService
+        tokens={tokens}
+        selectedProvider={selectedProvider as any}
+        onProviderChange={handleProviderChange as any}
+        disabledProviders={nameAvailabilityResults?.conflictProviders || []}
+        relayUrl={graspRelayUrl}
+        onRelayUrlChange={handleRelayUrlChange}
+      />
+    {:else if currentStep === 2}
       <RepoDetailsStep
         repoName={repoDetails.name}
         description={repoDetails.description}
@@ -418,7 +444,7 @@
         nameAvailabilityResults={nameAvailabilityResults}
         isCheckingAvailability={isCheckingAvailability}
       />
-    {:else if currentStep === 2}
+    {:else if currentStep === 3}
       <AdvancedSettingsStep
         gitignoreTemplate={advancedSettings.gitignoreTemplate}
         licenseTemplate={advancedSettings.licenseTemplate}
@@ -440,15 +466,6 @@
         onTagsChange={handleTagsChange}
         onWebUrlChange={handleWebUrlChange}
         onCloneUrlChange={handleCloneUrlChange}
-      />
-    {:else if currentStep === 3}
-      <ProviderSelectionStep
-        tokens={tokens}
-        selectedProvider={selectedProvider}
-        onProviderChange={handleProviderChange}
-        disabledProviders={nameAvailabilityResults?.conflictProviders || []}
-        relayUrl={graspRelayUrl}
-        onRelayUrlChange={handleRelayUrlChange}
       />
     {:else if currentStep === 4}
       <RepoProgressStep
@@ -486,7 +503,10 @@
         
         <Button
           onclick={nextStep}
-          disabled={(currentStep === 1 && !validateStep1()) || (currentStep === 3 && (!selectedProvider || (selectedProvider === 'grasp' && !isValidGraspConfig())))}
+          disabled={
+            (currentStep === 1 && (!selectedProvider || (selectedProvider === 'grasp' && !isValidGraspConfig()))) ||
+            (currentStep === 2 && !validateStep1())
+          }
           variant="git"
           size="sm"
           class="h-8 px-3 py-0 text-xs font-medium rounded-md transition"
