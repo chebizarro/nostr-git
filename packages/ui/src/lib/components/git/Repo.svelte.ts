@@ -339,7 +339,7 @@ export class Repo {
     const repoId = this.canonicalKey;
     const branch = targetBranch || this.mainBranch?.split("/").pop();
     
-    return await this.patchManager.getMergeAnalysis(patch, branch, repoId, this.repoEvent.id);
+    return await this.patchManager.getMergeAnalysis(patch, branch, repoId);
   }
 
   // Check if merge analysis is available for a patch ID
@@ -354,7 +354,7 @@ export class Repo {
     const repoId = this.canonicalKey;
     const branch = targetBranch || this.mainBranch?.split("/").pop();
     
-    return await this.patchManager.refreshMergeAnalysis(patch, branch, repoId, this.repoEvent.id);
+    return await this.patchManager.refreshMergeAnalysis(patch, branch, repoId);
   }
 
   // Public API for clearing merge analysis cache
@@ -845,12 +845,12 @@ export class Repo {
 
   // Perform background merge analysis for patches
   async #performMergeAnalysis(patches: PatchEvent[]) {
-    if (!this.repoEvent || !patches.length) return;
-
+    if (!patches?.length) return;
+    
     const repoId = this.canonicalKey;
-    const targetBranch = this.mainBranch?.split("/").pop();
-
+    const targetBranch = this.mainBranch?.split("/").pop() || "main";
+    
     // Delegate to PatchManager for background processing
-    await this.patchManager.processInBackground(patches, targetBranch, repoId, this.repoEvent.id);
+    await this.patchManager.processInBackground(patches, targetBranch, repoId);
   }
 }

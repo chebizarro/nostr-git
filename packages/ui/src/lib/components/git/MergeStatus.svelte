@@ -10,12 +10,25 @@
   } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
   import type { MergeAnalysisResult } from "@nostr-git/core";
-  import { toast } from "../../stores/toast";
   
   const { Card, CardHeader, CardTitle, CardContent, Badge } = useRegistry();
 
+  // Extend core result type with optional fields used by UI
+  type ExtendedMergeAnalysisResult = MergeAnalysisResult & {
+    conflictFiles?: string[];
+    conflictDetails?: Array<{
+      file: string;
+      type?: string;
+      conflictMarkers?: Array<{ start: number; end: number; type: string }>;
+    }>;
+    patchCommits?: string[];
+    targetCommit?: string;
+    remoteCommit?: string;
+    mergeBase?: string;
+  };
+
   interface Props {
-    result: MergeAnalysisResult | null;
+    result: ExtendedMergeAnalysisResult | null;
     loading?: boolean;
     targetBranch?: string;
   }
@@ -56,7 +69,7 @@
     }
   };
 
-  const getStatusMessage = (result: MergeAnalysisResult): string => {
+  const getStatusMessage = (result: ExtendedMergeAnalysisResult): string => {
     switch (result.analysis) {
       case 'clean':
         return result.fastForward 
@@ -122,21 +135,21 @@
         </div>
       {/if}
 
-      {#if result.analysis === 'conflicts' && result.conflictDetails.length > 0}
+      {#if result.analysis === 'conflicts' && (result.conflictDetails?.length ?? 0) > 0}
         <div class="space-y-3">
           <h4 class="font-medium text-sm flex items-center gap-2">
             <FileText class="h-4 w-4" />
-            Conflicting Files ({result.conflictFiles.length})
+            Conflicting Files ({result.conflictFiles?.length ?? 0})
           </h4>
           
           <div class="space-y-2">
-            {#each result.conflictDetails as conflict (conflict.file)}
+            {#each (result.conflictDetails ?? []) as conflict (conflict.file)}
               <Card class="border-orange-200">
                 <CardContent class="p-3">
                   <div class="flex items-center justify-between mb-2">
                     <span class="font-mono text-sm">{conflict.file}</span>
                     <Badge variant="destructive" class="text-xs">
-                      {conflict.conflictMarkers.length} conflicts
+                      {(conflict.conflictMarkers?.length ?? 0)} conflicts
                     </Badge>
                   </div>
                   
@@ -144,9 +157,9 @@
                     Type: {conflict.type}
                   </div>
                   
-                  {#if conflict.conflictMarkers.length > 0}
+                  {#if (conflict.conflictMarkers?.length ?? 0) > 0}
                     <div class="mt-2 space-y-1">
-                      {#each conflict.conflictMarkers as marker (marker.start)}
+                      {#each (conflict.conflictMarkers ?? []) as marker (marker.start)}
                         <div class="text-xs bg-secondary/50 p-2 rounded">
                           <div class="text-muted-foreground mb-1">
                             Lines {marker.start}-{marker.end}: {marker.type.replace(/-/g, ' ')}
@@ -191,7 +204,7 @@
         </div>
       {/if}
 
-      {#if result.patchCommits.length > 0}
+      {#if (result.patchCommits?.length ?? 0) > 0}
         <div class="text-xs text-muted-foreground">
           <span class="font-medium">Patch commits:</span> {result.patchCommits.length}
           {#if result.targetCommit}

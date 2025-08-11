@@ -103,6 +103,9 @@ export class PatchManager {
     
     // If we have a valid cached result that's not an error, return it
     if (cachedResult && cachedResult.analysis !== 'error') {
+      console.debug(
+        `🧠 MergeAnalysis cache hit for patch ${patch.id} → ${cachedResult.analysis} (branch=${targetBranch}, repo=${canonicalKey})`
+      );
       return cachedResult;
     }
     
@@ -115,6 +118,9 @@ export class PatchManager {
         await this.cacheManager.set(patch, targetBranch, canonicalKey, freshResult);
         // Publish to reactive store
         this.updateStore(patch.id, freshResult);
+        console.debug(
+          `🧪 MergeAnalysis fresh result for patch ${patch.id} → ${freshResult.analysis} (branch=${targetBranch}, repo=${canonicalKey})`
+        );
       }
       
       return freshResult;
@@ -199,6 +205,9 @@ export class PatchManager {
     this.activeAnalysis.add(patch.id);
 
     try {
+      console.debug(
+        `🔍 Analyzing patch ${patch.id} (branch=${targetBranch}, repo=${workerRepoId || canonicalKey})`
+      );
       // Parse the patch for analysis
       const { parseGitPatchFromEvent } = await import("@nostr-git/core");
       const parsedPatch = parseGitPatchFromEvent(patch);
@@ -218,7 +227,9 @@ export class PatchManager {
         },
         targetBranch
       });
-
+      console.debug(
+        `✅ Analysis complete for patch ${patch.id} → ${result.analysis}`
+      );
       return result;
     } catch (error) {
       console.error(`Failed to analyze patch ${patch.id}:`, error);
@@ -255,6 +266,9 @@ export class PatchManager {
       
       // Schedule batch processing with staggered delays
       const timeoutId = window.setTimeout(async () => {
+        console.debug(
+          `📦 Processing merge analysis batch size=${batch.length} (branch=${targetBranch}, repo=${canonicalKey})`
+        );
         await this.processBatch(batch, targetBranch, canonicalKey, workerRepoId);
         this.batchTimeouts.delete(timeoutId);
       }, i * batchDelay);
@@ -279,6 +293,9 @@ export class PatchManager {
         if (cachedResult) {
           // Ensure store reflects cached value
           this.updateStore(patch.id, cachedResult);
+          console.debug(
+            `🧠 (bg) cache hit for patch ${patch.id} → ${cachedResult.analysis}`
+          );
           continue;
         }
 
@@ -292,6 +309,9 @@ export class PatchManager {
           await this.cacheManager.set(patch, targetBranch, canonicalKey, result);
           // Publish to reactive store
           this.updateStore(patch.id, result);
+          console.debug(
+            `🧪 (bg) fresh result for patch ${patch.id} → ${result.analysis}`
+          );
         }
       } catch (error) {
         console.warn(`Background merge analysis failed for patch ${patch.id}:`, error);
