@@ -368,3 +368,120 @@ export default {
 ```
 
 This API documentation provides comprehensive coverage of all public APIs in the Nostr-Git project, with practical examples and error handling patterns.
+
+---
+
+## Git Wrapper API (@nostr-git/git-wrapper)
+
+The Git Wrapper bridges a concrete Git backend with Nostr NIP-34 collaboration events, implementing the ngit architecture in TypeScript.
+
+### Importing
+
+```ts
+import { NostrGitProvider } from '@nostr-git/git-wrapper/src/nostr-git-provider.js';
+import { makeRepoAddr } from '@nostr-git/git-wrapper/src/repo-addr.js';
+import { FileProtocolPrefs } from '@nostr-git/git-wrapper/src/prefs-store.js';
+```
+
+### Construction
+
+```ts
+const git /*: GitProvider*/ = /* your isomorphic-git based provider */;
+const nostr /*: NostrClient*/ = /* your nostr client (publish/subscribe/signing) */;
+const provider = new NostrGitProvider(git, nostr);
+
+// Optional: persist preferred clone/push URL per repoId
+import fs from 'node:fs';
+provider.configureProtocolPrefsStore(new FileProtocolPrefs(fs, `${process.cwd()}/.ngit/prefs.json`));
+```
+
+### Repo Address Helpers
+
+```ts
+const ownerPubkey = 'f'.repeat(64);
+const repoAddr = makeRepoAddr(ownerPubkey, 'my-repo'); // e.g. "kind:pubkey:identifier"
+```
+
+### Discovery
+
+```ts
+const discovered = await provider.discoverRepo('my-repo', { timeoutMs: 2000 });
+// discovered.urls (clone URLs), discovered.branches, discovered.tags
+```
+
+### Clone with Protocol Preference and SSH Heuristic
+
+```ts
+await provider.clone({ dir: '/tmp/repo', repoId: 'my-repo', timeoutMs: 2500 });
+// If url omitted: prefers stored preference else SSH if present, then others.
+```
+
+### Push Partitioning and PR Patch Events
+
+```ts
+await provider.push({
+  dir: '/tmp/repo',
+  fs, // enables unified diff in default patch content
+  refspecs: ['refs/heads/pr/feature-x'],
+  repoId: 'my-repo',
+  repoAddr,
+  baseBranch: 'refs/heads/main',
+  // Optional content controls
+  // patchContent: 'Custom content',
+  // getPatchContent: async (ctx) => '...'
+});
+```
+
+Behavior:
+- PR refs publish NIP-34 `GIT_PATCH` with enriched tags:
+  - `['t','base:<branch>']`, `['parent-commit', <oid>]`, `['committer', name, email, ts, tz]`
+  - recipients from announcement (owner/maintainers) + thread participants (`['p']`)
+- Content fallback: `patchContent` → `getPatchContent()` → default cover letter + unified diff
+
+### Normal Push with Optional Status Emission
+
+```ts
+await provider.push({
+  dir: '/tmp/repo',
+  refspecs: ['refs/heads/main'],
+  repoId: 'my-repo',
+  nostrStatus: {
+    repoAddr,
+    rootId: 'root-event-id',
+    content: 'Push applied to main',
+    close: false // set true to emit GIT_STATUS_CLOSED
+  }
+});
+```
+
+Resilience:
+- On server push failure, provider discovers alternate URLs, retries once with a different URL, and updates preference on success.
+
+### Merge with Status Events
+
+```ts
+await provider.merge({
+  dir: '/tmp/repo',
+  ours: 'refs/heads/main',
+  theirs: 'refs/heads/feature-x',
+  nostrStatus: { repoAddr, rootId: 'root-event-id', content: 'Merged feature-x', close: true }
+});
+```
+
+Emits `GIT_STATUS_APPLIED` (and `GIT_STATUS_CLOSED` when `close: true`) with enriched participants.
+
+### Subscriptions
+
+```ts
+const subId = provider.subscribeToCollaborationEvents('my-repo', (evt) => {
+  console.log('Collab evt', evt.kind, evt.id);
+});
+```
+
+### Default Unified Diff Helper
+
+```ts
+import { generateUnifiedDiff } from '@nostr-git/git-wrapper/src/git-diff-content.js';
+const diff = await generateUnifiedDiff({ fs, dir: '/tmp/repo', baseRef: 'refs/heads/main', headRef: 'refs/heads/feature-x' });
+```
+
