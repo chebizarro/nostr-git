@@ -206,7 +206,7 @@ export class PatchManager {
 
     try {
       console.debug(
-        `🔍 Analyzing patch ${patch.id} (branch=${targetBranch}, repo=${workerRepoId || canonicalKey})`
+        `🔍 Analyzing patch ${patch.id} (branch=${targetBranch}, repo=${canonicalKey})`
       );
       // Parse the patch for analysis
       const { parseGitPatchFromEvent } = await import("@nostr-git/core");
@@ -214,7 +214,7 @@ export class PatchManager {
       
       // Use WorkerManager to perform the analysis
       const result = await this.workerManager.analyzePatchMerge({
-        repoId: workerRepoId || canonicalKey,
+        repoId: canonicalKey,
         patchData: {
           id: parsedPatch.id,
           commits: parsedPatch.commits.map(c => ({
