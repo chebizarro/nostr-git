@@ -60,7 +60,22 @@ export class GraspApi implements GitServiceApi {
   private relayInfo?: RelayInfo;
 
   constructor(relayUrl: string, pubkey: string, signer?: Signer) {
-    this.relayUrl = relayUrl.replace(/\/$/, ''); // Remove trailing slash
+    // Normalize to base ws(s) origin with no path
+    let normalized = relayUrl.replace(/\/$/, '');
+    try {
+      const u = new URL(relayUrl);
+      const origin = `${u.protocol}//${u.host}`;
+      normalized = origin
+        .replace(/^http:\/\//, 'ws://')
+        .replace(/^https:\/\//, 'wss://');
+    } catch (_) {
+      // Fallback: convert protocol and strip any path after host
+      normalized = relayUrl
+        .replace(/^http:\/\//, 'ws://')
+        .replace(/^https:\/\//, 'wss://')
+        .replace(/(ws[s]?:\/\/[^/]+).*/, '$1');
+    }
+    this.relayUrl = normalized; // Base relay URL for Nostr operations
     this.pubkey = pubkey;
     this.signer = signer;
     this.pool = new SimplePool();
@@ -220,6 +235,44 @@ export class GraspApi implements GitServiceApi {
 
   async createRepo(options: { name: string; description?: string; private?: boolean; autoInit?: boolean }): Promise<RepoMetadata> {
     // Publish repository announcement event (NIP-34 kind 30617)
+    const npub = nip19.npubEncode(this.pubkey);
+    const httpBase = this.relayUrl.replace(/^ws:\/\//, 'http://').replace(/^wss:\/\//, 'https://');
+    const webUrl = `${httpBase}/${npub}/${options.name}`; // no .git
+    const cloneUrl = `${webUrl}.git`;
+    // Gather relay aliases: base relay plus optional configured aliases and ngit-relay fallback
+    const aliases: string[] = [];
+    // base ws(s) relay
+    aliases.push(this.relayUrl);
+    // from env (comma-separated)
+    try {
+      // Vite style
+      const viteAliases = (import.meta as any)?.env?.VITE_GRASP_RELAY_ALIASES as string | undefined;
+      if (viteAliases) {
+        viteAliases.split(',').map(s => s.trim()).filter(Boolean).forEach(a => aliases.push(a));
+      }
+    } catch {}
+    try {
+      // Node style
+      const nodeAliases = (globalThis as any)?.process?.env?.VITE_GRASP_RELAY_ALIASES as string | undefined;
+      if (nodeAliases) {
+        nodeAliases.split(',').map(s => s.trim()).filter(Boolean).forEach(a => aliases.push(a));
+      }
+    } catch {}
+    // add ngit-relay:<port> alias derived from current relay
+    try {
+      const u = new URL(this.relayUrl);
+      const port = u.port ? `:${u.port}` : '';
+      const ngitAlias = `${u.protocol}//ngit-relay${port}`;
+      aliases.push(ngitAlias);
+    } catch {}
+    // de-duplicate while preserving order
+    const seen = new Set<string>();
+    const relayAliases = aliases.filter(a => {
+      if (seen.has(a)) return false;
+      seen.add(a);
+      return true;
+    });
+
     const event: EventTemplate = {
       kind: 30617,
       created_at: Math.floor(Date.now() / 1000),
@@ -227,16 +280,14 @@ export class GraspApi implements GitServiceApi {
         ['d', options.name],
         ['name', options.name],
         ['description', options.description || ''],
-        ['clone', `${this.relayUrl}/${nip19.npubEncode(this.pubkey)}/${options.name}.git`],
-        ['web', `${this.relayUrl}/${nip19.npubEncode(this.pubkey)}/${options.name}`],
-        ['relays', this.relayUrl],
+        ['clone', cloneUrl, ...relayAliases],
+        ['web', webUrl],
+        ['relays', ...relayAliases],
       ],
       content: options.description || '',
     };
 
     await this.publishEvent(event);
-
-    const npub = nip19.npubEncode(this.pubkey);
     return {
       id: '', // Will be set after event is published
       name: options.name,
@@ -244,8 +295,8 @@ export class GraspApi implements GitServiceApi {
       description: options.description || '',
       defaultBranch: 'main',
       isPrivate: options.private || false,
-      cloneUrl: `${this.relayUrl}/${npub}/${options.name}.git`,
-      htmlUrl: `${this.relayUrl}/${npub}/${options.name}`,
+      cloneUrl: cloneUrl,
+      htmlUrl: webUrl,
       owner: {
         login: npub,
         type: 'User',
@@ -257,16 +308,42 @@ export class GraspApi implements GitServiceApi {
     // Update repository announcement event
     const currentRepo = await this.getRepo(owner, repo);
     
+    const httpBase = this.relayUrl.replace(/^ws:\/\//, 'http://').replace(/^wss:\/\//, 'https://');
+    const npub = nip19.npubEncode(this.pubkey);
+    const targetName = updates.name || repo;
+    const webUrl = `${httpBase}/${npub}/${targetName}`;
+    const cloneUrl = `${webUrl}.git`;
+    // Reuse alias logic
+    const aliasSeen = new Set<string>();
+    const aliasList: string[] = [];
+    aliasList.push(this.relayUrl);
+    try {
+      const viteAliases = (import.meta as any)?.env?.VITE_GRASP_RELAY_ALIASES as string | undefined;
+      if (viteAliases) viteAliases.split(',').map(s => s.trim()).filter(Boolean).forEach(a => aliasList.push(a));
+    } catch {}
+    try {
+      const nodeAliases = (globalThis as any)?.process?.env?.VITE_GRASP_RELAY_ALIASES as string | undefined;
+      if (nodeAliases) nodeAliases.split(',').map(s => s.trim()).filter(Boolean).forEach(a => aliasList.push(a));
+    } catch {}
+    try {
+      const u = new URL(this.relayUrl);
+      const port = u.port ? `:${u.port}` : '';
+      aliasList.push(`${u.protocol}//ngit-relay${port}`);
+    } catch {}
+    const relayAliases = aliasList.filter(a => {
+      if (aliasSeen.has(a)) return false; aliasSeen.add(a); return true;
+    });
+
     const event: EventTemplate = {
       kind: 30617,
       created_at: Math.floor(Date.now() / 1000),
       tags: [
-        ['d', updates.name || repo],
+        ['d', targetName],
         ['name', updates.name || currentRepo.name],
         ['description', updates.description || currentRepo.description || ''],
-        ['clone', currentRepo.cloneUrl || ''],
-        ['web', currentRepo.htmlUrl || ''],
-        ['relays', this.relayUrl],
+        ['clone', cloneUrl, ...relayAliases],
+        ['web', webUrl],
+        ['relays', ...relayAliases],
       ],
       content: updates.description || currentRepo.description || '',
     };
@@ -286,6 +363,26 @@ export class GraspApi implements GitServiceApi {
     const forkName = options?.name || `${repo}-fork`;
     
     const npub = nip19.npubEncode(this.pubkey);
+    const httpBase = this.relayUrl.replace(/^ws:\/\//, 'http://').replace(/^wss:\/\//, 'https://');
+    const webUrl = `${httpBase}/${npub}/${forkName}`;
+    const cloneUrl = `${webUrl}.git`;
+    const aliasDedup = new Set<string>();
+    const aliasList: string[] = [this.relayUrl];
+    try {
+      const viteAliases = (import.meta as any)?.env?.VITE_GRASP_RELAY_ALIASES as string | undefined;
+      if (viteAliases) viteAliases.split(',').map(s => s.trim()).filter(Boolean).forEach(a => aliasList.push(a));
+    } catch {}
+    try {
+      const nodeAliases = (globalThis as any)?.process?.env?.VITE_GRASP_RELAY_ALIASES as string | undefined;
+      if (nodeAliases) nodeAliases.split(',').map(s => s.trim()).filter(Boolean).forEach(a => aliasList.push(a));
+    } catch {}
+    try {
+      const u = new URL(this.relayUrl);
+      const port = u.port ? `:${u.port}` : '';
+      aliasList.push(`${u.protocol}//ngit-relay${port}`);
+    } catch {}
+    const relayAliases = aliasList.filter(a => { if (aliasDedup.has(a)) return false; aliasDedup.add(a); return true; });
+
     const event: EventTemplate = {
       kind: 30617,
       created_at: Math.floor(Date.now() / 1000),
@@ -293,9 +390,9 @@ export class GraspApi implements GitServiceApi {
         ['d', forkName],
         ['name', forkName],
         ['description', `Fork of ${originalRepo.fullName}`],
-        ['clone', `${this.relayUrl}/${npub}/${forkName}.git`],
-        ['web', `${this.relayUrl}/${npub}/${forkName}`],
-        ['relays', this.relayUrl],
+        ['clone', cloneUrl, ...relayAliases],
+        ['web', webUrl],
+        ['relays', ...relayAliases],
         ['fork', originalRepo.cloneUrl], // Reference to original
       ],
       content: `Fork of ${originalRepo.fullName}`,

@@ -838,24 +838,44 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       providerToken = tokens.find((t: Token) => t.host === providerHost)?.token;
     }
     
-    console.log('🚀 Pushing to remote with URL:', remoteRepo.url);
+    // For GRASP, ensure we never try to push over WebSocket; use HTTP(S) endpoint instead
+    const toHttpFromWs = (url: string) =>
+      url.startsWith('ws://') ? 'http://' + url.slice(5) :
+      url.startsWith('wss://') ? 'https://' + url.slice(6) : url;
+
+    const pushUrl = config.provider === 'grasp' ? toHttpFromWs(remoteRepo.url) : remoteRepo.url;
+
+    console.log('🚀 Pushing to remote with URL:', pushUrl);
     console.log('🚀 Push config:', {
       provider: config.provider,
       repoPath: canonicalKey ?? config.name,
       defaultBranch: config.defaultBranch,
-      remoteUrl: remoteRepo.url,
+      remoteUrl: pushUrl,
       tokenLength: providerToken ? providerToken.length : 'No token'
     });
 
-    // Push to remote repository
+    // Push to remote repository via safe preflight wrapper
     // Note: For GRASP, we don't pass a signer object since signing is handled via message protocol
-    await api.pushToRemote({
+    const pushResult = await api.safePushToRemote({
       repoId: canonicalKey ?? config.name,
-      remoteUrl: remoteRepo.url,
+      remoteUrl: pushUrl,
       branch: config.defaultBranch,
       token: providerToken,
-      provider: config.provider
+      provider: config.provider,
+      allowForce: false,
+      preflight: {
+        blockIfUncommitted: true,
+        requireUpToDate: true,
+        blockIfShallow: true,
+      },
     });
+
+    if (!pushResult?.success) {
+      if (pushResult?.requiresConfirmation) {
+        throw new Error(pushResult.warning || 'Force push requires confirmation.');
+      }
+      throw new Error(pushResult?.error || 'Safe push failed');
+    }
 
     return remoteRepo;
   }
@@ -865,91 +885,91 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
     localRepo: any,
     remoteRepo?: any
   ): Omit<NostrEvent, "id" | "sig" | "pubkey" | "created_at"> {
-    const cloneUrls = [];
-    const webUrls = [];
+    const toHttpFromWs = (url: string) =>
+      url?.startsWith('ws://') ? 'http://' + url.slice(5) :
+      url?.startsWith('wss://') ? 'https://' + url.slice(6) : url;
+    const ensureNoGitSuffix = (url: string) => url?.replace(/\.git$/, '');
 
-    // Add remote URLs if available
-    if (remoteRepo?.url) cloneUrls.push(remoteRepo.url);
-    if (remoteRepo?.webUrl) webUrls.push(remoteRepo.webUrl);
+    // Build base clone/web URLs
+    let cloneUrl: string = remoteRepo?.url || config.cloneUrl || '';
+    let webUrl: string = remoteRepo?.webUrl || config.webUrl || '';
+    if (config.provider === 'grasp') {
+      cloneUrl = toHttpFromWs(cloneUrl);
+      if (!webUrl && cloneUrl) webUrl = ensureNoGitSuffix(cloneUrl);
+    }
 
-    // Add user-provided URLs
-    if (config.cloneUrl) cloneUrls.push(config.cloneUrl);
-    if (config.webUrl) webUrls.push(config.webUrl);
+    // Ensure required values
+    const repoName = config.name || localRepo?.name || 'unknown-repo';
+    const name = localRepo?.name || config.name || 'Untitled Repository';
+    const description = config.description || '';
+    const initialCommit = localRepo?.initialCommit || '';
 
-    // Ensure all required values are defined
-    const repoId = localRepo?.repoId || config.name || "unknown-repo";
-    const name = config.name || "Untitled Repository";
-    const description = config.description || "";
-    const initialCommit = localRepo?.initialCommit || "";
-
-    const tags = [
-      ["d", repoId],
-      ["name", name],
-      ["description", description],
+    const tags: string[][] = [
+      ['d', repoName],
+      ['name', name],
+      ['description', description],
     ];
+    if (initialCommit) tags.push(['r', initialCommit, 'euc']);
 
-    // Only add commit reference if we have a valid commit
-    if (initialCommit) {
-      tags.push(["r", initialCommit, "euc"]);
-    }
-
-    // Add clone URLs
-    if (cloneUrls.length > 0) {
-      tags.push(["clone", ...cloneUrls]);
-    }
-
-    // Add web URLs
-    if (webUrls.length > 0) {
-      tags.push(["web", ...webUrls]);
-    }
-
-    // Add maintainers (additional to the author)
-    if (config.maintainers && config.maintainers.length > 0) {
-      config.maintainers.forEach((maintainer) => {
-        tags.push(["maintainer", maintainer]);
-      });
-    }
-
-    // Add relays
-    const relaysToAdd = [...(config.relays || [])];
-    // For GRASP providers, ensure the relay URL is included
-    if (config.provider === 'grasp' && config.relayUrl && !relaysToAdd.includes(config.relayUrl)) {
-      relaysToAdd.push(config.relayUrl);
-    }
-    
-    if (relaysToAdd.length > 0) {
-      relaysToAdd.forEach((relay) => {
-        tags.push(["relay", relay]);
-      });
-    }
-
-    // For GRASP providers, also add the relay URL to clone tags
-    if (config.provider === 'grasp' && config.relayUrl) {
-      // Add to existing clone URLs or create new clone tag
-      const cloneTagIndex = tags.findIndex(tag => tag[0] === 'clone');
-      if (cloneTagIndex !== -1) {
-        // Add to existing clone tag if not already present
-        if (!tags[cloneTagIndex].includes(config.relayUrl)) {
-          tags[cloneTagIndex].push(config.relayUrl);
+    // Relay aliases for GRASP
+    let relayAliases: string[] = [];
+    if (config.provider === 'grasp') {
+      const normalizeRelayWsOrigin = (u: string) => {
+        if (!u) return '';
+        try {
+          const url = new URL(u);
+          const origin = `${url.protocol}//${url.host}`;
+          return origin.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://');
+        } catch {
+          return u
+            .replace(/^http:\/\//, 'ws://')
+            .replace(/^https:\/\//, 'wss://')
+            .replace(/(ws[s]?:\/\/[^/]+).*/, '$1');
         }
-      } else {
-        // Create new clone tag with the relay URL
-        tags.push(["clone", config.relayUrl]);
-      }
+      };
+      const baseRelay = normalizeRelayWsOrigin(config.relayUrl || '');
+      const aliases: string[] = [];
+      if (baseRelay) aliases.push(baseRelay);
+      try {
+        const viteAliases = (import.meta as any)?.env?.VITE_GRASP_RELAY_ALIASES as string | undefined;
+        if (viteAliases) viteAliases.split(',').map(s => s.trim()).filter(Boolean).forEach(a => aliases.push(a));
+      } catch (e) { /* no-op: env may be undefined in some runtimes */ }
+      try {
+        const nodeAliases = (globalThis as any)?.process?.env?.VITE_GRASP_RELAY_ALIASES as string | undefined;
+        if (nodeAliases) nodeAliases.split(',').map(s => s.trim()).filter(Boolean).forEach(a => aliases.push(a));
+      } catch (e) { /* no-op: process.env not present in browser */ }
+      try {
+        if (baseRelay) {
+          const u = new URL(baseRelay);
+          const port = u.port ? `:${u.port}` : '';
+          aliases.push(`${u.protocol}//ngit-relay${port}`);
+        }
+      } catch (e) { /* no-op: URL parsing fallback */ }
+      const seen = new Set<string>();
+      relayAliases = aliases.filter(a => { if (seen.has(a)) return false; seen.add(a); return true; });
     }
 
-    // Add tags/topics
+    // Clone tag includes relay aliases for GRASP
+    if (cloneUrl) tags.push(['clone', cloneUrl, ...relayAliases]);
+    if (webUrl) tags.push(['web', ensureNoGitSuffix(webUrl)]);
+
+    // Maintainers
+    if (config.maintainers && config.maintainers.length > 0) {
+      config.maintainers.forEach(m => tags.push(['maintainers', m]));
+    }
+
+    // Relays: emit one tag per alias to match prior shape
+    const relaysList = relayAliases.length > 0 ? relayAliases : (config.relays || []);
+    if (relaysList.length > 0) {
+      relaysList.forEach(r => tags.push(['relays', r]));
+    }
+
+    // Topics
     if (config.tags && config.tags.length > 0) {
-      config.tags.forEach((tag) => {
-        tags.push(["t", tag]);
-      });
+      config.tags.forEach(t => tags.push(['t', t]));
     }
 
-    return {
-      kind: 30617,
-      content: config.description || "",
-      tags,
-    };
+    return { kind: 30617, content: description, tags };
   }
 
   function createRepoStateEvent(
@@ -958,11 +978,11 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
     remoteRepo?: any
   ): Omit<NostrEvent, "id" | "sig" | "pubkey" | "created_at"> {
     // Ensure all required values are defined
-    const repoId = localRepo?.repoId || config.name || "unknown-repo";
+    const repoName = config.name || localRepo?.name || "unknown-repo";
     const defaultBranch = config.defaultBranch || "master";
     const initialCommit = localRepo?.initialCommit || "";
 
-    const tags = [["d", repoId]];
+    const tags = [["d", repoName]];
 
     // Only add branch references if we have a valid commit
     if (initialCommit) {

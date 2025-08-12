@@ -240,6 +240,134 @@ const cacheManager = new RepoCacheManager();
 // Initialize cache cleanup on worker start
 cacheManager.clearOldCache().catch(console.warn);
 
+// ----------------------
+// Safety/Preflight Utils
+// ----------------------
+async function hasUncommittedChanges(dir: string): Promise<boolean> {
+  try {
+    const matrix = await git.statusMatrix({ dir });
+    for (const row of matrix) {
+      // statusMatrix row: [filepath, HEAD, WORKDIR, STAGE]
+      const head = row[1];
+      const workdir = row[2];
+      const stage = row[3];
+      if (head !== workdir || stage !== workdir) {
+        return true;
+      }
+    }
+    return false;
+  } catch (err) {
+    console.warn('Failed to compute statusMatrix; assuming no changes:', err);
+    return false;
+  }
+}
+
+async function isShallowClone(key: string): Promise<boolean> {
+  const level = repoDataLevels.get(key);
+  return level === 'refs' || level === 'shallow';
+}
+
+/**
+ * Safe push with preflight validations and optional destructive-action confirmation.
+ */
+async function safePushToRemote(options: {
+  repoId: string;
+  remoteUrl: string;
+  branch?: string;
+  token?: string;
+  provider?: GitVendor;
+  allowForce?: boolean; // if true, a non-FF push requires explicit confirmation
+  confirmDestructive?: boolean; // must be true to proceed with force
+  preflight?: {
+    blockIfUncommitted?: boolean;
+    requireUpToDate?: boolean; // block if remote appears ahead/newer
+    blockIfShallow?: boolean;
+  };
+}): Promise<{
+  success: boolean;
+  pushed?: boolean;
+  requiresConfirmation?: boolean;
+  reason?: string;
+  warning?: string;
+  error?: string;
+}> {
+  const { repoId, remoteUrl, branch, token, provider, allowForce = false, confirmDestructive = false, preflight } = options;
+  const key = canonicalRepoKey(repoId);
+  const dir = `${rootDir}/${key}`;
+
+  const pf = {
+    blockIfUncommitted: true,
+    requireUpToDate: true,
+    blockIfShallow: false,
+    ...(preflight || {})
+  };
+
+  try {
+    // Ensure repo exists
+    const cloned = await isRepoCloned(dir);
+    if (!cloned) {
+      return { success: false, error: 'Repository not cloned locally; clone before pushing.' };
+    }
+
+    // Resolve branch robustly (may throw if no branches)
+    const targetBranch = await resolveRobustBranchInWorker(dir, branch);
+
+    // Uncommitted changes guard
+    if (pf.blockIfUncommitted) {
+      const dirty = await hasUncommittedChanges(dir);
+      if (dirty) {
+        return {
+          success: false,
+          reason: 'uncommitted_changes',
+          error: 'Working tree has uncommitted changes. Commit or stash before push.'
+        };
+      }
+    }
+
+    // Shallow clone guard
+    if (pf.blockIfShallow) {
+      const shallow = await isShallowClone(key);
+      if (shallow) {
+        return {
+          success: false,
+          reason: 'shallow_clone',
+          error: 'Repository is a shallow/refs-only clone. Upgrade to full clone before pushing.'
+        };
+      }
+    }
+
+    // Remote freshness guard (best-effort using cache + HEAD probe)
+    if (pf.requireUpToDate) {
+      const cache = await cacheManager.getRepoCache(key);
+      const remoteChanged = await needsUpdate(key, [remoteUrl], cache);
+      if (remoteChanged) {
+        return {
+          success: false,
+          reason: 'remote_ahead',
+          error: 'Remote appears to have new commits. Sync with remote before pushing to avoid non-fast-forward.'
+        };
+      }
+    }
+
+    // By default we never force-push. If the caller requests allowing it, require explicit confirmation.
+    if (allowForce && !confirmDestructive) {
+      return {
+        success: false,
+        requiresConfirmation: true,
+        reason: 'force_push_requires_confirmation',
+        warning: 'Force push is potentially destructive. Confirmation required.'
+      };
+    }
+
+    // Delegate to existing push implementation (which handles provider differences)
+    const pushRes = await pushToRemote({ repoId, remoteUrl, branch: targetBranch, token, provider });
+    const ok = (pushRes as any)?.success;
+    return { success: ok === undefined ? true : !!ok, pushed: true };
+  } catch (error: any) {
+    return { success: false, error: error?.message || String(error) };
+  }
+}
+
 // Lightweight message-based RPC for calls that may trip Comlink cloning issues
 self.addEventListener('message', async (event: MessageEvent) => {
   const msg: any = event.data;
@@ -2217,7 +2345,13 @@ const createRemoteRepo = async ({
       autoInit: false // We'll push our own initial commit
     });
     
-    const remoteUrl = repoMetadata.cloneUrl;
+    let remoteUrl = repoMetadata.cloneUrl;
+    // For GRASP, ensure clone URL uses HTTP(S) scheme, not WS(S)
+    if (provider === 'grasp') {
+      remoteUrl = remoteUrl
+        .replace(/^ws:\/\//, 'http://')
+        .replace(/^wss:\/\//, 'https://');
+    }
     
     console.log(`Remote repository created: ${remoteUrl}`);
     
@@ -2256,7 +2390,7 @@ const pushToRemote = async ({
   const dir = `${rootDir}/${key}`;
   
   try {
-    console.log(`Pushing repository ${repoId} to remote: ${remoteUrl}`);
+    console.log(`Pushing repository ${repoId} to remote: ${remoteUrl} (provider=${provider})`);
     
     // Handle GRASP provider with GraspApi
     if (provider === 'grasp') {
@@ -2280,7 +2414,25 @@ const pushToRemote = async ({
       
       // For GRASP, we use the GraspApi instead of isomorphic-git
       // The GraspApi handles the Git Smart HTTP protocol and event signing
-      const graspApi = getGitServiceApi('grasp', token, remoteUrl, messageSigner);
+      // Ensure we construct GraspApi with the BASE relay URL (ws/wss origin), not a pathful clone URL
+      let relayBaseUrl = remoteUrl;
+      try {
+        const u = new URL(remoteUrl);
+        // Build origin without path
+        const origin = `${u.protocol}//${u.host}`;
+        // Ensure nostr-tools sees ws/wss protocol for the relay
+        const wsOrigin = origin.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://');
+        relayBaseUrl = wsOrigin;
+      } catch (_) {
+        // If URL parsing fails, fallback to replacing any http(s) with ws(s) and trimming after host
+        relayBaseUrl = remoteUrl
+          .replace(/^http:\/\//, 'ws://')
+          .replace(/^https:\/\//, 'wss://')
+          .replace(/(ws[s]?:\/\/[^/]+).*/, '$1');
+      }
+
+      console.log(`[GRASP] Using relay base URL for API:`, relayBaseUrl);
+      const graspApi = getGitServiceApi('grasp', token, relayBaseUrl, messageSigner);
       
       // For GRASP push operations, we need to create and publish repository state events
       // First, read the repository state (branches, HEAD, etc.)
@@ -2341,8 +2493,20 @@ const pushToRemote = async ({
       const signedEvent = await messageSigner.signEvent(repoStateEvent);
       
       // Publish the event to the relay
-      // Extract relay URL from remoteUrl (for GRASP, remoteUrl is the relay URL)
-      const relayUrl = remoteUrl;
+      // Derive the relay base ws(s) origin from remoteUrl
+      let relayUrl: string = remoteUrl;
+      try {
+        const u = new URL(remoteUrl);
+        const origin = `${u.protocol}//${u.host}`;
+        relayUrl = origin.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://');
+      } catch (_) {
+        // Fallback: convert protocol and strip path
+        relayUrl = remoteUrl
+          .replace(/^http:\/\//, 'ws://')
+          .replace(/^https:\/\//, 'wss://')
+          .replace(/(ws[s]?:\/\/[^/]+).*/, '$1');
+      }
+      console.log(`[GRASP] Publishing repo state to relay:`, relayUrl);
       const pool = new SimplePool();
       await Promise.all(pool.publish([relayUrl], signedEvent));
       
@@ -3145,6 +3309,7 @@ expose({
   createLocalRepo,
   createRemoteRepo,
   pushToRemote,
+  safePushToRemote,
   cloneRemoteRepo,
   forkAndCloneRepo,
   updateRemoteRepoMetadata,

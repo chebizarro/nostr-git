@@ -165,6 +165,26 @@ export class WorkerManager {
   }
 
   /**
+   * Safe push with preflight checks and optional destructive-action confirmation
+   */
+  async safePushToRemote(params: {
+    repoId: string;
+    remoteUrl: string;
+    branch?: string;
+    token?: string;
+    provider?: string;
+    allowForce?: boolean;
+    confirmDestructive?: boolean;
+    preflight?: {
+      blockIfUncommitted?: boolean;
+      requireUpToDate?: boolean;
+      blockIfShallow?: boolean;
+    };
+  }): Promise<any> {
+    return this.execute('safePushToRemote', params);
+  }
+
+  /**
    * Get repository data level (refs, shallow, full)
    */
   async getRepoDataLevel(repoId: string): Promise<string> {

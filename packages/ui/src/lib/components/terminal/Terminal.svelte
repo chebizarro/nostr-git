@@ -377,12 +377,28 @@
         return { text: 'error: git push requires repoId and remoteUrl (or cloneUrls[])\n' };
       }
       try {
-        const res = await mgr.pushToRemote({ repoId, remoteUrl, branch: useBranch, provider: useProvider, token: useToken });
+        const res = await mgr.safePushToRemote({
+          repoId,
+          remoteUrl,
+          branch: useBranch,
+          provider: useProvider,
+          token: useToken,
+          allowForce: false,
+          preflight: {
+            blockIfUncommitted: true,
+            requireUpToDate: true,
+            blockIfShallow: true,
+          },
+        });
         if (res?.success) {
           const b = res.branch || useBranch || 'main';
           return { text: `Pushed ${b} to ${remoteUrl}\n` };
         }
-        return { text: `error: push failed: ${res?.error || 'unknown error'}\n` };
+        if (res?.requiresConfirmation) {
+          return { text: `error: push blocked: ${res?.warning || 'force push requires confirmation'}\n` };
+        }
+        const reason = res?.reason ? ` (${res.reason})` : '';
+        return { text: `error: push blocked${reason}: ${res?.error || 'unknown error'}\n` };
       } catch (e: any) {
         return { text: `error: push exception: ${e?.message || String(e)}\n` };
       }

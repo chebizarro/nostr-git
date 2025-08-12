@@ -744,7 +744,7 @@ export class Repo {
       try {
         console.log('Resetting local git repository to match remote...');
         const resetResult = await this.workerManager.resetRepoToRemote(
-          this.repoEvent.id,
+          this.canonicalKey,
           this.mainBranch
         );
         

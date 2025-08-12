@@ -209,13 +209,22 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
       updateProgress('events', 'Creating Nostr events...', 'running');
       
       // Create Repository Announcement event (kind 30617)
+      // For GRASP, ensure the relay URL is included in both relays and clone tags
+      const cloneUrls = [workerResult.forkUrl];
+      if (provider === 'grasp' && relayUrl && !cloneUrls.includes(relayUrl)) {
+        cloneUrls.push(relayUrl);
+      }
+
+      const relays = provider === 'grasp' && relayUrl ? [relayUrl] : undefined;
+
       const announcementEvent = createRepoAnnouncementEvent({
         repoId: workerResult.repoId,
         name: config.forkName,
         description: originalRepo.description || `Fork of ${originalRepo.owner}/${originalRepo.name}`,
-        clone: [workerResult.forkUrl],
+        clone: cloneUrls,
         web: [workerResult.forkUrl.replace(/\.git$/, '')],
-        maintainers: [currentUser]
+        maintainers: [currentUser],
+        ...(relays ? { relays } : {})
       });
       
       // Create Repository State event (kind 30618)

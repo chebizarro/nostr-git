@@ -1,0 +1,3 @@
+# Ignore accidental TS compiler outputs in source
+src/**/*.js
+src/**/*.js.map

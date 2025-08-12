@@ -106,6 +106,25 @@ import type {
 } from './nip34.js';
 
 
+// Helper: extract repository name from canonical repoId formats
+// Accepts formats like:
+// - "owner/name"
+// - "owner:name"
+// - "name"
+// Returns just the repository name segment.
+function extractRepoName(repoId: string): string {
+  // Prefer last segment after '/' first, then after ':'
+  if (repoId.includes('/')) {
+    const parts = repoId.split('/');
+    return parts[parts.length - 1] || repoId;
+  }
+  if (repoId.includes(':')) {
+    const parts = repoId.split(':');
+    return parts[parts.length - 1] || repoId;
+  }
+  return repoId;
+}
+
 
 /**
 // export function createCommentEvent(opts: {
@@ -141,7 +160,8 @@ export function createRepoAnnouncementEvent(opts: {
   created_at?: number;
 }): RepoAnnouncementEvent {
   const tags: RepoAnnouncementTag[] = [
-    ["d", opts.repoId],
+    // NIP-34: use only the repository name for the identifier (d tag)
+    ["d", extractRepoName(opts.repoId)],
   ];
   if (opts.name) tags.push(["name", opts.name]);
   if (opts.description) tags.push(["description", opts.description]);

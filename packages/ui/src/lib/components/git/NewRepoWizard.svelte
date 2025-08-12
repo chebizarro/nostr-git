@@ -343,7 +343,8 @@
   }
 </script>
 
-<div class="max-w-4xl mx-auto p-6 space-y-6">
+<div
+ class="max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto p-6 space-y-6 bg-background text-foreground rounded-lg border border-border shadow">
   <!-- Header -->
   <div class="text-center space-y-2">
     <h1 class="text-3xl font-bold tracking-tight text-foreground">
