@@ -485,3 +485,18 @@ import { generateUnifiedDiff } from '@nostr-git/git-wrapper/src/git-diff-content
 const diff = await generateUnifiedDiff({ fs, dir: '/tmp/repo', baseRef: 'refs/heads/main', headRef: 'refs/heads/feature-x' });
 ```
 
+### Examples
+
+- Normal push with fallback and status: `packages/git-wrapper/examples/push-normal.ts`
+- PR push emitting NIP-34 GIT_PATCH: `packages/git-wrapper/examples/push-pr.ts`
+- Clone-and-PR with real commits and unified diff: `packages/git-wrapper/examples/clone-and-pr.ts`
+
+Run examples from repo root:
+
+```bash
+pnpm -w --filter @nostr-git/git-wrapper build
+node packages/git-wrapper/examples/push-normal.ts
+node packages/git-wrapper/examples/push-pr.ts
+node packages/git-wrapper/examples/clone-and-pr.ts
+```
+

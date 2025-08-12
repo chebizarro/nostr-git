@@ -72,6 +72,21 @@ await provider.merge({
 });
 ```
 
+## Examples
+
+- Normal push with fallback and status: `examples/push-normal.ts`
+- PR push emitting NIP-34 GIT_PATCH: `examples/push-pr.ts`
+- Clone-and-PR with real commits and unified diff: `examples/clone-and-pr.ts`
+
+Run examples:
+
+```bash
+pnpm -w --filter @nostr-git/git-wrapper build
+node packages/git-wrapper/examples/push-normal.ts
+node packages/git-wrapper/examples/push-pr.ts
+node packages/git-wrapper/examples/clone-and-pr.ts
+```
+
 ## API highlights
 
 - `discoverRepo(repoId, { timeoutMs, stateKind })` -> `{ urls, branches, tags, event, state }`
@@ -101,6 +116,11 @@ From the monorepo root:
 ```sh
 pnpm -w --filter @nostr-git/git-wrapper test
 ```
+
+## More docs
+
+- Top-level API guide (Git Wrapper API section): `../../API.md#git-wrapper-api-nostr-gitgit-wrapper`
+- Development notes for git-wrapper: `../../DEVELOPMENT.md#package-nostr-gitgit-wrapper`
 
 ## Notes
 

@@ -1,0 +1,52 @@
+name: Git Wrapper CI
+
+on:
+  push:
+    paths:
+      - 'packages/git-wrapper/**'
+      - '.github/workflows/git-wrapper-ci.yml'
+      - 'packages/shared-types/**'
+  pull_request:
+    paths:
+      - 'packages/git-wrapper/**'
+      - '.github/workflows/git-wrapper-ci.yml'
+      - 'packages/shared-types/**'
+
+jobs:
+  build-test-examples:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build git-wrapper
+        run: pnpm -w --filter @nostr-git/git-wrapper build
+
+      - name: Run tests for git-wrapper
+        run: pnpm -w --filter @nostr-git/git-wrapper test
+
+      - name: Run examples (push-normal)
+        run: pnpm -w --filter @nostr-git/git-wrapper run example:push-normal
+
+      - name: Run examples (push-pr)
+        run: pnpm -w --filter @nostr-git/git-wrapper run example:push-pr
+
+      - name: Run examples (clone-and-pr)
+        run: pnpm -w --filter @nostr-git/git-wrapper run example:clone-and-pr
