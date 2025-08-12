@@ -4,28 +4,8 @@
   const { Card, CardContent, CardHeader, CardTitle, Progress, Badge } = useRegistry();
   import DiffViewer from './DiffViewer.svelte';
 
-  const { analysis, patch, commit } = $props();
+  const { analysis, patch } = $props();
 
-  const mockDiff = `@@ -1,8 +1,12 @@
- import React from 'react';
-+import { OAuthProvider } from './oauth';
- import { Button } from '@/components/ui/button';
- 
- const LoginForm = () => {
-+  const handleOAuthLogin = async (provider: string) => {
-+    return await new OAuthProvider(provider).authenticate();
-+  };
-+
-   return (
-     <form className="space-y-4">
-       <input type="email" placeholder="Email" />
-@@ -9,5 +13,8 @@ const LoginForm = () => {
-+      <Button onClick={() => handleOAuthLogin('github')}>
-+        Login with GitHub
-+      </Button>
-     </form>
-   );
- };`;
 </script>
 
 <div class="space-y-6">
@@ -130,7 +110,7 @@
       </CardTitle>
     </CardHeader>
     <CardContent>
-      <DiffViewer {diff} showLineNumbers={true} />
+      <DiffViewer diff={patch} showLineNumbers={true} />
     </CardContent>
   </Card>
 </div>

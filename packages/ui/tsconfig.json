@@ -6,6 +6,7 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "esModuleInterop": false,
     "baseUrl": ".",
     "paths": {
       "$lib/*": ["src/lib/*"]
