@@ -9,6 +9,7 @@ const buildTarget = targetArg ? targetArg.split("=")[1] : "chrome";
 const isFirefox = buildTarget === "firefox";
 const shouldWatch = process.argv.includes("--watch");
 const shouldZip = process.argv.includes("--zip");
+const isProd = process.argv.includes("--prod") || process.argv.includes("--mode=production");
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const outdir = resolve(__dirname, "dist");
@@ -86,14 +87,20 @@ const buildOptions = {
   target: ["es2020"],
   platform: "browser",
   format: "iife",
-  sourcemap: true,
+  sourcemap: !isProd,
   loader: {
     ".ts": "ts",
     ".svg": "text",
   },
   define: {
-    "process.env.NODE_ENV": '"development"',
+    "process.env.NODE_ENV": isProd ? '"production"' : '"development"',
+    __SHOW_DEBUG__: String(
+      process.env.NOSTR_GIT_SHOW_DEBUG
+        ? process.env.NOSTR_GIT_SHOW_DEBUG !== "false"
+        : true
+    ),
   },
+  minify: isProd,
 };
 
 if (shouldWatch) {

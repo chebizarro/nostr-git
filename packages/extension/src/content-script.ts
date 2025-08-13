@@ -4,6 +4,7 @@ import {
   createCodeReferenceEvent,
   createCodeSnippetEvent,
   createRepoAnnouncementEvent,
+  createRepoStateEvent,
   fetchRepoEvent,
   generateNostrIssueThread,
   publishEvent,
@@ -14,7 +15,7 @@ import {
   parseSnippetLink,
 } from "./github";
 import { promptForSnippetDescription } from "./snippet-dialog";
-import { getActiveRelays } from "./defaults";
+import { getActiveRelays, getViewerBase } from "./defaults";
 import {
   createButton,
   createMenuItem,
@@ -73,9 +74,15 @@ async function insertNostrIssuesCommand() {
         }
         const events = await generateNostrIssueThread(issueInfo, e, relays);
         const finalEvent = await publishEvent(events.issueEvent, relays);
-        await copyNeventToClipboard(finalEvent, relays);
-
-        showSnackbar("✅ Issue published to relays");
+        const nevent = await copyNeventToClipboard(finalEvent, relays);
+        if (nevent) {
+          const base = await getViewerBase();
+          const href = `${base}${nevent}`;
+          const label = nevent.length > 24 ? `${nevent.slice(0, 12)}…${nevent.slice(-8)}` : nevent;
+          showSnackbar("✅ Issue published:", "success", { href, label });
+        } else {
+          showSnackbar("✅ Issue published", "success");
+        }
 
         events.commentEvents.forEach(async (comment) => {
           // NIP-22 reply threading: reference the issue root and author
@@ -153,17 +160,43 @@ async function insertNostrRepoCommand() {
     } else {
       const shareOnNostr = async () => {
         try {
-          const unsignedEvent = await createRepoAnnouncementEvent(relays);
-          if (unsignedEvent) {
-            const finalEvent = await publishEvent(unsignedEvent, relays);
-            await copyNeventToClipboard(finalEvent, relays);
-            showSnackbar("✅ Repository announcement published");
-            button.remove();
-            smlButton.remove();
+          // Confirm before publishing repo announcement
+          const okRepo = window.confirm(
+            "Publish Repository Announcement to Nostr?"
+          );
+          if (!okRepo) {
+            showSnackbar("❎ Cancelled Repository announcement", "cancel");
+            return;
           }
+          // 1) Repo announcement (30617)
+          const repoAnnouncement = await createRepoAnnouncementEvent(relays);
+          if (repoAnnouncement) {
+            const finalAnnouncement = await publishEvent(repoAnnouncement, relays);
+            const nevent = await copyNeventToClipboard(finalAnnouncement, relays);
+            if (nevent) {
+              const base = await getViewerBase();
+              const href = `${base}${nevent}`;
+              const label = nevent.length > 24 ? `${nevent.slice(0, 12)}…${nevent.slice(-8)}` : nevent;
+              showSnackbar("✅ Repository announcement:", "success", { href, label });
+            } else {
+              showSnackbar("✅ Repository announcement published", "success");
+            }
+          }
+
+          // 2) Repo state (30618)
+          const repoState = await createRepoStateEvent();
+          if (repoState) {
+            await publishEvent(repoState, relays);
+            showSnackbar("✅ Repository state published");
+          }
+
+          // Clean up the injected buttons after successful share
+          button.remove();
+          smlButton.remove();
         } catch (err) {
+          console.error("Failed to publish repository events:", err);
           showSnackbar(
-            "❌ Failed to publish Repository Announcement event",
+            "❌ Failed to publish repository events",
             "error"
           );
         }
@@ -189,33 +222,143 @@ async function insertNostrRepoCommand() {
 }
 
 async function injectNostrMenuCommand() {
-  // Check if we already added the new items to avoid duplication
-  const existingItem = document.getElementById("nostr-generate-event-permalink");
-  if (existingItem) return;
+  const idPermalink = "nostr-generate-event-permalink";
+  const idSnippet = "nostr-generate-event-snippet";
 
-  // Look for menu labels inside the open GitHub menu when possible
-  const openMenu = document.querySelector<HTMLElement>('[role="menu"]');
-  const menuItems = (openMenu
-    ? openMenu.querySelectorAll<HTMLSpanElement>('span')
-    : document.querySelectorAll<HTMLSpanElement>('span'));
-  if (!menuItems) return;
+  if (document.getElementById(idPermalink) || document.getElementById(idSnippet)) return;
 
-  const relays = await getActiveRelays();
+  // Find a visible non-header menu (GitHub renders some menus at document.body)
+  const allMenus = Array.from(document.querySelectorAll<HTMLElement>('[role="menu"], [role="listbox"]'));
+  const isVisible = (el: HTMLElement | null) => !!el && el.offsetParent !== null && getComputedStyle(el).visibility !== 'hidden';
+  const openMenu = allMenus.find(el => {
+    if (!isVisible(el)) return false;
+    const inHeader = !!el.closest('header, .AppHeader, [data-test-selector="header"]');
+    return !inHeader;
+  });
+  if (!openMenu) return; // only inject when a GitHub menu is actually open
 
-  const copyPermalinkItem = Array.from(menuItems).find((el) => el.textContent?.trim() === "Copy permalink");
-  if (!copyPermalinkItem) return;
-
-  const rootItem = copyPermalinkItem?.closest(
-    ".prc-ActionList-ActionListItem-uq6I7"
+  // Look for menu items using role-based selector and multiple label variants
+  const candidates = Array.from(
+    openMenu.querySelectorAll<HTMLElement>('[role="menuitem"], li, button, a, span')
   );
+  const wanted = ["copy permalink", "copy permanent link", "copy link"];
+  const copyPermalinkItem = candidates.find((el) => {
+    const text = el.textContent?.trim().toLowerCase() || "";
+    return wanted.some((w) => text.includes(w));
+  });
+  // If no explicit copy item, consider appending at end for relevant pages
+  if (!copyPermalinkItem) {
+    const path = window.location.pathname;
+    const isRelevant = /\/(blob|pull|commit|compare)\//.test(path) || /\/pull\//.test(path);
+    if (!isRelevant) return;
+    const permalinkItem = createMenuItem(idPermalink, "Create Nostr permalink");
+    const snippetItem = createMenuItem(idSnippet, "Create Nostr snippet");
+    permalinkItem.removeAttribute('hidden');
+    snippetItem.removeAttribute('hidden');
+    (permalinkItem as HTMLElement).style.display = '';
+    (snippetItem as HTMLElement).style.display = '';
+    openMenu.appendChild(permalinkItem);
+    openMenu.appendChild(snippetItem);
+    const relays = await getActiveRelays();
+    const handlePermalink = async () => {
+      closeGitHubContextMenu();
+      const permalink = extractPermalink();
+      if (!permalink) { showSnackbar("❗Could not locate the permalink URL. Please try again."); return; }
+      try {
+        // Confirm before publishing permalink
+        const ok = window.confirm("Publish Permalink to Nostr?");
+        if (!ok) {
+          showSnackbar("❎ Cancelled Permalink publish", "cancel");
+          return;
+        }
+        const permalinkData = parsePermalink();
+        const nostrEvent = await createCodeReferenceEvent(permalinkData!, relays);
+        const finalEvent = await publishEvent(nostrEvent, relays);
+        const nevent = await copyNeventToClipboard(finalEvent, relays);
+        if (nevent) {
+          const base = await getViewerBase();
+          const href = `${base}${nevent}`;
+          const label = href; // show full URL + nevent as requested
+          showSnackbar(`✅ Permalink event published:`, "success", { href, label });
+        } else {
+          showSnackbar(`✅ Permalink event published`, "success");
+        }
+      } catch (err) {
+        console.error(err);
+        showSnackbar("❌ Failed to publish Permalink", "error");
+      }
+    };
+    const handleSnippet = async () => {
+      closeGitHubContextMenu();
+      const desc = await promptForSnippetDescription();
+      if (desc) {
+        try {
+          const snippetData = parseSnippetLink();
+          const nostrEvent = createCodeSnippetEvent(snippetData!, desc);
+          const finalEvent = await publishEvent(nostrEvent, relays);
+          const nevent = await copyNeventToClipboard(finalEvent, relays);
+          if (nevent) {
+            const base = await getViewerBase();
+            const href = `${base}${nevent}`;
+            const label = href; // show full URL + nevent as requested
+            showSnackbar(`✅ Snippet event published:`, "success", { href, label });
+          } else {
+            showSnackbar(`✅ Snippet event published`, "success");
+          }
+        } catch (err) {
+          showSnackbar(`❌ Failed to publish Snippet: ${err}`, "error");
+        }
+      }
+    };
+    permalinkItem.addEventListener("click", handlePermalink);
+    permalinkItem.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handlePermalink(); } });
+    snippetItem.addEventListener("click", handleSnippet);
+    snippetItem.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleSnippet(); } });
+    return;
+  }
 
-  const permalinkItem = createMenuItem("nostr-generate-event-permalink", "Create Nostr permalink");
+  // Use role-based selector instead of brittle class names
+  const rootItem = copyPermalinkItem?.closest('[role="menuitem"]') as HTMLElement | null
+    || (copyPermalinkItem as HTMLElement | null)?.parentElement as (HTMLElement | null);
+  // Fallback: find the first visible menuitem to insert after
+  const firstVisibleItem = Array.from(openMenu.querySelectorAll<HTMLElement>('[role="menuitem"], li, button, a, span')).find(isVisible) as (HTMLElement | undefined);
 
-  rootItem?.insertAdjacentElement("afterend", permalinkItem);
+  const permalinkItem = createMenuItem(idPermalink, "Create Nostr permalink");
+
+  if (rootItem) {
+    permalinkItem.removeAttribute('hidden');
+    (permalinkItem as HTMLElement).style.display = '';
+    rootItem.insertAdjacentElement("afterend", permalinkItem);
+  } else {
+    // fallback: append to open menu
+    permalinkItem.removeAttribute('hidden');
+    (permalinkItem as HTMLElement).style.display = '';
+    if (firstVisibleItem && firstVisibleItem.closest('[role="menuitem"], li')) {
+      firstVisibleItem.closest('[role="menuitem"], li')!.insertAdjacentElement('afterend', permalinkItem);
+    } else {
+      openMenu.appendChild(permalinkItem);
+    }
+  }
 
   const snippetItem = createMenuItem("nostr-generate-event-snippet", "Create Nostr snippet");
 
-  permalinkItem.insertAdjacentElement("afterend", snippetItem);
+  if (permalinkItem.parentElement) {
+    snippetItem.removeAttribute('hidden');
+    (snippetItem as HTMLElement).style.display = '';
+    permalinkItem.insertAdjacentElement("afterend", snippetItem);
+  } else {
+    snippetItem.removeAttribute('hidden');
+    (snippetItem as HTMLElement).style.display = '';
+    if (permalinkItem.closest('[role="menuitem"], li')) {
+      permalinkItem.closest('[role="menuitem"], li')!.insertAdjacentElement('afterend', snippetItem);
+    } else if (firstVisibleItem && firstVisibleItem.closest('[role="menuitem"], li')) {
+      firstVisibleItem.closest('[role="menuitem"], li')!.insertAdjacentElement('afterend', snippetItem);
+    } else {
+      openMenu.appendChild(snippetItem);
+    }
+  }
+
+  const relays = await getActiveRelays();
 
   const handlePermalink = async () => {
     closeGitHubContextMenu();
@@ -225,11 +368,24 @@ async function injectNostrMenuCommand() {
       return;
     }
     try {
+      // Confirm before publishing permalink
+      const ok = window.confirm("Publish Permalink to Nostr?");
+      if (!ok) {
+        showSnackbar("❎ Cancelled Permalink publish", "cancel");
+        return;
+      }
       const permalinkData = parsePermalink();
       const nostrEvent = await createCodeReferenceEvent(permalinkData!, relays);
       const finalEvent = await publishEvent(nostrEvent, relays);
       const nevent = await copyNeventToClipboard(finalEvent, relays);
-      showSnackbar(`✅ Permalink event published`);
+      if (nevent) {
+        const base = await getViewerBase();
+        const href = `${base}${nevent}`;
+        const label = href; // full URL + nevent
+        showSnackbar(`✅ Permalink event published:`, "success", { href, label });
+      } else {
+        showSnackbar(`✅ Permalink event published`, "success");
+      }
     } catch (err) {
       console.error(`Error generating Nostr event: ${err}`, err);
       showSnackbar("❌ Failed to publish Permalink", "error");
@@ -251,10 +407,14 @@ async function injectNostrMenuCommand() {
         const nostrEvent = createCodeSnippetEvent(snippetData!, desc);
         const finalEvent = await publishEvent(nostrEvent, relays);
         const nevent = await copyNeventToClipboard(finalEvent, relays);
-        console.log(
-          `Successfully posted Nostr event: ${nevent} to relays: ${relays}`
-        );
-        showSnackbar(`✅ Snippet event published`);
+        if (nevent) {
+          const base = await getViewerBase();
+          const href = `${base}${nevent}`;
+          const label = href; // full URL + nevent
+          showSnackbar(`✅ Snippet event published:`, "success", { href, label });
+        } else {
+          showSnackbar(`✅ Snippet event published`, "success");
+        }
       } catch (err) {
         showSnackbar(`❌ Failed to publish Snippet: ${err}`, "error");
       }

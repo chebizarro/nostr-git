@@ -1,7 +1,7 @@
 {
   "name": "Nostr GitHub Integration",
   "description": "Adds a command to generate Nostr events from GitHub permalinks",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "manifest_version": 3,
   "permissions": ["storage"],
   "content_scripts": [

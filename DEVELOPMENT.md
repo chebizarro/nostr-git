@@ -175,16 +175,25 @@ describe('createRepoEvent', () => {
 
 ### Browser Extension Debugging
 ```bash
-# Build extension in development mode
+# Build Chrome MV3 bundle (development)
 cd packages/extension
-pnpm build:dev
+pnpm build:chrome
 
 # Load unpacked extension in Chrome
 # 1. Go to chrome://extensions/
 # 2. Enable "Developer mode"
 # 3. Click "Load unpacked"
-# 4. Select packages/extension/dist
+# 4. Select packages/extension/dist/nostr-github-extension
+
+# Optional: build Firefox bundle (for testing in Firefox)
+pnpm build:firefox
 ```
+
+Notes:
+- __Viewer base URL__: set in the popup. Input is normalized to include scheme and trailing slash; default is `https://njump.me/`.
+- __Confirm dialogs__: shown before repo announcements and permalinks; cancel shows a gentle cancel snackbar.
+- __Snackbars__: persistent until dismissed; auto-dismiss 5s (success/error) or 3s (cancel). Animated fade/slide; respects reduced motion.
+- __Debug option visibility__: a compile-time flag controls visibility in the popup. In development it is visible by default; in release builds it can be hidden with `NOSTR_GIT_SHOW_DEBUG=false`.
 
 ### VSCode Extension Debugging
 ```bash

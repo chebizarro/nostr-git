@@ -1,4 +1,5 @@
 import { EventTemplate, nip19, NostrEvent, SimplePool } from "nostr-tools";
+import { getDebugFlag } from "./defaults";
 import {
   GIT_REPO_ANNOUNCEMENT,
   GIT_ISSUE,
@@ -72,7 +73,6 @@ export async function createRepoAnnouncementEvent(
     ["name", repo],
     ["web", repoUrl],
     ["clone", cloneUrl],
-    ["alt", `git repository: ${repo}`],
   ];
 
   if (about.description) tags.push(["description", about.description]);
@@ -88,6 +88,37 @@ export async function createRepoAnnouncementEvent(
     created_at: Math.floor(Date.now() / 1000),
     tags,
     content: "",
+  };
+}
+
+/**
+ * Create a kind: 30618 "Repository State" event (NIP-34).
+ * Uses best-effort metadata available from the current page.
+ */
+export async function createRepoStateEvent(): Promise<EventTemplate | null> {
+  const { pathname } = window.location;
+  const parts = pathname.split("/").filter(Boolean);
+  if (parts.length < 2) return null;
+
+  const [owner, repo, section, branchMaybe] = parts;
+  const repoId = `${repo}`.toLowerCase();
+
+  // Try to infer branch from URL when on blob/tree pages
+  const branch = section === "blob" || section === "tree" ? branchMaybe : undefined;
+
+  const tags: string[][] = [["d", repoId]];
+
+  const commitData = extractLatestCommitInfo();
+  if (branch && commitData?.fullHash) {
+    tags.push([`refs/heads/${branch}`, commitData.fullHash]);
+    tags.push(["HEAD", `ref: refs/heads/${branch}`]);
+  }
+
+  return {
+    kind: 30618,
+    created_at: Math.floor(Date.now() / 1000),
+    content: "",
+    tags,
   };
 }
 
@@ -210,6 +241,14 @@ export async function publishEvent(
 ): Promise<NostrEvent> {
   const pool = new SimplePool();
   const signedEvent = await requestNip07Signature(event);
+  const debug = await getDebugFlag();
+  if (debug) {
+    console.log("[nostr-git][debug] Signed event (console-only, not publishing):", signedEvent);
+    if (relays?.length) {
+      console.log("[nostr-git][debug] Relays (skipped):", relays);
+    }
+    return signedEvent;
+  }
   pool.publish(relays, signedEvent);
   return signedEvent;
 }
@@ -222,20 +261,19 @@ export async function copyNeventToClipboard(
   event: NostrEvent,
   relays?: string[]
 ): Promise<string | undefined> {
+  const nevent = nip19.neventEncode({
+    id: event.id,
+    relays: relays || [],
+    author: event.pubkey,
+    kind: event.kind,
+  });
   try {
-    const nevent = nip19.neventEncode({
-      id: event.id,
-      relays: relays || [],
-      author: event.pubkey,
-      kind: event.kind,
-    });
-
     await navigator.clipboard.writeText(nevent);
     console.log("✅ Copied nevent to clipboard:", nevent);
-    return nevent;
   } catch (err) {
-    console.error("❌ Failed to copy nevent:", err);
+    console.error("❌ Failed to copy nevent (will still show link):", err);
   }
+  return nevent;
 }
 
 export interface IssueEventBundle {

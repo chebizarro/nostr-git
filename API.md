@@ -186,6 +186,13 @@ console.log('README content:', content.text);
 
 The browser extension provides APIs for integrating with web-based Git platforms.
 
+#### UX and Settings (v0.2.0)
+
+- Viewer base URL: The popup setting `viewerBase` controls where nevent links open. Defaults to `https://njump.me/`. Input is normalized to always include scheme and trailing slash.
+- Confirmation dialogs: Before publishing repo announcements and permalinks (including context menu actions), a native confirm dialog is shown. Canceling shows a gentle cancel snackbar.
+- Snackbars: Persistent until user dismisses; auto-dismiss after 5s (success/error) or 3s (cancel). Animated fade/slide and respects `prefers-reduced-motion`. Permalink/snippet snackbars include a full clickable URL+nevent that does not dismiss on click.
+- Compile-time debug toggle: Release builds can hide the "Debug: console-only" option via `NOSTR_GIT_SHOW_DEBUG=false`.
+
 #### Content Script API
 
 ```typescript

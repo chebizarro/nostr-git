@@ -31,7 +31,9 @@ pnpm build          # Svelte compilation + CSS
 
 # Browser extension
 cd packages/extension
-pnpm build:prod     # Production build with minification
+# Production builds (Chrome/Firefox)
+pnpm build:chrome:prod
+pnpm build:firefox:prod
 
 # VSCode extension
 cd packages/vscode-ngit
@@ -88,16 +90,20 @@ pnpm changeset publish
 
 #### Chrome Web Store
 ```bash
-# Build extension
+# Build + zip for stores
 cd packages/extension
-pnpm build:prod
-
-# Create zip for Chrome Web Store
-zip -r extension.zip dist/
+pnpm release:zip   # Produces extension-chrome.zip and extension-firefox.zip in package dir
 
 # Upload to Chrome Web Store Developer Dashboard
 # https://chrome.google.com/webstore/devconsole
 ```
+
+Notes:
+- To hide the Debug option in the popup for release builds, set the compile-time flag:
+  ```bash
+  NOSTR_GIT_SHOW_DEBUG=false pnpm --filter nostr-github-extension build:chrome:prod
+  ```
+  The release:zip script can also be run with the env var to produce a debugless Chrome bundle.
 
 #### VSCode Marketplace
 ```bash
@@ -248,7 +254,8 @@ jobs:
         run: |
           cd packages/extension
           pnpm install
-          pnpm build:prod
+          pnpm build:chrome:prod
+          pnpm zip:chrome
       
       - name: Publish to Chrome Web Store
         uses: PlasmoHQ/bpp@v3
