@@ -267,7 +267,7 @@ export async function generateNostrIssueThread(
     ["p", repoEvent.pubkey],
     ["subject", issue.title],
     ["author", issue.user?.login ?? ""],
-    ...issue.labels.map((label: any) => ["t", label.name.toLowerCase()]),
+    ...issue.labels.map((label: any) => ["t", (label.name || "").toLowerCase()]),
   ];
 
   const issueEvent: EventTemplate = {
@@ -281,16 +281,9 @@ export async function generateNostrIssueThread(
     const createdAt = Math.floor(new Date(comment.created_at).getTime() / 1000);
 
     const tags: string[][] = [
-      ["K", "1621"],
-      ["k", "1621"],
-
-      ["I", comment.html_url],
-	  
       ["repo", `${issueInfo.owner}/${issueInfo.repo}`],
       ["issue_number", `${issue.number}`],
       ["author", comment.user?.login ?? ""],
-      ["p", comment.user?.login ?? ""],
-      ...relays.map((r) => ["relays", r]),
     ];
 
     return {

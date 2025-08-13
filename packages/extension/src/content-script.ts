@@ -58,6 +58,8 @@ async function insertNostrIssuesCommand() {
       const [button, label] = createButton(id, "prc-Button-ButtonBase-c50BI");
       buttons.firstElementChild?.insertAdjacentElement("afterbegin", button);
       label.textContent = "Share Issue on Nostr";
+      // A11y
+      button.querySelector("button")?.setAttribute("aria-label", "Share Issue on Nostr");
       button.addEventListener("click", async () => {
         const relays = await getActiveRelays();
         const issueInfo = parseGitHubIssueURL();
@@ -72,10 +74,9 @@ async function insertNostrIssuesCommand() {
         showSnackbar("✅ Issue published to relays");
 
         events.commentEvents.forEach(async (comment) => {
-          comment.tags.push(["E", finalEvent.id]);
-		  comment.tags.push(["P", finalEvent.pubkey]);
-          comment.tags.push(["e", finalEvent.id]);
-		  comment.tags.push(["p", finalEvent.pubkey]);
+          // NIP-22 reply threading: reference the issue root and author
+          comment.tags.push(["e", finalEvent.id, "", "root"]);
+          comment.tags.push(["p", finalEvent.pubkey]);
           const finalCommentEvent = await publishEvent(comment, relays);
           await copyNeventToClipboard(finalCommentEvent, relays);
           showSnackbar("✅ Comment published to relays");
@@ -127,6 +128,9 @@ async function insertNostrRepoCommand() {
         "octicon",
         "Button-visual",
       ]);
+      // A11y
+      li.querySelector("button")?.setAttribute("aria-label", "Open on gitworkshop.dev");
+      smlButton.querySelector("button")?.setAttribute("aria-label", "Open on gitworkshop.dev");
       button.addEventListener("click", gitWorkshp);
       smlButton.addEventListener("click", gitWorkshp);
     } else {
@@ -153,6 +157,9 @@ async function insertNostrRepoCommand() {
         "octicon",
         "Button-visual",
       ]);
+      // A11y
+      li.querySelector("button")?.setAttribute("aria-label", "Share on Nostr");
+      smlButton.querySelector("button")?.setAttribute("aria-label", "Share on Nostr");
       button.addEventListener("click", shareOnNostr);
       smlButton.addEventListener("click", shareOnNostr);
     }
@@ -160,8 +167,8 @@ async function insertNostrRepoCommand() {
 }
 
 async function injectNostrMenuCommand() {
-  // Check if we already added te new item to avoid duplication
-  const existingItem = document.getElementById("nostr-generate-event-label");
+  // Check if we already added the new items to avoid duplication
+  const existingItem = document.getElementById("nostr-generate-event");
   if (existingItem) return;
 
   const menuItems = document.querySelectorAll<HTMLSpanElement>(
@@ -245,11 +252,15 @@ function closeGitHubContextMenu() {
 }
 
 function startObserver() {
-  // Observe changes to the DOM so that if the user navigates via Ajax, we can re-inject.
+  // Observe changes to the DOM and re-inject with debounce to avoid thrashing.
+  let timer: number | undefined;
   const observer = new MutationObserver(() => {
-    injectNostrMenuCommand();
-    insertNostrRepoCommand();
-    insertNostrIssuesCommand();
+    if (timer) window.clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      injectNostrMenuCommand();
+      insertNostrRepoCommand();
+      insertNostrIssuesCommand();
+    }, 250);
   });
   observer.observe(document.documentElement, {
     childList: true,
