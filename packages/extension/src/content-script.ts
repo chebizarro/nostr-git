@@ -48,9 +48,11 @@ async function insertNostrIssuesCommand() {
   const existingItem = document.getElementById(id);
   if (existingItem) return;
 
-  const buttons = document.querySelector(
-    "div.Box-sc-g0xbh4-0.bKeiGd.prc-PageHeader-Actions-ygtmj"
-  );
+  // Try stable or fallback container for issue header actions
+  const buttons =
+    document.querySelector("div.Box-sc-g0xbh4-0.bKeiGd.prc-PageHeader-Actions-ygtmj") ||
+    document.querySelector("#repository-content-pjax-container header div:has(button)") ||
+    document.querySelector("header div");
   if (!buttons) return;
 
   getRepoEvent().then((e) => {
@@ -58,9 +60,11 @@ async function insertNostrIssuesCommand() {
       const [button, label] = createButton(id, "prc-Button-ButtonBase-c50BI");
       buttons.firstElementChild?.insertAdjacentElement("afterbegin", button);
       label.textContent = "Share Issue on Nostr";
+      (button.querySelector("button") as HTMLButtonElement | null)?.setAttribute("title", "Share Issue on Nostr");
       // A11y
       button.querySelector("button")?.setAttribute("aria-label", "Share Issue on Nostr");
-      button.addEventListener("click", async () => {
+      const issueBtn = button.querySelector("button");
+      const handleShareIssue = async () => {
         const relays = await getActiveRelays();
         const issueInfo = parseGitHubIssueURL();
         if (!issueInfo) {
@@ -83,7 +87,13 @@ async function insertNostrIssuesCommand() {
         });
 
         console.log(events);
-      });
+      };
+      if (issueBtn) {
+        issueBtn.addEventListener("click", handleShareIssue);
+      } else {
+        // Fallback to container
+        button.addEventListener("click", handleShareIssue);
+      }
     }
   });
 }
@@ -106,11 +116,13 @@ async function insertNostrRepoCommand() {
   li.appendChild(button);
   buttons.firstElementChild?.insertAdjacentElement("afterbegin", li);
 
-  const smlButtonDiv = document.querySelector<HTMLFormElement>(
-    "form.unstarred.js-social-form"
-  );
+  const smlButtonDiv =
+    document.querySelector<HTMLFormElement>("form.unstarred.js-social-form") ||
+    document.querySelector<HTMLFormElement>("form.js-social-form");
   const [smlButton, smlLabel] = createSmallButton(smlButtonId);
-  smlButtonDiv!.parentElement!.insertAdjacentElement("afterend", smlButton);
+  if (smlButtonDiv?.parentElement) {
+    smlButtonDiv.parentElement.insertAdjacentElement("afterend", smlButton);
+  }
 
   const relays = await getActiveRelays();
 
@@ -123,6 +135,7 @@ async function insertNostrRepoCommand() {
     };
     if (e) {
       label.textContent = "Open on gitworkshop.dev";
+      (li.querySelector("button") as HTMLButtonElement | null)?.setAttribute("title", "Open on gitworkshop.dev");
       injectSvgInline(label, "svg/gitworkshop.svg", ["octicon", "mr-2"]);
       injectSvgInline(smlLabel, "svg/gitworkshop.svg", [
         "octicon",
@@ -131,8 +144,12 @@ async function insertNostrRepoCommand() {
       // A11y
       li.querySelector("button")?.setAttribute("aria-label", "Open on gitworkshop.dev");
       smlButton.querySelector("button")?.setAttribute("aria-label", "Open on gitworkshop.dev");
-      button.addEventListener("click", gitWorkshp);
-      smlButton.addEventListener("click", gitWorkshp);
+      const bigBtn = li.querySelector("button");
+      const smlBtn = smlButton.querySelector("button");
+      if (bigBtn) bigBtn.addEventListener("click", gitWorkshp);
+      else button.addEventListener("click", gitWorkshp);
+      if (smlBtn) smlBtn.addEventListener("click", gitWorkshp);
+      else smlButton.addEventListener("click", gitWorkshp);
     } else {
       const shareOnNostr = async () => {
         try {
@@ -152,6 +169,7 @@ async function insertNostrRepoCommand() {
         }
       };
       label.textContent = "Share on Nostr";
+      (li.querySelector("button") as HTMLButtonElement | null)?.setAttribute("title", "Share on Nostr");
       injectSvgInline(label, "svg/nostr-icon.svg", ["octicon", "mr-2"]);
       injectSvgInline(smlLabel, "svg/nostr-icon.svg", [
         "octicon",
@@ -160,42 +178,46 @@ async function insertNostrRepoCommand() {
       // A11y
       li.querySelector("button")?.setAttribute("aria-label", "Share on Nostr");
       smlButton.querySelector("button")?.setAttribute("aria-label", "Share on Nostr");
-      button.addEventListener("click", shareOnNostr);
-      smlButton.addEventListener("click", shareOnNostr);
+      const bigBtn2 = li.querySelector("button");
+      const smlBtn2 = smlButton.querySelector("button");
+      if (bigBtn2) bigBtn2.addEventListener("click", shareOnNostr);
+      else button.addEventListener("click", shareOnNostr);
+      if (smlBtn2) smlBtn2.addEventListener("click", shareOnNostr);
+      else smlButton.addEventListener("click", shareOnNostr);
     }
   });
 }
 
 async function injectNostrMenuCommand() {
   // Check if we already added the new items to avoid duplication
-  const existingItem = document.getElementById("nostr-generate-event");
+  const existingItem = document.getElementById("nostr-generate-event-permalink");
   if (existingItem) return;
 
-  const menuItems = document.querySelectorAll<HTMLSpanElement>(
-    "span.prc-ActionList-ItemLabel-TmBhn"
-  );
+  // Look for menu labels inside the open GitHub menu when possible
+  const openMenu = document.querySelector<HTMLElement>('[role="menu"]');
+  const menuItems = (openMenu
+    ? openMenu.querySelectorAll<HTMLSpanElement>('span')
+    : document.querySelectorAll<HTMLSpanElement>('span'));
   if (!menuItems) return;
 
   const relays = await getActiveRelays();
 
-  const copyPermalinkItem = Array.from(menuItems).find(
-    (el) => el.textContent?.trim() === "Copy permalink"
-  );
+  const copyPermalinkItem = Array.from(menuItems).find((el) => el.textContent?.trim() === "Copy permalink");
   if (!copyPermalinkItem) return;
 
   const rootItem = copyPermalinkItem?.closest(
     ".prc-ActionList-ActionListItem-uq6I7"
   );
 
-  const permalinkItem = createMenuItem("Create Nostr permalink");
+  const permalinkItem = createMenuItem("nostr-generate-event-permalink", "Create Nostr permalink");
 
   rootItem?.insertAdjacentElement("afterend", permalinkItem);
 
-  const snippetItem = createMenuItem("Create Nostr snippet");
+  const snippetItem = createMenuItem("nostr-generate-event-snippet", "Create Nostr snippet");
 
   permalinkItem.insertAdjacentElement("afterend", snippetItem);
 
-  permalinkItem.addEventListener("click", async () => {
+  const handlePermalink = async () => {
     closeGitHubContextMenu();
     const permalink = extractPermalink();
     if (!permalink) {
@@ -212,9 +234,15 @@ async function injectNostrMenuCommand() {
       console.error(`Error generating Nostr event: ${err}`, err);
       showSnackbar("❌ Failed to publish Permalink", "error");
     }
+    // Restore focus near where we injected
+    (rootItem as HTMLElement | null)?.focus();
+  };
+  permalinkItem.addEventListener("click", handlePermalink);
+  permalinkItem.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handlePermalink(); }
   });
 
-  snippetItem.addEventListener("click", async () => {
+  const handleSnippet = async () => {
     closeGitHubContextMenu();
     const desc = await promptForSnippetDescription();
     if (desc) {
@@ -231,6 +259,12 @@ async function injectNostrMenuCommand() {
         showSnackbar(`❌ Failed to publish Snippet: ${err}`, "error");
       }
     }
+    // Restore focus near where we injected
+    (rootItem as HTMLElement | null)?.focus();
+  };
+  snippetItem.addEventListener("click", handleSnippet);
+  snippetItem.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleSnippet(); }
   });
 }
 

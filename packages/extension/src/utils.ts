@@ -1,6 +1,8 @@
 export function showSnackbar(message: string, type: "success" | "error" = "success") {
   ensureSnackbarContainer();
 
+  const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   const snackbar = document.createElement("div");
   snackbar.textContent = message;
   snackbar.style.background = type === "success" ? "#2da44e" : "#cf222e";
@@ -14,14 +16,16 @@ export function showSnackbar(message: string, type: "success" | "error" = "succe
   snackbar.style.whiteSpace = "nowrap";
   snackbar.style.overflow = "hidden";
   snackbar.style.textOverflow = "ellipsis";
-  snackbar.style.opacity = "0";
-  snackbar.style.transition = "opacity 0.2s ease";
+  snackbar.style.opacity = prefersReduced ? "1" : "0";
+  snackbar.style.transition = prefersReduced ? "none" : "opacity 0.2s ease";
 
   document.getElementById("nostr-snackbar-container")?.appendChild(snackbar);
 
-  requestAnimationFrame(() => {
-    snackbar.style.opacity = "1";
-  });
+  if (!prefersReduced) {
+    requestAnimationFrame(() => {
+      snackbar.style.opacity = "1";
+    });
+  }
 
   setTimeout(() => {
     snackbar.style.opacity = "0";
@@ -43,6 +47,8 @@ function ensureSnackbarContainer() {
   container.style.flexDirection = "column";
   container.style.alignItems = "center";
   container.style.gap = "8px";
+  container.setAttribute('role', 'status');
+  container.setAttribute('aria-live', 'polite');
   document.body.appendChild(container);
 }
 
@@ -115,13 +121,13 @@ export async function injectSvgInline(
   }
 }
 
-export function createMenuItem(label: string): HTMLLIElement {
+export function createMenuItem(id: string, label: string): HTMLLIElement {
   // Create the <li> element
   const li = document.createElement("li");
   li.tabIndex = -1;
-  li.setAttribute("aria-labelledby", ":nostr-generate-event-label  ");
+  li.setAttribute("aria-labelledby", `${id}-label`);
   li.setAttribute("role", "menuitem");
-  li.id = "nostr-generate-event";
+  li.id = id;
   li.className = "prc-ActionList-ActionListItem-uq6I7";
   li.setAttribute("aria-keyshortcuts", "n");
 
@@ -139,7 +145,7 @@ export function createMenuItem(label: string): HTMLLIElement {
 
   // Create the inner label <span>
   const labelSpan = document.createElement("span");
-  labelSpan.id = "nostr-generate-event-label";
+  labelSpan.id = `${id}-label`;
   labelSpan.className = "prc-ActionList-ItemLabel-TmBhn";
   labelSpan.textContent = label;
 

@@ -1,5 +1,11 @@
 import { EventTemplate, nip19, NostrEvent, SimplePool } from "nostr-tools";
 import {
+  GIT_REPO_ANNOUNCEMENT,
+  GIT_ISSUE,
+  type RepoAnnouncementTag,
+  type IssueTag,
+} from "@nostr-git/shared-types";
+import {
   extractLatestCommitInfo,
   extractRepoMetadata,
   fetchRootCommitHash,
@@ -61,7 +67,7 @@ export async function createRepoAnnouncementEvent(
   const about = extractRepoMetadata();
   const rootCommit = await fetchRootCommitHash(owner, repo);
 
-  const tags: string[][] = [
+  const tags: RepoAnnouncementTag[] = [
     ["d", repoId],
     ["name", repo],
     ["web", repoUrl],
@@ -75,10 +81,10 @@ export async function createRepoAnnouncementEvent(
 
   if (rootCommit) tags.push(["r", rootCommit, "euc"]);
 
-  if (relays.length > 0) tags.push(["relay", ...relays]);
+  if (relays.length > 0) tags.push(["relays", ...relays]);
 
   return {
-    kind: 30617,
+    kind: GIT_REPO_ANNOUNCEMENT,
     created_at: Math.floor(Date.now() / 1000),
     tags,
     content: "",
@@ -262,7 +268,7 @@ export async function generateNostrIssueThread(
   const comments = commentsRes.ok ? await commentsRes.json() : [];
 
   const now = Math.floor(Date.now() / 1000);
-  const baseTags: string[][] = [
+  const baseTags: IssueTag[] = [
     ["a", `30617:${repoEvent.pubkey}:${issueInfo.repo}`],
     ["p", repoEvent.pubkey],
     ["subject", issue.title],
@@ -271,7 +277,7 @@ export async function generateNostrIssueThread(
   ];
 
   const issueEvent: EventTemplate = {
-    kind: 1621,
+    kind: GIT_ISSUE,
     created_at: now,
     content: issue.body || "",
     tags: baseTags,
