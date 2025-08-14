@@ -13,7 +13,7 @@ import {
 } from '@lucide/svelte';
 import { useRegistry } from "../../useRegistry";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
-const { Avatar, AvatarFallback, AvatarImage, Button, Card, CardContent, Textarea, Separator } = useRegistry();
+const { Avatar, AvatarFallback, AvatarImage, Button, Card, CardContent, Textarea, Separator, ProfileComponent } = useRegistry();
 
 // Real git commit data structure
 interface GitCommitData {
@@ -40,9 +40,13 @@ interface CommitCardProps {
   onComment?: (commitId: string, comment: string) => void;
   onNavigate?: (commitId: string) => void;
   href?: string; // Optional direct href for navigation
+  // Optional avatar and display name supplied by app layer
+  avatarUrl?: string;
+  displayName?: string;
+  pubkey?: string; // Optional Nostr pubkey for ProfileComponent avatar
 }
 
-let { commit, onReact, onComment, onNavigate, href }: CommitCardProps = $props();
+let { commit, onReact, onComment, onNavigate, href, avatarUrl, displayName, pubkey }: CommitCardProps = $props();
 
 let showComments = $state(false);
 let newComment = $state('');
@@ -93,18 +97,12 @@ function handleCommitClick(event: MouseEvent | KeyboardEvent) {
 
 <Card class="group hover:bg-secondary/20 transition-colors">
   <CardContent class="p-4">
-    <div class="flex gap-3">
-      <div class="flex-shrink-0">
-        <Avatar>
-          <AvatarFallback>{getInitials(commit.commit.author.name)}</AvatarFallback>
-        </Avatar>
-      </div>
-      
+    <div class="flex items-start gap-3">
       <div class="flex-1 min-w-0">
         <div class="flex items-start justify-between mb-2">
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 mb-1">
-              <span class="font-semibold text-sm">{commit.commit.author.name}</span>
+              <span class="font-semibold text-sm">{displayName || commit.commit.author.name}</span>
               <span class="text-xs text-muted-foreground">
                 {formatDate(commit.commit.author.timestamp)}
               </span>
@@ -229,6 +227,24 @@ function handleCommitClick(event: MouseEvent | KeyboardEvent) {
                 </div>
               </div>
             </div>
+          </div>
+        {/if}
+      </div>
+      <div class="flex-shrink-0">
+        {#if pubkey}
+          <ProfileComponent pubkey={pubkey} hideDetails={true} />
+        {:else if avatarUrl}
+          <Avatar class="size-10 rounded-full overflow-hidden">
+            <AvatarImage 
+              src={avatarUrl} 
+              alt={displayName || commit.commit.author.name}
+              class="h-10 w-10 object-cover"
+            />
+            <AvatarFallback>{getInitials(displayName || commit.commit.author.name)}</AvatarFallback>
+          </Avatar>
+        {:else}
+          <div class="size-10 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+            <User class="h-4 w-4 text-muted-foreground" />
           </div>
         {/if}
       </div>

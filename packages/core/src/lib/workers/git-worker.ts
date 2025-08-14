@@ -3167,11 +3167,25 @@ async function getCommitDetails({
       // Get the list of changed files
       const changedFiles = await git.walk({
         dir,
-        trees: [git.TREE({ ref: parentCommit }), git.TREE({ ref: commitId })],
+        // Use fully resolved OIDs for tree refs to avoid short-SHA resolution issues
+        trees: [git.TREE({ ref: parentCommit }), git.TREE({ ref: commit.oid })],
         map: async function (filepath: string, [A, B]: any[]) {
           // Skip directories
           if (filepath === '.') return;
-          
+          // Only process file blobs; ignore trees (directories) and other types
+          try {
+            const at = A ? await A.type() : undefined;
+            const bt = B ? await B.type() : undefined;
+            const isABlob = at === 'blob';
+            const isBBlob = bt === 'blob';
+            if (!isABlob && !isBBlob) {
+              // Neither side is a file blob (likely a directory or submodule), skip
+              return;
+            }
+          } catch (e) {
+            // If type detection fails, be conservative and continue; subsequent reads will guard
+          }
+
           const Aoid = await A?.oid();
           const Boid = await B?.oid();
           
@@ -3199,8 +3213,8 @@ async function getCommitDetails({
           try {
             if (status === 'added') {
               // For added files, show entire content as additions
-              const content = await git.readBlob({ dir, oid: Boid!, filepath });
-              const lines = new TextDecoder().decode(content.blob).split('\n');
+              const blob = await B!.content();
+              const lines = new TextDecoder().decode(blob).split('\n');
               diffHunks = [{
                 oldStart: 0,
                 oldLines: 0,
@@ -3210,8 +3224,8 @@ async function getCommitDetails({
               }];
             } else if (status === 'deleted') {
               // For deleted files, show entire content as deletions
-              const content = await git.readBlob({ dir, oid: Aoid!, filepath });
-              const lines = new TextDecoder().decode(content.blob).split('\n');
+              const blob = await A!.content();
+              const lines = new TextDecoder().decode(blob).split('\n');
               diffHunks = [{
                 oldStart: 1,
                 oldLines: lines.length,
@@ -3221,11 +3235,11 @@ async function getCommitDetails({
               }];
             } else {
               // For modified files, compute actual diff
-              const oldContent = await git.readBlob({ dir, oid: Aoid!, filepath });
-              const newContent = await git.readBlob({ dir, oid: Boid!, filepath });
+              const oldBlob = await A!.content();
+              const newBlob = await B!.content();
               
-              const oldText = new TextDecoder().decode(oldContent.blob);
-              const newText = new TextDecoder().decode(newContent.blob);
+              const oldText = new TextDecoder().decode(oldBlob);
+              const newText = new TextDecoder().decode(newBlob);
               
               // Simple line-by-line diff (could be enhanced with proper diff algorithm)
               const oldLines = oldText.split('\n');
@@ -3288,6 +3302,11 @@ async function getCommitDetails({
 
       // Filter out undefined results and add to changes
       changes.push(...changedFiles.filter(Boolean));
+      if (changes.length === 0) {
+        try {
+          console.debug('[git-worker.getCommitDetails] No changes detected', { repoId, commitId, resolved: commit.oid });
+        } catch {}
+      }
     } else {
       // Initial commit - show all files as added
       const files = await git.walk({

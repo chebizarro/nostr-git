@@ -9,9 +9,12 @@
     date: number;
     message: string;
     parents: string[];
+    // Optional: resolved avatar URL and display name from app-level Profile
+    avatarUrl?: string;
+    displayName?: string;
   }
 
-  let { sha, author, email, date, message, parents }: Props = $props();
+  let { sha, author, email, date, message, parents, avatarUrl, displayName }: Props = $props();
 
   // Format date for display
   const formatDate = (timestamp: number) => {
@@ -71,8 +74,12 @@
       <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
         <!-- Author Info -->
         <div class="flex items-center gap-2 text-sm text-muted-foreground">
-          <User class="h-4 w-4" />
-          <span class="font-medium text-foreground">{author}</span>
+          {#if avatarUrl}
+            <img src={avatarUrl} alt={displayName || author} class="h-6 w-6 rounded-full object-cover" />
+          {:else}
+            <User class="h-4 w-4" />
+          {/if}
+          <span class="font-medium text-foreground">{displayName || author}</span>
           {#if email}
             <span class="text-muted-foreground">({email})</span>
           {/if}
