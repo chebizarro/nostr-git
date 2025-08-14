@@ -1,7 +1,14 @@
 <script lang="ts">
   import { Button } from "$lib/components";
   import { cn } from "$lib/utils";
-  import { GitBranch, Star, Eye, GitFork, RotateCcw, Settings } from "@lucide/svelte";
+  import {
+    GitBranch,
+    Eye,
+    GitFork,
+    RotateCcw,
+    Settings,
+    LayoutDashboard,
+  } from "@lucide/svelte";
   import type { RepoAnnouncementEvent } from "@nostr-git/shared-types";
   import { parseRepoAnnouncementEvent } from "@nostr-git/shared-types";
   import AuthStatusIndicator from "./AuthStatusIndicator.svelte";
@@ -17,6 +24,7 @@
     isRefreshing = false,
     forkRepo,
     settingsRepo,
+    overviewRepo,
   }: {
     event: RepoAnnouncementEvent;
     activeTab?: string;
@@ -25,6 +33,7 @@
     isRepoWatched: boolean;
     refreshRepo?: () => Promise<void>;
     forkRepo?: () => void;
+    overviewRepo?: () => void;
     isRefreshing?: boolean;
     settingsRepo?: () => void;
   } = $props();
@@ -40,29 +49,32 @@
       {name}
     </h1>
     <div class="flex items-center gap-1 sm:gap-2">
-      <!--
-      <Button variant="outline" size="sm" class="gap-1 sm:gap-2 px-2 sm:px-3">
-        <Star class="h-4 w-4" />
-        <span class="hidden sm:inline">Star</span>
+      <Button
+        variant="outline"
+        size="sm"
+        class="gap-1 sm:gap-2 px-2 sm:px-3"
+        onclick={overviewRepo}
+        title="Repo Overview"
+      >
+        <LayoutDashboard class="h-4 w-4" />
       </Button>
-      -->
       <Button
         variant="outline"
         size="sm"
         class="gap-1 sm:gap-2 px-2 sm:px-3"
         onclick={watchRepo}
+        title={isRepoWatched ? "Unwatch" : "Watch"}
       >
         <Eye class="h-4 w-4" />
-        <span class="hidden sm:inline">{isRepoWatched ? "Unwatch" : "Watch"}</span>
       </Button>
       <Button
         variant="outline"
         size="sm"
         class="gap-1 sm:gap-2 px-2 sm:px-3"
         onclick={forkRepo}
+        title="Fork"
       >
         <GitFork class="h-4 w-4" />
-        <span class="hidden sm:inline">Fork</span>
       </Button>
       <Button 
         variant="outline" 
@@ -70,15 +82,16 @@
         class="gap-1 sm:gap-2 px-2 sm:px-3" 
         onclick={refreshRepo}
         disabled={isRefreshing}
+        title={isRefreshing ? 'Syncing...' : 'Refresh'}
       >
         <RotateCcw class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''}" />
-        <span class="hidden sm:inline">{isRefreshing ? 'Syncing...' : 'Refresh'}</span>
       </Button>
       <Button
         variant="outline"
         size="sm"
         class="gap-1 sm:gap-2 px-2 sm:px-3"
         onclick={settingsRepo}
+        title="Settings"
       >
         <Settings class="h-4 w-4" />
       </Button>
