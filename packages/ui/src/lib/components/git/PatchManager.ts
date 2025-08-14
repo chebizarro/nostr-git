@@ -18,6 +18,8 @@ export interface PatchManagerConfig {
   batchDelay?: number;
   /** Maximum concurrent analysis operations */
   maxConcurrent?: number;
+  /** Log level for PatchManager: controls console noise (default: 'warn') */
+  logLevel?: 'silent' | 'error' | 'warn' | 'info' | 'debug';
 }
 
 /**
@@ -31,6 +33,13 @@ export class PatchManager {
   private workerManager: WorkerManager;
   private cacheManager: MergeAnalysisCacheManager;
   private config: Required<PatchManagerConfig>;
+  // Severity mapping for log filtering
+  private static readonly severity: Record<'debug' | 'info' | 'warn' | 'error', number> = {
+    debug: 10,
+    info: 20,
+    warn: 30,
+    error: 40,
+  };
   
   // Track ongoing operations
   private activeAnalysis = new Set<string>();
@@ -52,7 +61,32 @@ export class PatchManager {
       batchSize: config.batchSize ?? 3,
       batchDelay: config.batchDelay ?? 200,
       maxConcurrent: config.maxConcurrent ?? 5,
+      logLevel: config.logLevel ?? 'warn',
     };
+  }
+
+  /**
+   * Internal logging helper that respects configured log level
+   */
+  private log(level: 'debug' | 'info' | 'warn' | 'error', ...args: unknown[]) {
+    if (this.config.logLevel === 'silent') return;
+    const current = PatchManager.severity[this.config.logLevel as Exclude<typeof this.config.logLevel, 'silent'>] ?? 30;
+    const severity = PatchManager.severity[level];
+    if (severity < current) return;
+    switch (level) {
+      case 'debug':
+        console.debug(...args);
+        break;
+      case 'info':
+        console.info?.(...args);
+        break;
+      case 'warn':
+        console.warn(...args);
+        break;
+      case 'error':
+        console.error(...args);
+        break;
+    }
   }
 
   /**
@@ -103,7 +137,8 @@ export class PatchManager {
     
     // If we have a valid cached result that's not an error, return it
     if (cachedResult && cachedResult.analysis !== 'error') {
-      console.debug(
+      this.log(
+        'debug',
         `🧠 MergeAnalysis cache hit for patch ${patch.id} → ${cachedResult.analysis} (branch=${targetBranch}, repo=${canonicalKey})`
       );
       return cachedResult;
@@ -118,14 +153,15 @@ export class PatchManager {
         await this.cacheManager.set(patch, targetBranch, canonicalKey, freshResult);
         // Publish to reactive store
         this.updateStore(patch.id, freshResult);
-        console.debug(
+        this.log(
+          'debug',
           `🧪 MergeAnalysis fresh result for patch ${patch.id} → ${freshResult.analysis} (branch=${targetBranch}, repo=${canonicalKey})`
         );
       }
       
       return freshResult;
     } catch (error) {
-      console.error('PatchManager fresh analysis failed:', error);
+      this.log('error', 'PatchManager fresh analysis failed:', error);
       
       // Return cached error result if we have one, otherwise create new error result
       if (cachedResult && cachedResult.analysis === 'error') {
@@ -205,7 +241,8 @@ export class PatchManager {
     this.activeAnalysis.add(patch.id);
 
     try {
-      console.debug(
+      this.log(
+        'debug',
         `🔍 Analyzing patch ${patch.id} (branch=${targetBranch}, repo=${canonicalKey})`
       );
       // Parse the patch for analysis
@@ -227,12 +264,13 @@ export class PatchManager {
         },
         targetBranch
       });
-      console.debug(
+      this.log(
+        'debug',
         `✅ Analysis complete for patch ${patch.id} → ${result.analysis}`
       );
       return result;
     } catch (error) {
-      console.error(`Failed to analyze patch ${patch.id}:`, error);
+      this.log('error', `Failed to analyze patch ${patch.id}:`, error);
       return null;
     } finally {
       this.activeAnalysis.delete(patch.id);
@@ -266,7 +304,8 @@ export class PatchManager {
       
       // Schedule batch processing with staggered delays
       const timeoutId = window.setTimeout(async () => {
-        console.debug(
+        this.log(
+          'debug',
           `📦 Processing merge analysis batch size=${batch.length} (branch=${targetBranch}, repo=${canonicalKey})`
         );
         await this.processBatch(batch, targetBranch, canonicalKey, workerRepoId);
@@ -293,9 +332,7 @@ export class PatchManager {
         if (cachedResult) {
           // Ensure store reflects cached value
           this.updateStore(patch.id, cachedResult);
-          console.debug(
-            `🧠 (bg) cache hit for patch ${patch.id} → ${cachedResult.analysis}`
-          );
+          this.log('debug', `🧠 (bg) cache hit for patch ${patch.id} → ${cachedResult.analysis}`);
           continue;
         }
 
@@ -309,12 +346,10 @@ export class PatchManager {
           await this.cacheManager.set(patch, targetBranch, canonicalKey, result);
           // Publish to reactive store
           this.updateStore(patch.id, result);
-          console.debug(
-            `🧪 (bg) fresh result for patch ${patch.id} → ${result.analysis}`
-          );
+          this.log('debug', `🧪 (bg) fresh result for patch ${patch.id} → ${result.analysis}`);
         }
       } catch (error) {
-        console.warn(`Background merge analysis failed for patch ${patch.id}:`, error);
+        this.log('warn', `Background merge analysis failed for patch ${patch.id}:`, error);
         // Don't cache error results as they might be temporary
       }
     }
