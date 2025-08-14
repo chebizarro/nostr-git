@@ -63,7 +63,7 @@
         name: "",
         description: "",
         visibility: "public" as "public" | "private",
-        defaultBranch: "main",
+        defaultBranch: "",
         maintainers: [],
         relays: [],
         webUrls: [],
@@ -77,7 +77,7 @@
     const repoData = repo.repo;
 
     // Get default branch from repo's mainBranch property (already resolved)
-    const defaultBranch = repo.mainBranch || "main";
+    const defaultBranch = repo.mainBranch || "";
 
     // Determine visibility from clone URL (basic heuristic)
     const cloneUrl = repoData.clone?.[0] || "";

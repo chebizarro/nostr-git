@@ -171,8 +171,8 @@ export class FileManager {
    */
   private getShortBranchName(fullBranch: string): string {
     const shortName = fullBranch.split("/").pop();
-    // If we have a short name, use it; otherwise the core will handle robust resolution
-    return shortName || "main"; // Core functions now handle multi-fallback branch resolution
+    // If we have a short name, use it; otherwise defer to core's robust branch resolution
+    return shortName || "";
   }
 
   /**

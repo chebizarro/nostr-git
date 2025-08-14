@@ -616,7 +616,7 @@ export class Repo {
         effectiveMainBranch = await this.getResolvedDefaultBranch();
       } catch (branchError) {
         console.warn('⚠️ getResolvedDefaultBranch failed, using fallback:', branchError);
-        effectiveMainBranch = this.mainBranch || 'main';
+        effectiveMainBranch = this.mainBranch || '';
       }
       
       if (!this.repoEvent || !effectiveMainBranch || !effectiveRepoId) {
@@ -855,7 +855,7 @@ export class Repo {
     if (!patches?.length) return;
     
     const repoId = this.canonicalKey;
-    const targetBranch = this.mainBranch?.split("/").pop() || "main";
+    const targetBranch = this.mainBranch?.split("/").pop() || "";
     const workerRepoId = this.repoEvent?.id;
     
     // Delegate to PatchManager for background processing

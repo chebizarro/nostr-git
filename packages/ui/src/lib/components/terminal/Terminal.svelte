@@ -375,7 +375,7 @@
     const mgr = await ensureWM();
     if (op === 'git.status') {
       // Status should not hit the network; print a local placeholder
-      const branch = params?.branch || defaultBranch || 'main';
+      const branch = params?.branch || defaultBranch || '';
       const lines = [`On branch ${branch}`, 'nothing to commit, working tree clean'];
       return { text: lines.join('\n') + '\n' };
     }
@@ -443,7 +443,7 @@
           },
         });
         if (res?.success) {
-          const b = res.branch || useBranch || 'main';
+          const b = res.branch || useBranch || '';
           return { text: `Pushed ${b} to ${remoteUrl}\n` };
         }
         if (res?.requiresConfirmation) {
@@ -464,7 +464,7 @@
       try {
         const res = await mgr.syncWithRemote({ repoId, cloneUrls: urls, branch: branch ?? defaultBranch });
         if (res?.success) {
-          const b = res.branch || branch || defaultBranch || 'main';
+          const b = res.branch || branch || defaultBranch || '';
           const head = res.headCommit ? ` (${res.headCommit})` : '';
           return { text: `Updated local ${b} to remote HEAD${head}\n` };
         }

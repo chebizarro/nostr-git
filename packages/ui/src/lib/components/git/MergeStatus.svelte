@@ -33,7 +33,7 @@
     targetBranch?: string;
   }
 
-  const { result, loading = false, targetBranch = 'main' }: Props = $props();
+  const { result, loading = false, targetBranch = '' }: Props = $props();
 
   const getStatusIcon = (analysis: string) => {
     switch (analysis) {
