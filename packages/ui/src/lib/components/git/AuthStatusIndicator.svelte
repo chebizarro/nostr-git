@@ -168,19 +168,6 @@
     </Badge>
   {/if}
   
-
-  
-  <!-- Refresh Button (always available for debugging) -->
-  <Button 
-    variant="ghost" 
-    size="sm" 
-    class="text-xs px-2" 
-    onclick={refreshTokens}
-    disabled={isRefreshing}
-  >
-    <RefreshCw class={`h-3 w-3 ${isRefreshing ? 'animate-spin' : ''}`} />
-  </Button>
-  
   <!-- Action Button for maintainers without tokens -->
   {#if authStatus.type === 'maintainer-no-token'}
     <Button variant="outline" size="sm" class="text-xs">

@@ -1,98 +1,126 @@
 <script lang="ts">
+  import { formatDistanceToNow } from "date-fns";
+  import {
+    MessageSquare,
+    Heart,
+    Share,
+    MoreHorizontal,
+    Copy,
+    Check,
+    User,
+  } from "@lucide/svelte";
+  import { useRegistry } from "../../useRegistry";
+  import NostrAvatar from "./NostrAvatar.svelte";
+  import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+  } from "../ui/dropdown-menu";
+  const {
+    Button,
+    Card,
+    CardContent,
+    Textarea,
+    Separator,
+  } = useRegistry();
 
-import { formatDistanceToNow } from 'date-fns';
-import { 
-  MessageSquare,
-  Heart,
-  Share,
-  MoreHorizontal,
-  GitBranch,
-  Copy,
-  Check,
-  User,
-} from '@lucide/svelte';
-import { useRegistry } from "../../useRegistry";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
-const { Avatar, AvatarFallback, AvatarImage, Button, Card, CardContent, Textarea, Separator, ProfileComponent } = useRegistry();
-
-// Real git commit data structure
-interface GitCommitData {
-  oid: string;
-  commit: {
-    message: string;
-    author: { 
-      name: string; 
-      email: string; 
-      timestamp: number;
+  // Real git commit data structure
+  interface GitCommitData {
+    oid: string;
+    commit: {
+      message: string;
+      author: {
+        name: string;
+        email: string;
+        timestamp: number;
+      };
+      committer: {
+        name: string;
+        email: string;
+        timestamp: number;
+      };
+      parent: string[];
     };
-    committer: { 
-      name: string; 
-      email: string; 
-      timestamp: number;
-    };
-    parent: string[];
-  };
-}
-
-interface CommitCardProps {
-  commit: GitCommitData;
-  onReact?: (commitId: string, type: 'heart') => void;
-  onComment?: (commitId: string, comment: string) => void;
-  onNavigate?: (commitId: string) => void;
-  href?: string; // Optional direct href for navigation
-  // Optional avatar and display name supplied by app layer
-  avatarUrl?: string;
-  displayName?: string;
-  pubkey?: string; // Optional Nostr pubkey for ProfileComponent avatar
-}
-
-let { commit, onReact, onComment, onNavigate, href, avatarUrl, displayName, pubkey }: CommitCardProps = $props();
-
-let showComments = $state(false);
-let newComment = $state('');
-let copied = $state(false);
-
-function truncateHash(hash: string): string {
-  return hash.substring(0, 7);
-}
-
-function formatDate(timestamp: number): string {
-  return formatDistanceToNow(new Date(timestamp * 1000), { addSuffix: true });
-}
-
-function copyHash() {
-  navigator.clipboard.writeText(commit.oid);
-  copied = true;
-  setTimeout(() => copied = false, 2000);
-}
-
-function handleReact() {
-  onReact?.(commit.oid, 'heart');
-}
-
-function handleComment() {
-  if (newComment.trim()) {
-    onComment?.(commit.oid, newComment.trim());
-    newComment = '';
-    showComments = false;
   }
-}
 
-// Get initials for avatar fallback
-function getInitials(name: string): string {
-  return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
-}
-
-// Handle commit card click for navigation
-function handleCommitClick(event: MouseEvent | KeyboardEvent) {
-  event.preventDefault();
-  
-  if (href) {
-    window.location.href = href;
-  } else if (onNavigate) {
-    onNavigate(commit.oid);
+  interface CommitCardProps {
+    commit: GitCommitData;
+    onReact?: (commitId: string, type: "heart") => void;
+    onComment?: (commitId: string, comment: string) => void;
+    onNavigate?: (commitId: string) => void;
+    href?: string; // Optional direct href for navigation
+    // Optional avatar and display name supplied by app layer
+    avatarUrl?: string;
+    displayName?: string;
+    pubkey?: string; // Optional Nostr pubkey for ProfileComponent avatar
+    nip05?: string;
+    nip39?: string;
   }
-}
+
+  let {
+    commit,
+    onReact,
+    onComment,
+    onNavigate,
+    href,
+    avatarUrl,
+    displayName,
+    pubkey,
+    nip05,
+    nip39,
+  }: CommitCardProps = $props();
+
+  let showComments = $state(false);
+  let newComment = $state("");
+  let copied = $state(false);
+
+  function truncateHash(hash: string): string {
+    return hash.substring(0, 7);
+  }
+
+  function formatDate(timestamp: number): string {
+    return formatDistanceToNow(new Date(timestamp * 1000), { addSuffix: true });
+  }
+
+  function copyHash() {
+    navigator.clipboard.writeText(commit.oid);
+    copied = true;
+    setTimeout(() => (copied = false), 2000);
+  }
+
+  function handleReact() {
+    onReact?.(commit.oid, "heart");
+  }
+
+  function handleComment() {
+    if (newComment.trim()) {
+      onComment?.(commit.oid, newComment.trim());
+      newComment = "";
+      showComments = false;
+    }
+  }
+
+  // Get initials for avatar fallback
+  function getInitials(name: string): string {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .substring(0, 2);
+  }
+
+  // Handle commit card click for navigation
+  function handleCommitClick(event: MouseEvent | KeyboardEvent) {
+    event.preventDefault();
+
+    if (href) {
+      window.location.href = href;
+    } else if (onNavigate) {
+      onNavigate(commit.oid);
+    }
+  }
 </script>
 
 <Card class="group hover:bg-secondary/20 transition-colors">
@@ -107,9 +135,9 @@ function handleCommitClick(event: MouseEvent | KeyboardEvent) {
                 {formatDate(commit.commit.author.timestamp)}
               </span>
             </div>
-            
+
             <div class="flex items-center gap-2 mb-2">
-              <button 
+              <button
                 onclick={copyHash}
                 class="font-mono text-sm bg-muted px-2 py-1 rounded hover:bg-muted/80 transition-colors flex items-center gap-1"
               >
@@ -122,7 +150,7 @@ function handleCommitClick(event: MouseEvent | KeyboardEvent) {
               </button>
             </div>
           </div>
-          
+
           <DropdownMenu>
             <DropdownMenuTrigger>
               <Button variant="ghost" size="sm" class="h-8 w-8 p-0">
@@ -141,14 +169,14 @@ function handleCommitClick(event: MouseEvent | KeyboardEvent) {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        
-        <div 
+
+        <div
           class="mb-3 cursor-pointer hover:bg-muted/30 -mx-2 px-2 py-1 rounded transition-colors"
           onclick={handleCommitClick}
           role="button"
           tabindex={0}
           onkeydown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
+            if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
               handleCommitClick(e);
             }
@@ -157,49 +185,51 @@ function handleCommitClick(event: MouseEvent | KeyboardEvent) {
           <h3 class="font-medium text-sm leading-tight mb-1 truncate">
             {commit.commit.message}
           </h3>
-          
+
           {#if commit.commit.author.email}
             <div class="flex items-center gap-4 text-xs text-muted-foreground">
               <span>{commit.commit.author.email}</span>
             </div>
           {/if}
         </div>
-        
+
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-4">
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               onclick={handleReact}
               class="h-8 px-2 text-muted-foreground hover:text-red-500 transition-colors"
             >
               <Heart class="h-4 w-4 mr-1" />
               <span class="text-xs">0</span>
             </Button>
-            
-            <Button 
-              variant="ghost" 
+
+            <Button
+              variant="ghost"
               size="sm"
-              onclick={() => showComments = !showComments}
+              onclick={() => (showComments = !showComments)}
               class="h-8 px-2 text-muted-foreground hover:text-foreground transition-colors"
             >
               <MessageSquare class="h-4 w-4 mr-1" />
               <span class="text-xs">Comment</span>
             </Button>
           </div>
-          
+
           {#if commit.commit.parent.length > 0}
             <div class="text-xs text-muted-foreground">
               Parent: {truncateHash(commit.commit.parent[0])}
             </div>
           {/if}
         </div>
-        
+
         {#if showComments}
           <Separator class="my-3" />
           <div class="space-y-3">
             <div class="flex gap-2">
-              <div class="w-6 h-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-1">
+              <div
+                class="w-6 h-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-1"
+              >
                 <User class="h-3 w-3 text-muted-foreground" />
               </div>
               <div class="flex-1 space-y-2">
@@ -209,14 +239,10 @@ function handleCommitClick(event: MouseEvent | KeyboardEvent) {
                   class="min-h-[60px] resize-none text-sm"
                 />
                 <div class="flex justify-end gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onclick={() => showComments = false}
-                  >
+                  <Button variant="outline" size="sm" onclick={() => (showComments = false)}>
                     Cancel
                   </Button>
-                  <Button 
+                  <Button
                     size="sm"
                     onclick={handleComment}
                     disabled={!newComment.trim()}
@@ -231,22 +257,17 @@ function handleCommitClick(event: MouseEvent | KeyboardEvent) {
         {/if}
       </div>
       <div class="flex-shrink-0">
-        {#if pubkey}
-          <ProfileComponent pubkey={pubkey} hideDetails={true} />
-        {:else if avatarUrl}
-          <Avatar class="size-10 rounded-full overflow-hidden">
-            <AvatarImage 
-              src={avatarUrl} 
-              alt={displayName || commit.commit.author.name}
-              class="h-10 w-10 object-cover"
-            />
-            <AvatarFallback>{getInitials(displayName || commit.commit.author.name)}</AvatarFallback>
-          </Avatar>
-        {:else}
-          <div class="size-10 rounded-full bg-muted flex items-center justify-center overflow-hidden">
-            <User class="h-4 w-4 text-muted-foreground" />
-          </div>
-        {/if}
+        <NostrAvatar
+          pubkey={pubkey}
+          avatarUrl={avatarUrl}
+          nip05={nip05}
+          nip39={nip39}
+          email={commit.commit.author.email || commit.commit.committer?.email}
+          displayName={displayName || commit.commit.author.name}
+          size={40}
+          class="h-10 w-10"
+          title={displayName || commit.commit.author.name}
+        />
       </div>
     </div>
   </CardContent>

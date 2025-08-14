@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { Copy, User, Calendar, GitCommit } from '@lucide/svelte';
+  import { Copy, Calendar, GitCommit } from '@lucide/svelte';
   import { toast } from '../../stores/toast';
+  import NostrAvatar from './NostrAvatar.svelte';
 
   interface Props {
     sha: string;
@@ -12,9 +13,13 @@
     // Optional: resolved avatar URL and display name from app-level Profile
     avatarUrl?: string;
     displayName?: string;
+    // Optional Nostr enrichments
+    pubkey?: string;
+    nip05?: string;
+    nip39?: string;
   }
 
-  let { sha, author, email, date, message, parents, avatarUrl, displayName }: Props = $props();
+  let { sha, author, email, date, message, parents, avatarUrl, displayName, pubkey, nip05, nip39 }: Props = $props();
 
   // Format date for display
   const formatDate = (timestamp: number) => {
@@ -74,11 +79,17 @@
       <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
         <!-- Author Info -->
         <div class="flex items-center gap-2 text-sm text-muted-foreground">
-          {#if avatarUrl}
-            <img src={avatarUrl} alt={displayName || author} class="h-6 w-6 rounded-full object-cover" />
-          {:else}
-            <User class="h-4 w-4" />
-          {/if}
+          <NostrAvatar
+            pubkey={pubkey}
+            avatarUrl={avatarUrl}
+            nip05={nip05}
+            nip39={nip39}
+            email={email}
+            displayName={displayName || author}
+            size={24}
+            class="h-6 w-6"
+            title={displayName || author}
+          />
           <span class="font-medium text-foreground">{displayName || author}</span>
           {#if email}
             <span class="text-muted-foreground">({email})</span>
