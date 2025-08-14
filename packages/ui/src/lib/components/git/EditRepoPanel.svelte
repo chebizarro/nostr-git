@@ -338,7 +338,7 @@
 
 <!-- Edit Repository Panel -->
 <div
-  class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+  class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 outline-none isolate"
   role="dialog"
   aria-modal="true"
   aria-labelledby="edit-repo-title"
@@ -348,7 +348,7 @@
 >
   <div
     bind:this={dialogElement}
-    class="bg-gray-900 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] border border-gray-700 flex flex-col"
+    class="bg-gray-900 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] border border-gray-700 flex flex-col overflow-hidden relative z-[60]"
     role="document"
   >
     <!-- Header -->

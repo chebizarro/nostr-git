@@ -53,7 +53,7 @@
     repoRef,
     fs,
     relays = [],
-    theme = 'dark',
+    theme = 'retro',
     height = 320,
     initialCwd = '/',
     urlAllowlist = [],
@@ -89,6 +89,58 @@
 
   function printPrompt() {
     term?.write(`\r\n${cwd} $ `);
+  }
+
+  function printWelcome() {
+    const art = [
+      '  Flotilla-Budabit',
+      '',
+    ].join('\n');
+    const help = [
+      "  Type 'help' to list available commands.",
+      '  Ctrl+C to cancel • Ctrl+L to clear',
+      '',
+    ].join('\n');
+    termWrite('stdout', `\r\n${art}\n${help}`);
+  }
+
+  function printHelp(topic?: string) {
+    const lines: string[] = [];
+    const showFS = !topic || topic.toLowerCase() === 'fs';
+    const showGit = !topic || topic.toLowerCase() === 'git';
+    lines.push('');
+    lines.push('Available commands:');
+    if (showFS) {
+      lines.push('  FS:');
+      lines.push('   - ls [path]              list directory contents');
+      lines.push('   - cd <path>              change directory');
+      lines.push('   - pwd                    print current directory');
+      lines.push('   - cat <file>             print file contents');
+      lines.push('   - mkdir <dir>            create directory');
+      lines.push('   - rm [-r] <path>         remove file or directory');
+      lines.push('   - cp <src> <dst>         copy file or directory');
+      lines.push('   - mv <src> <dst>         move/rename file or directory');
+      lines.push('   - touch <file>           create empty file');
+      lines.push('');
+    }
+    if (showGit) {
+      lines.push('  Git:');
+      lines.push('   - git status             show working tree status');
+      lines.push('   - git log [--oneline]    show commit history');
+      lines.push('   - git fetch              download objects and refs');
+      lines.push('   - git pull               fetch and merge (or rebase)');
+      lines.push('   - git push               push current branch to remote');
+      lines.push('   - git branch             list branches');
+      lines.push('   - git checkout <name>    switch branch');
+      lines.push('   - git switch <name>      switch branch');
+      lines.push('   - git add <paths>        stage changes');
+      lines.push('   - git commit -m "msg"    commit staged changes');
+      lines.push('   - git diff               show changes');
+      lines.push('   - git show <obj>         show object details');
+      lines.push('');
+    }
+    lines.push("Tips: type 'help fs' or 'help git' for a shorter list.");
+    termWrite('stdout', lines.join('\n'));
   }
 
   function termWrite(stream: Stream, text: string) {
@@ -612,6 +664,8 @@
       if (data === '\r') {
         const line = inputBuffer.replace(/\r/g, '').trim();
         inputBuffer = '';
+        // move to next line before command output begins
+        term.write('\r\n');
         if (line.length) {
           history.push(line);
           if (history.length > 500) history.shift();
@@ -629,6 +683,7 @@
       }
     });
 
+    printWelcome();
     printPrompt();
     window.addEventListener('resize', () => fitAddon?.fit());
   }
@@ -645,13 +700,26 @@
   }
 
   export async function runCommand(cmd: string): Promise<number> {
+    const tokens = tokenize(cmd);
+    const primary = tokens[0]?.toLowerCase();
+    if (!primary) { printPrompt(); return 0; }
+    // Built-in client commands
+    if (primary === 'help' || primary === '?') {
+      printHelp(tokens[1]);
+      printPrompt();
+      return 0;
+    }
+    if (primary === 'clear' || primary === 'cls') {
+      doClear();
+      printPrompt();
+      return 0;
+    }
     await ensureWorker();
     onCommand?.(cmd);
     dispatch('command', { cmd });
-    termWrite('stdout', `\r\n${cwd} $ ${cmd}\n`);
     const id = makeId();
     runningId = id;
-    worker!.postMessage({ type: 'run', id, cwd, argv: tokenize(cmd) });
+    worker!.postMessage({ type: 'run', id, cwd, argv: tokens });
     return 0;
   }
 
@@ -702,7 +770,7 @@
   });
 </script>
 
-<div class="w-full border rounded-md overflow-hidden bg-background" style={`height: ${typeof (height ?? 320)==='number'?(height ?? 320)+'px':(height ?? 320)}` }>
+<div class="w-full border rounded-md overflow-hidden bg-background px-1 pt-1 pb-0.5 box-border" style={`height: ${typeof (height ?? 320)==='number'?(height ?? 320)+'px':(height ?? 320)}` }>
   <div bind:this={containerEl} class="w-full h-full"></div>
 </div>
 

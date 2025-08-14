@@ -7,16 +7,26 @@
   import type { Token } from '../../stores/tokens.js';
   import { getGitServiceApi } from '@nostr-git/core';
   import { toast } from '$lib/stores/toast';
+  import { validateGraspServerUrl } from '@nostr-git/core';
+  // Load user's GRASP servers directly (so chips are reactive even if prop is static)
+  import { derived as _derived } from 'svelte/store';
+  import { repository, pubkey } from '@welshman/app';
+  import { deriveEvents } from '@welshman/store';
+  import { load } from '@welshman/net';
+  import { Router } from '@welshman/router';
+  import { GRASP_SET_KIND, DEFAULT_GRASP_SET_ID, parseGraspServersEvent } from '@nostr-git/core';
 
   // Component props
   interface Props {
     repo: Repo;
     onPublishEvent: (event: RepoAnnouncementEvent | RepoStateEvent) => Promise<void>;
+    graspServerUrls?: string[]; // Optional list of known GRASP servers to display
   }
 
   const {
     repo,
-    onPublishEvent
+    onPublishEvent,
+    graspServerUrls = []
   }: Props = $props();
 
   // Initialize the useForkRepo hook
@@ -57,6 +67,53 @@
   // GRASP-specific state
   let relayUrl = $state('');
   let relayUrlError = $state<string | undefined>();
+
+  // Local reactive list of GRASP servers. Seed from prop, keep updated from profile and prop changes.
+  let graspServerUrlsLocal = $state<string[]>([...(graspServerUrls || [])]);
+
+  // Keep local list in sync with prop updates, but don't clobber non-empty local list with empty props.
+  $effect(() => {
+    const incoming = (graspServerUrls || []).map((u) => u.trim()).filter(Boolean);
+    if (incoming.length === 0) return;
+    const current = (graspServerUrlsLocal || []).map((u) => u.trim()).filter(Boolean);
+    const changed = incoming.length !== current.length || incoming.some((u, i) => u !== current[i]);
+    if (changed) {
+      // de-dup
+      const set = Array.from(new Set(incoming));
+      graspServerUrlsLocal = set;
+    }
+  });
+
+  // Only wire profile-driven list if we have a pubkey; otherwise keep the seeded list.
+  if (pubkey.get()) {
+    const graspServersFilter = {
+      kinds: [GRASP_SET_KIND],
+      authors: [pubkey.get()!],
+      '#d': [DEFAULT_GRASP_SET_ID],
+    };
+    const graspServersEvent = _derived(
+      deriveEvents(repository, { filters: [graspServersFilter] }),
+      (events) => {
+        if (events.length === 0) {
+          load({ relays: Router.get().FromUser().getUrls(), filters: [graspServersFilter] });
+        }
+        return events[0];
+      }
+    );
+    graspServersEvent.subscribe((ev) => {
+      try {
+        const urls = ev ? (parseGraspServersEvent(ev as any) as string[]) : [];
+        // Only update when we actually have URLs; do not clear the seeded list during load.
+        if (urls && urls.length > 0) {
+          graspServerUrlsLocal = urls;
+        }
+      } catch {
+        // ignore parse errors, keep current list
+      }
+    });
+  }
+
+  const knownGraspServers = $derived.by(() => (graspServerUrlsLocal || []).map((u) => u.trim()).filter(Boolean));
 
   // Get available git services from tokens
   let tokenList = $state<Token[]>([]);
@@ -243,6 +300,17 @@
     }
   }
 
+  function handleSelectKnownRelay(url: string) {
+    const val = (url || '').trim();
+    relayUrl = val;
+    if (!val) {
+      relayUrlError = 'Relay URL is required for GRASP';
+      return;
+    }
+    const ok = validateGraspServerUrl(val) || /^wss?:\/\//i.test(val);
+    relayUrlError = ok ? undefined : 'Invalid relay URL. Must start with ws:// or wss://';
+  }
+
   // Computed properties for progress handling
   const isProgressComplete = $derived.by(() => {
     // If no progress or empty progress array, fork hasn't started yet
@@ -313,7 +381,7 @@
           relayUrlError = 'Relay URL is required for GRASP';
           return;
         }
-        const ok = /^wss?:\/\//i.test(val);
+        const ok = validateGraspServerUrl(val) || /^wss?:\/\//i.test(val);
         if (!ok) {
           relayUrlError = 'Invalid relay URL. Must start with ws:// or wss://';
           return;
@@ -369,10 +437,12 @@
 
 </script>
 
+<svelte:window onkeydown={handleBackdropKeydown} />
+
 <!-- Fork Repository Dialog -->
 {#if isOpen}
   <div 
-    class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+    class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 isolate"
     role="dialog"
     aria-modal="true"
     aria-labelledby="fork-dialog-title"
@@ -380,7 +450,7 @@
     onclick={handleBackdropClick}
     onkeydown={handleBackdropKeydown}
   >
-    <div class="bg-gray-900 rounded-lg shadow-xl w-full max-w-md border border-gray-700">
+    <div class="bg-gray-900 rounded-lg shadow-xl w-full max-w-md border border-gray-700 overflow-hidden relative z-[60] outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 transform-gpu">
       <!-- Header -->
       <div class="flex items-center justify-between p-6 border-b border-gray-700">
         <div class="flex items-center space-x-3">
@@ -455,6 +525,23 @@
                   />
                   {#if relayUrlError}
                     <p class="mt-1 text-sm text-red-400 flex items-center gap-1"><AlertCircle class="w-4 h-4" /> {relayUrlError}</p>
+                  {/if}
+                  {#if knownGraspServers.length > 0}
+                    <div class="mt-3">
+                      <p class="text-xs text-gray-400 mb-2">Your GRASP servers</p>
+                      <div class="flex flex-wrap gap-2">
+                        {#each knownGraspServers as url}
+                          <button
+                            type="button"
+                            class="px-2.5 py-1 text-xs rounded border {relayUrl === url ? 'border-blue-500 text-blue-300 bg-blue-500/10' : 'border-gray-600 text-gray-300 hover:border-gray-500'}"
+                            onclick={() => handleSelectKnownRelay(url)}
+                            title="Use this relay URL"
+                          >
+                            {url}
+                          </button>
+                        {/each}
+                      </div>
+                    </div>
                   {/if}
                 </div>
               {/if}
