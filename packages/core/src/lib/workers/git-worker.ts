@@ -339,13 +339,19 @@ async function safePushToRemote(options: {
     // Remote freshness guard (best-effort using cache + HEAD probe)
     if (pf.requireUpToDate) {
       const cache = await cacheManager.getRepoCache(key);
-      const remoteChanged = await needsUpdate(key, [remoteUrl], cache);
-      if (remoteChanged) {
-        return {
-          success: false,
-          reason: 'remote_ahead',
-          error: 'Remote appears to have new commits. Sync with remote before pushing to avoid non-fast-forward.'
-        };
+      console.log('[SAFE PUSH] Provider:', provider, 'Cache present:', !!cache);
+      // For GRASP, skip freshness check entirely; Nostr state events coordinate heads.
+      if (provider === 'grasp') {
+        console.log('[SAFE PUSH] Skipping up-to-date preflight for GRASP provider');
+      } else {
+        const remoteChanged = await needsUpdate(key, [remoteUrl], cache);
+        if (remoteChanged) {
+          return {
+            success: false,
+            reason: 'remote_ahead',
+            error: 'Remote appears to have new commits. Sync with remote before pushing to avoid non-fast-forward.'
+          };
+        }
       }
     }
 
@@ -392,8 +398,29 @@ self.addEventListener('message', async (event: MessageEvent) => {
 async function needsUpdate(repoId: string, cloneUrls: string[], cache: RepoCache | null): Promise<boolean> {
   console.log('[NEEDSUPDATE DEBUG] needsUpdate called for repoId:', repoId);
   if (!cache) {
-    console.log('[NEEDSUPDATE DEBUG] No cache, needs update');
-    return true;
+    // First-time push scenario: probe remote to see if it's empty.
+    console.log('[NEEDSUPDATE DEBUG] No cache; probing remote refs to detect empty remote');
+    try {
+      const cloneUrl = cloneUrls[0];
+      if (!cloneUrl) return false;
+      const refs = await git.listServerRefs({
+        http: http,
+        url: cloneUrl,
+        prefix: 'refs/heads/',
+        symrefs: true,
+      });
+      console.log('[NEEDSUPDATE DEBUG] (no-cache) Available refs:', refs.map((r: any) => r.ref));
+      if (!refs || refs.length === 0) {
+        console.log('[NEEDSUPDATE DEBUG] Remote appears empty; no update needed for initial push');
+        return false; // allow initial push to empty remote
+      }
+      // Remote has heads; be conservative and require sync
+      console.log('[NEEDSUPDATE DEBUG] Remote has existing heads; require update before push');
+      return true;
+    } catch (err) {
+      console.warn('[NEEDSUPDATE DEBUG] Failed to probe remote in no-cache state; assuming update required', err);
+      return true;
+    }
   }
   
   // Check if cache is too old (older than 1 hour)
@@ -423,7 +450,12 @@ async function needsUpdate(repoId: string, cloneUrls: string[], cache: RepoCache
     console.log('[NEEDSUPDATE DEBUG] Found main branch:', mainBranch);
 
     if (!mainBranch) {
-      console.log('[NEEDSUPDATE DEBUG] No main/master branch found, needs update');
+      // If there are zero refs, treat as empty remote and allow push
+      if (!refs || refs.length === 0) {
+        console.log('[NEEDSUPDATE DEBUG] No refs on remote; treating as empty. No update needed.');
+        return false;
+      }
+      console.log('[NEEDSUPDATE DEBUG] No main/master branch found despite refs existing; needs update');
       return true;
     }
 
@@ -2511,7 +2543,30 @@ const pushToRemote = async ({
       await Promise.all(pool.publish([relayUrl], signedEvent));
       
       console.log('Successfully published repository state event to GRASP relay');
-      
+
+      // Also push actual Git objects to the HTTPS remote so the repo is not empty
+      try {
+        // Ensure remote exists (idempotent)
+        try {
+          await git.addRemote({ dir, remote: 'origin', url: remoteUrl });
+        } catch (_) {
+          // Remote may already exist; ignore
+        }
+
+        console.log(`[GRASP] Pushing packfiles over HTTPS to ${remoteUrl} (ref=${branch})`);
+        await git.push({
+          dir,
+          url: remoteUrl,
+          ref: branch,
+          force: true,
+          corsProxy: 'https://cors.isomorphic-git.org'
+        });
+        console.log('[GRASP] Git objects pushed successfully');
+      } catch (pushErr) {
+        console.warn('[GRASP] Failed to push packfiles over HTTPS:', pushErr);
+        // We still return success because state event was published; caller may choose to sync and retry push
+      }
+
       // Return success result
       return {
         success: true,

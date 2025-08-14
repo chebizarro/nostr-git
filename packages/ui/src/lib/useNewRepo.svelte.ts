@@ -3,6 +3,7 @@ import { tokens as tokensStore, type Token } from "./stores/tokens.js";
 import { getGitServiceApi, canonicalRepoKey } from '@nostr-git/core';
 import { signer as signerStore } from "./stores/signer";
 import type { Signer as NostrGitSigner } from "./stores/signer";
+import { createRepoAnnouncementEvent as createAnnouncementEventShared, createRepoStateEvent as createStateEventShared } from '@nostr-git/shared-types';
 
 /**
  * Check if a repository name is available on GitHub
@@ -471,10 +472,71 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
         updateProgress("push", "Successfully pushed to remote repository", "completed");
       }
 
-      // Step 4: Create NIP-34 events
+      // Step 4: Create NIP-34 events (use shared-types helpers)
       updateProgress("events", "Creating Nostr events...", "running");
-      const announcementEvent = createRepoAnnouncementEvent(config, localRepo, remoteRepo);
-      const stateEvent = createRepoStateEvent(config, localRepo, remoteRepo);
+      // Derive clone and web URLs
+      const ensureNoGitSuffix = (url: string) => url?.replace(/\.git$/, "");
+      const cloneUrl = (() => {
+        const raw = (remoteRepo?.url || config.cloneUrl || '');
+        if (config.provider === 'grasp') {
+          return raw.replace(/^ws:\/\//, 'http://').replace(/^wss:\/\//, 'https://');
+        }
+        return raw;
+      })();
+      const webUrl = ensureNoGitSuffix(remoteRepo?.webUrl || config.webUrl || cloneUrl);
+
+      // Build GRASP relay aliases if applicable
+      let relays: string[] | undefined = undefined;
+      if (config.provider === 'grasp') {
+        const normalizeRelayWsOrigin = (u: string) => {
+          if (!u) return '';
+          try {
+            const url = new URL(u);
+            const origin = `${url.protocol}//${url.host}`;
+            return origin.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://');
+          } catch {
+            return u
+              .replace(/^http:\/\//, 'ws://')
+              .replace(/^https:\/\//, 'wss://')
+              .replace(/(ws[s]?:\/\/[^/]+).*/, '$1');
+          }
+        };
+        const baseRelay = normalizeRelayWsOrigin(config.relayUrl || '');
+        const aliases: string[] = [];
+        if (baseRelay) aliases.push(baseRelay);
+        const viteAliases = (import.meta as any)?.env?.VITE_GRASP_RELAY_ALIASES as string | undefined;
+        if (viteAliases) viteAliases.split(',').map(s => s.trim()).filter(Boolean).forEach(a => aliases.push(a));
+        const nodeAliases = (globalThis as any)?.process?.env?.VITE_GRASP_RELAY_ALIASES as string | undefined;
+        if (nodeAliases) nodeAliases.split(',').map(s => s.trim()).filter(Boolean).forEach(a => aliases.push(a));
+        if (baseRelay) {
+          const u = new URL(baseRelay);
+          const port = u.port ? `:${u.port}` : '';
+          aliases.push(`${u.protocol}//ngit-relay${port}`);
+        }
+        const seen = new Set<string>();
+        relays = aliases.filter(a => { if (seen.has(a)) return false; seen.add(a); return true; });
+      }
+
+      const announcementEvent = createAnnouncementEventShared({
+        repoId: config.name,
+        name: config.name,
+        description: config.description || '',
+        web: webUrl ? [webUrl] : undefined,
+        clone: cloneUrl ? [cloneUrl] : undefined,
+        relays,
+        maintainers: (config.maintainers && config.maintainers.length > 0) ? config.maintainers : undefined,
+        hashtags: (config.tags && config.tags.length > 0) ? config.tags : undefined,
+        earliestUniqueCommit: localRepo?.initialCommit || undefined,
+      });
+
+      const refs = (localRepo?.initialCommit)
+        ? [{ type: 'heads' as const, name: config.defaultBranch || 'master', commit: localRepo.initialCommit }]
+        : undefined;
+      const stateEvent = createStateEventShared({
+        repoId: config.name,
+        refs,
+        head: config.defaultBranch,
+      });
       updateProgress("events", "Nostr events created successfully", "completed");
 
       // Step 5: Publish events (if handler provided)
@@ -856,19 +918,28 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
 
     // Push to remote repository via safe preflight wrapper
     // Note: For GRASP, we don't pass a signer object since signing is handled via message protocol
-    const pushResult = await api.safePushToRemote({
-      repoId: canonicalKey ?? config.name,
-      remoteUrl: pushUrl,
-      branch: config.defaultBranch,
-      token: providerToken,
-      provider: config.provider,
-      allowForce: false,
-      preflight: {
-        blockIfUncommitted: true,
-        requireUpToDate: true,
-        blockIfShallow: true,
-      },
-    });
+    const isGrasp = config.provider === 'grasp';
+    console.log('[NEW REPO] Using', isGrasp ? 'pushToRemote (GRASP)' : 'safePushToRemote');
+    const pushResult = isGrasp
+      ? await api.pushToRemote({
+          repoId: canonicalKey || config.name,
+          remoteUrl: pushUrl,
+          branch: config.defaultBranch,
+          token: providerToken,
+          provider: config.provider as any,
+        })
+      : await api.safePushToRemote({
+          repoId: canonicalKey || config.name,
+          remoteUrl: pushUrl,
+          branch: config.defaultBranch,
+          token: providerToken,
+          provider: config.provider as any,
+          preflight: {
+            blockIfUncommitted: true,
+            requireUpToDate: true,
+            blockIfShallow: false,
+          },
+        });
 
     if (!pushResult?.success) {
       if (pushResult?.requiresConfirmation) {
@@ -880,122 +951,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
     return remoteRepo;
   }
 
-  function createRepoAnnouncementEvent(
-    config: NewRepoConfig,
-    localRepo: any,
-    remoteRepo?: any
-  ): Omit<NostrEvent, "id" | "sig" | "pubkey" | "created_at"> {
-    const toHttpFromWs = (url: string) =>
-      url?.startsWith('ws://') ? 'http://' + url.slice(5) :
-      url?.startsWith('wss://') ? 'https://' + url.slice(6) : url;
-    const ensureNoGitSuffix = (url: string) => url?.replace(/\.git$/, '');
-
-    // Build base clone/web URLs
-    let cloneUrl: string = remoteRepo?.url || config.cloneUrl || '';
-    let webUrl: string = remoteRepo?.webUrl || config.webUrl || '';
-    if (config.provider === 'grasp') {
-      cloneUrl = toHttpFromWs(cloneUrl);
-      if (!webUrl && cloneUrl) webUrl = ensureNoGitSuffix(cloneUrl);
-    }
-
-    // Ensure required values
-    const repoName = config.name || localRepo?.name || 'unknown-repo';
-    const name = localRepo?.name || config.name || 'Untitled Repository';
-    const description = config.description || '';
-    const initialCommit = localRepo?.initialCommit || '';
-
-    const tags: string[][] = [
-      ['d', repoName],
-      ['name', name],
-      ['description', description],
-    ];
-    if (initialCommit) tags.push(['r', initialCommit, 'euc']);
-
-    // Relay aliases for GRASP
-    let relayAliases: string[] = [];
-    if (config.provider === 'grasp') {
-      const normalizeRelayWsOrigin = (u: string) => {
-        if (!u) return '';
-        try {
-          const url = new URL(u);
-          const origin = `${url.protocol}//${url.host}`;
-          return origin.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://');
-        } catch {
-          return u
-            .replace(/^http:\/\//, 'ws://')
-            .replace(/^https:\/\//, 'wss://')
-            .replace(/(ws[s]?:\/\/[^/]+).*/, '$1');
-        }
-      };
-      const baseRelay = normalizeRelayWsOrigin(config.relayUrl || '');
-      const aliases: string[] = [];
-      if (baseRelay) aliases.push(baseRelay);
-      try {
-        const viteAliases = (import.meta as any)?.env?.VITE_GRASP_RELAY_ALIASES as string | undefined;
-        if (viteAliases) viteAliases.split(',').map(s => s.trim()).filter(Boolean).forEach(a => aliases.push(a));
-      } catch (e) { /* no-op: env may be undefined in some runtimes */ }
-      try {
-        const nodeAliases = (globalThis as any)?.process?.env?.VITE_GRASP_RELAY_ALIASES as string | undefined;
-        if (nodeAliases) nodeAliases.split(',').map(s => s.trim()).filter(Boolean).forEach(a => aliases.push(a));
-      } catch (e) { /* no-op: process.env not present in browser */ }
-      try {
-        if (baseRelay) {
-          const u = new URL(baseRelay);
-          const port = u.port ? `:${u.port}` : '';
-          aliases.push(`${u.protocol}//ngit-relay${port}`);
-        }
-      } catch (e) { /* no-op: URL parsing fallback */ }
-      const seen = new Set<string>();
-      relayAliases = aliases.filter(a => { if (seen.has(a)) return false; seen.add(a); return true; });
-    }
-
-    // Clone tag includes relay aliases for GRASP
-    if (cloneUrl) tags.push(['clone', cloneUrl, ...relayAliases]);
-    if (webUrl) tags.push(['web', ensureNoGitSuffix(webUrl)]);
-
-    // Maintainers
-    if (config.maintainers && config.maintainers.length > 0) {
-      config.maintainers.forEach(m => tags.push(['maintainers', m]));
-    }
-
-    // Relays: emit one tag per alias to match prior shape
-    const relaysList = relayAliases.length > 0 ? relayAliases : (config.relays || []);
-    if (relaysList.length > 0) {
-      relaysList.forEach(r => tags.push(['relays', r]));
-    }
-
-    // Topics
-    if (config.tags && config.tags.length > 0) {
-      config.tags.forEach(t => tags.push(['t', t]));
-    }
-
-    return { kind: 30617, content: description, tags };
-  }
-
-  function createRepoStateEvent(
-    config: NewRepoConfig,
-    localRepo: any,
-    remoteRepo?: any
-  ): Omit<NostrEvent, "id" | "sig" | "pubkey" | "created_at"> {
-    // Ensure all required values are defined
-    const repoName = config.name || localRepo?.name || "unknown-repo";
-    const defaultBranch = config.defaultBranch || "master";
-    const initialCommit = localRepo?.initialCommit || "";
-
-    const tags = [["d", repoName]];
-
-    // Only add branch references if we have a valid commit
-    if (initialCommit) {
-      tags.push(["HEAD", `refs/heads/${defaultBranch}`, initialCommit]);
-      tags.push([`refs/heads/${defaultBranch}`, initialCommit]);
-    }
-
-    return {
-      kind: 30618,
-      content: "",
-      tags,
-    };
-  }
+  // Removed local event creator helpers in favor of shared-types implementations
 
   function reset() {
     isCreating = false;

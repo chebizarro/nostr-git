@@ -7,6 +7,7 @@
   import { useRegistry } from '../../useRegistry';
   import { useNewRepo, type NewRepoResult, checkProviderRepoAvailability } from '$lib/useNewRepo.svelte';
   import { tokens as tokensStore, type Token } from '$lib/stores/tokens.js';
+  import { createGraspServersStore } from '$lib/stores/graspServers';
   
   const { Button } = useRegistry();
 
@@ -14,9 +15,10 @@
     onRepoCreated?: (repoData: NewRepoResult) => void;
     onCancel?: () => void;
     onPublishEvent?: (event: Omit<NostrEvent, 'id' | 'sig' | 'pubkey' | 'created_at'>) => Promise<void>;
+    graspServerUrls?: string[]; // optional: preloaded grasp server options
   }
 
-  const { onRepoCreated, onCancel, onPublishEvent }: Props = $props();
+  const { onRepoCreated, onCancel, onPublishEvent, graspServerUrls = [] }: Props = $props();
 
   // Initialize the useNewRepo hook
   const { createRepository, isCreating, progress, error, reset } = useNewRepo({
@@ -39,6 +41,12 @@
   let tokens = $state<Token[]>([]);
   let selectedProvider = $state<string | undefined>(undefined);
   let graspRelayUrl = $state<string>('');
+  // Grasp server options derived from store
+  const graspServerStore = createGraspServersStore(graspServerUrls);
+  let graspServerOptions = $state<string[]>(graspServerUrls);
+  graspServerStore.subscribe((s) => {
+    graspServerOptions = s.urls;
+  });
 
   // Repository name availability tracking
   let nameAvailabilityResults = $state<{
@@ -426,6 +434,7 @@
         disabledProviders={nameAvailabilityResults?.conflictProviders || []}
         relayUrl={graspRelayUrl}
         onRelayUrlChange={handleRelayUrlChange}
+        graspServerOptions={graspServerOptions}
       />
     {:else if currentStep === 2}
       <RepoDetailsStep

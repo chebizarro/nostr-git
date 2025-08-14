@@ -10,16 +10,12 @@ export interface CloneProgressEvent {
 }
 
 export function getGitWorker(onProgress?: (event: CloneProgressEvent) => void) {
-  // Append a cache-busting query param in typical dev environments (localhost/127.0.0.1)
+  // Always append a cache-busting query param to avoid stale workers
   const u = new URL('./workers/git-worker.js', import.meta.url);
   try {
-    const isLikelyDev = typeof location !== 'undefined' && (
-      location.hostname === 'localhost' || location.hostname === '127.0.0.1'
-    );
-    if (isLikelyDev) {
-      u.searchParams.set('v', String(Date.now()));
-    }
+    u.searchParams.set('v', String(Date.now()));
   } catch {}
+  console.log('[GitWorker] Spawning worker at', u.toString());
   const worker = new Worker(u, { type: 'module' });
   
   if (onProgress) {

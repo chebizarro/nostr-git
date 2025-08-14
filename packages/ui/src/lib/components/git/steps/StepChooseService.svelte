@@ -9,9 +9,17 @@
     disabledProviders?: string[];
     onProviderChange: (p: 'github'|'gitlab'|'gitea'|'bitbucket'|'grasp') => void;
     onRelayUrlChange?: (url: string) => void;
+    graspServerOptions?: string[];
   }
 
-  const { tokens, selectedProvider, relayUrl, disabledProviders = [], onProviderChange, onRelayUrlChange }: Props = $props();
+  const __props = $props();
+  const tokens = $derived(__props.tokens);
+  const selectedProvider = $derived(__props.selectedProvider);
+  const relayUrl = $derived(__props.relayUrl);
+  const disabledProviders = $derived(__props.disabledProviders ?? []);
+  const onProviderChange = $derived(__props.onProviderChange);
+  const onRelayUrlChange = $derived(__props.onRelayUrlChange);
+  const graspServerOptions = $derived(__props.graspServerOptions ?? []);
 </script>
 
 <div class="space-y-4 max-h-[70vh]">
@@ -22,5 +30,6 @@
     disabledProviders={disabledProviders}
     relayUrl={relayUrl || ''}
     onRelayUrlChange={onRelayUrlChange as any}
+    graspServerOptions={graspServerOptions}
   />
 </div>

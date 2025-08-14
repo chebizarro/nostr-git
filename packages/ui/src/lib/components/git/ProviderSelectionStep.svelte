@@ -12,13 +12,23 @@
     tokens?: Token[];
     relayUrl?: string;
     onRelayUrlChange?: (url: string) => void;
+    graspServerOptions?: string[];
   }
 
-  const { selectedProvider, onProviderChange, disabledProviders = [], tokens: propTokens, relayUrl = '', onRelayUrlChange }: Props = $props();
+  // Svelte 5 runes: use $derived to keep props reactive
+  const __props = $props();
+  const selectedProvider = $derived(__props.selectedProvider as string | undefined);
+  const onProviderChange = $derived(__props.onProviderChange as (provider: string) => void);
+  const disabledProviders = $derived((__props.disabledProviders ?? []) as string[]);
+  const propTokens = $derived(__props.tokens as Token[] | undefined);
+  const relayUrl = $derived((__props.relayUrl ?? '') as string);
+  const onRelayUrlChange = $derived(__props.onRelayUrlChange as ((url: string) => void) | undefined);
+  const graspServerOptions = $derived((__props.graspServerOptions ?? []) as string[]);
 
   // Token management
   let tokens = $state<Token[]>([]);
-  let graspRelayUrl = $state<string>(relayUrl || '');
+  // Initialize empty; sync from relayUrl prop via $effect below
+  let graspRelayUrl = $state<string>('');
   let availableProviders = $state<{
     id: string;
     name: string;
@@ -40,6 +50,14 @@
     // Ensure tokens are loaded
     await tokensStore.waitForInitialization();
     updateAvailableProviders();
+  });
+
+  // Keep local input in sync if parent updates relayUrl prop
+  $effect(() => {
+    const next = relayUrl || '';
+    if (graspRelayUrl !== next) {
+      graspRelayUrl = next;
+    }
   });
 
   function updateAvailableProviders() {
@@ -88,13 +106,15 @@
 
     // Mark providers as disabled if they have name conflicts
     availableProviders = providers.map(provider => {
-      const isDisabled = disabledProviders.includes(provider.id);
+      const conflict = disabledProviders.includes(provider.id);
+      const isGrasp = provider.id === 'grasp';
+      const isDisabled = isGrasp ? false : conflict;
       return {
         ...provider,
         disabled: isDisabled,
         disabledReason: isDisabled ? 'Repository name already exists' : undefined,
-        // A provider is available if it has a token AND is not disabled due to name conflict
-        hasToken: provider.hasToken && !isDisabled
+        // Keep GRASP selectable regardless of name conflicts; others require token and no conflict
+        hasToken: isGrasp ? true : (provider.hasToken && !isDisabled)
       };
     });
 
@@ -122,7 +142,9 @@
   function isValidRelayUrl(url: string): boolean {
     return url.trim() !== '' && (url.startsWith('wss://') || url.startsWith('ws://'));
   }
-</script>
+ </script>
+
+<svelte:options runes={true} />
 
 <div class="space-y-6">
   <div class="space-y-2">
@@ -221,6 +243,23 @@
           oninput={handleRelayUrlChange}
           placeholder="wss://relay.example.com"
         />
+        {#if graspServerOptions.length > 0}
+          <div class="flex flex-wrap gap-2 mt-2">
+            {#each graspServerOptions as opt}
+              <button
+                type="button"
+                class="px-2 py-1 text-xs rounded border hover:bg-muted"
+                onclick={() => {
+                  graspRelayUrl = opt;
+                  if (onRelayUrlChange) onRelayUrlChange(opt);
+                }}
+                title={opt}
+              >
+                {opt}
+              </button>
+            {/each}
+          </div>
+        {/if}
         {#if selectedProvider === 'grasp' && graspRelayUrl && !isValidRelayUrl(graspRelayUrl)}
           <p class="text-sm text-destructive mt-1">
             Please enter a valid WebSocket URL (must start with ws:// or wss://)

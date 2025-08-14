@@ -83,3 +83,6 @@ export { default as Spinner } from "./editor/Spinner.svelte";
 export { default as Terminal } from "./terminal/Terminal.svelte";
 export { createTerminalFeedBridge } from "./terminal/feed-bridge"; 
 
+// Settings
+export { default as GraspServersPanel } from "./git/GraspServersPanel.svelte";
+
