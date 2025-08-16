@@ -37,7 +37,7 @@
     "paths": {
       "@nostr-git/core": ["packages/core/src"],
       "@nostr-git/ui": ["packages/ui/src/lib"],
-      "@nostr-git/types": ["packages/shared-types"]
+      "@nostr-git/shared-types": ["packages/shared-types/src"]
     }
   }
 }
