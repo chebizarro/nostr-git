@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { createDataUrl } from '../../../utils/binaryUtils';
+  import { createDataUrl } from '@nostr-git/core';
   
   const {
     content,

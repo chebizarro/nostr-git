@@ -5,6 +5,9 @@ import {
   GIT_ISSUE,
   type RepoAnnouncementTag,
   type IssueTag,
+  validateRepoAnnouncementEvent,
+  validateRepoStateEvent,
+  validateIssueEvent,
 } from "@nostr-git/shared-types";
 import {
   extractLatestCommitInfo,
@@ -17,6 +20,23 @@ import {
 import langMap from "lang-map";
 import { SnipptDescription } from "./snippet-dialog";
 import { requestNip07Signature } from "./nip07";
+
+// Feature-flagged runtime validation toggle
+function shouldValidate(): boolean {
+  try {
+    if (typeof process !== "undefined" && (process as any).env && (process as any).env.NOSTR_GIT_VALIDATE_EVENTS !== undefined) {
+      return (process as any).env.NOSTR_GIT_VALIDATE_EVENTS !== "false";
+    }
+    if (typeof globalThis !== "undefined" && (globalThis as any).NOSTR_GIT_VALIDATE_EVENTS !== undefined) {
+      return (globalThis as any).NOSTR_GIT_VALIDATE_EVENTS !== false;
+    }
+  } catch {}
+  try {
+    return (process as any)?.env?.NODE_ENV !== "production";
+  } catch {
+    return true;
+  }
+}
 
 export async function fetchRepoEvent(
   relays: string[]
@@ -37,7 +57,13 @@ export async function fetchRepoEvent(
     });
     //pool.close(relays);
     // find event referencing a 'clone' tag that includes "owner/repo"
-    const found = events.find((evt) =>
+    const candidates = (Array.isArray(events) ? events : [])
+      .filter((evt) => {
+        if (!shouldValidate()) return true;
+        const v = validateRepoAnnouncementEvent(evt as any);
+        return v.success;
+      });
+    const found = candidates.find((evt) =>
       evt.tags.some(
         (t) => t[0] === "clone" && t[1].includes(`${owner}/${repo}`)
       )
@@ -241,6 +267,34 @@ export async function publishEvent(
 ): Promise<NostrEvent> {
   const pool = new SimplePool();
   const signedEvent = await requestNip07Signature(event);
+  // Preflight validation (feature-flagged)
+  if (shouldValidate()) {
+    try {
+      switch (signedEvent.kind) {
+        case 30617: {
+          const v = validateRepoAnnouncementEvent(signedEvent as any);
+          if (!v.success) throw new Error(v.error.message);
+          break;
+        }
+        case 30618: {
+          const v = validateRepoStateEvent(signedEvent as any);
+          if (!v.success) throw new Error(v.error.message);
+          break;
+        }
+        case GIT_ISSUE: {
+          const v = validateIssueEvent(signedEvent as any);
+          if (!v.success) throw new Error(v.error.message);
+          break;
+        }
+        default:
+          // no-op for other kinds
+          break;
+      }
+    } catch (e) {
+      console.error("[nostr-git] Event validation failed:", e);
+      throw e;
+    }
+  }
   const debug = await getDebugFlag();
   if (debug) {
     console.log("[nostr-git][debug] Signed event (console-only, not publishing):", signedEvent);

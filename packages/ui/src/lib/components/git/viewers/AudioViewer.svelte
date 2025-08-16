@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createDataUrl, createBlob } from '../../../utils/binaryUtils';
+  import { createDataUrl, createBlob } from '@nostr-git/core';
   
   const {
     content,

@@ -2,6 +2,7 @@ import { getGitProvider } from './git-provider.js';
 import { rootDir } from './git.js';
 import { canonicalRepoKey } from './utils/canonicalRepoKey.js';
 import { parseRepoAnnouncementEvent, RepoAnnouncementEvent } from '@nostr-git/shared-types';
+import { assertRepoAnnouncementEvent } from './validation.js';
 
 export interface Branch {
   name: string;
@@ -10,6 +11,7 @@ export interface Branch {
 }
 
 export async function listBranchesFromEvent(opts: { repoEvent: RepoAnnouncementEvent; }): Promise<Branch[]> {
+  assertRepoAnnouncementEvent(opts.repoEvent);
   const repo = parseRepoAnnouncementEvent(opts.repoEvent);
   // Some repos announce only the name (e.g., "grasp") in tag d. Build a canonical key if needed.
   let canonicalKey: string;

@@ -63,6 +63,65 @@ const clones = getTags(announcement, 'clone');
 const repoUrl = getTagValue(announcement, 'r');
 ```
 
+## Runtime Validation (Zod)
+
+For optional runtime guarantees, `@nostr-git/shared-types` exposes Zod schemas and helpers in `src/validation.ts`.
+
+- **Tag tuple schemas**: NIP-34 tag shapes (e.g., `DTag`, `CloneTag`, `RefsTag`, `CommitterTag`).
+- **Per-kind tag arrays**: `RepoAnnouncementTagsSchema`, `RepoStateTagsSchema`, `PatchTagsSchema`, `IssueTagsSchema`, `StatusTagsSchema`.
+- **Per-kind strict event schemas**: `RepoAnnouncementEventSchema`, `RepoStateEventSchema`, `PatchEventSchema`, `IssueEventSchema`, `StatusEventSchema`.
+- **Helpers**: `assertValidTags(event)`, `safeParseEventTags(event)`, and `validate*Tags(...)` / `validate*Event(...)` convenience functions.
+
+Example:
+
+```ts
+import {
+  validateRepoAnnouncementEvent,
+  validatePatchTags
+} from '@nostr-git/shared-types';
+
+const evt = { kind: 30617, content: '', tags: [ ['d','repo-id'], ['clone','https://git'] ] };
+const ok = validateRepoAnnouncementEvent(evt);
+if (!ok.success) console.error(ok.error.format());
+
+const tagsOk = validatePatchTags([
+  ['a','30617:<owner>:<repo>'],
+  ['p','npub1...'],
+  ['committer','Alice','alice@example.com','1734038123','-420']
+]);
+```
+
+Notes:
+
+- Runtime validation is optional; prefer canonical helpers for normal reads.
+- Use strict schemas in boundaries (ingress/egress, tests) or when dealing with untrusted inputs.
+
+## Compile-time Type Assertions (tsd)
+
+We use `tsd` to assert helper typings and prevent regressions.
+
+- Test file: `packages/shared-types/index.test-d.ts`
+- Script: `pnpm -w --filter @nostr-git/shared-types tsd`
+- CI: `.github/workflows/shared-types-ci.yml` runs `tsd` after build/tests.
+
+Snippet:
+
+```ts
+// index.test-d.ts
+import { expectType } from 'tsd';
+import type { getTag, getTagValue, PatchEvent } from './dist/index.d.ts';
+
+declare const patch: PatchEvent;
+const _getTag: typeof getTag = null as any;
+const _getTagValue: typeof getTagValue = null as any;
+
+const committer = _getTag(patch, 'committer');
+expectType<["committer", string, string, string, string] | undefined>(committer);
+
+const committerName = _getTagValue(patch, 'committer');
+expectType<string | undefined>(committerName);
+```
+
 ### 2. Build All Packages
 ```bash
 # Build all packages in dependency order

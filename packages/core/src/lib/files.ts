@@ -3,6 +3,7 @@ import { ensureRepo, ensureRepoFromEvent, rootDir, getDefaultBranch, resolveRobu
 import { canonicalRepoKey } from './utils/canonicalRepoKey.js';
 import { parseRepoAnnouncementEvent, type RepoAnnouncementEvent } from '@nostr-git/shared-types';
 import { Buffer } from 'buffer';
+import { assertRepoAnnouncementEvent } from './validation.js';
 
 declare global {
   // Extend globalThis to include Buffer
@@ -54,6 +55,7 @@ export async function listRepoFilesFromEvent(opts: {
   // Optional, when caller already computed canonical repo key (e.g. "owner/name" or "owner:name")
   repoKey?: string;
 }): Promise<FileEntry[]> {
+  assertRepoAnnouncementEvent(opts.repoEvent);
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main'; // Will be resolved robustly later
   const dir = `${rootDir}/${opts.repoKey || canonicalRepoKey(event.repoId)}`;
@@ -153,6 +155,7 @@ export async function getRepoFileContentFromEvent(opts: {
   path: string;
   repoKey?: string;
 }): Promise<string> {
+  assertRepoAnnouncementEvent(opts.repoEvent);
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main'; // Will be resolved robustly in git operations
   const dir = `${rootDir}/${opts.repoKey || canonicalRepoKey(event.repoId)}`;
@@ -318,6 +321,7 @@ export async function getCommitInfo(opts: {
   committer: { name: string; email: string; timestamp: number };
   parent: string[];
 }> {
+  assertRepoAnnouncementEvent(opts.repoEvent);
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const dir = `${rootDir}/${canonicalRepoKey(event.repoId)}`;
   await ensureRepoFromEvent({ repoEvent: event });
@@ -354,6 +358,7 @@ export async function getFileHistory(opts: {
   author: { name: string; email: string; timestamp: number };
   committer: { name: string; email: string; timestamp: number };
 }>> {
+  assertRepoAnnouncementEvent(opts.repoEvent);
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main'; // Will be resolved robustly in git operations
   const dir = `${rootDir}/${opts.repoKey || canonicalRepoKey(event.repoId)}`;
@@ -395,6 +400,7 @@ export async function getCommitHistory(opts: {
     parent: string[];
   };
 }>> {
+  assertRepoAnnouncementEvent(opts.repoEvent);
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main'; // Will be resolved robustly in git operations
   const dir = `${rootDir}/${canonicalRepoKey(event.repoId)}`;

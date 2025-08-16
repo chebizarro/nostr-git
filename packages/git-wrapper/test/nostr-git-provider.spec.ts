@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import { NostrGitProvider } from '../src/nostr-git-provider.js';
 import type { GitProvider, GitFetchResult, GitMergeResult } from '../src/provider.js';
 import type { NostrEvent } from '../src/nostr-client.js';
@@ -149,5 +149,54 @@ describe('NostrGitProvider', () => {
     await provider.clone({ repoId: 'repo-1', dir: '/tmp/repo', timeoutMs: 10 });
     expect(git.clone).toHaveBeenCalledWith(expect.objectContaining({ url: 'ssh://git@host/repo-1' }));
     expect(set).toHaveBeenCalledWith('repo-1', 'ssh://git@host/repo-1');
+  });
+
+  describe('validation feature flag behavior', () => {
+    const prev = process.env.NOSTR_GIT_VALIDATE_EVENTS;
+    beforeEach(() => {
+      process.env.NOSTR_GIT_VALIDATE_EVENTS = 'true';
+    });
+    afterAll(() => {
+      process.env.NOSTR_GIT_VALIDATE_EVENTS = prev;
+    });
+
+    it('discoverRepo ignores invalid announcements when validation is enabled', async () => {
+      const provider = new NostrGitProvider(git as GitProvider, nostr as any);
+      // Emit an invalid announcement (missing 'd' tag)
+      (nostr.subscribe as any).mockImplementationOnce((filter: any, cb: (e: NostrEvent) => void) => {
+        cb(makeEvent({ kind: GIT_REPO_ANNOUNCEMENT, tags: [['clone', 'https://host/repo-1']] }));
+        return 'subA';
+      });
+      // No state either
+      await expect(provider.discoverRepo('repo-1', { timeoutMs: 5, stateKind: GIT_REPO_STATE })).rejects.toThrow(/No repo discovery data/);
+    });
+
+    it('getRepoState rejects when only invalid state events are seen', async () => {
+      const provider = new NostrGitProvider(git as GitProvider, nostr as any);
+      (nostr.subscribe as any).mockImplementationOnce((filter: any, cb: (e: NostrEvent) => void) => {
+        // Invalid: missing 'd' tag and missing HEAD/refs shape
+        cb(makeEvent({ kind: GIT_REPO_STATE, tags: [['refs/heads/mainx', 'abc123']] }));
+        return 'subB';
+      });
+      await expect(provider.getRepoState('repo-1', { kind: GIT_REPO_STATE, timeoutMs: 5 })).rejects.toThrow(/No RepoState event/);
+    });
+
+    it('subscribeToCollaborationEvents delivers only valid events to callback', async () => {
+      const provider = new NostrGitProvider(git as GitProvider, nostr as any);
+      let delivered: NostrEvent[] = [];
+      // Mock subscribe to synchronously emit several events
+      (nostr.subscribe as any).mockImplementationOnce((filter: any, cb: (e: NostrEvent) => void) => {
+        // Invalid patch: missing 'a' coordinate tag
+        cb(makeEvent({ kind: GIT_PATCH, tags: [['p', 'f'.repeat(64)], ['t', 'root']] }));
+        // Valid patch with 'a' tag ending in :repo-1
+        cb(makeEvent({ kind: GIT_PATCH, tags: [['a', `30617:${'f'.repeat(64)}:repo-1`], ['p', 'f'.repeat(64)]] }));
+        return 'subC';
+      });
+      const subId = provider.subscribeToCollaborationEvents('repo-1', (e) => delivered.push(e));
+      expect(subId).toBeDefined();
+      // Only one valid delivered
+      expect(delivered.length).toBe(1);
+      expect(delivered[0].kind).toBe(GIT_PATCH);
+    });
   });
 });

@@ -17,3 +17,5 @@ export * from './lib/merge.js';
 export * from './lib/git/index.js';
 export * from './lib/utils/canonicalRepoKey.js';
 export * from './lib/grasp-lists.js';
+export * from './lib/utils/binaryUtils.js';
+export * from './lib/validation.js';

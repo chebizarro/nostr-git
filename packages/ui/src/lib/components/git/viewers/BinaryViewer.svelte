@@ -1,6 +1,6 @@
 <script lang="ts">
   import { formatFileSize } from '../../../utils/fileTypeDetection';
-  import { createBlob } from '../../../utils/binaryUtils';
+  import { createBlob } from '@nostr-git/core';
   
   const {
     content,

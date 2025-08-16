@@ -9,6 +9,7 @@ import { parseRepoAnnouncementEvent, parseRepoStateEvent } from '@nostr-git/shar
 import { getGitProvider } from './git-provider.js';
 import { Branch, listBranches } from './branches.js';
 import { rootDir } from './git.js';
+import { assertRepoAnnouncementEvent, assertRepoStateEvent } from './validation.js';
 
 export interface RepoHandle {
   repo: any; // Provider-specific repo handle (e.g., FS path, object, etc.)
@@ -27,6 +28,8 @@ export async function fetchRepo(
   state?: RepoStateEvent,
   provider?: GitProvider
 ): Promise<RepoHandle> {
+  assertRepoAnnouncementEvent(announcement);
+  if (state) assertRepoStateEvent(state);
   const parsedAnnouncement = parseRepoAnnouncementEvent(announcement);
   const parsedState = state ? parseRepoStateEvent(state) : undefined;
   const url = parsedAnnouncement.clone?.[0];
@@ -45,6 +48,8 @@ export class GitRepository {
   state?: RepoState;
   dir: string;
   constructor(announcement: RepoAnnouncementEvent, state?: RepoStateEvent) {
+    assertRepoAnnouncementEvent(announcement);
+    if (state) assertRepoStateEvent(state);
     this.announcement = parseRepoAnnouncementEvent(announcement);
     this.state = state ? parseRepoStateEvent(state) : undefined;
     this.dir = `${rootDir}/${this.announcement.owner}/${this.announcement.repoId}`;

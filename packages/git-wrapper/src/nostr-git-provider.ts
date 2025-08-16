@@ -14,8 +14,13 @@ import {
   GIT_STATUS_DRAFT,
   createPatchEvent,
   createStatusEvent,
+  getTags,
+  validateRepoAnnouncementEvent,
+  validateRepoStateEvent,
+  validatePatchEvent,
+  validateIssueEvent,
+  validateStatusEvent,
 } from '@nostr-git/shared-types';
-import { getTags } from '@nostr-git/shared-types';
 
 /**
  * A GitProvider implementation that coordinates between an underlying git backend
@@ -60,6 +65,26 @@ export class NostrGitProvider implements GitProvider {
       return Array.from(participants);
     } catch {
       return [];
+    }
+  }
+
+  // Feature-flagged runtime validation toggle
+  private shouldValidate(): boolean {
+    try {
+      // Env var wins
+      if (typeof process !== 'undefined' && (process as any).env && (process as any).env.NOSTR_GIT_VALIDATE_EVENTS !== undefined) {
+        return (process as any).env.NOSTR_GIT_VALIDATE_EVENTS !== 'false';
+      }
+      // Global flag fallback (browser)
+      if (typeof globalThis !== 'undefined' && (globalThis as any).NOSTR_GIT_VALIDATE_EVENTS !== undefined) {
+        return (globalThis as any).NOSTR_GIT_VALIDATE_EVENTS !== false;
+      }
+    } catch {}
+    // Default: enabled in dev, disabled in production
+    try {
+      return (process as any)?.env?.NODE_ENV !== 'production';
+    } catch {
+      return true;
     }
   }
 
@@ -518,6 +543,10 @@ export class NostrGitProvider implements GitProvider {
         { kinds: [GIT_REPO_ANNOUNCEMENT], '#d': [repoId] },
         (event: NostrEvent) => {
           if (allowedPubkeys && !allowedPubkeys.includes(event.pubkey)) return;
+          if (this.shouldValidate()) {
+            const v = validateRepoAnnouncementEvent(event as any);
+            if (!v.success) return; // ignore invalid events when validation is on
+          }
           if (event.created_at > latestTime) {
             latest = event;
             latestTime = event.created_at;
@@ -620,7 +649,23 @@ export class NostrGitProvider implements GitProvider {
     const subId = this.nostr.subscribe({ kinds }, (event: NostrEvent) => {
       // Post-filter: ensure there's an 'a' tag whose value ends with `:${repoId}`
       const matchesRepo = event.tags.some((t) => t[0] === 'a' && typeof t[1] === 'string' && t[1].endsWith(`:${repoId}`));
-      if (matchesRepo) onEvent(event);
+      if (!matchesRepo) return;
+      if (this.shouldValidate()) {
+        let ok = false;
+        switch (event.kind) {
+          case GIT_PATCH: ok = validatePatchEvent(event as any).success; break;
+          case GIT_ISSUE: ok = validateIssueEvent(event as any).success; break;
+          case GIT_STATUS_OPEN:
+          case GIT_STATUS_APPLIED:
+          case GIT_STATUS_CLOSED:
+          case GIT_STATUS_DRAFT:
+            ok = validateStatusEvent(event as any).success; break;
+          default:
+            ok = false;
+        }
+        if (!ok) return; // drop invalid events
+      }
+      onEvent(event);
     });
     return subId;
   }
@@ -641,6 +686,10 @@ export class NostrGitProvider implements GitProvider {
         { kinds: [kind], '#d': [identifier] },
         (event: NostrEvent) => {
           if (allowedPubkeys && !allowedPubkeys.includes(event.pubkey)) return;
+          if (this.shouldValidate()) {
+            const v = validateRepoStateEvent(event as any);
+            if (!v.success) return; // ignore invalid
+          }
           if (event.created_at > latestTime) {
             latest = event;
             latestTime = event.created_at;
@@ -650,6 +699,10 @@ export class NostrGitProvider implements GitProvider {
       setTimeout(() => {
         this.nostr.unsubscribe(subId);
         if (!latest) return reject(new Error(`No RepoState event for '${identifier}'`));
+        if (this.shouldValidate()) {
+          const v = validateRepoStateEvent(latest as any);
+          if (!v.success) return reject(new Error(`Invalid RepoState event for '${identifier}': ${v.error.message}`));
+        }
         const parsed = this.parseRepoStateEvent(latest);
         const id = parsed.identifier ?? identifier;
         const state = this.ensureHeadInState(parsed.state);
