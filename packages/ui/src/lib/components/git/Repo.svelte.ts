@@ -225,43 +225,12 @@ export class Repo {
           console.log('🔐 No authentication tokens found');
         }
         
-        // Now that WorkerManager is ready, load branches if we have a repo event
-        if (initialRepoEvent && !this.state) {
-          await this.#loadBranchesFromRepo(initialRepoEvent);
-        }
+        // Delegate initialization and commit loading to a single method
+        await this.#loadCommitsFromRepo();
         
-        const repoId = this.canonicalKey;
-        const cloneUrls = [...(this.repo?.clone || [])];
-
-        if (!repoId || !cloneUrls.length) {
-          console.warn("Repository ID or clone URLs missing, skipping initialization");
-          return;
-        }
-
-        this.#loadingIds.clone = context.loading("Initializing repository...");
-
-        // Use smart initialization instead of always cloning
-        const result = await this.workerManager.smartInitializeRepo({
-          repoId,
-          cloneUrls,
-        });
-
-        if (result.success) {
-          context.update(this.#loadingIds.clone, {
-            type: "success",
-            message: result.fromCache ? "Repository loaded from cache" : "Repository initialized",
-            duration: 3000,
-          });
-
-          // Load commits after successful initialization
-          this.#loadCommitsFromRepo();
-
-          // Ensure background merge analysis runs once worker is ready
-          if (this.patches.length > 0) {
-            await this.#performMergeAnalysis(this.patches);
-          }
-        } else {
-          throw new Error(result.error || "Smart initialization failed");
+        // Ensure background merge analysis runs once worker is ready
+        if (this.patches.length > 0) {
+          await this.#performMergeAnalysis(this.patches);
         }
       } catch (error) {
         console.error("Git initialization failed:", error);
