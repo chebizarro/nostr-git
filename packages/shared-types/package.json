@@ -17,6 +17,7 @@
   ],
   "scripts": {
     "build": "tsc --declaration --outDir dist",
+    "typecheck": "tsc -p tsconfig.types.json",
     "clean": "rm -rf dist",
     "prepare": "npm run build",
     "watch": "tsc --declaration --outDir dist --watch"

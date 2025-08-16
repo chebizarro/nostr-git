@@ -1,6 +1,7 @@
 import { nip19, SimplePool, type EventTemplate, type NostrEvent } from 'nostr-tools';
 import { fetchPermalink, produceGitDiffFromPermalink } from './git.js';
 import { parsePermalink, type PermalinkData } from './permalink.js';
+import { getTagValue } from '@nostr-git/shared-types';
 
 export type HexString = Uint8Array<ArrayBufferLike>;
 
@@ -73,9 +74,9 @@ async function createEvent(eventData: PermalinkData, relays: string[]): Promise<
     const repoEvent = await fetchRepoEvent(eventData, relays);
     if (repoEvent) {
       // if there's a 'd' tag
-      const repoId = repoEvent.tags.find((t) => t[0] === 'd');
+      const repoId = getTagValue(repoEvent as any, 'd');
       if (repoId) {
-        tags.push(['a', `30617:${repoEvent.pubkey}:${repoId[1]}`]);
+        tags.push(['a', `30617:${repoEvent.pubkey}:${repoId}`]);
       }
     }
   }
@@ -124,22 +125,18 @@ async function permalinkEventExists(
 
     // filter or find an event that has matching branch, file, lines
     const found = events.find((evt) => {
-      const hasBranch = evt.tags.some((t) => t[0] === 'branch' && t[1] === linkData.branch);
-      const hasFile = evt.tags.some((t) => t[0] === 'file' && t[1] === linkData.filePath);
+      const hasBranch = getTagValue(evt as any, 'branch') === linkData.branch;
+      const hasFile = getTagValue(evt as any, 'file') === linkData.filePath;
 
       // handle optional line range
       if (linkData.startLine) {
-        const hasStart = evt.tags.some(
-          (t) => t[0] === 'lines' && t[1] === linkData.startLine!.toString()
-        );
+        const hasStart = (evt.tags.find(t => t[0] === 'lines')?.[1]) === linkData.startLine!.toString();
         if (!hasStart) return false;
 
         // if endLine also present, check for lines[2] = linkData.endLine
         if (linkData.endLine) {
           // The "lines" tag might store them as [ 'lines', start, end ]
-          const hasEnd = evt.tags.some(
-            (t) => t[0] === 'lines' && t[2] === linkData.endLine!.toString()
-          );
+          const hasEnd = (evt.tags.find(t => t[0] === 'lines')?.[2]) === linkData.endLine!.toString();
           if (!hasEnd) return false;
         }
       }

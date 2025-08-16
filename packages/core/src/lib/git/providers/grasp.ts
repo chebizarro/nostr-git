@@ -23,6 +23,7 @@ import type {
   GitForkOptions 
 } from '../api.js';
 import { SimplePool, type EventTemplate, type NostrEvent, nip19 } from 'nostr-tools';
+import { getTagValue, getTags } from '@nostr-git/shared-types';
 
 // Import or declare the requestEventSigning function
 declare const requestEventSigning: ((event: EventTemplate) => Promise<NostrEvent>) | undefined;
@@ -227,10 +228,10 @@ export class GraspApi implements GitServiceApi {
     }
 
     const event = events[0];
-    const nameTag = event.tags.find(t => t[0] === 'name')?.[1] || repo;
-    const descTag = event.tags.find(t => t[0] === 'description')?.[1] || '';
-    const cloneTag = event.tags.find(t => t[0] === 'clone')?.[1] || '';
-    const webTag = event.tags.find(t => t[0] === 'web')?.[1] || '';
+    const nameTag = getTagValue(event as any, 'name') || repo;
+    const descTag = getTagValue(event as any, 'description') || '';
+    const cloneTag = getTagValue(event as any, 'clone') || '';
+    const webTag = getTagValue(event as any, 'web') || '';
     
     const npub = nip19.npubEncode(owner);
     
@@ -478,22 +479,22 @@ export class GraspApi implements GitServiceApi {
     return events.map(event => ({
       id: parseInt(event.id.slice(-8), 16), // Use last 8 chars of event ID as number
       number: parseInt(event.id.slice(-8), 16),
-      title: event.tags.find(t => t[0] === 'subject')?.[1] || 'Untitled',
+      title: getTagValue(event as any, 'subject') || 'Untitled',
       body: event.content,
-      state: event.tags.find(t => t[0] === 'closed')? 'closed' : 'open',
+      state: getTagValue(event as any, 'closed') ? 'closed' : 'open',
       author: {
         login: nip19.npubEncode(event.pubkey),
         avatarUrl: undefined,
       },
       assignees: [],
-      labels: event.tags.filter(t => t[0] === 'label').map(t => ({
+      labels: getTags(event as any, 'label').map(t => ({
         name: t[1],
         color: '#000000',
         description: undefined,
       })),
       createdAt: new Date(event.created_at * 1000).toISOString(),
       updatedAt: new Date(event.created_at * 1000).toISOString(),
-      closedAt: event.tags.find(t => t[0] === 'closed')?.[1],
+      closedAt: getTagValue(event as any, 'closed'),
       url: `nostr:${nip19.neventEncode({ id: event.id, relays: [this.relayUrl] })}`,
       htmlUrl: `${this.relayUrl}/issues/${event.id}`,
     }));
@@ -637,7 +638,7 @@ export class GraspApi implements GitServiceApi {
 
     return events.map(event => ({
       id: event.id,
-      title: event.tags.find(t => t[0] === 'subject')?.[1] || 'Untitled Patch',
+      title: getTagValue(event as any, 'subject') || 'Untitled Patch',
       description: event.content,
       author: {
         login: nip19.npubEncode(event.pubkey),
