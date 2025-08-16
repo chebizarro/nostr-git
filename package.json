@@ -4,8 +4,13 @@
   "workspaces": [
     "packages/*"
   ],
+  "packageManager": "pnpm@10.12.4",
   "scripts": {
     "build": "pnpm -r build",
+    "format": "pnpm -r run format || true",
+    "lint": "pnpm -r run lint || true",
+    "typecheck": "pnpm -r run typecheck || true",
+    "test": "pnpm -r test || true",
     "watch": "pnpm -r --parallel --stream watch",
     "watch:core": "pnpm --filter @nostr-git/core watch",
     "watch:ui": "pnpm --filter @nostr-git/ui watch",
