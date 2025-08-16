@@ -8,13 +8,13 @@
   import { onMount } from "svelte";
 
   interface Props {
-    event: RepoAnnouncementEvent;
+    event?: RepoAnnouncementEvent;
   }
 
   const { event }: Props = $props();
 
-  // Parse repo data
-  const repoData = parseRepoAnnouncementEvent(event);
+  // Parse repo data (guard against undefined event)
+  const repoData = event ? parseRepoAnnouncementEvent(event) : ({ clone: [], web: [] } as any);
 
   // Get tokens from store
   let tokenList = $state([]);
@@ -88,13 +88,15 @@
   // Check if user is a maintainer/owner
   const isMaintainer = $derived.by(() => {
     const userPubkey = $pubkey;
-    if (!userPubkey) return false;
+    if (!userPubkey || !event) return false;
     
     // Check if user is the repo owner (event author)
     if (event.pubkey === userPubkey) return true;
     
     // Check maintainers list in repo tags
-    return event.tags.some(tag => tag[0] === "maintainers" && tag[1] === userPubkey);
+    return Array.isArray((event as any).tags)
+      ? event.tags.some(tag => tag[0] === "maintainers" && tag[1] === userPubkey)
+      : false;
   });
   
   // Determine overall auth status

@@ -80,6 +80,8 @@
   let cwd = initialCwd ?? '/';
   let history: string[] = [];
   let historyIdx = -1;
+  // Track the branch the terminal operates on; initialized from defaultBranch prop
+  let currentBranch: string | undefined = defaultBranch;
 
   // Toolbar actions
   function doClear() {
@@ -88,7 +90,12 @@
   }
 
   function printPrompt() {
-    term?.write(`\r\n${cwd} $ `);
+    term?.write(`\r\n${promptText()}`);
+  }
+
+  function promptText(): string {
+    const branch = currentBranch ? ` [${currentBranch}]` : '';
+    return `${cwd}${branch} $ `;
   }
 
   function printWelcome() {
@@ -134,7 +141,7 @@
       lines.push('   - git checkout <name>    switch branch');
       lines.push('   - git switch <name>      switch branch');
       lines.push('   - git add <paths>        stage changes');
-      lines.push('   - git commit -m "msg"    commit staged changes');
+      lines.push('   - git commit --apply-patch <file> -m "msg"  commit and push a patch');
       lines.push('   - git diff               show changes');
       lines.push('   - git show <obj>         show object details');
       lines.push('');
@@ -177,7 +184,7 @@
     const mgr = await ensureWM();
     try {
       const rel = path === '/' ? undefined : path.replace(/^\//, '');
-      const list = await mgr.listRepoFilesFromEvent({ repoEvent, branch: defaultBranch, path: rel, repoKey: repoRef?.repoId });
+      const list = await mgr.listRepoFilesFromEvent({ repoEvent, branch: currentBranch, path: rel, repoKey: repoRef?.repoId });
       return Array.isArray(list);
     } catch { return false; }
   }
@@ -186,13 +193,13 @@
     const mgr = await ensureWM();
     try {
       const rel = path.replace(/^\//, '');
-      return await mgr.fileExistsAtCommit({ repoEvent, branch: defaultBranch, path: rel, repoKey: repoRef?.repoId });
+      return await mgr.fileExistsAtCommit({ repoEvent, branch: currentBranch, path: rel, repoKey: repoRef?.repoId });
     } catch { return false; }
   }
   async function repoRead(path: string, encoding?: 'utf8'|'arraybuffer'): Promise<string|Uint8Array> {
     const mgr = await ensureWM();
     const rel = path.replace(/^\//, '');
-    const res = await mgr.getRepoFileContentFromEvent({ repoEvent: repoEvent!, branch: defaultBranch, path: rel, repoKey: repoRef?.repoId });
+    const res = await mgr.getRepoFileContentFromEvent({ repoEvent: repoEvent!, branch: currentBranch, path: rel, repoKey: repoRef?.repoId });
     const text = typeof res === 'string' ? res : String(res?.text ?? '');
     if (encoding === 'utf8' || !encoding) return text;
     return textEncoder.encode(text);
@@ -374,14 +381,26 @@
   async function handleGitRpc(op: string, params: any): Promise<any> {
     const mgr = await ensureWM();
     if (op === 'git.status') {
-      // Status should not hit the network; print a local placeholder
-      const branch = params?.branch || defaultBranch || '';
-      const lines = [`On branch ${branch}`, 'nothing to commit, working tree clean'];
-      return { text: lines.join('\n') + '\n' };
+      try {
+        const repoId = params?.repoId;
+        const branch = params?.branch ?? currentBranch;
+        if (!repoId) return { text: 'error: git status requires repoId\n' };
+        const res = await mgr.getStatus({ repoId, branch });
+        if (res?.success === false) {
+          return { text: `error: status failed: ${res?.error || 'unknown'}\n` };
+        }
+        const out = res?.text
+          || [`On branch ${res?.branch || branch || ''}`, ''].concat(
+               (res?.files || []).map((f: any) => `${f.status}\t${f.path}`)
+             ).join('\n');
+        return { text: out.endsWith('\n') ? out : out + '\n' };
+      } catch (e: any) {
+        return { text: `error: status exception: ${e?.message || String(e)}\n` };
+      }
     }
     if (op === 'git.log') {
       const depth = params.depth ?? 50;
-      const branch = params.branch;
+      const branch = params.branch ?? currentBranch;
       const oneline: boolean = !!params.oneline;
       const hist = await mgr.getCommitHistory({ repoId: params.repoId, branch, depth });
       if (!hist || hist.success === false) {
@@ -407,14 +426,91 @@
       const text = commits.map(fmt).join(oneline ? '\n' : '\n');
       return { text: text.endsWith('\n') ? text : text + '\n' };
     }
+    if (op === 'git.show') {
+      const { repoId, object } = params || {};
+      if (!repoId || !object) return { text: 'error: git show requires an object id\n' };
+      try {
+        const det = await mgr.getCommitDetails({ repoId, commitId: object, branch: params.branch ?? currentBranch });
+        if (!det?.success) return { text: `error: show failed: ${det?.error || 'unknown'}\n` };
+        const meta = det.meta || {};
+        const header = [
+          `commit ${meta.sha || object}`,
+          meta.author ? `Author: ${meta.author}${meta.email ? ' <'+meta.email+'>' : ''}` : undefined,
+          meta.date ? `Date:   ${new Date(meta.date).toISOString()}` : undefined,
+          '',
+          ...(meta.message ? String(meta.message).split('\n').map((l: string) => `    ${l}`) : []),
+          ''
+        ].filter(Boolean).join('\n');
+        const files = det.changes || [];
+        const body = files.map((f: any) => {
+          const hunks = (f.diffHunks || []).flatMap((h: any) => h.patches || []);
+          const lines = hunks.map((p: any) => `${p.type}${p.line}`);
+          const hdr = `diff -- ${f.path}`;
+          return [hdr, ...lines, ''].join('\n');
+        }).join('');
+        const out = header + (body ? body : '');
+        return { text: out.endsWith('\n') ? out : out + '\n' };
+      } catch (e: any) {
+        return { text: `error: show exception: ${e?.message || String(e)}\n` };
+      }
+    }
     if (op === 'git.add') {
       // Staging is not yet supported in worker API. Return a friendly message.
       return { text: 'warning: staging (git add) is not yet supported in this terminal\n' };
     }
     if (op === 'git.commit') {
-      // Committing via CLI not yet wired; commit flows are handled via UI workflows today.
-      const msg = params?.message ? ` (${params.message})` : '';
-      return { text: `warning: git commit${msg} is not yet supported in this terminal\n` };
+      // Support "git commit --apply-patch <file> -m \"msg\"" as Phase 2
+      const applyPatchPath = params?.applyPatchPath;
+      const message = params?.message || '';
+      const repoId = params?.repoId;
+      const targetBranch = params?.branch ?? defaultBranch;
+      if (applyPatchPath && repoId) {
+        try {
+          const content = await getFS().readFile(applyPatchPath, 'utf8') as string;
+          const result = await (await ensureWM()).applyPatchAndPush({
+            repoId,
+            patchData: { rawContent: content },
+            targetBranch,
+            mergeCommitMessage: message || 'Apply patch',
+            authorName: 'Terminal',
+            authorEmail: 'terminal@example.com',
+          });
+          if (result?.success) {
+            const commit = result.mergeCommitOid ? ` (${result.mergeCommitOid})` : '';
+            return { text: `Applied patch and pushed to ${targetBranch}${commit}\n` };
+          }
+          return { text: `error: commit failed: ${result?.error || 'unknown'}\n` };
+        } catch (e: any) {
+          return { text: `error: commit exception: ${e?.message || String(e)}\n` };
+        }
+      }
+      const msg = message ? ` (${message})` : '';
+      return { text: `warning: git commit${msg} requires --apply-patch <file> in this terminal\n` };
+    }
+    if (op === 'git.diff') {
+      // Phase 1: show diff for the latest commit vs parent (HEAD)
+      try {
+        const repoId = params?.repoId;
+        const branch = params?.branch ?? currentBranch;
+        const hist = await (await ensureWM()).getCommitHistory({ repoId, branch, depth: 2 });
+        const commits: any[] = hist?.commits || hist?.items || [];
+        if (!commits.length) return { text: 'warning: no commits to diff\n' };
+        const head = String(commits[0]?.oid || commits[0]?.sha || '');
+        if (!head) return { text: 'warning: cannot resolve HEAD\n' };
+        const det = await (await ensureWM()).getCommitDetails({ repoId, commitId: head, branch });
+        if (!det?.success) return { text: `error: diff failed: ${det?.error || 'unknown'}\n` };
+        const files = det.changes || [];
+        const body = files.map((f: any) => {
+          const hunks = (f.diffHunks || []).flatMap((h: any) => h.patches || []);
+          const lines = hunks.map((p: any) => `${p.type}${p.line}`);
+          const hdr = `diff -- ${f.path}`;
+          return [hdr, ...lines, ''].join('\n');
+        }).join('');
+        const out = body || 'no changes\n';
+        return { text: out.endsWith('\n') ? out : out + '\n' };
+      } catch (e: any) {
+        return { text: `error: diff exception: ${e?.message || String(e)}\n` };
+      }
     }
     if (op === 'git.push') {
       const { repoId, remoteUrl: ru, branch, provider, token, cloneUrls } = params || {};
@@ -424,7 +520,7 @@
             : (Array.isArray(repoCloneUrls) && repoCloneUrls.length > 0 ? repoCloneUrls[0] : undefined));
       const useProvider = provider ?? defaultProvider;
       const useToken = token ?? defaultToken;
-      const useBranch = branch ?? defaultBranch;
+      const useBranch = branch ?? currentBranch;
       if (!repoId || !remoteUrl) {
         return { text: 'error: git push requires repoId and remoteUrl (or cloneUrls[])\n' };
       }
@@ -462,9 +558,9 @@
         return { text: 'error: git pull requires repoId and cloneUrls[]\n' };
       }
       try {
-        const res = await mgr.syncWithRemote({ repoId, cloneUrls: urls, branch: branch ?? defaultBranch });
+        const res = await mgr.syncWithRemote({ repoId, cloneUrls: urls, branch: branch ?? currentBranch });
         if (res?.success) {
-          const b = res.branch || branch || defaultBranch || '';
+          const b = res.branch || branch || currentBranch || '';
           const head = res.headCommit ? ` (${res.headCommit})` : '';
           return { text: `Updated local ${b} to remote HEAD${head}\n` };
         }
@@ -478,9 +574,49 @@
         return { text: `error: pull exception: ${msg}\n` };
       }
     }
-    if (op === 'git.diff') {
-      // Working-tree diff not yet exposed; fallback message.
-      return { text: 'warning: git diff is not yet supported in this terminal\n' };
+    if (op === 'git.branch') {
+      // List branches using repoEvent if available
+      if (!repoEvent) {
+        return { text: 'error: branch listing requires repoEvent in this terminal\n' };
+      }
+      try {
+        const res = await mgr.listBranchesFromEvent({ repoEvent });
+        const branches: string[] = Array.isArray(res)
+          ? res.map((b: any) => (typeof b === 'string' ? b : (b?.name ?? String(b))))
+          : Array.isArray(res?.branches) ? res.branches : [];
+        if (!branches.length) return { text: 'no branches found\n' };
+        const lines = branches.map(b => (b === currentBranch ? `* ${b}` : `  ${b}`));
+        return { text: lines.join('\n') + '\n' };
+      } catch (e: any) {
+        return { text: `error: branch: ${e?.message || String(e)}\n` };
+      }
+    }
+    if (op === 'git.checkout') {
+      const repoId = params?.repoId;
+      const branch = params?.branch as string | undefined;
+      if (!repoId || !branch) return { text: 'error: checkout requires repoId and branch\n' };
+      try {
+        // Optionally verify branch exists if repoEvent present
+        if (repoEvent) {
+          try {
+            const res = await mgr.listBranchesFromEvent({ repoEvent });
+            const branches: string[] = Array.isArray(res)
+              ? res.map((b: any) => (typeof b === 'string' ? b : (b?.name ?? String(b))))
+              : Array.isArray(res?.branches) ? res.branches : [];
+            if (branches.length && !branches.includes(branch)) {
+              return { text: `error: branch '${branch}' not found\n` };
+            }
+          } catch {}
+        }
+        // Sync to the target branch to ensure local state, if clone URLs available
+        if (Array.isArray(repoCloneUrls) && repoCloneUrls.length > 0) {
+          try { await mgr.syncWithRemote({ repoId, cloneUrls: repoCloneUrls, branch }); } catch {}
+        }
+        currentBranch = branch;
+        return { text: `Switched to branch '${branch}'\n` };
+      } catch (e: any) {
+        return { text: `error: checkout: ${e?.message || String(e)}\n` };
+      }
     }
     throw new Error(`Unknown git op: ${op}`);
   }
@@ -624,7 +760,7 @@
           // naive redraw
           term.write(`\r\n`);
           const cmd = history[historyIdx] || '';
-          termWrite('stdout', `${cwd} $ ${cmd}`);
+          termWrite('stdout', `${promptText()}${cmd}`);
           inputBuffer = cmd;
         }
         return;
@@ -635,7 +771,7 @@
           historyIdx = historyIdx >= history.length - 1 ? 0 : historyIdx + 1;
           term.write(`\r\n`);
           const cmd = history[historyIdx] || '';
-          termWrite('stdout', `${cwd} $ ${cmd}`);
+          termWrite('stdout', `${promptText()}${cmd}`);
           inputBuffer = cmd;
         }
         return;

@@ -104,6 +104,7 @@ import type {
   IssueTag,
   StatusTag,
 } from './nip34.js';
+import { sanitizeRelays } from './sanitize-relays.js';
 
 
 // Helper: extract repository name from canonical repoId formats
@@ -467,7 +468,7 @@ export function parseRepoAnnouncementEvent(event: RepoAnnouncementEvent): RepoAn
   const getTag = (name: string) => event.tags.find(t => t[0] === name)?.[1];
   const getAllTags = (name: string) => event.tags.filter(t => t[0] === name).map(t => t[1]);
   const getMultiTag = (name: string) => event.tags.filter(t => t[0] === name).flatMap(t => t.slice(1));
-  
+  const relaysTag = () => sanitizeRelays(getMultiTag("relays"));
   // Extract earliest unique commit from r tag with 'euc' marker
   const eucTag = event.tags.find(t => t[0] === "r" && t[2] === "euc");
   const earliestUniqueCommit = eucTag?.[1];
@@ -481,7 +482,7 @@ export function parseRepoAnnouncementEvent(event: RepoAnnouncementEvent): RepoAn
     description: getTag("description"),
     web: getMultiTag("web"),
     clone: getMultiTag("clone"),
-    relays: getMultiTag("relays"),
+    relays: relaysTag(),
     maintainers: getMultiTag("maintainers"),
     hashtags: getAllTags("t"),
     earliestUniqueCommit,

@@ -5,7 +5,8 @@ import { getGitProvider } from './git-provider.js';
 import { GitMergeResult } from '@nostr-git/git-wrapper';
 
 export function parseGitPatchFromEvent(event: PatchEvent): Patch {
-  const header = parseGitPatch(event.content);
+  const parsed = parseGitPatch(event.content);
+  const header = Array.isArray(parsed) ? parsed : [];
 
   let diff = parseDiff(event.content);
 
@@ -27,8 +28,8 @@ export function parseGitPatchFromEvent(event: PatchEvent): Patch {
   return {
     id: event.id,
     repoId: getTag('a') || '',
-    title: getTag('subject') || header.length > 0 ? header[0].message : '',
-    description: header.length > 0 ? header[0].message : '',
+    title: getTag('subject') || (header[0]?.message ?? ''),
+    description: header[0]?.message ?? '',
     author,
     baseBranch: getTag('base-branch') || '',
     commitCount: header.length,

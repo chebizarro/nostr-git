@@ -10,10 +10,20 @@ export interface Branch {
 }
 
 export async function listBranchesFromEvent(opts: { repoEvent: RepoAnnouncementEvent; }): Promise<Branch[]> {
-  const event = parseRepoAnnouncementEvent(opts.repoEvent);
-  const dir = `${rootDir}/${canonicalRepoKey(event.repoId)}`;
+  const repo = parseRepoAnnouncementEvent(opts.repoEvent);
+  // Some repos announce only the name (e.g., "grasp") in tag d. Build a canonical key if needed.
+  let canonicalKey: string;
+  try {
+    canonicalKey = canonicalRepoKey(repo.repoId);
+  } catch (_) {
+    // Fallback: combine pubkey with repo name or repoId and canonicalize again
+    const fallbackId = `${opts.repoEvent.pubkey}:${repo.name || repo.repoId}`;
+    canonicalKey = canonicalRepoKey(fallbackId);
+  }
+
+  const dir = `${rootDir}/${canonicalKey}`;
   const git = getGitProvider();
-  const branches = await git.listBranches({dir});
+  const branches = await git.listBranches({ dir });
   return branches.map((name: string) => ({ name }));
 }
 

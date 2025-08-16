@@ -81,6 +81,23 @@ export class GraspApi implements GitServiceApi {
     this.pool = new SimplePool();
   }
 
+  /** Determine if a relay URL is suitable for Nostr relay connections */
+  private isValidNostrRelayUrl(url: string): boolean {
+    try {
+      const u = new URL(url);
+      if (!(u.protocol === 'ws:' || u.protocol === 'wss:')) return false;
+      const host = u.hostname.toLowerCase();
+      // Allow localhost and loopback
+      if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true;
+      // Reject known dev-only alias host
+      if (host === 'ngit-relay') return false;
+      // Require a dot in hostname for public hosts (rudimentary check)
+      return host.includes('.');
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Get relay information via NIP-11
    */
@@ -267,10 +284,11 @@ export class GraspApi implements GitServiceApi {
     } catch {}
     // de-duplicate while preserving order
     const seen = new Set<string>();
+    // Only include valid Nostr relay URLs in the relays tag to avoid adapter errors
     const relayAliases = aliases.filter(a => {
       if (seen.has(a)) return false;
       seen.add(a);
-      return true;
+      return this.isValidNostrRelayUrl(a);
     });
 
     const event: EventTemplate = {
@@ -331,7 +349,9 @@ export class GraspApi implements GitServiceApi {
       aliasList.push(`${u.protocol}//ngit-relay${port}`);
     } catch {}
     const relayAliases = aliasList.filter(a => {
-      if (aliasSeen.has(a)) return false; aliasSeen.add(a); return true;
+      if (aliasSeen.has(a)) return false; 
+      aliasSeen.add(a); 
+      return this.isValidNostrRelayUrl(a);
     });
 
     const event: EventTemplate = {
@@ -381,7 +401,11 @@ export class GraspApi implements GitServiceApi {
       const port = u.port ? `:${u.port}` : '';
       aliasList.push(`${u.protocol}//ngit-relay${port}`);
     } catch {}
-    const relayAliases = aliasList.filter(a => { if (aliasDedup.has(a)) return false; aliasDedup.add(a); return true; });
+    const relayAliases = aliasList.filter(a => { 
+      if (aliasDedup.has(a)) return false; 
+      aliasDedup.add(a); 
+      return this.isValidNostrRelayUrl(a);
+    });
 
     const event: EventTemplate = {
       kind: 30617,

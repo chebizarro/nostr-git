@@ -1,4 +1,4 @@
-import { getGitWorker } from "@nostr-git/core";
+import { getGitWorker, registerEventSigner } from "@nostr-git/core";
 import { 
   listBranchesFromEvent,
   listRepoFilesFromEvent,
@@ -9,6 +9,7 @@ import {
   getCommitHistory,
 } from "@nostr-git/core";
 import { RepoAnnouncementEvent } from "@nostr-git/shared-types";
+import { signer as signerStore, type Signer } from "../../stores/signer";
 
 export interface WorkerProgressEvent {
   repoId: string;
@@ -45,9 +46,17 @@ export class WorkerManager {
   private isInitialized = false;
   private progressCallback?: WorkerProgressCallback;
   private authConfig: AuthConfig = { tokens: [] };
+  private currentSigner: Signer | null = null;
   
   constructor(progressCallback?: WorkerProgressCallback) {
     this.progressCallback = progressCallback;
+    // Track latest signer from the store
+    try {
+      signerStore.subscribe((s) => { this.currentSigner = s; });
+    } catch (e) {
+      // Non-fatal if store subscription fails in non-Svelte contexts
+      console.warn('WorkerManager: signer store subscription failed', e);
+    }
   }
 
   /**
@@ -65,8 +74,20 @@ export class WorkerManager {
     this.worker = worker;
     this.api = api as any;
     this.isInitialized = true;
-    
+
     try {
+      // Register UI event signer so worker can request Nostr event signatures (e.g., GRASP push)
+      if (this.worker) {
+        registerEventSigner(this.worker, async (event: any) => {
+          const s = this.currentSigner;
+          if (!s || typeof s.sign !== 'function') {
+            throw new Error('No signer available');
+          }
+          const signed = await s.sign(event);
+          return signed;
+        });
+      }
+
       // Set authentication configuration in the worker
       if (this.authConfig.tokens.length > 0) {
         await this.api.setAuthConfig(this.authConfig);
@@ -215,6 +236,17 @@ export class WorkerManager {
   }
 
   /**
+   * Get detailed information about a specific commit including metadata and file changes
+   */
+  async getCommitDetails(params: {
+    repoId: string;
+    commitId: string;
+    branch?: string;
+  }): Promise<any> {
+    return this.execute('getCommitDetails', params);
+  }
+
+  /**
    * Get commit count
    */
   async getCommitCount(params: {
@@ -222,6 +254,16 @@ export class WorkerManager {
     branch: string;
   }): Promise<any> {
     return this.execute('getCommitCount', params);
+  }
+
+  /**
+   * Get working tree status using worker's getStatus()
+   */
+  async getStatus(params: {
+    repoId: string;
+    branch?: string;
+  }): Promise<any> {
+    return this.execute('getStatus', params);
   }
 
   /**
@@ -246,6 +288,19 @@ export class WorkerManager {
    * List branches from repository event
    */
   async listBranchesFromEvent(params: { repoEvent: RepoAnnouncementEvent }): Promise<any> {
+    /**
+     * WARNING: This is a thin helper that returns raw local git branch names from the
+     * UI thread by calling the core function directly. It does NOT interpret NIP-34
+     * RepoState refs or HEAD and therefore must not be used to determine a default
+     * branch or to render the final branch selector on its own.
+     * 
+     * For authoritative branch handling, including mapping of NIP-34 refs (refs/heads/*, refs/tags/*)
+     * and HEAD resolution with multi-fallback defaults, use BranchManager:
+     *   packages/nostr-git/packages/ui/src/lib/components/git/BranchManager.ts
+     *
+     * TODO: When the worker exposes an equivalent RPC, route this through `this.execute('listBranchesFromEvent', ...)`
+     * to keep FS/git access confined to the worker for consistency.
+     */
     return await listBranchesFromEvent(params);
   }
 

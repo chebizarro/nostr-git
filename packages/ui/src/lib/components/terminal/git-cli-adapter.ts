@@ -39,6 +39,8 @@ function helpFor(sub?: string): string {
       return 'usage: git log [--oneline] [<path>]';
     case 'diff':
       return 'usage: git diff [<path>]';
+    case 'show':
+      return 'usage: git show <object>'; 
     case 'add':
       return 'usage: git add <pathspec>...';
     case 'commit':
@@ -47,6 +49,11 @@ function helpFor(sub?: string): string {
       return 'usage: git push [--force] [<remote>] [<branch>]';
     case 'pull':
       return 'usage: git pull [<remote>] [<branch>]';
+    case 'branch':
+      return 'usage: git branch';
+    case 'checkout':
+    case 'switch':
+      return 'usage: git checkout <branch> | git switch <branch>';
     default:
       return usage();
   }
@@ -77,6 +84,18 @@ export async function runGitCli(argv: string[], ctx: GitCliContext): Promise<Git
         return { code: 1, stderr: `git status: ${e?.message || String(e)}` };
       }
     }
+    case 'show': {
+      if (!ctx.rpc) return { code: 127, stderr: 'git show: RPC not available' };
+      const object = args.find(a => !a.startsWith('-'));
+      if (!object) return { code: 2, stderr: 'git show: missing object id' };
+      try {
+        const res = await ctx.rpc('git.show', { repoId: ctx.repoRef.repoId, object });
+        const text = typeof res === 'string' ? res : String(res?.text ?? '');
+        return { code: 0, stdout: text.endsWith('\n') ? text : text + '\n' };
+      } catch (e: any) {
+        return { code: 1, stderr: `git show: ${e?.message || String(e)}` };
+      }
+    }
     case 'log':
       if (!ctx.rpc) {
         return { code: 127, stderr: 'git log: RPC not available' };
@@ -92,6 +111,34 @@ export async function runGitCli(argv: string[], ctx: GitCliContext): Promise<Git
       } catch (e: any) {
         return { code: 1, stderr: `git log: ${e?.message || String(e)}` };
       }
+    case 'branch': {
+      if (!ctx.rpc) return { code: 127, stderr: 'git branch: RPC not available' };
+      try {
+        const res = await ctx.rpc('git.branch', { repoId: ctx.repoRef.repoId });
+        const text = typeof res === 'string' ? res : (typeof res?.text === 'string' ? res.text : undefined);
+        if (typeof text === 'string') {
+          return { code: 0, stdout: text.endsWith('\n') ? text : text + '\n' };
+        }
+        const list: string[] = Array.isArray(res?.branches) ? res.branches : (Array.isArray(res) ? res : []);
+        const out = list.join('\n');
+        return { code: 0, stdout: out ? out + '\n' : '' };
+      } catch (e: any) {
+        return { code: 1, stderr: `git branch: ${e?.message || String(e)}` };
+      }
+    }
+    case 'checkout':
+    case 'switch': {
+      if (!ctx.rpc) return { code: 127, stderr: `git ${sub}: RPC not available` };
+      const branch = args.find(a => !a.startsWith('-'));
+      if (!branch) return { code: 2, stderr: `git ${sub}: missing branch` };
+      try {
+        const res = await ctx.rpc('git.checkout', { repoId: ctx.repoRef.repoId, branch });
+        const text = typeof res === 'string' ? res : String(res?.text ?? `Switched to branch '${branch}'`);
+        return { code: 0, stdout: text.endsWith('\n') ? text : text + '\n' };
+      } catch (e: any) {
+        return { code: 1, stderr: `git ${sub}: ${e?.message || String(e)}` };
+      }
+    }
     case 'diff': {
       if (!ctx.rpc) return { code: 127, stderr: 'git diff: RPC not available' };
       const pathArg = args.find(a => !a.startsWith('-'));

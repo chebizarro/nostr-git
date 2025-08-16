@@ -3362,6 +3362,106 @@ async function getCommitDetails({
   }
 }
 
+// Compute working tree status for a repository
+async function getStatus({
+  repoId,
+  branch,
+}: {
+  repoId: string;
+  branch?: string;
+}): Promise<{
+  success: boolean;
+  repoId: string;
+  branch: string;
+  files: Array<{
+    path: string;
+    head: number;
+    workdir: number;
+    stage: number;
+    status: 'added' | 'modified' | 'deleted' | 'untracked' | 'ignored' | 'conflicted' | 'staged' | 'renamed' | 'unknown';
+  }>;
+  counts: Record<string, number>;
+  text?: string;
+  error?: string;
+}> {
+  const key = canonicalRepoKey(repoId);
+  const dir = `${rootDir}/${key}`;
+  try {
+    // Ensure repo exists
+    const cloned = await isRepoCloned(dir);
+    if (!cloned) {
+      return { success: false, repoId, branch: branch || 'main', files: [], counts: {}, error: 'Repository not cloned locally' };
+    }
+
+    // Resolve branch robustly
+    const targetBranch = await resolveRobustBranchInWorker(dir, branch);
+
+    // Best-effort checkout to ensure HEAD points to target branch
+    try {
+      await git.checkout({ dir, ref: targetBranch });
+    } catch {
+      // ignore
+    }
+
+    const matrix = await git.statusMatrix({ dir });
+    type StatusFile = {
+      path: string;
+      head: number;
+      workdir: number;
+      stage: number;
+      status: 'added' | 'modified' | 'deleted' | 'untracked' | 'ignored' | 'conflicted' | 'staged' | 'renamed' | 'unknown';
+    };
+
+    const files: StatusFile[] = matrix.map((row: any) => {
+      const path = row[0] as string;
+      const head = row[1] as number;
+      const workdir = row[2] as number;
+      const stage = row[3] as number;
+      let status: StatusFile['status'] = 'unknown';
+      if (head === 0 && workdir === 2 && stage === 0) status = 'untracked';
+      else if (head === 1 && workdir === 0 && stage === 0) status = 'deleted';
+      else if (head === 1 && workdir === 2 && stage === 1) status = 'modified';
+      else if (head === 0 && workdir === 2 && stage === 2) status = 'added';
+      else if (head !== stage) status = 'staged';
+      return { path, head, workdir, stage, status };
+    });
+
+    const counts: Record<string, number> = {};
+    for (const f of files) counts[f.status] = (counts[f.status] || 0) + 1;
+
+    // Build a git-like summary text
+    const lines: string[] = [];
+    lines.push(`On branch ${targetBranch}`);
+    const changed = files.filter((f) => f.status !== 'unknown' && f.status !== 'ignored');
+    if (changed.length === 0) {
+      lines.push('nothing to commit, working tree clean');
+    } else {
+      const staged = files.filter((f) => f.status === 'staged' || f.stage === 2);
+      const notStaged = files.filter((f) => (f.status === 'modified' || f.status === 'deleted' || f.status === 'added') && f.stage !== 2);
+      const untracked = files.filter((f) => f.status === 'untracked');
+      if (staged.length) {
+        lines.push('Changes to be committed:');
+        lines.push('  (use "git reset HEAD <file>..." to unstage)');
+        for (const f of staged) lines.push(`        ${f.status}:   ${f.path}`);
+      }
+      if (notStaged.length) {
+        lines.push('Changes not staged for commit:');
+        lines.push('  (use "git add <file>..." to update what will be committed)');
+        for (const f of notStaged) lines.push(`        ${f.status}:   ${f.path}`);
+      }
+      if (untracked.length) {
+        lines.push('Untracked files:');
+        lines.push('  (use "git add <file>..." to include in what will be committed)');
+        for (const f of untracked) lines.push(`        ${f.path}`);
+      }
+    }
+
+    return { success: true, repoId, branch: targetBranch, files, counts, text: lines.join('\n') + '\n' };
+  } catch (error: any) {
+    return { success: false, repoId, branch: branch || 'main', files: [], counts: {}, error: error.message || String(error) };
+  }
+}
+
 expose({ 
   cloneAndFork, 
   clone, 
@@ -3389,6 +3489,7 @@ expose({
   updateRemoteRepoMetadata,
   updateAndPushFiles,
   getCommitDetails,
+  getStatus,
   setEventSigner, // Flag to indicate signing is available
   requestEventSigning, // Function to request event signing from UI thread
   setRequestEventSigningHandler // Function to register the event signing handler

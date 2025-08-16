@@ -95,7 +95,39 @@
       deriveEvents(repository, { filters: [graspServersFilter] }),
       (events) => {
         if (events.length === 0) {
-          load({ relays: Router.get().FromUser().getUrls(), filters: [graspServersFilter] });
+          const isValidNostrRelayUrl = (url: string): boolean => {
+            try {
+              const u = new URL(url)
+              if (!(u.protocol === 'ws:' || u.protocol === 'wss:')) return false
+              const host = u.hostname.toLowerCase()
+              if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true
+              if (host === 'ngit-relay' || host === 'container') return false
+              return host.includes('.')
+            } catch {
+              return false
+            }
+          }
+          const sanitizeRelays = (urls: string[]): string[] => {
+            const out: string[] = []
+            const seen = new Set<string>()
+            for (const raw of urls || []) {
+              try {
+                const normalized = raw
+                  .replace(/^http:\/\//, 'ws://')
+                  .replace(/^https:\/\//, 'wss://')
+                  .replace(/(ws[s]?:\/\/[^/]+).*/, '$1')
+                  .replace(/\/$/, '')
+                if (!isValidNostrRelayUrl(normalized)) continue
+                if (seen.has(normalized)) continue
+                seen.add(normalized)
+                out.push(normalized)
+              } catch {
+                // skip
+              }
+            }
+            return out
+          }
+          load({ relays: sanitizeRelays(Router.get().FromUser().getUrls()), filters: [graspServersFilter] });
         }
         return events[0];
       }

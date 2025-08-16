@@ -39,7 +39,7 @@
         <div class="flex -space-x-2">
           {#each contributors.slice(0, 5) as c (c.name)}
             <Avatar class="h-8 w-8 border-2 border-background">
-              <AvatarImage src={c?.avatar ?? c?.picture ?? ''} alt={c?.name ?? c?.display_name ?? ''} />
+              <AvatarImage src={c?.picture ?? ''} alt={c?.name ?? c?.display_name ?? ''} />
               <AvatarFallback>{(c?.name ?? c?.display_name ?? '').slice(0, 2).toUpperCase()}</AvatarFallback>
             </Avatar>
           {/each}
