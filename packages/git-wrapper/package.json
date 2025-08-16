@@ -2,14 +2,15 @@
   "name": "@nostr-git/git-wrapper",
   "version": "0.1.0",
   "description": "Pluggable git implementation wrapper with nostr extensions.",
-  "main": "dist/index.js",
-  "module": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/index.node.js",
+  "module": "dist/index.node.js",
+  "types": "dist/index.node.d.ts",
   "type": "module",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "require": "./dist/index.js"
+      "browser": "./dist/index.web.js",
+      "import": "./dist/index.node.js",
+      "require": "./dist/index.node.js"
     }
   },
   "scripts": {
@@ -18,6 +19,7 @@
     "prepare": "npm run build",
     "watch": "tsc --watch",
     "test": "vitest run",
+    "start:compat": "cross-env LIBGIT2_COMPAT=true node -e \"console.log('compat mode enabled')\"",
     "example:push-normal": "node --loader ts-node/esm examples/push-normal.ts",
     "example:push-pr": "node --loader ts-node/esm examples/push-pr.ts",
     "example:clone-and-pr": "node --loader ts-node/esm examples/clone-and-pr.ts"
@@ -25,10 +27,13 @@
   "dependencies": {
     "@nostr-git/shared-types": "workspace:*",
     "buffer": "^6.0.3",
-    "isomorphic-git": "^1.27.0"
+    "dotenv": "^16.4.5",
+    "@isomorphic-git/lightning-fs": "^4.6.2",
+    "isomorphic-git": "https://github.com/chebizarro/isomorphic-git/releases/download/v2.0.0-alpha/isomorphic-git-2.0.0-alpha.tgz"
   },
   "devDependencies": {
     "@types/node": "^22.2.0",
+    "cross-env": "^7.0.3",
     "ts-node": "^10.9.2",
     "typescript": "^5.0.0",
     "vitest": "^2.1.9"

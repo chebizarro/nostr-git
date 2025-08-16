@@ -1,13 +1,12 @@
 import * as isogit from 'isomorphic-git';
 import { GitFetchResult, GitMergeResult, GitProvider } from './provider.js';
-import { FsClient } from 'isomorphic-git';
 
 export class IsomorphicGitProvider implements GitProvider {
-  fs: FsClient;
-  http: isogit.HttpClient;
+  fs: any;
+  http: any;
   corsProxy: string;
 
-  constructor(options: { fs: FsClient, http: isogit.HttpClient, corsProxy: string }) {
+  constructor(options: { fs: any; http: any; corsProxy: string }) {
     this.fs = options.fs;
     this.http = options.http;
     this.corsProxy = options.corsProxy;

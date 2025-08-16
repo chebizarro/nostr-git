@@ -1,13 +1,10 @@
 import type { GitProvider } from '@nostr-git/git-wrapper';
+import { getGitProvider as getBaseGitProvider } from '@nostr-git/git-wrapper';
 import { MultiVendorGitProvider } from './multi-vendor-git-provider.js';
-import http from 'isomorphic-git/http/web';
-import LightningFS from '@isomorphic-git/lightning-fs';
 
-// Create the multi-vendor GitProvider instance
+// Create the multi-vendor GitProvider instance using git-wrapper factory
 let gitProvider: GitProvider = new MultiVendorGitProvider({
-  fs: new LightningFS('nostr-git'),
-  http: http,
-  corsProxy: 'https://cors.isomorphic-git.org',
+  baseProvider: getBaseGitProvider(),
 });
 
 /**

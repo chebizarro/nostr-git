@@ -457,6 +457,29 @@ import { makeRepoAddr } from '@nostr-git/git-wrapper/src/repo-addr.js';
 import { FileProtocolPrefs } from '@nostr-git/git-wrapper/src/prefs-store.js';
 ```
 
+#### Split entry points (browser vs node)
+
+`@nostr-git/git-wrapper` ships split entry points to avoid bundling Node-only modules in the browser:
+
+- Browser: `dist/index.web.js` (LightningFS + `isomorphic-git/http/web`)
+- Node/SSR: `dist/index.node.js` (Node `fs` + `isomorphic-git/http/node`)
+
+The package `exports` map selects the correct entry automatically for most bundlers. Typical usage:
+
+```ts
+import { getGitProvider } from '@nostr-git/git-wrapper';
+```
+
+When you need to be explicit:
+
+```ts
+// Browser explicit
+import { getGitProvider } from '@nostr-git/git-wrapper/dist/index.web.js';
+
+// Node explicit
+import { getGitProvider } from '@nostr-git/git-wrapper/dist/index.node.js';
+```
+
 ### Construction
 
 ```ts
@@ -564,6 +587,7 @@ const diff = await generateUnifiedDiff({ fs, dir: '/tmp/repo', baseRef: 'refs/he
 - Normal push with fallback and status: `packages/git-wrapper/examples/push-normal.ts`
 - PR push emitting NIP-34 GIT_PATCH: `packages/git-wrapper/examples/push-pr.ts`
 - Clone-and-PR with real commits and unified diff: `packages/git-wrapper/examples/clone-and-pr.ts`
+- Basic clone + status with factory: `packages/git-wrapper/examples/basic-clone-status.ts`
 
 Run examples from repo root:
 
@@ -572,5 +596,6 @@ pnpm -w --filter @nostr-git/git-wrapper build
 node packages/git-wrapper/examples/push-normal.ts
 node packages/git-wrapper/examples/push-pr.ts
 node packages/git-wrapper/examples/clone-and-pr.ts
+node packages/git-wrapper/examples/basic-clone-status.ts
 ```
 

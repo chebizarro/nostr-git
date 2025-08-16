@@ -19,7 +19,7 @@ export async function generateUnifiedDiff(opts: UnifiedDiffOptions): Promise<str
     fs,
     dir,
     trees: [git.TREE({ ref: baseRef }), git.TREE({ ref: headRef })],
-    map: async (filepath, [A, B]) => {
+    map: async (filepath: string, [A, B]: any[]) => {
       if (!filepath) return;
       const aType = await A?.type();
       const bType = await B?.type();

@@ -70,6 +70,111 @@ await provider.merge({
     close: true, // also emit GIT_STATUS_CLOSED
   },
 });
+
+## Usage
+
+### Factory + caching
+
+Prefer the factory to obtain a provider with sensible defaults and caching:
+
+```ts
+import { getGitProvider } from '@nostr-git/git-wrapper';
+
+const git = getGitProvider();
+await git.clone({ dir: '/my/repo', url: 'https://github.com/owner/repo.git' });
+const head = await git.resolveRef({ dir: '/my/repo', ref: 'HEAD' });
+```
+
+### Browser usage snippet
+
+When used in a browser app (e.g., Svelte with `ssr=false`), the browser entry is selected automatically. LightningFS and `http/web` are wired for you:
+
+```ts
+import { getGitProvider } from '@nostr-git/git-wrapper';
+
+const git = getGitProvider();
+await git.init({ dir: '/my-repo' });
+const status = await git.statusMatrix({ dir: '/my-repo' });
+console.log('entries:', status.length);
+```
+
+Configure behavior via env (Node) or by calling `loadConfig()` with overrides when embedding:
+
+- `LIBGIT2_COMPAT` = `true|false` — toggles compat behavior in the v2 engine.
+- `GIT_CACHE_MODE` = `off|per-session|per-repo-batch` — caching strategy (default `per-session`).
+- `GIT_CACHE_TTL_MS` = number — idle TTL for per-session caches (default `60000`).
+
+You can also directly wrap a provider with cache using `CachedGitProvider` if you need custom composition.
+
+### Factory behavior and caching
+
+The factory returns a singleton `GitProvider` with optional caching layered on top:
+
+- `GIT_CACHE_MODE` (default: `per-session`)
+  - `off` — no caching
+  - `per-session` — memoizes results for a short idle TTL
+  - `per-repo-batch` — groups operations within a repo for the duration of a batch
+- `GIT_CACHE_TTL_MS` (default: `60000`) — idle TTL for `per-session` caches
+
+Programmatic override when embedding:
+
+```ts
+import { getGitProvider } from '@nostr-git/git-wrapper';
+import { loadConfig } from '@nostr-git/git-wrapper';
+
+// Override at call site
+const git = getGitProvider({ cacheMode: 'per-session', cacheTtlMs: 45_000 });
+```
+
+The singleton is reused across calls to `getGitProvider()` for the process/session.
+
+### Entry points (browser vs node)
+
+This package ships split entry points so browser apps never see Node-only imports:
+
+- Browser: `dist/index.web.js` (LightningFS + `isomorphic-git/http/web`)
+- Node/SSR: `dist/index.node.js` (Node `fs` + `isomorphic-git/http/node`)
+
+The `package.json` exports map selects the right entry automatically:
+
+```json
+{
+  "exports": {
+    ".": {
+      "browser": "./dist/index.web.js",
+      "import": "./dist/index.node.js",
+      "require": "./dist/index.node.js"
+    }
+  }
+}
+```
+
+Most consumers can simply:
+
+```ts
+import { getGitProvider } from '@nostr-git/git-wrapper';
+```
+
+If you need to target explicitly:
+
+```ts
+// Browser explicit
+import { getGitProvider } from '@nostr-git/git-wrapper/dist/index.web.js';
+
+// Node explicit
+import { getGitProvider } from '@nostr-git/git-wrapper/dist/index.node.js';
+```
+
+### Direct adapter
+
+If you need to wire your own fs/http, use the adapter:
+
+```ts
+import { IsomorphicGitProvider } from '@nostr-git/git-wrapper';
+import http from 'isomorphic-git/http/web';
+import LightningFS from '@isomorphic-git/lightning-fs';
+
+const git = new IsomorphicGitProvider({ fs: LightningFS, http, corsProxy: 'https://cors.isomorphic-git.org' });
 ```
 
 ## Examples

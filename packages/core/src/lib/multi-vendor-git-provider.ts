@@ -1,9 +1,8 @@
 import type { GitProvider } from '@nostr-git/git-wrapper';
-import { IsomorphicGitProvider } from '@nostr-git/git-wrapper';
+import { getGitProvider } from '@nostr-git/git-wrapper';
 import type { VendorProvider, RepoMetadata, CreateRepoOptions, UpdateRepoOptions } from './vendor-providers.js';
 import { resolveVendorProvider, parseRepoFromUrl } from './vendor-provider-factory.js';
-import http from 'isomorphic-git/http/web';
-import LightningFS from '@isomorphic-git/lightning-fs';
+// Core no longer imports isomorphic-git or LightningFS directly; we rely on git-wrapper factory.
 
 /**
  * Enhanced GitProvider that supports multiple Git service vendors
@@ -13,16 +12,8 @@ export class MultiVendorGitProvider implements GitProvider {
   private baseProvider: GitProvider;
   private tokenStore: Map<string, string> = new Map();
 
-  constructor(options?: {
-    fs?: any;
-    http?: any;
-    corsProxy?: string;
-  }) {
-    this.baseProvider = new IsomorphicGitProvider({
-      fs: options?.fs || new LightningFS('nostr-git'),
-      http: options?.http || http,
-      corsProxy: options?.corsProxy || 'https://cors.isomorphic-git.org',
-    });
+  constructor(options?: { baseProvider?: GitProvider }) {
+    this.baseProvider = options?.baseProvider ?? getGitProvider();
   }
 
   // Token management
