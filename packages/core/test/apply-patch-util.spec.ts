@@ -231,4 +231,60 @@ describe('applyPatchAndPushUtil', () => {
     expect(res.skippedRemotes).toContain('backup');
     expect(res.pushErrors?.[0].code).toBe('DENIED');
   });
+
+  it('rejects rename patches as unsupported', async () => {
+    const git = makeGit({ listRemotes: vi.fn(async () => []) });
+    const mem = makeMemFs();
+    const renamePatch = `diff --git a/old.txt b/new.txt\nrename from old.txt\nrename to new.txt\n@@ -1 +1 @@\n-old\n+new\n`;
+
+    const res = await applyPatchAndPushUtil(
+      git,
+      {
+        repoId: 'Org/Repo',
+        patchData: { id: 'rn1', commits: [], baseBranch: 'main', rawContent: renamePatch },
+        authorName: 'G',
+        authorEmail: 'g@example.com',
+      },
+      {
+        rootDir: '/tmp',
+        canonicalRepoKey: (s) => s.toLowerCase(),
+        resolveRobustBranch: async (_dir, requested) => requested || 'main',
+        ensureFullClone: async () => ({}),
+        getAuthCallback: (_url) => undefined,
+        getConfiguredAuthHosts: () => [],
+        getProviderFs: () => mem.fs,
+      }
+    );
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/Unsupported patch features/);
+  });
+
+  it('rejects binary patches as unsupported', async () => {
+    const git = makeGit({ listRemotes: vi.fn(async () => []) });
+    const mem = makeMemFs();
+    const binaryPatch = `diff --git a/img.png b/img.png\nnew file mode 100644\nindex 0000000..e69de29\nGIT binary patch\nliteral 0\nHcmV?d00001\n`;
+
+    const res = await applyPatchAndPushUtil(
+      git,
+      {
+        repoId: 'Org/Repo',
+        patchData: { id: 'bn1', commits: [], baseBranch: 'main', rawContent: binaryPatch },
+        authorName: 'H',
+        authorEmail: 'h@example.com',
+      },
+      {
+        rootDir: '/tmp',
+        canonicalRepoKey: (s) => s.toLowerCase(),
+        resolveRobustBranch: async (_dir, requested) => requested || 'main',
+        ensureFullClone: async () => ({}),
+        getAuthCallback: (_url) => undefined,
+        getConfiguredAuthHosts: () => [],
+        getProviderFs: () => ({ promises: mem.fs.promises } as any),
+      }
+    );
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/Unsupported patch features/);
+  });
 });

@@ -111,6 +111,7 @@ function parsePatchContent(patchLines: string[]): Array<{
     if (line.startsWith('diff --git')) {
       // finalize previous
       if (currentFile) {
+        // Push even if no hunks when we flagged unsupported
         changes.push({ filepath: currentFile, type: currentType, content: currentContent.join('\n') });
       }
       const match = line.match(/diff --git a\/(.*) b\/(.*)/);
@@ -149,7 +150,7 @@ function parsePatchContent(patchLines: string[]): Array<{
     if (line.startsWith('@@')) {
       inFileDiff = true;
       // Only set type from flags if not already explicitly set to add/delete
-      if (currentType !== 'add' && currentType !== 'delete') {
+      if (!sawUnsupported && currentType !== 'add' && currentType !== 'delete') {
         currentType = isDeletedFile ? 'delete' : isNewFile ? 'add' : 'modify';
       }
       currentContent.push(line);
@@ -159,7 +160,7 @@ function parsePatchContent(patchLines: string[]): Array<{
       currentContent.push(line);
     }
   }
-  if (currentFile && currentContent.length > 0) {
+  if (currentFile && (currentContent.length > 0 || sawUnsupported)) {
     changes.push({ filepath: currentFile, type: currentType, content: currentContent.join('\n') });
   }
   return changes;
@@ -179,32 +180,72 @@ function extractNewFileContentFromPatch(patchContent: string): string {
 }
 
 function applyUnifiedDiffPatch(existingContent: string, patchContent: string): string {
-  const existingLines = existingContent.split('\n');
-  const patchLines = patchContent.split('\n');
-  const resultLines: string[] = [];
-  let existingIndex = 0;
-  let inHunk = false;
-  let hunkOldStart = 0;
-  let hunkNewStart = 0;
-  for (const line of patchLines) {
-    const hunkMatch = line.match(/^@@\s+-?(\d+),?\d*\s+\+(\d+),?\d*\s+@@/);
-    if (hunkMatch) {
-      hunkOldStart = parseInt(hunkMatch[1]) - 1;
-      hunkNewStart = parseInt(hunkMatch[2]) - 1;
-      while (existingIndex < hunkOldStart) { resultLines.push(existingLines[existingIndex]); existingIndex++; }
-      inHunk = true;
+  const src = existingContent.split('\n');
+  const p = patchContent.split('\n');
+
+  type Hunk = { header: string; lines: string[]; oldStart: number };
+  const hunks: Hunk[] = [];
+  let current: Hunk | null = null;
+  for (const line of p) {
+    const m = line.match(/^@@\s+-?(\d+),?\d*\s+\+(\d+),?\d*\s+@@/);
+    if (m) {
+      if (current) hunks.push(current);
+      current = { header: line, lines: [], oldStart: parseInt(m[1]) - 1 };
       continue;
     }
-    if (inHunk) {
-      if (line.startsWith(' ')) { resultLines.push(line.substring(1)); existingIndex++; }
-      else if (line.startsWith('+')) { resultLines.push(line.substring(1)); }
-      else if (line.startsWith('-')) { existingIndex++; }
-      else if (line.startsWith('\\')) { continue; }
-      else { inHunk = false; }
+    if (current) current.lines.push(line);
+  }
+  if (current) hunks.push(current);
+
+  const out: string[] = [];
+  let cursor = 0; // index into src
+
+  const advanceTo = (target: number) => {
+    while (cursor < Math.max(0, target) && cursor < src.length) {
+      out.push(src[cursor++]);
+    }
+  };
+
+  const findContextOffset = (startIndex: number, ctx: string[]): number => {
+    if (ctx.length === 0) return startIndex;
+    const window = 5;
+    const begin = Math.max(0, startIndex - window);
+    const end = Math.min(src.length - ctx.length, startIndex + window);
+    for (let i = begin; i <= end; i++) {
+      let ok = true;
+      for (let j = 0; j < ctx.length; j++) {
+        if (src[i + j] !== ctx[j]) { ok = false; break; }
+      }
+      if (ok) return i;
+    }
+    return startIndex; // fallback
+  };
+
+  for (const h of hunks) {
+    // Extract first few context lines from the hunk body to help alignment
+    const preCtx: string[] = [];
+    for (const l of h.lines) {
+      if (l.startsWith(' ')) preCtx.push(l.substring(1));
+      else if (l.startsWith('+') || l.startsWith('-') || l.startsWith('\\')) break;
+      if (preCtx.length >= 3) break;
+    }
+
+    const aligned = findContextOffset(h.oldStart, preCtx);
+    advanceTo(aligned);
+
+    // Apply hunk
+    for (const l of h.lines) {
+      if (!l) continue;
+      if (l.startsWith(' ')) { out.push(l.substring(1)); cursor++; }
+      else if (l.startsWith('+')) { out.push(l.substring(1)); }
+      else if (l.startsWith('-')) { cursor++; }
+      else if (l.startsWith('\\')) { /* ignore no newline markers */ }
     }
   }
-  while (existingIndex < existingLines.length) { resultLines.push(existingLines[existingIndex]); existingIndex++; }
-  return resultLines.join('\n');
+
+  // Append the remainder
+  while (cursor < src.length) out.push(src[cursor++]);
+  return out.join('\n');
 }
 
 export async function applyPatchAndPushUtil(
