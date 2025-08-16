@@ -15,6 +15,7 @@ import {
   createPatchEvent,
   createStatusEvent,
 } from '@nostr-git/shared-types';
+import { getTags } from '@nostr-git/shared-types';
 
 /**
  * A GitProvider implementation that coordinates between an underlying git backend
@@ -534,10 +535,9 @@ export class NostrGitProvider implements GitProvider {
     const tags: { name: string; hash: string }[] = [];
 
     if (announcement) {
-      for (const tag of announcement.tags) {
-        if (tag[0] === 'clone' && tag.length > 1) {
-          urls.push(...tag.slice(1));
-        }
+      const cloneTags = getTags(announcement as any, 'clone') as [string, ...string[]][];
+      for (const tag of cloneTags) {
+        if (tag.length > 1) urls.push(...tag.slice(1));
       }
     }
 

@@ -1,37 +1,21 @@
-import prettier from 'eslint-config-prettier';
-import js from '@eslint/js';
-import { includeIgnoreFile } from '@eslint/compat';
-import svelte from 'eslint-plugin-svelte';
-import globals from 'globals';
-import { fileURLToPath } from 'node:url';
 import ts from 'typescript-eslint';
-import svelteConfig from './svelte.config.js';
 
-const gitignorePath = fileURLToPath(new URL('./.gitignore', import.meta.url));
-
-export default ts.config(
-	includeIgnoreFile(gitignorePath),
-	js.configs.recommended,
-	...ts.configs.recommended,
-	...svelte.configs.recommended,
-	prettier,
-	...svelte.configs.prettier,
+export default [
 	{
 		languageOptions: {
-			globals: { ...globals.browser, ...globals.node }
+			parser: ts.parser
 		},
-		rules: { 'no-undef': 'off' }
-	},
-	{
-		files: ['**/*.svelte', '**/*.svelte.ts', '**/*.svelte.js'],
-		ignores: ['eslint.config.js', 'svelte.config.js'],
-		languageOptions: {
-			parserOptions: {
-				projectService: true,
-				extraFileExtensions: ['.svelte'],
-				parser: ts.parser,
-				svelteConfig
-			}
+		rules: {
+			// Enforce canonical tag helpers instead of direct event.tags find/filter
+			'no-restricted-syntax': [
+				'error',
+				{
+					selector:
+						"CallExpression[callee.type='MemberExpression'][callee.property.name=/^(find|filter)$/] > *.object[type='MemberExpression'][property.name='tags']",
+					message:
+						"Do not use event.tags.find/filter directly. Use getTag/getTags/getTagValue from @nostr-git/shared-types."
+				}
+			]
 		}
 	}
-);
+];

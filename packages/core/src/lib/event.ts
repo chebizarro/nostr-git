@@ -1,7 +1,7 @@
 import { nip19, SimplePool, type EventTemplate, type NostrEvent } from 'nostr-tools';
 import { fetchPermalink, produceGitDiffFromPermalink } from './git.js';
 import { parsePermalink, type PermalinkData } from './permalink.js';
-import { getTagValue } from '@nostr-git/shared-types';
+import { getTagValue, getTag } from '@nostr-git/shared-types';
 
 export type HexString = Uint8Array<ArrayBufferLike>;
 
@@ -130,13 +130,14 @@ async function permalinkEventExists(
 
       // handle optional line range
       if (linkData.startLine) {
-        const hasStart = (evt.tags.find(t => t[0] === 'lines')?.[1]) === linkData.startLine!.toString();
+        const linesTag = getTag(evt as any, 'lines');
+        const hasStart = (linesTag?.[1]) === linkData.startLine!.toString();
         if (!hasStart) return false;
 
         // if endLine also present, check for lines[2] = linkData.endLine
         if (linkData.endLine) {
           // The "lines" tag might store them as [ 'lines', start, end ]
-          const hasEnd = (evt.tags.find(t => t[0] === 'lines')?.[2]) === linkData.endLine!.toString();
+          const hasEnd = (linesTag?.[2]) === linkData.endLine!.toString();
           if (!hasEnd) return false;
         }
       }

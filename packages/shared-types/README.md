@@ -55,7 +55,9 @@ function handleGitEvent(event: NostrEvent) {
   switch (event.kind) {
     case 30617: // Repository announcement
       const repoEvent = event as GitRepoEvent;
-      console.log(`Repository: ${repoEvent.tags.find(t => t[0] === 'name')?.[1]}`);
+      // Prefer canonical helpers over direct tag access
+      import { getTagValue } from '@nostr-git/shared-types';
+      console.log(`Repository: ${getTagValue(repoEvent, 'name')}`);
       break;
       
     case 1617: // Patch event
@@ -203,6 +205,24 @@ getNip34KindLabel(1621)  // "Issue"
 getRepoUrlFromTags(tags: string[][]): string | undefined
 getRepoNameFromTags(tags: string[][]): string | undefined
 getBranchFromTags(tags: string[][]): string | undefined
+```
+
+### Canonical Tag Helpers
+
+Use these helpers instead of direct `tags.find`/`tags.filter` when extracting tag data from events. This ensures consistent behavior across packages and centralizes tag parsing logic.
+
+```typescript
+import { getTagValue, getTags } from '@nostr-git/shared-types';
+
+// Get first value for a tag
+const name = getTagValue(event, 'name');
+
+// Check presence
+const isSigned = !!getTagValue(event, 'commit-pgp-sig');
+
+// List of tags of a given type
+const reviewers = getTags(event, 'p'); // string[][] of [type, value, ...]
+const reviewerCount = reviewers.length;
 ```
 
 ## 🏗️ Architecture

@@ -6,3 +6,4 @@ export * from './nip22.js';
 export * from './utils-comment.js';
 export type { Commit, FileDiff, CommitDiff } from './core.js';
 export * from './sanitize-relays.js';
+export * from './validation.js';

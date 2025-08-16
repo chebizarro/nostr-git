@@ -18,6 +18,9 @@
   "scripts": {
     "build": "tsc --declaration --outDir dist",
     "typecheck": "tsc -p tsconfig.types.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "tsd": "npm run build && tsd",
     "clean": "rm -rf dist",
     "prepare": "npm run build",
     "watch": "tsc --declaration --outDir dist --watch"
@@ -39,6 +42,17 @@
     "typescript": ">=4.7.0"
   },
   "dependencies": {
-    "nostr-tools": "^2.12.0"
+    "nostr-tools": "^2.12.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.9",
+    "tsd": "^0.31.1"
+  },
+  "tsd": {
+    "directory": ".",
+    "files": [
+      "index.test-d.ts"
+    ]
   }
 }

@@ -28,6 +28,7 @@
   } from "@nostr-git/shared-types";
   import { parseGitPatchFromEvent } from "@nostr-git/core";
   import IssueThread from "./IssueThread.svelte";
+  import { getTagValue, getTags } from "@nostr-git/shared-types";
 
   interface Props {
     event: PatchEvent;
@@ -167,7 +168,7 @@
             </button>
           </div>
         {/if}
-        {#if event.tags?.find(t => t[0] === 'commit-pgp-sig')}
+        {#if getTagValue(event as any, 'commit-pgp-sig')}
           <span>•</span>
           <div class="flex items-center gap-1 text-green-600">
             <Shield class="h-3 w-3" />
@@ -198,18 +199,18 @@
             {/if}
             
             {#if event.tags}
-              {@const committerTag = event.tags.find(t => t[0] === 'committer')}
-              {#if committerTag && committerTag[1] !== parsed.author.name}
+              {@const committerName = getTagValue(event as any, 'committer')}
+              {#if committerName && committerName !== parsed.author.name}
                 <div class="flex items-center justify-between">
                   <span class="text-muted-foreground">Committer:</span>
                   <div class="flex items-center gap-1">
                     <User class="h-3 w-3" />
-                    <span>{committerTag[1]}</span>
+                    <span>{committerName}</span>
                   </div>
                 </div>
               {/if}
               
-              {@const recipients = event.tags.filter(t => t[0] === 'p')}
+              {@const recipients = getTags(event as any, 'p')}
               {#if recipients.length > 0}
                 <div class="col-span-2 flex items-center justify-between">
                   <span class="text-muted-foreground">Reviewers:</span>
@@ -268,7 +269,7 @@
             <a href={`patches/${id}`}>View Diff</a>
           </Button>
           <div class="flex items-center gap-3">
-            {#if event.tags?.find(t => t[0] === 'commit-pgp-sig')}
+            {#if getTagValue(event as any, 'commit-pgp-sig')}
               <div class="flex items-center gap-1 text-green-600">
                 <Shield class="h-3 w-3" />
                 <span class="text-xs">Signed</span>

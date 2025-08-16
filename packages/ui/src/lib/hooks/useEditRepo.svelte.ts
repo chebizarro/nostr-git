@@ -1,6 +1,6 @@
 import type { Event } from "nostr-tools";
 import type { RepoAnnouncementEvent, RepoStateEvent } from "@nostr-git/shared-types";
-import { createRepoAnnouncementEvent, createRepoStateEvent } from "@nostr-git/shared-types";
+import { createRepoAnnouncementEvent, createRepoStateEvent, getTagValue } from "@nostr-git/shared-types";
 import { git } from "@nostr-git/core";
 
 const { detectVendorFromUrl } = git;
@@ -73,9 +73,9 @@ export function useEditRepo() {
       const gitWorker = getGitWorker();
 
       // Extract current repository info
-      const repoId = currentAnnouncement.tags.find((t) => t[0] === "d")?.[1] || "";
-      const currentName = currentAnnouncement.tags.find((t) => t[0] === "name")?.[1] || "";
-      const cloneUrl = currentAnnouncement.tags.find((t) => t[0] === "clone")?.[1] || "";
+      const repoId = getTagValue(currentAnnouncement as any, "d") || "";
+      const currentName = getTagValue(currentAnnouncement as any, "name") || "";
+      const cloneUrl = getTagValue(currentAnnouncement as any, "clone") || "";
 
       // Parse owner/repo from clone URL
       const urlMatch = cloneUrl.match(/github\.com[\/:]([^\/]+)\/([^\/\.]+)/);
@@ -96,8 +96,7 @@ export function useEditRepo() {
       // Step 1: Update remote repository metadata if needed
       const metadataChanged =
         config.name !== currentName ||
-        config.description !==
-          (currentAnnouncement.tags.find((t) => t[0] === "description")?.[1] || "") ||
+        config.description !== (getTagValue(currentAnnouncement as any, "description") || "") ||
         config.visibility !== (cloneUrl.includes("private") ? "private" : "public");
 
       if (metadataChanged) {
@@ -125,11 +124,9 @@ export function useEditRepo() {
 
       // Step 2: Update files if needed (README, default branch changes)
       const filesChanged =
-        config.readmeContent !==
-          `# ${currentName}\n\n${currentAnnouncement.tags.find((t) => t[0] === "description")?.[1] || ""}` ||
+        config.readmeContent !== `# ${currentName}\n\n${getTagValue(currentAnnouncement as any, "description") || ""}` ||
         config.defaultBranch !==
-          (currentState.tags.find((t) => t[0] === "HEAD")?.[1]?.replace("ref: refs/heads/", "") ||
-            "main");
+          (getTagValue(currentState as any, "HEAD")?.replace("ref: refs/heads/", "") || "main");
 
       if (filesChanged) {
         progress = {

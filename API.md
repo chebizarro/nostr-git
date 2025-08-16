@@ -2,6 +2,20 @@
 
 This document describes the APIs provided by the Nostr-Git project, including the core library APIs, Git service APIs, and extension interfaces.
 
+## Canonical Tag Helpers (Required)
+
+Always access Nostr event tags via helpers from `@nostr-git/shared-types`:
+
+```ts
+import { getTag, getTags, getTagValue } from '@nostr-git/shared-types';
+
+const firstCommitter = getTag(event, 'committer');
+const cloneTags = getTags(announcement, 'clone');
+const repoUrl = getTagValue(announcement, 'r');
+```
+
+Do not use `event.tags.find` or `event.tags.filter` directly. ESLint enforces this repo-wide; exceptions only apply within `packages/shared-types/src/` where helpers are implemented.
+
 ## Core Library API (@nostr-git/core)
 
 ### Event Creation API

@@ -5,10 +5,12 @@
     "packages/*"
   ],
   "packageManager": "pnpm@10.12.4",
+  "type": "module",
   "scripts": {
     "build": "pnpm -r build",
     "format": "pnpm -r run format || true",
     "lint": "pnpm -r run lint || true",
+    "lint:eslint": "eslint . --ignore-pattern tools/**",
     "typecheck": "pnpm -r run typecheck || true",
     "test": "pnpm -r test || true",
     "watch": "pnpm -r --parallel --stream watch",
@@ -16,11 +18,15 @@
     "watch:ui": "pnpm --filter @nostr-git/ui watch",
     "watch:shared-types": "pnpm --filter @nostr-git/shared-types watch",
     "watch:git-wrapper": "pnpm --filter @nostr-git/git-wrapper watch",
-    "watch:all": "pnpm -r --parallel --stream run watch"
+    "watch:all": "pnpm -r --parallel --stream run watch",
+    "codemod:tag-helpers:dry": "pnpm dlx jscodeshift -d -p -t tools/codemods/tag-helpers/transform.js 'packages/**/src/**/*.{ts,tsx,js,jsx}'",
+    "codemod:tag-helpers": "pnpm dlx jscodeshift -t tools/codemods/tag-helpers/transform.js 'packages/**/src/**/*.{ts,tsx,js,jsx}'"
   },
   "devDependencies": {
     "@storybook/addon-svelte-csf": "5.0.0-next.28",
     "@types/node": "^24.2.1",
+    "eslint": "^9.18.0",
+    "typescript-eslint": "^8.20.0",
     "typescript": "^5.3.3",
     "vitest": "^2.1.9"
   },

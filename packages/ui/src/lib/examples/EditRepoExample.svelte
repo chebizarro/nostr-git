@@ -3,6 +3,7 @@
   import { useEditRepo } from '../hooks/useEditRepo.svelte.ts';
   import type { Event } from 'nostr-tools';
   import type { RepoAnnouncementEvent, RepoStateEvent } from '@nostr-git/shared-types';
+  import { getTagValue } from '@nostr-git/shared-types';
 
   // Example of how to integrate the Edit Repository feature
   let showEditPanel = $state(false);
@@ -133,28 +134,28 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
         <div>
           <span class="text-gray-400">Name:</span>
-          <span class="text-white ml-2">{currentAnnouncement.tags.find(t => t[0] === 'name')?.[1]}</span>
+          <span class="text-white ml-2">{getTagValue(currentAnnouncement as any, 'name')}</span>
         </div>
         <div>
           <span class="text-gray-400">Visibility:</span>
           <span class="text-white ml-2">
-            {currentAnnouncement.tags.find(t => t[0] === 'clone')?.[1]?.includes('private') ? 'Private' : 'Public'}
+            {getTagValue(currentAnnouncement as any, 'clone')?.includes('private') ? 'Private' : 'Public'}
           </span>
         </div>
         <div class="md:col-span-2">
           <span class="text-gray-400">Description:</span>
-          <span class="text-white ml-2">{currentAnnouncement.tags.find(t => t[0] === 'description')?.[1]}</span>
+          <span class="text-white ml-2">{getTagValue(currentAnnouncement as any, 'description')}</span>
         </div>
         <div>
           <span class="text-gray-400">Default Branch:</span>
           <span class="text-white ml-2">
-            {currentState.tags.find(t => t[0] === 'HEAD')?.[1]?.replace('ref: refs/heads/', '') || 'main'}
+            {getTagValue(currentState as any, 'HEAD')?.replace('ref: refs/heads/', '') || 'main'}
           </span>
         </div>
         <div>
           <span class="text-gray-400">Clone URL:</span>
           <span class="text-white ml-2 font-mono text-xs">
-            {currentAnnouncement.tags.find(t => t[0] === 'clone')?.[1]}
+            {getTagValue(currentAnnouncement as any, 'clone')}
           </span>
         </div>
       </div>

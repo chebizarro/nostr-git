@@ -33,6 +33,36 @@ pnpm --version
 node --version
 ```
 
+## Canonical Tag Helpers (Required)
+
+- Always use `@nostr-git/shared-types` helpers to access tags on Nostr events:
+  - `getTag(event, tagName)`
+  - `getTags(event, tagName)`
+  - `getTagValue(event, tagName)`
+
+- Do not use `event.tags.find` or `event.tags.filter` directly in application code.
+  - A repo-wide ESLint rule enforces this. Violations will fail CI.
+
+### Rationale
+
+- Provides consistent, type-safe behavior across packages and future-proofs parsing logic.
+- Centralizes NIP-34 tag shape knowledge in `packages/shared-types/`.
+
+### Examples
+
+```ts
+import { getTag, getTags, getTagValue } from '@nostr-git/shared-types';
+
+// First committer tag
+const committer = getTag(event, 'committer');
+
+// All clone tags in order
+const clones = getTags(announcement, 'clone');
+
+// Single value from first matching tag
+const repoUrl = getTagValue(announcement, 'r');
+```
+
 ### 2. Build All Packages
 ```bash
 # Build all packages in dependency order

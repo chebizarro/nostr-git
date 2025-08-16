@@ -1,5 +1,19 @@
 import { type Nip34Event, type RepoAnnouncementEvent, type RepoStateEvent, type PatchEvent, type IssueEvent, type StatusEvent, type NostrTag, GIT_REPO_ANNOUNCEMENT } from './nip34.js';
+import type { RepoAnnouncementTag, RepoStateTag, PatchTag, IssueTag, StatusTag } from './nip34.js';
 import type { CommentEvent } from './nip22.js';
+
+// Stronger typing for tag helpers: map known tag names to their tuple types
+// (imports of specific tag types are declared at the top of file)
+
+type KnownTags = RepoAnnouncementTag | RepoStateTag | PatchTag | IssueTag | StatusTag;
+
+// For a given tag name T, resolve to the precise tuple type if known; otherwise fallback to a generic [T, ...string[]]
+export type TagFor<T extends string> = Extract<KnownTags, [T, ...string[]]> extends never
+  ? [T, ...string[]]
+  : Extract<KnownTags, [T, ...string[]]>;
+
+// For value extraction: the first value after tag name, or undefined if not present
+type FirstValueOf<T extends string> = TagFor<T> extends [any, infer V extends string, ...any[]] ? V : undefined;
 
 /**
  * Type guard for RepoAnnouncementEvent (kind: 30617)
@@ -75,35 +89,29 @@ export function isCommentEvent(event: { kind: number }): event is CommentEvent {
 /**
  * Get the first tag of a given type (e.g. 'committer')
  */
-export function getTag<T extends string>(event: { tags: NostrTag[] }, tagType: T): Extract<NostrTag, [T, ...string[]]> | undefined {
-  return event.tags.find((tag): tag is Extract<NostrTag, [T, ...string[]]> => tag[0] === tagType);
+export function getTag<T extends string>(event: { tags: NostrTag[] }, tagType: T): TagFor<T> | undefined {
+  return event.tags.find((tag): tag is TagFor<T> => tag[0] === tagType);
 }
 
 /**
  * Get all tags of a given type (e.g. 'p')
  */
-export function getTags<T extends string>(event: { tags: NostrTag[] }, tagType: T): Extract<NostrTag, [T, ...string[]]>[] {
-  return event.tags.filter((tag): tag is Extract<NostrTag, [T, ...string[]]> => tag[0] === tagType);
+export function getTags<T extends string>(event: { tags: NostrTag[] }, tagType: T): TagFor<T>[] {
+  return event.tags.filter((tag): tag is TagFor<T> => tag[0] === tagType);
 }
 
 /**
  * Get the first value (after the tag type) for a given tag type
  */
-export function getTagValue<T extends string>(event: { tags: NostrTag[] }, tagType: T): string | undefined {
+export function getTagValue<T extends string>(event: { tags: NostrTag[] }, tagType: T): FirstValueOf<T> | undefined {
   const tag = getTag(event, tagType);
-  return tag ? tag[1] : undefined;
+  return (tag?.[1] as FirstValueOf<T> | undefined);
 }
 
 // -------------------
 // Event Creation Helpers
 // -------------------
-import type {
-  RepoAnnouncementTag,
-  RepoStateTag,
-  PatchTag,
-  IssueTag,
-  StatusTag,
-} from './nip34.js';
+// removed duplicate import of tag types (moved to top)
 import { sanitizeRelays } from './sanitize-relays.js';
 
 

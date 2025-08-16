@@ -1,4 +1,5 @@
 import { nip19, NostrEvent } from "nostr-tools";
+import { getTagValue } from "@nostr-git/shared-types";
 import {
   copyNeventToClipboard,
   createCodeReferenceEvent,
@@ -136,7 +137,7 @@ async function insertNostrRepoCommand() {
   getRepoEvent().then((e) => {
     const gitWorkshp = () => {
       const npub = nip19.npubEncode(e!.pubkey);
-      const repo = e!.tags.find((t) => t[0] === "d")?.[1];
+      const repo = getTagValue(e as any, "d");
       const url = `https://gitworkshop.dev/${npub}/${repo}`;
       window.open(url, "_blank");
     };

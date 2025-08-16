@@ -5,7 +5,9 @@
 		"build": "tsc --project tsconfig.json",
 		"typecheck": "tsc --noEmit --project tsconfig.json",
 		"format": "prettier --write .",
-		"lint": "prettier --check . && eslint .",
+		"lint": "eslint . && prettier --check .",
+		"lint:eslint": "eslint .",
+		"lint:prettier": "prettier --check .",
 		"prepare": "npm run build",
 		"watch": "tsc --project tsconfig.json --watch"
 	},
