@@ -96,6 +96,59 @@ Notes:
 - Runtime validation is optional; prefer canonical helpers for normal reads.
 - Use strict schemas in boundaries (ingress/egress, tests) or when dealing with untrusted inputs.
 
+### Feature Flag: NOSTR_GIT_VALIDATE_EVENTS
+
+Runtime validation guards are feature-flagged for performance flexibility.
+
+- Default behavior: enabled when `NODE_ENV !== 'production'`, disabled in production.
+- Explicit toggle via env var `NOSTR_GIT_VALIDATE_EVENTS` (case-insensitive):
+  - Truthy: `true`, `1`, `yes`
+  - Falsy: `false`, `0`, `no`
+
+Examples:
+
+```bash
+# Enable validation explicitly
+NOSTR_GIT_VALIDATE_EVENTS=true pnpm -w --filter @nostr-git/core test
+
+# Disable validation even in development
+NOSTR_GIT_VALIDATE_EVENTS=false pnpm -r test
+```
+
+### Guards and Where to Apply Them
+
+- Core (`@nostr-git/core`):
+  - `assertRepoAnnouncementEvent(evt)`, `assertRepoStateEvent(evt)` throw on invalid events when enabled.
+  - Apply at ingress points like `fetchRepo`, constructors, and any boundary receiving Nostr events.
+
+- Git-Wrapper (`@nostr-git/git-wrapper`):
+  - Discovery ignores invalid announcements.
+  - State subscription rejects invalid state events.
+  - Collaboration streams (patch/issue/status) deliver only valid events.
+
+- Extension (`@nostr-git/extension`):
+  - `fetchRepoEvent()` filters invalid announcements.
+  - `publishEvent()` preflight validates outgoing repo announcement, repo state, and issue events before signing/publishing.
+
+### Testing Guidance
+
+- In Vitest, set the env per test or suite:
+
+```ts
+// validation.spec.ts
+import { beforeEach } from 'vitest';
+
+beforeEach(() => {
+  process.env.NOSTR_GIT_VALIDATE_EVENTS = 'true';
+});
+```
+
+- Verify both modes:
+  - Enabled: invalid inputs should throw (or be filtered/ignored depending on path).
+  - Disabled: guards should be no-ops and not throw.
+
+- Extension tests: mock NIP-07 signing and relay pool querying; assert that invalid events are filtered prior to being surfaced or published.
+
 ## Compile-time Type Assertions (tsd)
 
 We use `tsd` to assert helper typings and prevent regressions.

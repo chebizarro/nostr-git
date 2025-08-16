@@ -191,20 +191,12 @@ isGitEvent(event: NostrEvent): event is GitEvent
 #### Event Kind Labels
 ```typescript
 // Get human-readable labels for event kinds
-getNip34KindLabel(kind: number): string
+getNostrKindLabel(kind: number): string
 
 // Examples:
-getNip34KindLabel(30617) // "Repository Announcement"
-getNip34KindLabel(1617)  // "Patch"
-getNip34KindLabel(1621)  // "Issue"
-```
-
-#### Tag Utilities
-```typescript
-// Extract specific tags from events
-getRepoUrlFromTags(tags: string[][]): string | undefined
-getRepoNameFromTags(tags: string[][]): string | undefined
-getBranchFromTags(tags: string[][]): string | undefined
+getNostrKindLabel(30617) // "Repository Announcement"
+getNostrKindLabel(1617)  // "Patch"
+getNostrKindLabel(1621)  // "Issue"
 ```
 
 ### Canonical Tag Helpers
@@ -212,7 +204,10 @@ getBranchFromTags(tags: string[][]): string | undefined
 Use these helpers instead of direct `tags.find`/`tags.filter` when extracting tag data from events. This ensures consistent behavior across packages and centralizes tag parsing logic.
 
 ```typescript
-import { getTagValue, getTags } from '@nostr-git/shared-types';
+import { getTag, getTagValue, getTags } from '@nostr-git/shared-types';
+
+// Get first tag tuple of a given type
+const headRef = getTag(event, 'HEAD');
 
 // Get first value for a tag
 const name = getTagValue(event, 'name');

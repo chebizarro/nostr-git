@@ -87,21 +87,24 @@ export function isCommentEvent(event: { kind: number }): event is CommentEvent {
 
 
 /**
- * Get the first tag of a given type (e.g. 'committer')
+ * Get the first tag tuple of a given type from an event's `tags`.
+ * Preserves precise tuple typing for known tag names.
  */
 export function getTag<T extends string>(event: { tags: NostrTag[] }, tagType: T): TagFor<T> | undefined {
   return event.tags.find((tag): tag is TagFor<T> => tag[0] === tagType);
 }
 
 /**
- * Get all tags of a given type (e.g. 'p')
+ * Get all tag tuples of a given type from an event's `tags`.
+ * Returns an array preserving precise tuple typing for known tag names.
  */
 export function getTags<T extends string>(event: { tags: NostrTag[] }, tagType: T): TagFor<T>[] {
   return event.tags.filter((tag): tag is TagFor<T> => tag[0] === tagType);
 }
 
 /**
- * Get the first value (after the tag type) for a given tag type
+ * Get the first value (second tuple element) for the first occurrence of a tag type.
+ * Returns `undefined` if the tag is not present.
  */
 export function getTagValue<T extends string>(event: { tags: NostrTag[] }, tagType: T): FirstValueOf<T> | undefined {
   const tag = getTag(event, tagType);

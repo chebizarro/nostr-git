@@ -130,6 +130,59 @@ const result = await api.cloneAndFork({
 worker.terminate();
 ```
 
+## Runtime Validation Guards (Feature-Flagged)
+
+To protect against malformed Nostr events at runtime, Nostr-Git provides optional validation guards backed by Zod schemas from `@nostr-git/shared-types`.
+
+- Default: enabled in development, disabled in production.
+- Toggle via environment variable: `NOSTR_GIT_VALIDATE_EVENTS`.
+  - Truthy: `true`, `1`, `yes`
+  - Falsy: `false`, `0`, `no`
+
+#### Core Guards
+
+Guards are exported by `@nostr-git/core` and throw on invalid input when validation is enabled.
+
+```ts
+import { assertRepoAnnouncementEvent, assertRepoStateEvent } from '@nostr-git/core';
+
+function ingestAnnouncement(evt: unknown) {
+  assertRepoAnnouncementEvent(evt); // throws if invalid (when enabled)
+  // evt now narrowed to RepoAnnouncementEvent
+}
+
+function ingestState(evt: unknown) {
+  assertRepoStateEvent(evt); // throws if invalid (when enabled)
+}
+```
+
+#### Git-Wrapper Subscription Paths
+
+`@nostr-git/git-wrapper` applies validation at ingress:
+
+- Repo discovery ignores invalid repo announcements.
+- Repo state subscription rejects invalid state events.
+- Collaboration streams (patch/issue/status) only deliver valid events to callbacks.
+
+Behavior is controlled by the same `NOSTR_GIT_VALIDATE_EVENTS` flag.
+
+#### Extension Fetch/Publish Paths
+
+`@nostr-git/extension` applies validation to:
+
+- `fetchRepoEvent()`: filters out invalid announcements from relays.
+- `publishEvent()`: preflight validates outgoing repo announcement, repo state, and issue events before signing/publishing.
+
+```ts
+// Example: ensure a repo announcement is valid before signing/publishing
+import { validateRepoAnnouncementEvent } from '@nostr-git/shared-types';
+
+const res = validateRepoAnnouncementEvent(unsignedAnnouncement);
+if (!res.success) throw new Error(res.error.message);
+```
+
+See Development Guide for usage guidance and testing tips.
+
 ## Git Service API
 
 The Git Service API provides a unified interface for different Git hosting providers (GitHub, GitLab, Gitea, Bitbucket).
