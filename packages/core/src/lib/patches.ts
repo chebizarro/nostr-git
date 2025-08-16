@@ -1,4 +1,5 @@
 import { Patch, PatchEvent, Profile } from '@nostr-git/shared-types';
+import { getTagValue } from '@nostr-git/shared-types';
 import { parseGitPatch } from 'parse-patch';
 import parseDiff from 'parse-diff';
 import { getGitProvider } from './git-provider.js';
@@ -17,8 +18,6 @@ export function parseGitPatchFromEvent(event: PatchEvent): Patch {
       author: { name: commit.authorName, email: commit.authorEmail }
     };
   });
-
-  const getTag = (name: string) => event.tags.find((t) => t[0] === name)?.[1];
   const authorTag = event.tags.find((t) => t[0] === 'committer');
   const author: Profile = {
     pubkey: event.pubkey,
@@ -27,13 +26,13 @@ export function parseGitPatchFromEvent(event: PatchEvent): Patch {
 
   return {
     id: event.id,
-    repoId: getTag('a') || '',
-    title: getTag('subject') || (header[0]?.message ?? ''),
+    repoId: getTagValue(event as any, 'a') || '',
+    title: getTagValue(event as any, 'subject') || (header[0]?.message ?? ''),
     description: header[0]?.message ?? '',
     author,
-    baseBranch: getTag('base-branch') || '',
+    baseBranch: getTagValue(event as any, 'base-branch') || '',
     commitCount: header.length,
-    commitHash: getTag('commit') || '',
+    commitHash: getTagValue(event as any, 'commit') || '',
     createdAt: new Date(event.created_at * 1000).toISOString(),
     status: 'open',
     raw: event,
