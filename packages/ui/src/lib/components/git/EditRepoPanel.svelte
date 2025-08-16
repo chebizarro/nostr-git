@@ -324,12 +324,27 @@
   // Check if form has changes
   const isFormDirty = $derived.by(() => {
     const original = extractCurrentValues();
-    return (
+
+    // Normalize arrays by trimming empties for fair comparison (handleSave filters them out)
+    const norm = (arr: string[]) => arr.filter((v) => v.trim());
+
+    const basicChanged = (
       formData.name !== original.name ||
       formData.description !== original.description ||
       formData.visibility !== original.visibility ||
-      formData.defaultBranch !== original.defaultBranch
+      formData.defaultBranch !== original.defaultBranch ||
+      formData.earliestUniqueCommit !== original.earliestUniqueCommit
     );
+
+    const arraysChanged = (
+      JSON.stringify(norm(formData.maintainers)) !== JSON.stringify(norm(original.maintainers)) ||
+      JSON.stringify(norm(formData.relays)) !== JSON.stringify(norm(original.relays)) ||
+      JSON.stringify(norm(formData.webUrls)) !== JSON.stringify(norm(original.webUrls)) ||
+      JSON.stringify(norm(formData.cloneUrls)) !== JSON.stringify(norm(original.cloneUrls)) ||
+      JSON.stringify(norm(formData.hashtags)) !== JSON.stringify(norm(original.hashtags))
+    );
+
+    return basicChanged || arraysChanged;
   });
 
   // Check if form is valid
@@ -856,4 +871,3 @@
     {/if}
   </div>
 </div>
-

@@ -84,6 +84,20 @@ export class Repo {
       };
     });
 
+    // Keep worker auth config synced with token store updates
+    tokens.subscribe(async (t) => {
+      try {
+        await this.workerManager.setAuthConfig({ tokens: t });
+        if (t?.length) {
+          console.log('🔐 Updated git auth tokens for', t.length, 'hosts');
+        } else {
+          console.log('🔐 Cleared git auth tokens');
+        }
+      } catch (e) {
+        console.warn('🔐 Failed to update worker auth config from token changes:', e);
+      }
+    });
+
     // Initialize cache managers
     this.cacheManager = new CacheManager();
     
@@ -303,7 +317,10 @@ export class Repo {
   }
 
   get #maintainers(): string[] {
-    return this.repo?.maintainers || [this.repo?.owner || ""];
+    const maintainers = this.repo?.maintainers ?? [];
+    const owner = this.repo?.owner ?? "";
+    const combined = owner ? [...maintainers, owner] : [...maintainers];
+    return Array.from(new Set(combined.filter((v): v is string => !!v && v.length > 0)));
   }
 
   // Public API for getting merge analysis result (requires patch object for proper validation)
@@ -759,8 +776,8 @@ export class Repo {
   ): RepoAnnouncementEvent {
     // Use the shared-types utility function
     return createRepoAnnouncementEvent({
-      // Ensure repoId is canonicalized (owner/name or owner:name)
-      repoId: canonicalRepoKey(repoData.name),
+      // Ensure we use the existing canonical repository key rather than deriving from name
+      repoId: this.canonicalKey,
       name: repoData.name,
       description: repoData.description,
       // Support both legacy single URLs and new array format

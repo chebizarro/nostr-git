@@ -638,7 +638,7 @@ async function smartInitializeRepo({
         // Get the main branch name using robust resolution
         const mainBranch = await resolveRobustBranchInWorker(dir);
         
-        // Update local branch to match remote HEAD
+        // Update local branch to match remote
         const remoteRef = `refs/remotes/origin/${mainBranch}`;
         let remoteCommit: string;
         
@@ -732,7 +732,6 @@ const initializeRepo = async ({
       phase,
       loaded,
       total,
-      progress: total ? (loaded || 0) / total : undefined
     });
   };
 
@@ -869,7 +868,13 @@ const ensureShallowClone = async ({
 
     // Check if we need to initialize first
     if (!clonedRepos.has(key)) {
-      throw new Error('Repository not initialized. Call initializeRepo first.');
+      if(!await isRepoCloned(`${rootDir}/${key}`)) {
+        return {
+          success: false,
+          repoId,
+          error: 'Repository not initialized. Call initializeRepo first.'
+        };
+      }
     }
 
     sendProgress('Fetching branch content', 0, 1);
@@ -922,7 +927,7 @@ const ensureShallowClone = async ({
       branch: targetBranch,
       dataLevel: 'shallow' as const,
     };
-  } catch (error: any) {
+  } catch (error) {
     console.error(`Shallow clone failed for ${repoId}:`, error);
     // If targetBranch wasn't assigned due to error, use fallback
     if (!targetBranch) {
@@ -932,7 +937,7 @@ const ensureShallowClone = async ({
       success: false,
       repoId,
       branch: targetBranch,
-      error: error.message || String(error),
+      error: error instanceof Error ? error.message : String(error),
       fromCache: false,
     };
   }
@@ -2175,7 +2180,32 @@ const createLocalRepo = async ({
     const fs = (git as any).fs;
     for (const file of files) {
       const filePath = `${dir}/${file.path}`;
-      await fs.promises.writeFile(filePath, file.content, 'utf8');
+      
+      // Ensure the directory exists
+      const pathParts = file.path.split('/');
+      if (pathParts.length > 1) {
+        const dirPath = pathParts.slice(0, -1).join('/');
+        const fullDirPath = `${dir}/${dirPath}`;
+        
+        try {
+          // Create directory structure if it doesn't exist
+          await fs.promises.mkdir(fullDirPath, { recursive: true });
+        } catch (error) {
+          // Directory might already exist, that's fine
+        }
+      }
+      
+      let finalContent: string = '';
+      
+      if (file.path === 'README.md') {
+        finalContent = file.content;
+      } else if (file.path === '.gitignore') {
+        finalContent = file.content;
+      } else if (file.path === 'LICENSE') {
+        finalContent = file.content;
+      }
+      
+      await fs.promises.writeFile(filePath, finalContent, 'utf8');
       await git.add({ dir, filepath: file.path });
     }
     
@@ -2790,18 +2820,45 @@ async function forkAndCloneRepo(options: {
   try {
     onProgress?.('Creating remote fork...', 10);
     
+    // Validate inputs early to avoid confusing API errors
+    const ownerValid = typeof owner === 'string' && owner.trim().length > 0;
+    const repoValid = typeof repo === 'string' && repo.trim().length > 0;
+    const forkValid = typeof forkName === 'string' && forkName.trim().length > 0;
+    if (!ownerValid || !repoValid || !forkValid) {
+      throw new Error(`Invalid parameters for fork: owner="${owner}", repo="${repo}", forkName="${forkName}"`);
+    }
+
+    console.log('[forkAndCloneRepo] Input params', {
+      provider,
+      baseUrl,
+      owner,
+      repo,
+      forkName,
+      visibility,
+      dir
+    });
+    
     // Step 1: Create remote fork using GitServiceApi abstraction
     const { getGitServiceApi } = await import('../git/factory.js');
     const gitServiceApi = getGitServiceApi(provider as any, token, baseUrl);
     
-    // Determine source URL based on provider
+    // Determine source URL based on provider (for diagnostics only)
     const providerHost = provider === 'github' ? 'github.com' : 
                         provider === 'gitlab' ? 'gitlab.com' :
                         provider === 'gitea' ? 'gitea.com' :
                         provider === 'bitbucket' ? 'bitbucket.org' : 'github.com';
     
     const sourceUrl = `https://${providerHost}/${owner}/${repo}`;
-    const forkResult = await gitServiceApi.forkRepo(owner, repo, { name: forkName });
+    console.log('[forkAndCloneRepo] Creating fork via API', { sourceUrl });
+
+    let forkResult;
+    try {
+      forkResult = await gitServiceApi.forkRepo(owner, repo, { name: forkName });
+    } catch (e: any) {
+      const msg = e?.message || String(e);
+      console.error('[forkAndCloneRepo] forkRepo failed', { owner, repo, forkName, provider, baseUrl, error: msg });
+      throw e;
+    }
     
     // Check if the fork name was honored
     if (forkResult.name !== forkName) {
@@ -2809,6 +2866,12 @@ async function forkAndCloneRepo(options: {
     }
     const forkOwner = forkResult.owner;
     let forkUrl = forkResult.cloneUrl;
+    console.log('[forkAndCloneRepo] Fork created', {
+      forkOwner: forkOwner?.login,
+      forkName: forkResult?.name,
+      forkFullName: forkResult?.fullName,
+      forkCloneUrl: forkUrl,
+    });
     
     onProgress?.('Waiting for fork to be ready...', 30);
     
@@ -2832,6 +2895,7 @@ async function forkAndCloneRepo(options: {
         if (error.message?.includes('404') || error.message?.includes('Not Found')) {
           // 404 means fork not ready yet, continue polling
         } else {
+          console.error('[forkAndCloneRepo] Unexpected error while polling fork readiness', { error: error?.message || String(error) });
           throw error; // Unexpected error
         }
       }
@@ -2852,6 +2916,8 @@ async function forkAndCloneRepo(options: {
     const cloneUrl = provider === 'grasp'
       ? forkUrl.replace('ws://', 'http://').replace('wss://', 'https://')
       : forkUrl;
+
+    console.log('[forkAndCloneRepo] Cloning', { cloneUrl, dir });
 
     await cloneRemoteRepo({
       url: cloneUrl,
@@ -2874,7 +2940,7 @@ async function forkAndCloneRepo(options: {
     
     return {
       success: true,
-      repoId: dir.split('/').pop() || forkName,
+      repoId: `${owner}/${forkName}`,
       forkUrl,
       defaultBranch,
       branches,
@@ -2882,7 +2948,13 @@ async function forkAndCloneRepo(options: {
     };
     
   } catch (error: any) {
-    console.error('Fork and clone failed:', error);
+    console.error('Fork and clone failed:', error, {
+      provider,
+      baseUrl,
+      owner,
+      repo,
+      forkName,
+    });
     
     // Cleanup partial clone on error
     try {
@@ -3088,7 +3160,7 @@ async function updateAndPushFiles(options: {
 async function getCommitDetails({
   repoId,
   commitId,
-  branch,
+  branch
 }: {
   repoId: string;
   commitId: string;

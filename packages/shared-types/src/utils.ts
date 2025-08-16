@@ -166,11 +166,11 @@ export function createRepoAnnouncementEvent(opts: {
   ];
   if (opts.name) tags.push(["name", opts.name]);
   if (opts.description) tags.push(["description", opts.description]);
-  // NIP-34: web and clone tags can have multiple values, each as separate tag
-  if (opts.web) opts.web.forEach(url => tags.push(["web", url]));
-  if (opts.clone) opts.clone.forEach(url => tags.push(["clone", url]));
-  if (opts.relays) opts.relays.forEach(relay => tags.push(["relays", relay]));
-  if (opts.maintainers) opts.maintainers.forEach(maintainer => tags.push(["maintainers", maintainer]));
+  // NIP-34: web, clone, relays, maintainers tags can include multiple values in a single tag
+  if (opts.web && opts.web.length > 0) tags.push(["web", ...opts.web]);
+  if (opts.clone && opts.clone.length > 0) tags.push(["clone", ...opts.clone]);
+  if (opts.relays && opts.relays.length > 0) tags.push(["relays", ...sanitizeRelays(opts.relays)]);
+  if (opts.maintainers && opts.maintainers.length > 0) tags.push(["maintainers", ...opts.maintainers]);
   if (opts.hashtags) opts.hashtags.forEach(t => tags.push(["t", t]));
   if (opts.earliestUniqueCommit) tags.push(["r", opts.earliestUniqueCommit, "euc"]);
   return {

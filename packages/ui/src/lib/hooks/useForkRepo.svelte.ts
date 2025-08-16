@@ -109,6 +109,14 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
     progress = [];
 
     try {
+      // Validate inputs early
+      if (!originalRepo?.owner || !originalRepo?.name) {
+        throw new Error(`Invalid original repo: owner="${originalRepo?.owner}", name="${originalRepo?.name}"`);
+      }
+      if (!config?.forkName || !config.forkName.trim()) {
+        throw new Error('Fork name is required');
+      }
+
       // Step 1: Determine provider and validate token (skip token for GRASP)
       const provider = config.provider || 'github'; // Default to GitHub for backward compatibility
       const providerHost = provider === 'github' ? 'github.com' : 
@@ -198,10 +206,11 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
         dir: destinationPath
         // Note: onProgress callback removed - functions cannot be serialized through Comlink
       });
+      console.log('[useForkRepo] forkAndCloneRepo returned', workerResult);
 
       if (!workerResult.success) {
-        console.error('🔍 Fork worker result:', workerResult);
-        throw new Error(workerResult.error || 'Fork operation failed');
+        const ctx = `owner=${originalRepo.owner} repo=${originalRepo.name} forkName=${config.forkName} provider=${provider}`;
+        throw new Error(`${workerResult.error || 'Fork operation failed'} (${ctx})`);
       }
       updateProgress('fork', 'Repository forked and cloned successfully', 'completed');
 

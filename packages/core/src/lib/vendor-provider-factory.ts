@@ -3,6 +3,7 @@ import { detectVendorFromUrl, extractHostname } from './vendor-providers.js';
 import { GitHubProvider } from './vendors/github-provider.js';
 import { GitLabProvider } from './vendors/gitlab-provider.js';
 import { GenericProvider } from './vendors/generic-provider.js';
+import { GraspProvider } from './vendors/grasp-provider.js';
 
 // Registry of vendor providers
 const providerRegistry = new Map<string, VendorProvider>();
@@ -58,6 +59,9 @@ export function resolveVendorProvider(url: string): VendorProvider {
       // For now, treat Bitbucket as generic (could implement BitbucketProvider later)
       provider = new GenericProvider(hostname);
       break;
+    case 'grasp':
+      provider = new GraspProvider(hostname);
+      break;
     default:
       provider = new GenericProvider(hostname);
       break;
@@ -93,6 +97,9 @@ export function getVendorProvider(vendor: GitVendor, hostname: string): VendorPr
       break;
     case 'bitbucket':
       provider = new GenericProvider(hostname);
+      break;
+    case 'grasp':
+      provider = new GraspProvider(hostname);
       break;
     default:
       provider = new GenericProvider(hostname);
