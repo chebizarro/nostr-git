@@ -1,0 +1,22 @@
+# Build outputs
+**/dist/
+**/build/
+**/.svelte-kit/
+**/.next/
+**/.vite/
+**/storybook-static/
+**/coverage/
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Package manager artifacts
+pnpm-lock.yaml
+
+# Generated assets
+**/*.gen.*
+**/*.d.ts.map
+
+# Misc
+.DS_Store
