@@ -57,8 +57,8 @@
   const isForking = $derived(forkState.isForking);
   let completedResult = $state<ForkResult | null>(null);
   let showDetails = $state(false);
-  let dialogEl: HTMLDivElement | null = null;
-  let initialFocusEl: HTMLInputElement | null = null;
+  let dialogEl = $state<HTMLDivElement | null>(null);
+  let initialFocusEl = $state<HTMLInputElement | null>(null);
 
   // Extract repository information from Repo instance
   const repoData = repo.repo;
@@ -508,7 +508,7 @@
     onclick={handleBackdropClick}
     onkeydown={handleBackdropKeydown}
   >
-    <div bind:this={dialogEl} onkeydown={handleKeydownTrap} class="bg-gray-900 rounded-lg shadow-xl w-full max-w-md border border-gray-700 overflow-hidden relative z-[60] outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 transform-gpu">
+    <div bind:this={dialogEl} class="bg-gray-900 rounded-lg shadow-xl w-full max-w-md border border-gray-700 overflow-hidden relative z-[60] outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 transform-gpu">
       <!-- Header -->
       <div class="flex items-center justify-between p-6 border-b border-gray-700">
         <div class="flex items-center space-x-3">

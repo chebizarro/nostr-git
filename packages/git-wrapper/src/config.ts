@@ -14,20 +14,9 @@ const defaultConfig: GitWrapperConfig = {
   cacheMaxAgeMs: 60_000, // 60s idle TTL by default
 };
 
-function loadDotEnvIfAvailable() {
-  if (typeof window !== 'undefined') return; // browser/extension: no dotenv
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const dotenv = require('dotenv');
-    if (dotenv?.config) dotenv.config();
-  } catch {
-    // dotenv not available; ignore
-  }
-}
-
 export function loadConfig(overrides?: Partial<GitWrapperConfig>): GitWrapperConfig {
-  loadDotEnvIfAvailable();
-  const env = (typeof process !== 'undefined' && process.env) ? process.env : {} as any;
+  // Read from process.env if available (ambient declaration provided for portability)
+  const env = (typeof process !== 'undefined' && (process as any).env) ? (process as any).env : ({} as any);
 
   const compatMode = Boolean(
     overrides?.compatMode ?? (env.LIBGIT2_COMPAT === 'true' || env.LIBGIT2_COMPAT === '1')
