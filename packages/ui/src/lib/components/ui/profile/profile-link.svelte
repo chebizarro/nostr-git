@@ -7,6 +7,5 @@
 </script>
 
 <div>
-  {pubkey.substring(0,9)}
+  {pubkey ? pubkey.substring(0, 9) : ""}
 </div>
-

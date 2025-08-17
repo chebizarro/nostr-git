@@ -3,6 +3,8 @@
   "compilerOptions": {
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "lib": ["ES2020"],
+    "types": [],
     "declaration": true,
     "outDir": "dist",
     "rootDir": "./src",

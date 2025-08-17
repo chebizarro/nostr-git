@@ -25,9 +25,9 @@ import { BranchManager } from "./BranchManager";
 import { FileManager } from "./FileManager";
 
 export class Repo {
-  repoEvent: RepoAnnouncementEvent = $state(undefined);
+  repoEvent: RepoAnnouncementEvent | undefined = $state(undefined);
   repo: RepoAnnouncement | undefined = $state(undefined);
-  repoStateEvent?: RepoStateEvent = $state(undefined);
+  repoStateEvent: RepoStateEvent | undefined = $state(undefined);
   state: RepoState | undefined = $state(undefined);
   issues = $state<IssueEvent[]>([]);
   patches = $state<PatchEvent[]>([]);
@@ -326,9 +326,10 @@ export class Repo {
   // Public API for getting merge analysis result (requires patch object for proper validation)
   async getMergeAnalysis(patch: PatchEvent, targetBranch?: string): Promise<MergeAnalysisResult | null> {
     if (!this.repoEvent) return null;
-    
+  
     const repoId = this.canonicalKey;
-    const branch = targetBranch || this.mainBranch?.split("/").pop();
+    const fallbackMain = this.branchManager.getMainBranch();
+    const branch = (targetBranch ?? this.mainBranch ?? fallbackMain).split("/").pop() || fallbackMain;
     // Use workerRepoId (event id) for worker calls when available
     const workerRepoId = this.repoEvent?.id;
     return await this.patchManager.getMergeAnalysis(patch, branch, repoId, workerRepoId);
@@ -344,7 +345,8 @@ export class Repo {
     if (!this.repoEvent) return null;
 
     const repoId = this.canonicalKey;
-    const branch = targetBranch || this.mainBranch?.split("/").pop();
+    const fallbackMain = this.branchManager.getMainBranch();
+    const branch = (targetBranch ?? this.mainBranch ?? fallbackMain).split("/").pop() || fallbackMain;
     // Use workerRepoId (event id) for worker calls when available
     const workerRepoId = this.repoEvent?.id;
     return await this.patchManager.refreshMergeAnalysis(patch, branch, repoId, workerRepoId);
@@ -631,50 +633,70 @@ export class Repo {
       }
     } catch (error) {
       console.error('❌ loadPage error:', error);
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      return { success: false, error: error instanceof Error ? error.message : String(error) } as const;
     }
   }
 
   async listRepoFiles({ branch, path }: { branch?: string; path?: string }) {
     const targetBranch = branch || this.branchManager.getMainBranch();
+    if (!this.repoEvent) {
+      return {
+        files: [],
+        path: path || "/",
+        ref: (targetBranch || "").split("/").pop() || "",
+        fromCache: false,
+      } as const;
+    }
     return this.fileManager.listRepoFiles({
       repoEvent: this.repoEvent,
       repoKey: this.canonicalKey,
       branch: targetBranch,
-      path: path || "/"
+      path: path || "/",
     });
   }
 
   async getFileContent({ path, branch, commit }: { path: string; branch?: string; commit?: string }) {
     const targetBranch = branch || this.branchManager.getMainBranch();
+    if (!this.repoEvent) {
+      return {
+        content: "",
+        path,
+        ref: commit || (targetBranch || "").split("/").pop() || "",
+        encoding: "utf-8",
+        size: 0,
+        fromCache: false,
+      } as const;
+    }
     return this.fileManager.getFileContent({
       repoEvent: this.repoEvent,
       repoKey: this.canonicalKey,
       path,
       branch: targetBranch,
-      commit
+      commit,
     });
   }
 
   async fileExistsAtCommit({ path, branch, commit }: { path: string; branch?: string; commit?: string }) {
     const targetBranch = branch || this.branchManager.getMainBranch();
+    if (!this.repoEvent) return false;
     return this.fileManager.fileExistsAtCommit({
       repoEvent: this.repoEvent,
       repoKey: this.canonicalKey,
       path,
       branch: targetBranch,
-      commit
+      commit,
     });
   }
 
   async getFileHistory({ path, branch, maxCount }: { path: string; branch?: string; maxCount?: number }) {
     const targetBranch = branch || this.branchManager.getMainBranch();
+    if (!this.repoEvent) return [];
     return this.fileManager.getFileHistory({
       repoEvent: this.repoEvent,
       repoKey: this.canonicalKey,
       path,
       branch: targetBranch,
-      maxCount
+      maxCount,
     });
   }
 
@@ -683,7 +705,7 @@ export class Repo {
     return await this.workerManager.getCommitHistory({
       repoId: this.canonicalKey,
       branch: targetBranch,
-      depth,
+      depth: depth ?? this.commitManager.getCommitsPerPage(),
     });
   }
 

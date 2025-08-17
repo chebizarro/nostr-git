@@ -1,23 +1,20 @@
 <script lang="ts">
-  import { Badge, Button } from "$lib/components";
-  import { tokens } from "$lib/stores/tokens";
+  import { tokens, type Token } from "../../stores/tokens";
   import { Key, Shield, AlertCircle, CheckCircle, RefreshCw } from "@lucide/svelte";
-  import type { RepoAnnouncementEvent } from "@nostr-git/shared-types";
-  import { parseRepoAnnouncementEvent } from "@nostr-git/shared-types";
-  import { pubkey } from "@welshman/app";
   import { onMount } from "svelte";
+  import { useRegistry } from "../../useRegistry";
+  import { Repo } from "./Repo.svelte";
+  const { Badge, Button } = useRegistry();
 
   interface Props {
-    event?: RepoAnnouncementEvent;
+    repository: Repo;
+    pubkey: string;
   }
 
-  const { event }: Props = $props();
-
-  // Parse repo data (guard against undefined event)
-  const repoData = event ? parseRepoAnnouncementEvent(event) : ({ clone: [], web: [] } as any);
+  const { repository, pubkey }: Props = $props();
 
   // Get tokens from store
-  let tokenList = $state([]);
+  let tokenList: Token[] = $state([]);
   tokens.subscribe(t => tokenList = t);
   
   // Loading state for refresh operations
@@ -49,7 +46,7 @@
     const hosts = new Set<string>();
     
     // Extract from clone URLs
-    repoData.clone.forEach(url => {
+    repository.repo?.clone?.forEach((url) => {
       try {
         const urlObj = new URL(url);
         hosts.add(urlObj.hostname);
@@ -59,7 +56,7 @@
     });
     
     // Extract from web URLs
-    repoData.web.forEach(url => {
+    repository.repo?.web?.forEach((url) => {
       try {
         const urlObj = new URL(url);
         hosts.add(urlObj.hostname);
@@ -72,36 +69,25 @@
   });
   
   // Check if we have tokens for this repo's hosts
-  const hasTokensForRepo = $derived.by(() => {
-    return tokenList.some(token => 
-      repoHosts.includes(token.host)
-    );
-  });
+  const hasTokensForRepo = $derived.by(() => tokenList.some((token) => repoHosts.includes(token.host)));
   
   // Get matching tokens for this repo
-  const matchingTokens = $derived.by(() => {
-    return tokenList.filter(token => 
-      repoHosts.includes(token.host)
-    );
-  });
+  const matchingTokens = $derived.by(() => tokenList.filter((token) => repoHosts.includes(token.host)));
   
   // Check if user is a maintainer/owner
   const isMaintainer = $derived.by(() => {
-    const userPubkey = $pubkey;
-    if (!userPubkey || !event) return false;
+    const userPubkey = pubkey;
+    if (!userPubkey || !repository) return false;
     
     // Check if user is the repo owner (event author)
-    if (event.pubkey === userPubkey) return true;
-    
-    // Check maintainers list in repo tags
-    return Array.isArray((event as any).tags)
-      ? event.tags.some(tag => tag[0] === "maintainers" && tag[1] === userPubkey)
-      : false;
+    if (repository.maintainers.includes(userPubkey)) return true;
+
+    return false;
   });
   
   // Determine overall auth status
   const authStatus = $derived.by(() => {
-    const userPubkey = $pubkey;
+    const userPubkey = pubkey;
     if (!userPubkey) {
       return {
         type: 'no-user',

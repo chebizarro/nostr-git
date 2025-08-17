@@ -18,10 +18,9 @@ export const PermalinkExtension = Extension.create<PermalinkExtensionOptions>({
 
   addOptions() {
     return {
-      signer: window.nostr?.signEvent ||
-        (() => {
-          throw new Error('nostr.signEvent is not available');
-        }),
+      signer: (() => {
+        throw new Error('nostr.signEvent is not available');
+      }),
       relays: ['wss://relay.damus.io'],
       spinnerComponent: Spinner,
     };

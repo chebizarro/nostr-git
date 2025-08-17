@@ -1,5 +1,5 @@
 import { createRepoAnnouncementEvent, createRepoStateEvent, RepoAnnouncementEvent, RepoStateEvent } from '@nostr-git/shared-types';
-import { tokens as tokensStore } from '../stores/tokens.js';
+import { tokens as tokensStore, type Token } from '$lib/stores/tokens';
 import { getGitServiceApi } from '@nostr-git/core';
 
 // Types for fork configuration and progress
@@ -61,10 +61,10 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
   let progress = $state<ForkProgress[]>([]);
   let error = $state<string | null>(null);
 
-  let tokens = $state([]);
+  let tokens = $state<Token[]>([]);
 
   // Subscribe to token store changes and update reactive state
-  tokensStore.subscribe((t) => {
+  tokensStore.subscribe((t: Token[]) => {
     tokens = t;
     console.log('🔐 Token store updated, now have', t.length, 'tokens');
   });
@@ -240,12 +240,12 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
       const stateEvent = createRepoStateEvent({
         repoId: workerResult.repoId,
         refs: [
-          ...workerResult.branches.map(branch => ({
+          ...workerResult.branches.map((branch: string) => ({
             type: 'heads' as const,
             name: branch,
             commit: '' // Will be filled by actual implementation
           })),
-          ...workerResult.tags.map(tag => ({
+          ...workerResult.tags.map((tag: string) => ({
             type: 'tags' as const,
             name: tag,
             commit: '' // Will be filled by actual implementation

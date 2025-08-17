@@ -117,7 +117,7 @@
     "clean": "rm -rf out/"
   },
   "devDependencies": {
-    "@types/node": "^22.14.1",
+    "@types/node": "^24.2.1",
     "@types/vscode": "^1.88.0",
     "esbuild": "^0.25.4",
     "typescript": "^5.3.0"

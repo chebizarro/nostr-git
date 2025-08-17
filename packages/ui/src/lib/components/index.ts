@@ -1,4 +1,4 @@
-// Export all Svelte components from git/
+// Git components
 export { default as DiffViewer } from "./git/DiffViewer.svelte";
 export { default as FileView } from "./git/FileView.svelte";
 export { default as IssueCard } from "./git/IssueCard.svelte";
@@ -29,17 +29,18 @@ export { default as AdvancedSettingsStep } from "./git/AdvancedSettingsStep.svel
 export { default as RepoProgressStep } from "./git/RepoProgressStep.svelte";
 export { default as ProviderSelectionStep } from "./git/ProviderSelectionStep.svelte";
 export { default as EditRepoPanel } from "./git/EditRepoPanel.svelte";
-export { default as ForkRepoDialog } from "./git/ForkRepoDialog.svelte";
 export { default as StackedDiff } from "./git/StackedDiff.svelte";
+export { default as ForkRepoDialog } from "./git/ForkRepoDialog.svelte";
 export { Repo } from "./git/Repo.svelte";
 
+// Media viewers
 export { default as ImageViewer } from "./git/viewers/ImageViewer.svelte";
 export { default as PDFViewer } from "./git/viewers/PDFViewer.svelte";
 export { default as VideoViewer } from "./git/viewers/VideoViewer.svelte";
 export { default as AudioViewer } from "./git/viewers/AudioViewer.svelte";
 export { default as BinaryViewer } from "./git/viewers/BinaryViewer.svelte";
 
-// Export all Svelte components from thread/
+// Thread components
 export { default as ThreadCommit } from "./thread/ThreadCommit.svelte";
 export { default as ThreadComposer } from "./thread/ThreadComposer.svelte";
 export { default as ThreadIssue } from "./thread/ThreadIssue.svelte";
@@ -47,6 +48,11 @@ export { default as ThreadMessage } from "./thread/ThreadMessage.svelte";
 export { default as ThreadPatch } from "./thread/ThreadPatch.svelte";
 export { default as ContextMessages } from "./ContextMessages.svelte";
 
+// Editor extras
+export { PermalinkExtension, type PermalinkExtensionOptions } from "./editor/PermalinkExtension";
+export { default as Spinner } from "./editor/Spinner.svelte";
+
+// UI primitives
 export { Button } from "./ui/button";
 export { Input } from "./ui/input";
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
@@ -65,24 +71,23 @@ export { Profile, ProfileLink } from "./ui/profile";
 export { Progress } from "./ui/progress";
 export { Select, SelectContent, SelectItem, SelectTrigger } from "./ui/select";
 export { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
+
+// Common actions
 export { default as EventActions } from "./EventActions.svelte";
 export { default as ReactionSummary } from "./ReactionSummary.svelte";
+export { default as EventRenderer } from "./events/EventRenderer.svelte";
 
-
+// Stores
 export { toast } from "../stores/toast";
 export { context } from "../stores/context";
 export { tokens } from "../stores/tokens";
 export { signer } from "../stores/signer";
 
+// Providers
 export { default as ConfigProvider } from "../ConfigProvider.svelte";
 export { default as FunctionProvider } from "../FunctionProvider.svelte";
 
-export { PermalinkExtension, type PermalinkExtensionOptions } from "./editor/PermalinkExtension";
-export { default as EventRenderer } from "./events/EventRenderer.svelte";
-export { default as Spinner } from "./editor/Spinner.svelte";
+// Terminal
 export { default as Terminal } from "./terminal/Terminal.svelte";
 export { createTerminalFeedBridge } from "./terminal/feed-bridge"; 
-
-// Settings
-export { default as GraspServersPanel } from "./git/GraspServersPanel.svelte";
 

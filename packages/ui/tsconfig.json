@@ -1,4 +1,5 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
     "types": ["svelte", "vite/client"],
@@ -14,6 +15,25 @@
       "$lib/*": ["src/lib/*"]
     }
   },
-  "include": ["src"],
-  "exclude": ["**/node_modules/**"]
+  "include": [
+    "src/**/*.d.ts",
+    "src/lib/components/ui/**/*",
+    "src/lib/components/terminal/**/*",
+    "src/lib/components/events/**/*",
+    "src/lib/components/editor/PermalinkExtension.ts",
+    "src/lib/components/editor/PermalinkNodeView.svelte.ts",
+    "src/lib/components/editor/PermalinkTipTapEditor.svelte",
+    "src/lib/components/git/ForkRepoDialog.svelte",
+    "src/lib/components/git/AuthStatusIndicator.svelte",
+    "src/lib/stores/**/*",
+    "src/ConfigProvider.svelte",
+    "src/FunctionProvider.svelte"
+  ],
+  "exclude": [
+    "**/node_modules/**",
+    "src/lib/examples/**",
+    "src/lib/types/xterm-fit.d.ts",
+    "**/*.stories.svelte",
+    "src/lib/hooks/useForkRepo.svelte.ts"
+  ]
 }

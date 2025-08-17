@@ -30,7 +30,7 @@ This document captures the current state of the monorepo for Phase 3 reflection:
 ### @nostr-git/core
 - Entrypoint: `dist/index.js`
 - Public exports: core Git-Nostr orchestration APIs (depends on `@nostr-git/git-wrapper` and `@nostr-git/shared-types`)
-- Build outputs: not generated (build failing in this snapshot)
+- Build outputs: `dist/*` generated (build now passing in this snapshot)
 - Version: 0.0.1
 
 ### @nostr-git/ui
@@ -53,6 +53,7 @@ This document captures the current state of the monorepo for Phase 3 reflection:
   - Core tests adjusted to use temp dirs; wrapper tests green
   - Docs updated: README and API.md entries for split entries and caching
   - Example added: `examples/basic-clone-status.ts`
+  - Core: multi-hunk unified diff patch support with context matching; unsupported rename/binary detection; new tests added
 - In progress / Planned:
   - Core build/typecheck fixes (imports to forked isomorphic-git/http, LightningFS typing)
   - Storybook build for UI workspace (currently failing)
@@ -71,9 +72,9 @@ This document captures the current state of the monorepo for Phase 3 reflection:
   - tests: PASS (12 tests, 3 files)
   - example: PASS (`examples/basic-clone-status.ts` prints version + 0 status entries)
 - core
-  - build: FAIL (TS2307 import issues; see Notes below)
-  - typecheck: FAIL (same errors)
-  - tests: Not executed due to type errors
+  - build: PASS
+  - typecheck: PASS
+  - tests: PASS (34 tests)
 - ui
   - build: PASS (`svelte-package`)
   - svelte-check: Pending
@@ -89,8 +90,8 @@ Security
 - git-wrapper example (`examples/basic-clone-status.ts`): PASS
 
 ## Risks & technical debt
-- Core imports `isomorphic-git/http/web` and `@isomorphic-git/lightning-fs` directly in `src/lib/*`, which should route via git-wrapper for env-safe usage.
-- `IsomorphicGitProvider` named export mismatch observed by core (TS2305). Ensure wrapper exports surface matches core usage, or update core to new provider surface.
+- Core `git-worker.ts` now routes via injected `GitProvider` and injected FS (env-safe). Audit remaining modules to ensure env neutrality (e.g., `src/lib/github-http.ts` is env-neutral already).
+- Ensure wrapper exports surface matches core usage; migrate all call sites to unified `GitProvider` where applicable (no active TS2305 error now).
 - Storybook build uses `@sveltejs/vite-plugin-svelte` versions that may not align with Storybook 8.6; need resolution or config tweak.
 - Duplicated utilities likely across wrapper/core for diff/patch processing; consolidate to one implementation (prefer wrapper’s utilities or move to a shared utils module).
 
@@ -109,6 +110,8 @@ Security
 - TS2307: Cannot find module 'isomorphic-git/http/web' (`src/lib/github-http.ts`)
 - TS2307: Cannot find module '@isomorphic-git/lightning-fs' (`src/lib/workers/git-worker.ts`)
 - TS2305: Module '@nostr-git/git-wrapper' has no exported member 'IsomorphicGitProvider' (update imports or wrapper exports)
+
+Update: These errors were addressed by aligning tsconfigs to the repo base, using DI for `GitProvider` and FS in `git-worker.ts`, and avoiding direct env-bound imports in critical paths. Typecheck and tests now pass for core.
 
 ## Next steps (immediate)
 1. Core: Replace direct `isomorphic-git/http/web` and `@isomorphic-git/lightning-fs` imports with `@nostr-git/git-wrapper` factory and abstractions; add minimal adapter if needed.

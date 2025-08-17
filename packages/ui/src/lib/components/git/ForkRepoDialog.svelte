@@ -1,43 +1,52 @@
 <script lang="ts">
-  import { X, GitFork, AlertCircle, CheckCircle2, Loader2, ChevronDown, ExternalLink } from '@lucide/svelte';
+  import {
+    X,
+    GitFork,
+    AlertCircle,
+    CheckCircle2,
+    Loader2,
+    ChevronDown,
+    ExternalLink
+  } from '@lucide/svelte';
   import { Repo } from './Repo.svelte';
   import { useForkRepo } from '../../hooks/useForkRepo.svelte';
-  import { tokens } from '../../stores/tokens.js';
+  import { tokens } from '$lib/stores/tokens';
   import type { RepoAnnouncementEvent, RepoStateEvent } from '@nostr-git/shared-types';
-  import type { Token } from '../../stores/tokens.js';
+  import type { Token } from '$lib/stores/tokens';
+  import type { ForkResult } from '../../hooks/useForkRepo.svelte';
   import { getGitServiceApi } from '@nostr-git/core';
-  import { toast } from '$lib/stores/toast';
+  import { toast } from '../../stores/toast';
   import { validateGraspServerUrl } from '@nostr-git/core';
   // Load user's GRASP servers directly (so chips are reactive even if prop is static)
-  import { derived as _derived } from 'svelte/store';
-  import { repository, pubkey } from '@welshman/app';
-  import { deriveEvents } from '@welshman/store';
-  import { load } from '@welshman/net';
-  import { Router } from '@welshman/router';
-  import { GRASP_SET_KIND, DEFAULT_GRASP_SET_ID, parseGraspServersEvent } from '@nostr-git/core';
+  
 
-  // Component props
   interface Props {
     repo: Repo;
+    pubkey: string;
     onPublishEvent: (event: RepoAnnouncementEvent | RepoStateEvent) => Promise<void>;
     graspServerUrls?: string[]; // Optional list of known GRASP servers to display
+    // Optional DI: override the useForkRepo hook (for Storybook/tests)
+    useForkRepoImpl?: typeof useForkRepo;
   }
 
   const {
     repo,
+    pubkey,
     onPublishEvent,
-    graspServerUrls = []
+    graspServerUrls = [],
+    useForkRepoImpl
   }: Props = $props();
 
-  // Initialize the useForkRepo hook
-  const forkState = useForkRepo({
+  // Initialize the useForkRepo hook (allow DI override)
+  const forkImpl = useForkRepoImpl ?? useForkRepo;
+  const forkState = forkImpl({
     onProgress: (steps) => {
       // Progress is handled internally by the hook
       console.log('🔄 Fork progress:', steps);
     },
     onForkCompleted: (result) => {
       console.log('🎉 Fork completed:', result);
-      handleClose();
+      completedResult = result;
     },
     onPublishEvent: onPublishEvent
   });
@@ -46,6 +55,10 @@
   const progress = $derived(forkState.progress);
   const error = $derived(forkState.error);
   const isForking = $derived(forkState.isForking);
+  let completedResult = $state<ForkResult | null>(null);
+  let showDetails = $state(false);
+  let dialogEl: HTMLDivElement | null = null;
+  let initialFocusEl: HTMLInputElement | null = null;
 
   // Extract repository information from Repo instance
   const repoData = repo.repo;
@@ -83,67 +96,6 @@
       graspServerUrlsLocal = set;
     }
   });
-
-  // Only wire profile-driven list if we have a pubkey; otherwise keep the seeded list.
-  if (pubkey.get()) {
-    const graspServersFilter = {
-      kinds: [GRASP_SET_KIND],
-      authors: [pubkey.get()!],
-      '#d': [DEFAULT_GRASP_SET_ID],
-    };
-    const graspServersEvent = _derived(
-      deriveEvents(repository, { filters: [graspServersFilter] }),
-      (events) => {
-        if (events.length === 0) {
-          const isValidNostrRelayUrl = (url: string): boolean => {
-            try {
-              const u = new URL(url)
-              if (!(u.protocol === 'ws:' || u.protocol === 'wss:')) return false
-              const host = u.hostname.toLowerCase()
-              if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true
-              if (host === 'ngit-relay' || host === 'container') return false
-              return host.includes('.')
-            } catch {
-              return false
-            }
-          }
-          const sanitizeRelays = (urls: string[]): string[] => {
-            const out: string[] = []
-            const seen = new Set<string>()
-            for (const raw of urls || []) {
-              try {
-                const normalized = raw
-                  .replace(/^http:\/\//, 'ws://')
-                  .replace(/^https:\/\//, 'wss://')
-                  .replace(/(ws[s]?:\/\/[^/]+).*/, '$1')
-                  .replace(/\/$/, '')
-                if (!isValidNostrRelayUrl(normalized)) continue
-                if (seen.has(normalized)) continue
-                seen.add(normalized)
-                out.push(normalized)
-              } catch {
-                // skip
-              }
-            }
-            return out
-          }
-          load({ relays: sanitizeRelays(Router.get().FromUser().getUrls()), filters: [graspServersFilter] });
-        }
-        return events[0];
-      }
-    );
-    graspServersEvent.subscribe((ev) => {
-      try {
-        const urls = ev ? (parseGraspServersEvent(ev as any) as string[]) : [];
-        // Only update when we actually have URLs; do not clear the seeded list during load.
-        if (urls && urls.length > 0) {
-          graspServerUrlsLocal = urls;
-        }
-      } catch {
-        // ignore parse errors, keep current list
-      }
-    });
-  }
 
   const knownGraspServers = $derived.by(() => (graspServerUrlsLocal || []).map((u) => u.trim()).filter(Boolean));
 
@@ -206,6 +158,17 @@
   // Validate fork name on input
   $effect(() => {
     validationError = validateForkName(forkName);
+  });
+
+  // Focus management: move focus into dialog on open
+  $effect(() => {
+    if (isOpen) {
+      queueMicrotask(() => {
+        if (initialFocusEl && typeof initialFocusEl.focus === 'function') {
+          initialFocusEl.focus();
+        }
+      });
+    }
   });
 
   // Debounced fork checking to prevent excessive API calls
@@ -364,6 +327,8 @@
   function handleClose() {
     console.log('🔄 ForkRepoDialog: handleClose called', { isForking, isOpen });
     if (!isForking) {
+      completedResult = null;
+      showDetails = false;
       console.log('✅ ForkRepoDialog: Closing dialog - setting isOpen to false and navigating back');
       isOpen = false;
       // Use browser history API to go back (framework-agnostic)
@@ -373,8 +338,33 @@
     }
   }
 
+  async function copyForkUrl() {
+    try {
+      const url = completedResult?.forkUrl?.replace(/\.git$/, '') || '';
+      if (!url) return;
+      await navigator.clipboard.writeText(url);
+      toast.push({ message: 'Copied fork URL to clipboard', variant: 'default' });
+    } catch (e) {
+      toast.push({ message: 'Failed to copy URL', theme: 'error' });
+    }
+  }
+
+  async function copyCloneCommand() {
+    try {
+      const url = completedResult?.forkUrl || '';
+      if (!url) return;
+      const cmd = `git clone ${url}`;
+      await navigator.clipboard.writeText(cmd);
+      toast.push({ message: 'Copied git clone command', variant: 'default' });
+    } catch (e) {
+      toast.push({ message: 'Failed to copy command', theme: 'error' });
+    }
+  }
+
   async function handleFork() {
     console.log('🚀 ForkRepoDialog: handleFork called', { forkName, originalRepo, selectedService });
+    completedResult = null;
+    showDetails = false;
     
     // Validate service availability
     if (availableServices.length === 0) {
@@ -452,6 +442,14 @@
     }
   }
 
+  // Submit via Enter on inputs; prevent default form navigation
+  function onFormSubmit(event: Event) {
+    event.preventDefault();
+    if (!isForking) {
+      handleFork();
+    }
+  }
+
   // Prevent dialog close when forking
   function handleBackdropClick(event: MouseEvent) {
     if (event.target === event.currentTarget && !isForking) {
@@ -463,6 +461,33 @@
   function handleBackdropKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape' && !isForking) {
       handleClose();
+    }
+  }
+
+  // Trap focus within the dialog
+  function handleKeydownTrap(event: KeyboardEvent) {
+    if (event.key !== 'Tab' || !dialogEl) return;
+    const focusableSelectors = [
+      'a[href]',
+      'button:not([disabled])',
+      'input:not([disabled])',
+      'select:not([disabled])',
+      'textarea:not([disabled])',
+      '[tabindex]:not([tabindex="-1"])'
+    ].join(',');
+    const nodes = Array.from(dialogEl.querySelectorAll<HTMLElement>(focusableSelectors))
+      .filter((el) => el.offsetParent !== null);
+    if (nodes.length === 0) return;
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    const active = document.activeElement as HTMLElement | null;
+    const forward = !event.shiftKey;
+    if (forward && active === last) {
+      event.preventDefault();
+      first.focus();
+    } else if (!forward && active === first) {
+      event.preventDefault();
+      last.focus();
     }
   }
 
@@ -478,11 +503,12 @@
     role="dialog"
     aria-modal="true"
     aria-labelledby="fork-dialog-title"
+    aria-busy={isForking}
     tabindex="-1"
     onclick={handleBackdropClick}
     onkeydown={handleBackdropKeydown}
   >
-    <div class="bg-gray-900 rounded-lg shadow-xl w-full max-w-md border border-gray-700 overflow-hidden relative z-[60] outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 transform-gpu">
+    <div bind:this={dialogEl} onkeydown={handleKeydownTrap} class="bg-gray-900 rounded-lg shadow-xl w-full max-w-md border border-gray-700 overflow-hidden relative z-[60] outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 transform-gpu">
       <!-- Header -->
       <div class="flex items-center justify-between p-6 border-b border-gray-700">
         <div class="flex items-center space-x-3">
@@ -491,6 +517,7 @@
         </div>
         {#if !isForking}
           <button
+            type="button"
             onclick={handleClose}
             class="text-gray-400 hover:text-gray-200 transition-colors"
             aria-label="Close dialog"
@@ -519,7 +546,7 @@
 
         <!-- Fork Configuration -->
         {#if !isForking && !isProgressComplete}
-          <div class="space-y-4">
+          <form id="fork-form" class="space-y-4" onsubmit={onFormSubmit}>
             <!-- Git Service Selection -->
             {#if availableServices.length > 0}
               <div>
@@ -554,9 +581,11 @@
                     bind:value={relayUrl}
                     placeholder="wss://relay.example.com"
                     class="w-full px-3 py-2 bg-gray-800 border {relayUrlError ? 'border-red-500' : 'border-gray-600'} rounded-lg text-white focus:outline-none focus:ring-2 {relayUrlError ? 'focus:ring-red-500' : 'focus:ring-blue-500'} focus:border-transparent"
+                    aria-invalid={!!relayUrlError}
+                    aria-describedby={relayUrlError ? 'relay-url-error' : undefined}
                   />
                   {#if relayUrlError}
-                    <p class="mt-1 text-sm text-red-400 flex items-center gap-1"><AlertCircle class="w-4 h-4" /> {relayUrlError}</p>
+                    <p id="relay-url-error" class="mt-1 text-sm text-red-400 flex items-center gap-1"><AlertCircle class="w-4 h-4" /> {relayUrlError}</p>
                   {/if}
                   {#if knownGraspServers.length > 0}
                     <div class="mt-3">
@@ -600,12 +629,15 @@
                 id="fork-name"
                 type="text"
                 bind:value={forkName}
+                bind:this={initialFocusEl}
                 placeholder="Enter fork name"
                 disabled={availableServices.length === 0}
                 class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-invalid={!!validationError}
+                aria-describedby={validationError ? 'fork-name-error' : undefined}
               />
               {#if validationError}
-                <p class="mt-1 text-sm text-red-400 flex items-center space-x-1">
+                <p id="fork-name-error" class="mt-1 text-sm text-red-400 flex items-center space-x-1">
                   <AlertCircle class="w-4 h-4" />
                   <span>{validationError}</span>
                 </p>
@@ -646,8 +678,19 @@
                 </div>
               </div>
             {/if}
-          </div>
+          </form>
         {/if}
+
+        <!-- Live region for screen readers (status updates) -->
+        <div class="sr-only" aria-live="polite">
+          {#if error}
+            Fork failed: {error}
+          {:else if isForking}
+            {currentProgressMessage}
+          {:else if isProgressComplete}
+            Fork completed successfully.
+          {/if}
+        </div>
 
         <!-- Error Display -->
         {#if error}
@@ -659,6 +702,7 @@
                 <p class="text-red-300 text-sm">{error}</p>
                 {#if !isForking}
                   <button
+                    type="button"
                     onclick={handleRetry}
                     class="mt-3 text-red-400 hover:text-red-300 text-sm underline"
                   >
@@ -669,6 +713,66 @@
             </div>
           </div>
         <!-- Progress Display -->
+        {:else if isProgressComplete}
+          <!-- Success Summary -->
+          <div class="space-y-4">
+            <div class="flex items-center space-x-3">
+              <CheckCircle2 class="w-5 h-5 text-green-400" />
+              <span class="text-green-400 font-medium">Fork completed successfully!</span>
+            </div>
+
+            <div class="bg-gray-800 rounded-lg p-4 border border-gray-600">
+              <p class="text-sm text-gray-300">Your fork is ready:</p>
+              <div class="mt-2 flex items-center justify-between gap-3">
+                <a
+                  href={(completedResult?.forkUrl || '').replace(/\.git$/, '')}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  class="text-blue-400 hover:text-blue-300 break-all inline-flex items-center gap-1"
+                >
+                  <span>{(completedResult?.forkUrl || '').replace(/\.git$/, '')}</span>
+                  <ExternalLink class="w-3 h-3" />
+                </a>
+                <button type="button" onclick={copyForkUrl} class="px-2 py-1 text-xs border border-gray-600 rounded text-gray-300 hover:text-white hover:border-gray-500">Copy URL</button>
+              </div>
+            </div>
+
+            {#if completedResult?.defaultBranch}
+              <div class="text-xs text-gray-400">
+                Default branch: <span class="text-gray-300">{completedResult.defaultBranch}</span>
+              </div>
+            {/if}
+
+            <!-- Compact details toggle -->
+            <div class="mt-2">
+              <button
+                type="button"
+                class="text-xs text-gray-300 hover:text-white inline-flex items-center gap-1"
+                onclick={() => (showDetails = !showDetails)}
+                aria-expanded={showDetails}
+              >
+                <ChevronDown class={"w-3 h-3 transition-transform " + (showDetails ? 'rotate-180' : '')} />
+                {showDetails ? 'Hide details' : 'Show details'}
+              </button>
+            </div>
+
+            {#if showDetails}
+              <div class="mt-2 rounded-md border border-gray-700 bg-gray-900 p-3 text-xs text-gray-300 space-y-2">
+                <div class="flex items-center justify-between">
+                  <span>Clone with Git</span>
+                  <button type="button" onclick={copyCloneCommand} class="px-2 py-1 border border-gray-700 rounded hover:border-gray-600">Copy</button>
+                </div>
+                <code class="block bg-black/40 rounded px-2 py-1 break-all">git clone {completedResult?.forkUrl}</code>
+                <div>
+                  <span class="text-gray-400">Repository:</span>
+                  <span class="ml-1">{originalRepo.owner}/{forkName}</span>
+                </div>
+                {#if completedResult?.branches?.length}
+                  <div class="text-gray-400">Branches: <span class="text-gray-300">{completedResult.branches.join(', ')}</span></div>
+                {/if}
+              </div>
+            {/if}
+          </div>
         {:else if isForking && progress && progress.length > 0}
           <div class="space-y-4">
             <div class="flex items-center space-x-3">
@@ -709,6 +813,7 @@
       {#if !isProgressComplete}
         <div class="flex items-center justify-end space-x-3 p-6 border-t border-gray-700">
           <button
+            type="button"
             onclick={handleClose}
             disabled={isForking}
             class="px-4 py-2 text-gray-300 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -716,7 +821,8 @@
             Cancel
           </button>
           <button
-            onclick={handleFork}
+            type="submit"
+            form="fork-form"
             disabled={isForking || !!validationError || !forkName.trim() || availableServices.length === 0 || existingForkInfo?.exists}
             class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
           >
@@ -730,11 +836,13 @@
           </button>
         </div>
       {:else}
-        <div class="flex items-center justify-end p-6 border-t border-gray-700">
+        <div class="flex items-center justify-end space-x-3 p-6 border-t border-gray-700">
           <button
+            type="button"
             onclick={handleClose}
-            class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center space-x-2"
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
           >
+            Close
             <CheckCircle2 class="w-4 h-4" />
             <span>Done</span>
           </button>

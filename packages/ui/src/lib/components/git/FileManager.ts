@@ -169,8 +169,8 @@ export class FileManager {
   /**
    * Get default branch name from full branch reference
    */
-  private getShortBranchName(fullBranch: string): string {
-    const shortName = fullBranch.split("/").pop();
+  private getShortBranchName(fullBranch?: string): string {
+    const shortName = (fullBranch || "").split("/").pop();
     // If we have a short name, use it; otherwise defer to core's robust branch resolution
     return shortName || "";
   }

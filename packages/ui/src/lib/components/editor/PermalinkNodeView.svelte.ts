@@ -1,4 +1,10 @@
-import { mergeAttributes, Node, nodePasteRule, type PasteRuleMatch, type RawCommands } from '@tiptap/core';
+import {
+  mergeAttributes,
+  Node,
+  nodePasteRule,
+  type PasteRuleMatch,
+  type RawCommands
+} from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { createNeventFromPermalink } from '@nostr-git/core';
 import type { EventTemplate, NostrEvent } from 'nostr-tools';
@@ -43,10 +49,9 @@ export const PermalinkNode = Node.create<PermalinkNodeOptions>({
 
   addOptions() {
     return {
-      signer: window.nostr?.signEvent ||
-        (() => {
-          throw new Error('nostr.signEvent is not available');
-        }),
+      signer: (() => {
+        throw new Error('nostr.signEvent is not available');
+      }),
       relays: ['wss://relay.damus.io'],
       spinnerComponent: Spinner
     };
@@ -98,7 +103,7 @@ export const PermalinkNode = Node.create<PermalinkNodeOptions>({
       nodePasteRule({
         type: this.type,
         find: (text) => {
-          const matches = [];
+          const matches: PasteRuleMatch[] = [];
           for (const match of text.matchAll(PERMALINK_REGEX)) {
             const rawLink = match[0];
             matches.push(createPasteRuleMatch(match, { permalink: rawLink }));

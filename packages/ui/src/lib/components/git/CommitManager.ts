@@ -233,7 +233,8 @@ export class CommitManager {
 
     // Try cache first if enabled
     const cacheEnabled = !!(this.config.enableCaching && this.cacheManager && this.canonicalKey);
-    const branchName = (branch || mainBranch).split("/").pop();
+    // Ensure branchName is a concrete string (short git name)
+    const branchName = (branch ?? mainBranch).split("/").pop()!;
     const pageKey = cacheEnabled
       ? `${this.canonicalKey}:${branchName}:p${this.currentPage}:s${this.commitsPerPage}`
       : undefined;
@@ -272,15 +273,15 @@ export class CommitManager {
       const requiredDepth = this.commitsPerPage * this.currentPage;
 
       // Check current data level
-      const dataLevel = await this.workerManager.getRepoDataLevel(effectiveRepoId);
+      const dataLevel = await this.workerManager.getRepoDataLevel(effectiveRepoId as string);
 
       // For commit history, we need full clone to avoid NotFoundError
       if (dataLevel !== "full") {
         console.log(`Upgrading to full clone for commit history (current: ${dataLevel})`);
         const upgradeResult = await this.workerManager.ensureFullClone({
-          repoId: effectiveRepoId,
-          branch: branchName,
-          depth: Math.max(requiredDepth, this.config.defaultDepth),
+          repoId: effectiveRepoId as string,
+          branch: branchName as string,
+          depth: Math.max(requiredDepth, this.config.defaultDepth) as number,
         });
 
         if (!upgradeResult.success) {
@@ -290,9 +291,9 @@ export class CommitManager {
 
       // Load commits with the worker's optimized method
       const commitsResult = await this.workerManager.getCommitHistory({
-        repoId: effectiveRepoId,
-        branch: branchName,
-        depth: requiredDepth,
+        repoId: effectiveRepoId as string,
+        branch: branchName as string,
+        depth: requiredDepth as number,
       });
 
       if (commitsResult.success) {
@@ -317,8 +318,8 @@ export class CommitManager {
           } else {
             // Get total count separately (this might be cached)
             const countResult = await this.workerManager.getCommitCount({
-              repoId: effectiveRepoId,
-              branch: branchName,
+              repoId: effectiveRepoId as string,
+              branch: branchName as string,
             });
 
             if (countResult.success) {
@@ -387,8 +388,8 @@ export class CommitManager {
     depth,
   }: {
     repoId: string;
-    branch?: string;
-    depth?: number;
+    branch: string;
+    depth: number;
   }): Promise<any> {
     return await this.workerManager.getCommitHistory({
       repoId,
@@ -408,7 +409,7 @@ export class CommitManager {
   }: {
     repoEvent: any;
     path: string;
-    branch?: string;
+    branch: string;
     maxCount?: number;
   }): Promise<any> {
     return await this.workerManager.getFileHistory({
