@@ -31,6 +31,7 @@ export { default as ProviderSelectionStep } from "./git/ProviderSelectionStep.sv
 export { default as EditRepoPanel } from "./git/EditRepoPanel.svelte";
 export { default as StackedDiff } from "./git/StackedDiff.svelte";
 export { default as ForkRepoDialog } from "./git/ForkRepoDialog.svelte";
+export { default as GraspServersPanel } from "./git/GraspServersPanel.svelte";
 export { Repo } from "./git/Repo.svelte";
 
 // Media viewers

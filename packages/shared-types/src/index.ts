@@ -10,7 +10,7 @@ export {
   GIT_STATUS_APPLIED,
   GIT_STATUS_CLOSED,
   GIT_STATUS_DRAFT,
-} from './nip34.js';
+} from "./nip34.js"
 export type {
   NostrEvent,
   NostrTag,
@@ -28,7 +28,7 @@ export type {
   Nip34EventByKind,
   Profile,
   TrustedEvent,
-} from './nip34.js';
+} from "./nip34.js"
 
 // Utilities: type guards, labels, tag helpers, creators, immutable tag ops, parsers
 export {
@@ -56,18 +56,19 @@ export {
   parseRepoAnnouncementEvent,
   parseRepoStateEvent,
   parseStatusEvent,
-} from './utils.js';
-export type { Patch, Issue, RepoAnnouncement, RepoState, Status } from './utils.js';
+} from "./utils.js"
+export type {Patch, Issue, RepoAnnouncement, RepoState, Status} from "./utils.js"
 
 // NIP-22 comments
-export type { CommentTag, CommentEvent, CreateCommentOpts } from './nip22.js';
-export { createCommentEvent } from './nip22.js';
+export type {CommentTag, CommentEvent, CreateCommentOpts} from "./nip22.js"
+export {parseCommentEvent} from "./utils-comment.js"
+export {createCommentEvent} from "./nip22.js"
 
 // Core git types
-export type { Commit, FileDiff, CommitDiff } from './core.js';
+export type {Commit, FileDiff, CommitDiff} from "./core.js"
 
 // Relay sanitizer
-export { normalizeRelayUrl, sanitizeRelays } from './sanitize-relays.js';
+export {normalizeRelayUrl, sanitizeRelays} from "./sanitize-relays.js"
 
 // Runtime validation (Zod schemas and validators)
 export {
@@ -88,5 +89,5 @@ export {
   validatePatchEvent,
   validateIssueEvent,
   validateStatusEvent,
-} from './validation.js';
-export type { NostrTagRuntime, NostrEventLike } from './validation.js';
+} from "./validation.js"
+export type {NostrTagRuntime, NostrEventLike} from "./validation.js"

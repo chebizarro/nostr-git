@@ -455,6 +455,26 @@ export class Repo {
     return this.branchManager.getBranches();
   }
 
+  // Expose clone URLs from the parsed repo announcement
+  get cloneUrls(): string[] {
+    return this.repo?.clone ?? [];
+  }
+
+  // Expose relays from the parsed repo announcement
+  get relays(): string[] {
+    return this.repo?.relays ?? [];
+  }
+
+  // Expose maintainers from the parsed repo announcement
+  get maintainers(): string[] {
+    return this.repo?.maintainers ?? [];
+  }
+
+  // Expose currently loaded commits for UI components
+  get commits(): any[] {
+    return this.commitManager.getCommits();
+  }
+
   /**
    * Get all repository references (branches and tags) with robust fallback logic
    * This method encapsulates the sophisticated branch/ref handling logic that includes:
@@ -551,17 +571,6 @@ export class Repo {
     this.branchManager.setSelectedBranch(branchName);
   }
 
-  get maintainers() {
-    return this.#maintainers;
-  }
-
-  get relays() {
-    return this.repo?.relays;
-  }
-
-  get commits() {
-    return this.commitManager.getCommits();
-  }
 
   get isLoading() {
     return Object.values(this.#loadingIds).some((id) => id !== null) || this.commitManager.isLoading();

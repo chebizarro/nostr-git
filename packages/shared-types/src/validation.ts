@@ -54,7 +54,9 @@ export const RepoAnnouncementTagSchema = z.union([
   RelaysTag,
   REarlyUniqueCommitTag,
   MaintainersTag,
-  HashtagTag
+  HashtagTag,
+  // Allow unknown/extra tags to pass validation without breaking
+  NostrTagSchema
 ]);
 
 export const RepoAnnouncementTagsSchema = z.array(RepoAnnouncementTagSchema);

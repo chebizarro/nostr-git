@@ -16,6 +16,7 @@
   // Accept props: event (NIP-34 RepoAnnouncementEvent), owner (Profile), activeTab
   const {
     event,
+    repoClass,
     activeTab = "overview",
     children,
     watchRepo,
@@ -27,6 +28,7 @@
     overviewRepo,
   }: {
     event: RepoAnnouncementEvent;
+    repoClass: Repo;
     activeTab?: string;
     children?: any;
     watchRepo?: () => void;
@@ -101,7 +103,7 @@
   
   <!-- Authentication Status Indicator -->
   <div class="mb-4">
-    <AuthStatusIndicator {event} />
+    <AuthStatusIndicator repository={repoClass} pubkey={pubkey} />
   </div>
 
   <nav

@@ -25,6 +25,7 @@
     "src/lib/components/editor/PermalinkTipTapEditor.svelte",
     "src/lib/components/git/ForkRepoDialog.svelte",
     "src/lib/components/git/AuthStatusIndicator.svelte",
+    "src/lib/components/git/GraspServersPanel.svelte",
     "src/lib/stores/**/*",
     "src/ConfigProvider.svelte",
     "src/FunctionProvider.svelte"
