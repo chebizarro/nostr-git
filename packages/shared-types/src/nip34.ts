@@ -100,6 +100,7 @@ export type IssueTag =
   | ["e", string];
 
 export interface IssueEvent extends NostrEvent {
+  id: string;
   kind: typeof GIT_ISSUE;
   content: string; // markdown text
   tags: IssueTag[];
