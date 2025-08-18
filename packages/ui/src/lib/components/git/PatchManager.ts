@@ -288,13 +288,18 @@ export class PatchManager {
   ): Promise<void> {
     if (!patches.length) return;
 
-
-    
     // Clear any existing timeouts
     this.clearBatchTimeouts();
     
     // Cleanup expired cache entries
     this.cacheManager.cleanup();
+
+    // Sort patches by created_at in descending order
+    patches.sort((a, b) => {
+      const dateA = new Date(a.created_at);
+      const dateB = new Date(b.created_at);
+      return dateB.getTime() - dateA.getTime();
+    });
 
     // Process patches in batches to avoid overwhelming the system
     const { batchSize, batchDelay } = this.config;
