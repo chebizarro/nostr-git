@@ -107,23 +107,35 @@
 
   const availableServices = $derived.by(() => {
     const services = tokenList
-      .filter(token => ['github.com', 'gitlab.com', 'bitbucket.org'].includes(token.host))
-      .map(token => ({
+      .filter((token) => ['github.com', 'gitlab.com', 'bitbucket.org'].includes(token.host))
+      .map((token) => ({
         host: token.host,
-        label: token.host === 'github.com' ? 'GitHub' : 
-               token.host === 'gitlab.com' ? 'GitLab' : 
-               token.host === 'bitbucket.org' ? 'Bitbucket' : token.host
+        label:
+          token.host === 'github.com'
+            ? 'GitHub'
+            : token.host === 'gitlab.com'
+            ? 'GitLab'
+            : token.host === 'bitbucket.org'
+            ? 'Bitbucket'
+            : token.host
       }));
 
     // Always include GRASP option regardless of tokens
     services.push({ host: 'grasp', label: 'GRASP (Nostr)' });
-    
-    // Ensure selected service is available, fallback to GitHub or GRASP
-    if (!services.some(s => s.host === selectedService)) {
-      selectedService = services.find(s => s.host === 'github.com')?.host || 'grasp';
-    }
-    
+
     return services;
+  });
+
+  // Ensure selected service remains valid based on availableServices
+  $effect(() => {
+    const services = availableServices;
+    if (!services || services.length === 0) return;
+    if (!services.some((s) => s.host === selectedService)) {
+      const fallback = services.find((s) => s.host === 'github.com')?.host || 'grasp';
+      if (selectedService !== fallback) {
+        selectedService = fallback;
+      }
+    }
   });
 
   // Debug initial state

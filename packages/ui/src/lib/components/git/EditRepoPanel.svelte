@@ -17,6 +17,7 @@
     Trash2,
   } from "@lucide/svelte";
   import type { NostrEvent } from "nostr-tools";
+  import { nip19 } from "nostr-tools";
   import { Repo } from "./Repo.svelte";
 
   // Types for edit configuration and progress
@@ -173,10 +174,14 @@
       errors.defaultBranch = "Invalid branch name format";
     }
 
-    // Maintainers validation (npub format)
-    const invalidMaintainers = formData.maintainers.filter(m => m.trim() && !m.match(/^npub1[a-z0-9]{58}$/));
+    // Maintainers validation (accept npub or 64-char hex)
+    const invalidMaintainers = formData.maintainers.filter((m) => {
+      const v = m.trim();
+      if (!v) return false;
+      return !/^npub1[ac-hj-np-z02-9]{58}$/.test(v) && !/^[a-fA-F0-9]{64}$/.test(v);
+    });
     if (invalidMaintainers.length > 0) {
-      errors.maintainers = "Maintainers must be valid npub addresses";
+      errors.maintainers = "Maintainers must be npub or 64-char hex pubkeys";
     }
 
     // Relays validation (wss:// URLs)
@@ -257,6 +262,21 @@
     try {
       // Filter out empty strings from arrays
       const cleanMaintainers = formData.maintainers.filter(m => m.trim());
+      // Normalize maintainers to hex pubkeys
+      const normalizedMaintainers = cleanMaintainers.map((m) => {
+        const v = m.trim();
+        if (/^npub1/i.test(v)) {
+          try {
+            const dec = nip19.decode(v);
+            if (dec.type === "npub" && typeof dec.data === "string") {
+              return dec.data.toLowerCase();
+            }
+          } catch (e) {
+            // Fallback: keep original, validation should have caught invalid values
+          }
+        }
+        return v.toLowerCase();
+      });
       const cleanRelays = formData.relays.filter(r => r.trim());
       const cleanWebUrls = formData.webUrls.filter(w => w.trim());
       const cleanCloneUrls = formData.cloneUrls.filter(c => c.trim());
@@ -269,7 +289,7 @@
         cloneUrl: cleanCloneUrls[0], // Primary clone URL
         webUrl: cleanWebUrls[0], // Primary web URL
         defaultBranch: formData.defaultBranch,
-        maintainers: cleanMaintainers,
+        maintainers: normalizedMaintainers,
         relays: cleanRelays,
         hashtags: cleanHashtags,
         earliestUniqueCommit: formData.earliestUniqueCommit.trim() || undefined,
