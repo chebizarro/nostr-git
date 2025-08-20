@@ -318,8 +318,9 @@ export class Repo {
 
   get #maintainers(): string[] {
     const maintainers = this.repo?.maintainers ?? [];
-    const owner = this.repo?.owner ?? "";
+    const owner = this.repo?.owner ?? this.repoEvent?.pubkey;
     const combined = owner ? [...maintainers, owner] : [...maintainers];
+    console.log('Maintainers:', combined);
     return Array.from(new Set(combined.filter((v): v is string => !!v && v.length > 0)));
   }
 
@@ -467,7 +468,7 @@ export class Repo {
 
   // Expose maintainers from the parsed repo announcement
   get maintainers(): string[] {
-    return this.repo?.maintainers ?? [];
+    return this.#maintainers;
   }
 
   // Expose currently loaded commits for UI components
