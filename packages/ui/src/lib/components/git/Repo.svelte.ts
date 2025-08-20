@@ -818,7 +818,7 @@ export class Repo {
       relays: repoData.relays,
       maintainers: repoData.maintainers,
       hashtags: repoData.hashtags,
-      earliestUniqueCommit: repoData.earliestUniqueCommit || repoData.defaultBranch,
+      earliestUniqueCommit: repoData.earliestUniqueCommit || this.branchManager.getBranch(repoData.defaultBranch!)?.commit,
     });
   }
   

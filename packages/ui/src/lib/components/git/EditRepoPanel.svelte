@@ -140,7 +140,6 @@
 
   // UI state
   let validationErrors = $state<Record<string, string>>({});
-  let showReadmePreview = $state(false);
 
   // Update form data when repo changes
   $effect(() => {
