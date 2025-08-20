@@ -67,7 +67,7 @@
     </div>
 
     <button
-      on:click={downloadFile}
+      onclick={downloadFile}
       class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors mb-6"
     >
       Download File

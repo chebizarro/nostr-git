@@ -89,8 +89,7 @@
         subject,
         labels,
       });
-      
-      onIssueCreated(issueEvent)
+      await onIssueCreated(issueEvent)
 
       back()
 
