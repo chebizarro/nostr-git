@@ -1,7 +1,6 @@
 import { getGitProvider } from './git-provider.js';
 import { canonicalRepoKey } from './utils/canonicalRepoKey.js';
 import { fileTypeFromBuffer } from 'file-type';
-import { lookup as mimeLookup } from 'mime-types';
 import { createPatch } from 'diff';
 import type { RepoAnnouncement } from '@nostr-git/shared-types';
 import type { PermalinkData } from './permalink.js';
@@ -347,7 +346,26 @@ export async function determineMimeType(data?: Uint8Array, extension?: string): 
     if (ftResult?.mime) return ftResult.mime;
   }
   if (extension) {
-    const extBasedMime = mimeLookup(extension.replace(/^\./, ''));
+    const ext = extension.replace(/^\./, '').toLowerCase();
+    const map: Record<string, string> = {
+      // text/code
+      md: 'text/markdown', markdown: 'text/markdown', txt: 'text/plain',
+      html: 'text/html', css: 'text/css',
+      js: 'application/javascript', mjs: 'application/javascript', cjs: 'application/javascript',
+      ts: 'application/typescript', tsx: 'application/typescript', jsx: 'text/jsx',
+      json: 'application/json', yaml: 'application/x-yaml', yml: 'application/x-yaml',
+      svelte: 'text/svelte', vue: 'text/vue',
+      // images
+      png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+      webp: 'image/webp', svg: 'image/svg+xml', ico: 'image/x-icon', bmp: 'image/bmp',
+      // fonts
+      ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2',
+      // archives
+      zip: 'application/zip', gz: 'application/gzip', tar: 'application/x-tar', tgz: 'application/gzip',
+      // docs
+      pdf: 'application/pdf'
+    };
+    const extBasedMime = map[ext];
     if (extBasedMime) return extBasedMime;
   }
   return 'application/octet-stream';

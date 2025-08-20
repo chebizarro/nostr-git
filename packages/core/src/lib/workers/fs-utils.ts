@@ -3,7 +3,25 @@
 import type { GitProvider } from '@nostr-git/git-wrapper';
 
 export function getProviderFs(git: GitProvider): any | undefined {
-  return (git as any).fs;
+  // Try direct fs first
+  let fs: any | undefined = (git as any).fs;
+  if (fs) return fs;
+
+  // Try unwrapping common wrapper shape (e.g., MultiVendorGitProvider -> baseProvider)
+  const base = (git as any).baseProvider;
+  if (base && typeof base === 'object') {
+    fs = (base as any).fs;
+    if (fs) return fs;
+
+    // Some wrappers may nest further; attempt one more level defensively
+    const base2 = (base as any).baseProvider;
+    if (base2 && typeof base2 === 'object') {
+      fs = (base2 as any).fs;
+      if (fs) return fs;
+    }
+  }
+
+  return undefined;
 }
 
 export async function ensureDir(fs: any, path: string): Promise<void> {

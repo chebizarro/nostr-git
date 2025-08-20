@@ -21,12 +21,12 @@ export class IsomorphicGitProvider implements GitProvider {
   // Repository
   async clone(options: any) { return isogit.clone({ ...options, fs: this.fs, http: this.http, corsProxy: this.corsProxy }); }
   async commit(options: any) { return isogit.commit({ ...options, fs: this.fs }); }
-  async fetch(options: any) { return isogit.fetch({ ...options, fs: this.fs, http: this.http }) as Promise<GitFetchResult>; }
+  async fetch(options: any) { return isogit.fetch({ ...options, fs: this.fs, http: this.http, corsProxy: this.corsProxy }) as Promise<GitFetchResult>; }
   async init(options: any) { return isogit.init({ ...options, fs: this.fs }); }
   async log(options: any) { return isogit.log({ ...options, fs: this.fs }); }
   async merge(options: any) { return isogit.merge({ ...options, fs: this.fs }) as Promise<GitMergeResult>; }
-  async pull(options: any) { return isogit.pull({ ...options, fs: this.fs, http: this.http }); }
-  async push(options: any) { return isogit.push({ ...options, fs: this.fs, http: this.http }); }
+  async pull(options: any) { return isogit.pull({ ...options, fs: this.fs, http: this.http, corsProxy: this.corsProxy }); }
+  async push(options: any) { return isogit.push({ ...options, fs: this.fs, http: this.http, corsProxy: this.corsProxy }); }
   async status(options: any) { return isogit.status({ ...options, fs: this.fs }); }
   async statusMatrix(options: any) { return isogit.statusMatrix({ ...options, fs: this.fs }); }
   async version() { return isogit.version(); }
@@ -63,10 +63,10 @@ export class IsomorphicGitProvider implements GitProvider {
 
   // Remotes
   async deleteRemote(options: any) { return isogit.deleteRemote({ ...options, fs: this.fs }); }
-  async getRemoteInfo(options: any) { return isogit.getRemoteInfo({ ...options, fs: this.fs }); }
-  async getRemoteInfo2(options: any) { return isogit.getRemoteInfo2({ ...options, fs: this.fs }); }
+  async getRemoteInfo(options: any) { return isogit.getRemoteInfo({ ...options, fs: this.fs, http: this.http, corsProxy: this.corsProxy }); }
+  async getRemoteInfo2(options: any) { return (isogit as any).getRemoteInfo2({ ...options, fs: this.fs, http: this.http, corsProxy: this.corsProxy }); }
   async listRemotes(options: any) { return isogit.listRemotes({ ...options, fs: this.fs }); }
-  async listServerRefs(options: any) { return isogit.listServerRefs({ ...options, fs: this.fs }); }
+  async listServerRefs(options: any) { return (isogit as any).listServerRefs({ ...options, fs: this.fs, http: this.http, corsProxy: this.corsProxy }); }
   async addRemote(options: any) { return isogit.addRemote({ ...options, fs: this.fs }); }
 
   // Working Directory

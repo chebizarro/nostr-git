@@ -14,10 +14,15 @@ export async function needsUpdateUtil(
       const cloneUrl = cloneUrls[0];
       if (!cloneUrl) return false;
       const refs = await git.listServerRefs({ url: cloneUrl, prefix: 'refs/heads/', symrefs: true });
-      if (!refs || refs.length === 0) return false; // empty remote -> allow initial push
+      // If there are no branch heads yet, treat as empty remote and allow initial push
+      const heads = (refs || []).filter((r: any) => r?.ref?.startsWith('refs/heads/'));
+      if (!heads || heads.length === 0) return false;
       return true; // has heads -> require sync
     } catch {
-      return true; // conservative if probe fails
+      // Probe may fail in browsers due to CORS (e.g., GitHub smart HTTP endpoints).
+      // For initial push (no cache), be permissive and allow the push attempt.
+      // If the remote truly has commits, the push will fail and we can sync then.
+      return false;
     }
   }
 

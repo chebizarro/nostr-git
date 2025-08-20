@@ -6,14 +6,22 @@ type CacheEntry = { cache: Record<string | symbol, any>; lastUsed: number };
 
 export class CachedGitProvider implements GitProvider {
   private readonly inner: GitProvider;
+  // Expose the underlying provider for environments that need direct fs access (e.g., workers)
+  public readonly baseProvider: GitProvider;
   private readonly mode: CacheMode;
   private readonly ttl: number;
   private readonly caches = new Map<string, CacheEntry>();
 
   constructor(inner: GitProvider, cfg: GitWrapperConfig) {
     this.inner = inner;
+    this.baseProvider = inner;
     this.mode = cfg.cacheMode;
     this.ttl = cfg.cacheMaxAgeMs;
+  }
+
+  // Forward fs property if present on the inner provider (e.g., IsomorphicGitProvider with LightningFS)
+  get fs(): any {
+    return (this.inner as any)?.fs;
   }
 
   // --- cache helpers ---

@@ -16,7 +16,11 @@ export function getGitProvider(overrides?: Partial<GitWrapperConfig>): GitProvid
 
   // Note: compatMode is consumed by isomorphic-git v2 via process.env (dotenv-loaded).
   // We don't branch code here; we just ensure env is loaded in config.
-  const isBrowserLike = typeof window !== 'undefined' && typeof (globalThis as any).indexedDB !== 'undefined';
+  // Detect browser-like environments, including Web Workers (self)
+  const hasWindow = typeof window !== 'undefined';
+  const hasSelf = typeof self !== 'undefined';
+  const hasIndexedDB = typeof (globalThis as any).indexedDB !== 'undefined';
+  const isBrowserLike = (hasWindow || hasSelf) && hasIndexedDB;
   const fs = isBrowserLike ? new LightningFS('nostr-git') : fsNode;
   const http = isBrowserLike ? httpWeb : httpNode;
   const provider = new IsomorphicGitProvider({ fs, http, corsProxy: 'https://cors.isomorphic-git.org' });

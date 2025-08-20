@@ -5,7 +5,6 @@ import { rootDir } from '../git.js';
 import { Buffer } from 'buffer';
 import { analyzePatchMergeability, type MergeAnalysisResult } from '../merge-analysis.js';
 import { getGitServiceApi } from '../git/factory.js';
-import type { GitServiceApi } from '../git/api.js';
 import type { GitVendor } from '../vendor-providers.js';
 import { createRepoStateEvent } from '@nostr-git/shared-types';
 import { canonicalRepoKey } from '../utils/canonicalRepoKey.js';
@@ -945,7 +944,31 @@ const createLocalRepo = async ({
     }
     
     // Write files to repository using the file system via provider fs
-    const fs = (git as any).fs;
+    // Debug provider and FS info
+    try {
+      const providerInfo = {
+        providerCtor: (git as any)?.constructor?.name,
+        hasFsPropOnProvider: Boolean((git as any)?.fs),
+        providerFsCtor: (git as any)?.fs?.constructor?.name,
+      };
+      console.log('[git-worker] Provider info:', providerInfo);
+    } catch {}
+
+    const fs = getProviderFs(git);
+    try {
+      const fsInfo = {
+        hasFs: Boolean(fs),
+        fsCtor: fs && (fs as any).constructor?.name,
+        hasPromises: Boolean(fs && (fs as any).promises),
+        promisesKeys: fs && (fs as any).promises ? Object.keys((fs as any).promises) : [],
+        isLightningHint: Boolean(fs && (((fs as any).__isLightningFS) || ((fs as any).constructor?.name || '').toLowerCase().includes('lightning'))),
+      };
+      console.log('[git-worker] FS info:', fsInfo);
+    } catch {}
+
+    if (!fs || !fs.promises) {
+      throw new Error('File system provider is not available in the current environment. Cannot create initial files.');
+    }
     for (const file of files) {
       const filePath = `${dir}/${file.path}`;
       
@@ -957,7 +980,8 @@ const createLocalRepo = async ({
         
         try {
           // Create directory structure if it doesn't exist
-          await fs.promises.mkdir(fullDirPath, { recursive: true });
+          const { ensureDir } = await import('./fs-utils.js');
+          await ensureDir(fs, fullDirPath);
         } catch (error) {
           // Directory might already exist, that's fine
         }
