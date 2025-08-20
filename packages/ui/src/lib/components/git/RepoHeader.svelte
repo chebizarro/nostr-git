@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { Button } from "$lib/components";
-  import { cn } from "$lib/utils";
+  import { cn } from "../../utils";
   import {
     GitBranch,
     Eye,
@@ -9,9 +8,12 @@
     Settings,
     LayoutDashboard,
   } from "@lucide/svelte";
+  import { useRegistry } from "../../useRegistry";
+  const { Button } = useRegistry();
   import type { RepoAnnouncementEvent } from "@nostr-git/shared-types";
   import { parseRepoAnnouncementEvent } from "@nostr-git/shared-types";
   import AuthStatusIndicator from "./AuthStatusIndicator.svelte";
+  import { Repo } from "./Repo.svelte";
 
   // Accept props: event (NIP-34 RepoAnnouncementEvent), owner (Profile), activeTab
   const {
@@ -19,6 +21,7 @@
     repoClass,
     activeTab = "overview",
     children,
+    pubkey,
     watchRepo,
     isRepoWatched,
     refreshRepo,
@@ -31,6 +34,7 @@
     repoClass: Repo;
     activeTab?: string;
     children?: any;
+    pubkey?: string;
     watchRepo?: () => void;
     isRepoWatched: boolean;
     refreshRepo?: () => Promise<void>;

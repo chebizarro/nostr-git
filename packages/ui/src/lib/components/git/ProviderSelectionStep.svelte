@@ -1,6 +1,6 @@
 <script lang="ts">
   import { useRegistry } from '../../useRegistry';
-  import { tokens as tokensStore, type Token } from '$lib/stores/tokens.js';
+  import { tokens as tokensStore, type Token } from '../../stores/tokens.js';
   import { onMount } from 'svelte';
   
   const { Button, Card, CardContent, CardHeader, CardTitle } = useRegistry();

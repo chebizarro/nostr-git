@@ -5,9 +5,9 @@
   import StepChooseService from './steps/StepChooseService.svelte';
   import { type Event as NostrEvent } from 'nostr-tools';
   import { useRegistry } from '../../useRegistry';
-  import { useNewRepo, type NewRepoResult, checkProviderRepoAvailability } from '$lib/useNewRepo.svelte';
-  import { tokens as tokensStore, type Token } from '$lib/stores/tokens.js';
-  import { createGraspServersStore } from '$lib/stores/graspServers';
+  import { useNewRepo, type NewRepoResult, checkProviderRepoAvailability } from '../../useNewRepo.svelte';
+  import { tokens as tokensStore, type Token } from '../../stores/tokens.js';
+  import { createGraspServersStore } from '../../stores/graspServers.js';
   
   const { Button } = useRegistry();
 
