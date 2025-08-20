@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Token } from '../../../stores/tokens';
   import ProviderSelectionStep from '../ProviderSelectionStep.svelte';
+  import type { Token } from '$lib/stores/tokens.js';
 
   interface Props {
     tokens: Token[];
