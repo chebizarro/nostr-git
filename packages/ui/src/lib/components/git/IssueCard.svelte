@@ -68,7 +68,7 @@
       case GIT_STATUS_DRAFT:
         return { icon: FileCode, color: "text-gray-500" };
       default:
-        return { icon: CircleDot, color: "text-gray-400" };
+        return { icon: CircleDot, color: "text-amber-500" };
     }
   }
 
