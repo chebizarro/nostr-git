@@ -131,38 +131,24 @@
     }
 
     // 2) cloneUrls defaults
+    // If the user hasn't manually edited clone URLs, fully regenerate the list based on current inputs
     if (!userEditedCloneUrl) {
-      const firstEmpty = (advancedSettings.cloneUrls.length === 0 || !advancedSettings.cloneUrls[0]);
       const host = availabilityHost || providerHost(selectedProvider);
 
       if (selectedProvider === 'grasp') {
-        // For GRASP keep nostr as primary default
-        if (firstEmpty && npub) {
-          const nostrUrl = `nostr://${npub}/${name}`;
-          if (advancedSettings.cloneUrls.length === 0) advancedSettings.cloneUrls = [nostrUrl];
-          else advancedSettings.cloneUrls[0] = nostrUrl;
-        }
+        // For GRASP, use only nostr as the auto-generated default
+        const nostrUrl = npub ? `nostr://${npub}/${name}` : undefined;
+        advancedSettings.cloneUrls = nostrUrl ? [nostrUrl] : [];
       } else {
-        // For non-GRASP: prefer HTTPS as primary when host+username are known.
+        // For non-GRASP: prefer HTTPS primary (when derivable), plus nostr secondary
         const httpsUrl = host && username ? `https://${host}/${username}/${name}.git` : undefined;
         const nostrUrl = npub ? `nostr://${npub}/${name}` : undefined;
 
         if (httpsUrl) {
-          // If primary empty or currently nostr, set HTTPS as primary
-          if (firstEmpty || advancedSettings.cloneUrls[0]?.startsWith('nostr://')) {
-            if (advancedSettings.cloneUrls.length === 0) advancedSettings.cloneUrls = [httpsUrl];
-            else advancedSettings.cloneUrls[0] = httpsUrl;
-          }
-          // Ensure nostr exists as secondary (not duplicate and not primary)
-          if (nostrUrl) {
-            const hasNostr = advancedSettings.cloneUrls.some((u) => u === nostrUrl);
-            if (!hasNostr) {
-              advancedSettings.cloneUrls = [...advancedSettings.cloneUrls, nostrUrl];
-            }
-          }
+          advancedSettings.cloneUrls = nostrUrl ? [httpsUrl, nostrUrl] : [httpsUrl];
         } else {
-          // If HTTPS cannot be derived yet, avoid adding nostr as primary prematurely.
-          // We'll re-run when availability results provide username/host.
+          // If HTTPS not derivable yet, avoid populating with transient nostr values
+          advancedSettings.cloneUrls = [];
         }
       }
     }

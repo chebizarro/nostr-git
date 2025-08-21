@@ -378,14 +378,57 @@ export async function applyPatchAndPushUtil(
         await git.push({ dir, url: remote.url, ref: effectiveTargetBranch, force: true, ...(authCallback && { onAuth: authCallback }) });
         pushedRemotes.push(remote.remote);
       } catch (pushError: any) {
-        const errorMsg = pushError instanceof Error ? pushError.message : String(pushError);
-        pushErrors.push({ remote: remote.remote, url: remote.url || 'N/A', error: errorMsg, code: pushError?.code || 'UNKNOWN', stack: pushError?.stack || '' });
+        // If push to protected branch is rejected by a pre-receive hook, retry to a topic branch
+        const rawMsg = pushError instanceof Error ? pushError.message || '' : String(pushError || '');
+        const code = (pushError && (pushError.code || pushError.name)) || 'UNKNOWN';
+        const looksProtected = /pre-receive hook declined/i.test(rawMsg) || /protected branch/i.test(rawMsg);
+        const graspLike = /relay\.ngit\.dev|grasp/i.test(remote.url || '');
+
+        if (looksProtected || graspLike) {
+          try {
+            const shortId = (patchData.id || 'patch').slice(0, 8);
+            const topicBranch = `grasp/patch-${shortId}`;
+            const remoteRef = `refs/heads/${topicBranch}`;
+            const authCallback = getAuthCallback(remote.url || '');
+            // Push local target branch to remote topic branch; avoid force on fallback
+            await git.push({
+              dir,
+              url: remote.url as string,
+              ref: effectiveTargetBranch,
+              remoteRef,
+              force: false,
+              ...(authCallback && { onAuth: authCallback })
+            } as any);
+            pushedRemotes.push(`${remote.remote}:${topicBranch}`);
+            // Record the original failure as a warning rather than fatal
+            pushErrors.push({
+              remote: remote.remote,
+              url: remote.url || 'N/A',
+              error: `Primary push rejected (${code}). Fallback pushed to ${topicBranch}. Original: ${rawMsg}`,
+              code: 'FALLBACK_TOPIC_PUSH',
+              stack: ''
+            });
+            continue;
+          } catch (fallbackErr: any) {
+            const fbMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+            pushErrors.push({ remote: remote.remote, url: remote.url || 'N/A', error: fbMsg, code: fallbackErr?.code || 'FALLBACK_FAILED', stack: fallbackErr?.stack || '' });
+            skippedRemotes.push(remote.remote);
+            continue;
+          }
+        }
+
+        // Non-protection-related error, report as-is
+        const errorMsg = rawMsg;
+        pushErrors.push({ remote: remote.remote, url: remote.url || 'N/A', error: errorMsg, code, stack: pushError?.stack || '' });
         skippedRemotes.push(remote.remote);
       }
     }
 
     progress('Push complete', 100);
-    return { success: true, mergeCommitOid, pushedRemotes, skippedRemotes, pushErrors: pushErrors.length ? pushErrors : undefined };
+    // Aggregate warning if any fallback behavior occurred
+    const hadFallback = (pushErrors || []).some(e => e.code === 'FALLBACK_TOPIC_PUSH');
+    const warning = hadFallback ? 'Primary push rejected by remote policy; patch was pushed to a topic branch for review.' : undefined;
+    return { success: true, mergeCommitOid, pushedRemotes, skippedRemotes, warning, pushErrors: pushErrors.length ? pushErrors : undefined };
   } catch (error: any) {
     return { success: false, error: error?.message || String(error) };
   }

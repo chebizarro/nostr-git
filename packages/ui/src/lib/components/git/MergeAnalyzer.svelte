@@ -4,7 +4,27 @@
   const { Card, CardContent, CardHeader, CardTitle, Progress, Badge } = useRegistry();
   import DiffViewer from './DiffViewer.svelte';
 
-  const { analysis, patch } = $props();
+  interface Props {
+    analysis: {
+      similarity: number;
+      autoMergeable: boolean;
+      affectedFiles: string[];
+      conflictCount: number;
+    };
+    // Can be a diff array or an object containing a `diff` field
+    patch: any;
+    analyzing?: boolean;
+    onAnalyze?: () => void;
+  }
+
+  const { analysis, patch, analyzing, onAnalyze }: Props = $props();
+
+  function handleAnalyze() {
+    onAnalyze?.();
+  }
+
+  // Normalize diff input for DiffViewer
+  const normalizedDiff = $derived(() => Array.isArray(patch) ? patch : (patch?.diff ?? []));
 
 </script>
 
@@ -12,10 +32,18 @@
   <!-- Compatibility Score -->
   <Card>
     <CardHeader class="pb-3">
-      <CardTitle class="text-lg flex items-center gap-2">
-        <TrendingUp class="h-5 w-5" />
-        Compatibility Analysis
-      </CardTitle>
+      <div class="flex items-center justify-between">
+        <CardTitle class="text-lg flex items-center gap-2">
+          <TrendingUp class="h-5 w-5" />
+          Compatibility Analysis
+        </CardTitle>
+        <button class="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded border hover:bg-accent transition-colors disabled:opacity-50"
+                disabled={!!analyzing}
+                onclick={handleAnalyze} aria-label="Analyze patch">
+          <GitMerge class="h-4 w-4" />
+          Analyze
+        </button>
+      </div>
     </CardHeader>
     <CardContent>
       <div class="space-y-4">
@@ -110,7 +138,7 @@
       </CardTitle>
     </CardHeader>
     <CardContent>
-      <DiffViewer diff={patch} showLineNumbers={true} />
+      <DiffViewer diff={normalizedDiff()} showLineNumbers={true} />
     </CardContent>
   </Card>
 </div>

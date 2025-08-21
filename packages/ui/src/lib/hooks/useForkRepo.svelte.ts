@@ -63,6 +63,9 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
 
   let tokens = $state<Token[]>([]);
 
+  // Prevent duplicate GRASP signing listener registration per session
+  let signingSetupDone = false;
+
   // Subscribe to token store changes and update reactive state
   tokensStore.subscribe((t: Token[]) => {
     tokens = t;
@@ -170,29 +173,32 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
 
       // If GRASP, set up message-based signing so worker can request signatures
       if (provider === 'grasp') {
-        // Register message handler for signing requests
-        worker.addEventListener('message', async (event: MessageEvent) => {
-          if ((event as any).data?.type === 'request-event-signing') {
-            try {
-              const { signer: signerStore } = await import('../stores/signer');
-              let nostrSigner: any = null;
-              signerStore.subscribe((v: any) => (nostrSigner = v))();
-              const signedEvent = await nostrSigner.sign((event as any).data.event);
-              worker.postMessage({
-                type: 'event-signed',
-                requestId: (event as any).data.requestId,
-                signedEvent
-              });
-            } catch (e: any) {
-              worker.postMessage({
-                type: 'event-signing-error',
-                requestId: (event as any).data.requestId,
-                error: e?.message || String(e)
-              });
+        if (!signingSetupDone) {
+          // Register message handler for signing requests (once)
+          worker.addEventListener('message', async (event: MessageEvent) => {
+            if ((event as any).data?.type === 'request-event-signing') {
+              try {
+                const { signer: signerStore } = await import('../stores/signer');
+                let nostrSigner: any = null;
+                signerStore.subscribe((v: any) => (nostrSigner = v))();
+                const signedEvent = await nostrSigner.sign((event as any).data.event);
+                worker.postMessage({
+                  type: 'event-signed',
+                  requestId: (event as any).data.requestId,
+                  signedEvent
+                });
+              } catch (e: any) {
+                worker.postMessage({
+                  type: 'event-signing-error',
+                  requestId: (event as any).data.requestId,
+                  error: e?.message || String(e)
+                });
+              }
             }
-          }
-        });
-        worker.postMessage({ type: 'register-event-signer' });
+          });
+          worker.postMessage({ type: 'register-event-signer' });
+          signingSetupDone = true;
+        }
       }
 
       const workerResult = await gitWorkerApi.forkAndCloneRepo({

@@ -374,6 +374,9 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
 
   let tokens = $state([]);
 
+  // Ensure we only register the GRASP signing event handler once per worker/session
+  let signingSetupDone = false;
+
   // Subscribe to token store changes and update reactive state
   tokensStore.subscribe((t) => {
     tokens = t;
@@ -751,40 +754,37 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
         // We'll set up a message handler directly instead of using a separate function
         
         try {
-          // Set up a message handler for event signing requests
-          console.log('🔐 Setting up event signing message handler');
-          
-          // Set up a message handler for event signing requests
-          worker.addEventListener('message', async (event) => {
-            if (event.data.type === 'request-event-signing') {
-              try {
-                console.log('🔐 Received event signing request:', event.data);
-                const signedEvent = await nostrSigner.sign(event.data.event);
-                console.log('🔐 Event signed successfully');
-                
-                // Send the signed event back to the worker
-                worker.postMessage({
-                  type: 'event-signed',
-                  requestId: event.data.requestId,
-                  signedEvent
-                });
-              } catch (error) {
-                console.error('🔐 Error signing event:', error);
-                
-                // Send the error back to the worker
-                worker.postMessage({
-                  type: 'event-signing-error',
-                  requestId: event.data.requestId,
-                  error: error instanceof Error ? error.message : String(error)
-                });
+          if (!signingSetupDone) {
+            // Set up a message handler for event signing requests (once)
+            console.log('🔐 Setting up event signing message handler');
+            worker.addEventListener('message', async (event) => {
+              if (event.data.type === 'request-event-signing') {
+                try {
+                  console.log('🔐 Received event signing request:', event.data);
+                  const signedEvent = await nostrSigner.sign(event.data.event);
+                  console.log('🔐 Event signed successfully');
+                  worker.postMessage({
+                    type: 'event-signed',
+                    requestId: event.data.requestId,
+                    signedEvent
+                  });
+                } catch (error) {
+                  console.error('🔐 Error signing event:', error);
+                  worker.postMessage({
+                    type: 'event-signing-error',
+                    requestId: event.data.requestId,
+                    error: error instanceof Error ? error.message : String(error)
+                  });
+                }
               }
-            }
-          });
-          
-          // Tell the worker that event signing is available
-          worker.postMessage({ type: 'register-event-signer' });
-          
-          console.log('🔐 Event signing setup complete');
+            });
+            // Tell the worker that event signing is available
+            worker.postMessage({ type: 'register-event-signer' });
+            signingSetupDone = true;
+            console.log('🔐 Event signing setup complete');
+          } else {
+            console.log('🔐 Event signing already set up; skipping duplicate registration');
+          }
         } catch (error) {
           console.error('🔐 Error setting up event signing:', error);
           throw new Error('Failed to set up event signing: ' + (error instanceof Error ? error.message : String(error)));
@@ -918,28 +918,20 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
 
     // Push to remote repository via safe preflight wrapper
     // Note: For GRASP, we don't pass a signer object since signing is handled via message protocol
-    const isGrasp = config.provider === 'grasp';
-    console.log('[NEW REPO] Using', isGrasp ? 'pushToRemote (GRASP)' : 'safePushToRemote');
-    const pushResult = isGrasp
-      ? await api.pushToRemote({
-          repoId: canonicalKey || config.name,
-          remoteUrl: pushUrl,
-          branch: config.defaultBranch,
-          token: providerToken,
-          provider: config.provider as any,
-        })
-      : await api.safePushToRemote({
-          repoId: canonicalKey || config.name,
-          remoteUrl: pushUrl,
-          branch: config.defaultBranch,
-          token: providerToken,
-          provider: config.provider as any,
-          preflight: {
-            blockIfUncommitted: true,
-            requireUpToDate: true,
-            blockIfShallow: false,
-          },
-        });
+    // Always use safePushToRemote to resolve the actual default branch and run preflight checks
+    console.log('[NEW REPO] Using safePushToRemote for provider:', config.provider);
+    const pushResult = await api.safePushToRemote({
+      repoId: canonicalKey || config.name,
+      remoteUrl: pushUrl,
+      branch: config.defaultBranch,
+      token: providerToken,
+      provider: config.provider as any,
+      preflight: {
+        blockIfUncommitted: true,
+        requireUpToDate: true, // skipped internally for GRASP
+        blockIfShallow: false,
+      },
+    });
 
     if (!pushResult?.success) {
       if (pushResult?.requiresConfirmation) {
