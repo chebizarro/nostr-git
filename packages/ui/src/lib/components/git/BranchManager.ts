@@ -246,7 +246,7 @@ export class BranchManager {
     }
     
     // Ultimate fallback
-    return "main";
+    return "master";
   }
 
   /**

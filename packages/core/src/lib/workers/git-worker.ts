@@ -9,7 +9,6 @@ import type { GitVendor } from '../vendor-providers.js';
 import { createRepoStateEvent } from '@nostr-git/shared-types';
 import { canonicalRepoKey } from '../utils/canonicalRepoKey.js';
 
-// canonicalRepoKey is now imported from '../utils/canonicalRepoKey.js'
 import { setAuthConfig, getAuthCallback, getConfiguredAuthHosts, type AuthConfig } from './auth.js';
 import { RepoCache, RepoCacheManager } from './cache.js';
 import { getProviderFs, isRepoClonedFs, safeRmrf } from './fs-utils.js';

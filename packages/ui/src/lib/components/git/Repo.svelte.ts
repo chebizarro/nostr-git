@@ -320,7 +320,6 @@ export class Repo {
     const maintainers = this.repo?.maintainers ?? [];
     const owner = this.repo?.owner ?? this.repoEvent?.pubkey;
     const combined = owner ? [...maintainers, owner] : [...maintainers];
-    console.log('Maintainers:', combined);
     return Array.from(new Set(combined.filter((v): v is string => !!v && v.length > 0)));
   }
 

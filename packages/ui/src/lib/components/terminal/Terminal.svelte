@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { createEventDispatcher } from 'svelte';
   import { Terminal } from '@xterm/xterm';
   import { FitAddon } from '@xterm/addon-fit';
   // Import xterm's CSS so the internal helper textarea is hidden and styling is applied
@@ -34,19 +33,15 @@
     outputLimit?: { bytes: number; lines: number; timeMs: number };
     onCommand?: (cmd: string) => void;
     onOutput?: (evt: { stream: Stream; chunk: string }) => void;
+    onExit?: (evt: { code: number }) => void;
+    onProgress?: (evt: any) => void;
+    onToast?: (evt: { level: 'info'|'warn'|'error'; message: string }) => void;
     // Optional repo defaults for CLI convenience
     repoCloneUrls?: string[];
     defaultRemoteUrl?: string;
     defaultBranch?: string;
     provider?: string;
     token?: string;
-  }
-
-  interface TerminalHandle {
-    focus(): void;
-    clear(): void;
-    runCommand(cmd: string): Promise<number>;
-    abort(): void;
   }
 
   const {
@@ -60,6 +55,9 @@
     outputLimit = { bytes: 1_000_000, lines: 10_000, timeMs: 30_000 },
     onCommand,
     onOutput,
+    onExit,
+    onProgress,
+    onToast,
     repoCloneUrls,
     defaultRemoteUrl,
     defaultBranch,
@@ -68,7 +66,6 @@
     token: defaultToken,
   } = $props();
 
-  const dispatch = createEventDispatcher();
 
   let containerEl: HTMLDivElement;
   let term: Terminal;
@@ -86,7 +83,7 @@
   // Toolbar actions
   function doClear() {
     term?.clear();
-    dispatch('output', { stream: 'stdout', chunk: '' });
+    onOutput?.({ stream: 'stdout', chunk: '' });
   }
 
   function printPrompt() {
@@ -153,7 +150,6 @@
   function termWrite(stream: Stream, text: string) {
     term?.write(text.replace(/\n/g, '\r\n'));
     onOutput?.({ stream, chunk: text });
-    dispatch('output', { stream, chunk: text });
   }
 
   // ---------------- FS Bridge ----------------
@@ -373,7 +369,7 @@
   }
 
   async function ensureWM() {
-    if (!wm) wm = new WorkerManager((evt) => dispatch('progress', evt));
+    if (!wm) wm = new WorkerManager((evt) => onProgress?.(evt));
     if (!wm.isReady) await wm.initialize();
     return wm;
   }
@@ -623,12 +619,14 @@
 
   async function ensureWorker() {
     if (worker) return;
-    // Try compiled JS paths first (dist consumption), fall back to TS in dev
-    const candidates = ['./worker/cli.js', './worker/cli.mjs', './worker/cli.ts'];
+    const isDist = String(import.meta.url).includes('/packages/nostr-git/packages/ui/dist/');
+    const preferred = isDist
+      ? ['./worker/cli.js', './worker/cli.mjs', './worker/cli.ts']
+      : ['./worker/cli.ts', './worker/cli.js', './worker/cli.mjs'];
     let lastErr: any = null;
-    for (const rel of candidates) {
+    for (const rel of preferred) {
+      const u = new URL(rel, import.meta.url);
       try {
-        const u = new URL(rel, import.meta.url);
         try {
           const isLikelyDev = typeof location !== 'undefined' && (
             location.hostname === 'localhost' || location.hostname === '127.0.0.1'
@@ -637,15 +635,45 @@
             u.searchParams.set('v', String(Date.now()));
           }
         } catch {}
-        worker = new Worker(u, { type: 'module' });
+        console.debug('[terminal] attempting worker url', u.toString());
+        const w = new Worker(u, { type: 'module' });
+        // If the worker errors immediately (e.g., 404 / bad MIME), fall back to next candidate
+        const ok = await new Promise<boolean>((resolve) => {
+          let settled = false;
+          const timer = setTimeout(() => { if (!settled) { settled = true; resolve(true); } }, 150);
+          const onError = (e: ErrorEvent) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(false);
+          };
+          w.addEventListener('error', onError, { once: true });
+          // Also treat messageerror as failure during bootstrap
+          w.addEventListener('messageerror', onError as any, { once: true });
+          // If the worker sends any message quickly, consider it alive
+          w.addEventListener('message', () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(true);
+          }, { once: true });
+        });
+        if (!ok) {
+          console.debug('[terminal] worker boot failed for', u.toString());
+          try { w.terminate(); } catch {}
+          lastErr = new Error('worker boot failed');
+          continue;
+        }
+        worker = w;
         break;
       } catch (e) {
         lastErr = e;
         worker = null;
+        console.debug('[terminal] worker init failed for candidate', rel, e);
       }
     }
     if (!worker) {
-      console.error('[terminal] failed to initialize worker with all fallbacks', lastErr);
+      console.error('[terminal] failed to initialize worker with fallbacks', lastErr);
       throw lastErr;
     }
 
@@ -675,14 +703,14 @@
         case 'exit':
           console.debug('[terminal] exit', msg);
           runningId = null;
-          dispatch('exit', { code: msg.code });
+          onExit?.({ code: msg.code });
           printPrompt();
           break;
         case 'progress':
-          dispatch('progress', msg);
+          onProgress?.(msg);
           break;
         case 'toast':
-          dispatch('toast', msg);
+          onToast?.(msg);
           break;
         case 'fs': {
           const { op, id, args } = msg;
@@ -852,7 +880,6 @@
     }
     await ensureWorker();
     onCommand?.(cmd);
-    dispatch('command', { cmd });
     const id = makeId();
     runningId = id;
     worker!.postMessage({ type: 'run', id, cwd, argv: tokens });
