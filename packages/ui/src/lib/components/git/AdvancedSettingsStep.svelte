@@ -8,8 +8,8 @@
     maintainers: string[];
     relays: string[];
     tags: string[];
-    webUrl: string;
-    cloneUrl: string;
+    webUrls: string[];
+    cloneUrls: string[];
     onGitignoreChange: (template: string) => void;
     onLicenseChange: (template: string) => void;
     onDefaultBranchChange: (branch: string) => void;
@@ -18,8 +18,8 @@
     onMaintainersChange: (maintainers: string[]) => void;
     onRelaysChange: (relays: string[]) => void;
     onTagsChange: (tags: string[]) => void;
-    onWebUrlChange: (url: string) => void;
-    onCloneUrlChange: (url: string) => void;
+    onWebUrlsChange: (urls: string[]) => void;
+    onCloneUrlsChange: (urls: string[]) => void;
   }
 
   const {
@@ -31,8 +31,8 @@
     maintainers,
     relays,
     tags,
-    webUrl,
-    cloneUrl,
+    webUrls,
+    cloneUrls,
     onGitignoreChange,
     onLicenseChange,
     onDefaultBranchChange,
@@ -41,8 +41,8 @@
     onMaintainersChange,
     onRelaysChange,
     onTagsChange,
-    onWebUrlChange,
-    onCloneUrlChange
+    onWebUrlsChange,
+    onCloneUrlsChange
   }: Props = $props();
 
   const gitignoreOptions = [
@@ -72,6 +72,17 @@
   function handleBranchInput(event: Event) {
     const target = event.target as HTMLInputElement;
     onDefaultBranchChange(target.value);
+  }
+
+  // Helpers for multi-value fields
+  function addItem(arr: string[], onChange: (v: string[]) => void) {
+    onChange([...(arr || []), '']);
+  }
+  function removeItem(arr: string[], index: number, onChange: (v: string[]) => void) {
+    onChange((arr || []).filter((_, i) => i !== index));
+  }
+  function updateItem(arr: string[], index: number, value: string, onChange: (v: string[]) => void) {
+    onChange((arr || []).map((item, i) => (i === index ? value : item)));
   }
 </script>
 
@@ -128,93 +139,148 @@
       <h3 class="text-lg font-medium text-gray-100 mb-4">Repository Metadata (NIP-34)</h3>
       
       <div class="space-y-4">
-        <!-- Web URL -->
+        <!-- Web URLs -->
         <div>
-          <label for="web-url" class="block text-sm font-medium text-gray-300 mb-2">
-            Web URL
+          <label class="block text-sm font-medium text-gray-300 mb-2">
+            Web URLs
           </label>
-          <input
-            id="web-url"
-            type="url"
-            value={webUrl}
-            oninput={(e) => onWebUrlChange((e.target as HTMLInputElement).value)}
-            placeholder="https://github.com/user/repo"
-            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
-          />
+          <div class="space-y-2">
+            {#each webUrls as url, index}
+              <div class="flex items-center space-x-2">
+                <input
+                  type="url"
+                  value={webUrls[index]}
+                  oninput={(e) => updateItem(webUrls, index, (e.target as HTMLInputElement).value, onWebUrlsChange)}
+                  placeholder="https://github.com/user/repo"
+                  class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
+                />
+                <button type="button" class="p-2 text-red-400 hover:text-red-300" aria-label="Remove web URL" onclick={() => removeItem(webUrls, index, onWebUrlsChange)}>
+                  Remove
+                </button>
+              </div>
+            {/each}
+            <button type="button" class="px-3 py-2 text-blue-400 hover:text-blue-300" onclick={() => addItem(webUrls, onWebUrlsChange)}>
+              Add web URL
+            </button>
+          </div>
           <p class="mt-1 text-sm text-gray-400">
-            URL for browsing the repository online
+            URL(s) for browsing the repository online
           </p>
         </div>
 
-        <!-- Clone URL -->
+        <!-- Clone URLs -->
         <div>
-          <label for="clone-url" class="block text-sm font-medium text-gray-300 mb-2">
-            Clone URL
+          <label class="block text-sm font-medium text-gray-300 mb-2">
+            Clone URLs
           </label>
-          <input
-            id="clone-url"
-            type="url"
-            value={cloneUrl}
-            oninput={(e) => onCloneUrlChange((e.target as HTMLInputElement).value)}
-            placeholder="https://github.com/user/repo.git"
-            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
-          />
+          <div class="space-y-2">
+            {#each cloneUrls as url, index}
+              <div class="flex items-center space-x-2">
+                <input
+                  type="url"
+                  value={cloneUrls[index]}
+                  oninput={(e) => updateItem(cloneUrls, index, (e.target as HTMLInputElement).value, onCloneUrlsChange)}
+                  placeholder="https://github.com/user/repo.git"
+                  class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
+                />
+                <button type="button" class="p-2 text-red-400 hover:text-red-300" aria-label="Remove clone URL" onclick={() => removeItem(cloneUrls, index, onCloneUrlsChange)}>
+                  Remove
+                </button>
+              </div>
+            {/each}
+            <button type="button" class="px-3 py-2 text-blue-400 hover:text-blue-300" onclick={() => addItem(cloneUrls, onCloneUrlsChange)}>
+              Add clone URL
+            </button>
+          </div>
           <p class="mt-1 text-sm text-gray-400">
-            Git clone URL for the repository
+            Git clone URL(s) for the repository
           </p>
         </div>
 
         <!-- Tags -->
         <div>
-          <label for="tags" class="block text-sm font-medium text-gray-300 mb-2">
+          <label class="block text-sm font-medium text-gray-300 mb-2">
             Tags/Topics
           </label>
-          <input
-            id="tags"
-            type="text"
-            value={tags.join(', ')}
-            oninput={(e) => onTagsChange((e.target as HTMLInputElement).value.split(',').map(tag => tag.trim()).filter(tag => tag))}
-            placeholder="javascript, svelte, web-development"
-            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
-          />
+          <div class="space-y-2">
+            {#each tags as tag, index}
+              <div class="flex items-center space-x-2">
+                <input
+                  type="text"
+                  value={tags[index]}
+                  oninput={(e) => updateItem(tags, index, (e.target as HTMLInputElement).value, onTagsChange)}
+                  placeholder="javascript"
+                  class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
+                />
+                <button type="button" class="p-2 text-red-400 hover:text-red-300" aria-label="Remove tag" onclick={() => removeItem(tags, index, onTagsChange)}>
+                  Remove
+                </button>
+              </div>
+            {/each}
+            <button type="button" class="px-3 py-2 text-blue-400 hover:text-blue-300" onclick={() => addItem(tags, onTagsChange)}>
+              Add tag
+            </button>
+          </div>
           <p class="mt-1 text-sm text-gray-400">
-            Comma-separated list of tags or topics for this repository
+            Add tags or topics for this repository
           </p>
         </div>
 
         <!-- Maintainers -->
         <div>
-          <label for="maintainers" class="block text-sm font-medium text-gray-300 mb-2">
+          <label class="block text-sm font-medium text-gray-300 mb-2">
             Additional Maintainers
           </label>
-          <input
-            id="maintainers"
-            type="text"
-            value={maintainers.join(', ')}
-            oninput={(e) => onMaintainersChange((e.target as HTMLInputElement).value.split(',').map(key => key.trim()).filter(key => key))}
-            placeholder="npub1abc..., npub1def..."
-            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
-          />
+          <div class="space-y-2">
+            {#each maintainers as m, index}
+              <div class="flex items-center space-x-2">
+                <input
+                  type="text"
+                  value={maintainers[index]}
+                  oninput={(e) => updateItem(maintainers, index, (e.target as HTMLInputElement).value, onMaintainersChange)}
+                  placeholder="npub1..."
+                  class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
+                />
+                <button type="button" class="p-2 text-red-400 hover:text-red-300" aria-label="Remove maintainer" onclick={() => removeItem(maintainers, index, onMaintainersChange)}>
+                  Remove
+                </button>
+              </div>
+            {/each}
+            <button type="button" class="px-3 py-2 text-blue-400 hover:text-blue-300" onclick={() => addItem(maintainers, onMaintainersChange)}>
+              Add maintainer
+            </button>
+          </div>
           <p class="mt-1 text-sm text-gray-400">
-            Comma-separated list of additional maintainer public keys (npub format)
+            Maintainer public keys (npub or hex)
           </p>
         </div>
 
         <!-- Relays -->
         <div>
-          <label for="relays" class="block text-sm font-medium text-gray-300 mb-2">
+          <label class="block text-sm font-medium text-gray-300 mb-2">
             Preferred Relays
           </label>
-          <input
-            id="relays"
-            type="text"
-            value={relays.join(', ')}
-            oninput={(e) => onRelaysChange((e.target as HTMLInputElement).value.split(',').map(relay => relay.trim()).filter(relay => relay))}
-            placeholder="wss://relay1.example.com, wss://relay2.example.com"
-            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
-          />
+          <div class="space-y-2">
+            {#each relays as r, index}
+              <div class="flex items-center space-x-2">
+                <input
+                  type="text"
+                  value={relays[index]}
+                  oninput={(e) => updateItem(relays, index, (e.target as HTMLInputElement).value, onRelaysChange)}
+                  placeholder="wss://relay.example.com"
+                  class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
+                />
+                <button type="button" class="p-2 text-red-400 hover:text-red-300" aria-label="Remove relay" onclick={() => removeItem(relays, index, onRelaysChange)}>
+                  Remove
+                </button>
+              </div>
+            {/each}
+            <button type="button" class="px-3 py-2 text-blue-400 hover:text-blue-300" onclick={() => addItem(relays, onRelaysChange)}>
+              Add relay
+            </button>
+          </div>
           <p class="mt-1 text-sm text-gray-400">
-            Comma-separated list of preferred relay URLs for this repository
+            Preferred relay URLs (wss://)
           </p>
         </div>
       </div>

@@ -806,8 +806,20 @@ export class Repo {
     }
   ): RepoAnnouncementEvent {
     // Use the shared-types utility function
+    // Resolve a robust earliestUniqueCommit:
+    // - Prefer provided value if valid 40-hex
+    // - Otherwise, try to resolve from the default branch using BranchManager (nip34Ref.commitId or oid)
+    const providedEuc = repoData.earliestUniqueCommit?.trim();
+    const is40Hex = (v?: string) => !!v && /^[a-f0-9]{40}$/.test(v);
+    const branchObj = repoData.defaultBranch
+      ? this.branchManager.getBranch(repoData.defaultBranch)
+      : undefined;
+    const resolvedFromBranch = branchObj?.nip34Ref?.commitId || branchObj?.oid || branchObj?.commit;
+    const euc = is40Hex(providedEuc)
+      ? providedEuc
+      : (is40Hex(resolvedFromBranch) ? resolvedFromBranch : undefined);
+
     return createRepoAnnouncementEvent({
-      // Ensure we use the existing canonical repository key rather than deriving from name
       repoId: this.canonicalKey,
       name: repoData.name,
       description: repoData.description,
@@ -817,10 +829,10 @@ export class Repo {
       relays: repoData.relays,
       maintainers: repoData.maintainers,
       hashtags: repoData.hashtags,
-      earliestUniqueCommit: repoData.earliestUniqueCommit || this.branchManager.getBranch(repoData.defaultBranch!)?.commit,
+      earliestUniqueCommit: euc,
     });
   }
-  
+
   /**
    * Create repository state event data for NIP-34
    * @param stateData Repository state data

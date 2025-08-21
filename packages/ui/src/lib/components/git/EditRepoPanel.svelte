@@ -7,7 +7,6 @@
     CheckCircle2,
     Loader2,
     GitBranch,
-    FileText,
     Users,
     Globe,
     Link,
@@ -119,6 +118,18 @@
           availableRefs = []
           loadingRefs = false
         })
+    }
+  })
+
+  // Auto-fill earliest unique commit from default branch's commitId when available
+  $effect(() => {
+    // Only set if empty and refs are loaded
+    if (!loadingRefs && !formData.earliestUniqueCommit?.trim() && formData.defaultBranch) {
+      const ref = availableRefs.find(r => r.type === 'heads' && r.name === formData.defaultBranch);
+      const commitId = ref?.commitId || '';
+      if (commitId && /^[a-f0-9]{40}$/.test(commitId)) {
+        formData.earliestUniqueCommit = commitId;
+      }
     }
   })
 

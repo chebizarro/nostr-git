@@ -64,6 +64,7 @@
       >
         <LayoutDashboard class="h-4 w-4" />
       </Button>
+      <!--
       <Button
         variant="outline"
         size="sm"
@@ -73,6 +74,7 @@
       >
         <Eye class="h-4 w-4" />
       </Button>
+       -->
       <Button
         variant="outline"
         size="sm"

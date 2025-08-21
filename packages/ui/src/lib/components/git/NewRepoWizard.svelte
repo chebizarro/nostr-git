@@ -3,11 +3,12 @@
   import AdvancedSettingsStep from './AdvancedSettingsStep.svelte';
   import RepoProgressStep from './RepoProgressStep.svelte';
   import StepChooseService from './steps/StepChooseService.svelte';
-  import { type Event as NostrEvent } from 'nostr-tools';
+  import { type Event as NostrEvent, nip19 } from 'nostr-tools';
   import { useRegistry } from '../../useRegistry';
   import { useNewRepo, type NewRepoResult, checkProviderRepoAvailability } from '../../useNewRepo.svelte';
   import { tokens as tokensStore, type Token } from '../../stores/tokens.js';
   import { createGraspServersStore } from '../../stores/graspServers.js';
+  import { signer as signerStore } from '../../stores/signer';
   
   const { Button } = useRegistry();
 
@@ -16,9 +17,10 @@
     onCancel?: () => void;
     onPublishEvent?: (event: Omit<NostrEvent, 'id' | 'sig' | 'pubkey' | 'created_at'>) => Promise<void>;
     graspServerUrls?: string[]; // optional: preloaded grasp server options
+    defaultRelays?: string[]; // optional: default relays for Advanced Settings
   }
 
-  const { onRepoCreated, onCancel, onPublishEvent, graspServerUrls = [] }: Props = $props();
+  const { onRepoCreated, onCancel, onPublishEvent, graspServerUrls = [], defaultRelays = [] }: Props = $props();
 
   // Initialize the useNewRepo hook
   const { createRepository, isCreating, progress, error, reset } = useNewRepo({
@@ -41,6 +43,9 @@
   let tokens = $state<Token[]>([]);
   let selectedProvider = $state<string | undefined>(undefined);
   let graspRelayUrl = $state<string>('');
+  let cachedNpub = $state<string | null>(null);
+  let userEditedWebUrl = $state(false);
+  let userEditedCloneUrl = $state(false);
   // Grasp server options derived from store
   const graspServerStore = createGraspServersStore(graspServerUrls);
   let graspServerOptions = $state<string[]>(graspServerUrls);
@@ -69,6 +74,100 @@
     tokens = t;
   });
 
+  // Resolve npub from signer store (cached)
+  async function ensureNpub(): Promise<string | null> {
+    if (cachedNpub) return cachedNpub;
+    let s: any = null;
+    signerStore.subscribe((v) => (s = v))();
+    try {
+      const pubkey: string = await s?.getPubkey?.();
+      if (pubkey) {
+        cachedNpub = nip19.npubEncode(pubkey);
+        return cachedNpub;
+      }
+    } catch {}
+    return null;
+  }
+
+  // Compute sensible defaults for Advanced Settings
+  function providerHost(p?: string): string | undefined {
+    if (!p) return undefined;
+    const map: Record<string, string> = {
+      github: 'github.com',
+      gitlab: 'gitlab.com',
+      gitea: 'gitea.com',
+      bitbucket: 'bitbucket.org',
+    };
+    return map[p] || undefined;
+  }
+
+  async function updateAdvancedDefaults() {
+    const name = repoDetails.name?.trim();
+    if (!name) return;
+    const npub = await ensureNpub();
+
+    // Derive username and host from availability results for the selected provider
+    const providerResult = nameAvailabilityResults?.results?.find((r) => r.provider === selectedProvider)
+      || nameAvailabilityResults?.results?.find((r) => r.host === providerHost(selectedProvider));
+    const username = providerResult?.username;
+    const availabilityHost = providerResult?.host;
+
+    // 1) webUrls (primary web URL default)
+    if (!userEditedWebUrl && (advancedSettings.webUrls.length === 0 || !advancedSettings.webUrls[0])) {
+      let url = '';
+      if (selectedProvider === 'grasp') {
+        // Use gitworkshop.dev for GRASP
+        url = npub ? `https://gitworkshop.dev/${npub}/${name}` : '';
+      } else if (selectedProvider) {
+        const host = availabilityHost || providerHost(selectedProvider);
+        if (host && username) {
+          url = `https://${host}/${username}/${name}`;
+        }
+      }
+      if (url) {
+        if (advancedSettings.webUrls.length === 0) advancedSettings.webUrls = [url];
+        else advancedSettings.webUrls[0] = url;
+      }
+    }
+
+    // 2) cloneUrls defaults
+    if (!userEditedCloneUrl) {
+      const firstEmpty = (advancedSettings.cloneUrls.length === 0 || !advancedSettings.cloneUrls[0]);
+      const host = availabilityHost || providerHost(selectedProvider);
+
+      if (selectedProvider === 'grasp') {
+        // For GRASP keep nostr as primary default
+        if (firstEmpty && npub) {
+          const nostrUrl = `nostr://${npub}/${name}`;
+          if (advancedSettings.cloneUrls.length === 0) advancedSettings.cloneUrls = [nostrUrl];
+          else advancedSettings.cloneUrls[0] = nostrUrl;
+        }
+      } else {
+        // For non-GRASP: prefer HTTPS as primary when host+username are known.
+        const httpsUrl = host && username ? `https://${host}/${username}/${name}.git` : undefined;
+        const nostrUrl = npub ? `nostr://${npub}/${name}` : undefined;
+
+        if (httpsUrl) {
+          // If primary empty or currently nostr, set HTTPS as primary
+          if (firstEmpty || advancedSettings.cloneUrls[0]?.startsWith('nostr://')) {
+            if (advancedSettings.cloneUrls.length === 0) advancedSettings.cloneUrls = [httpsUrl];
+            else advancedSettings.cloneUrls[0] = httpsUrl;
+          }
+          // Ensure nostr exists as secondary (not duplicate and not primary)
+          if (nostrUrl) {
+            const hasNostr = advancedSettings.cloneUrls.some((u) => u === nostrUrl);
+            if (!hasNostr) {
+              advancedSettings.cloneUrls = [...advancedSettings.cloneUrls, nostrUrl];
+            }
+          }
+        } else {
+          // If HTTPS cannot be derived yet, avoid adding nostr as primary prematurely.
+          // We'll re-run when availability results provide username/host.
+        }
+      }
+    }
+  }
+
   // Step management (1: Choose Service, 2: Repo Details, 3: Advanced, 4: Create)
   let currentStep = $state(1);
   const totalSteps = 4;
@@ -90,10 +189,17 @@
     authorEmail: '',
     // NIP-34 metadata
     maintainers: [] as string[],
-    relays: [] as string[],
+    relays: [...defaultRelays] as string[],
     tags: [] as string[],
-    webUrl: '',
-    cloneUrl: ''
+    webUrls: [] as string[],
+    cloneUrls: [] as string[]
+  });
+
+  // Populate relays from defaultRelays if relays are empty and defaults are provided
+  $effect(() => {
+    if ((advancedSettings.relays?.length ?? 0) === 0 && (defaultRelays?.length ?? 0) > 0) {
+      advancedSettings.relays = [...defaultRelays];
+    }
   });
 
   // Creation progress (Step 3) - now managed by useNewRepo hook
@@ -229,10 +335,17 @@
     selectedProvider = provider;
     // Clear previous availability results when provider changes
     nameAvailabilityResults = null;
+    // Reset web/clone URL state so they reflect the new service
+    advancedSettings.webUrls = [];
+    advancedSettings.cloneUrls = [];
+    userEditedWebUrl = false;
+    userEditedCloneUrl = false;
     // Auto re-check if a name is already entered
     if (repoDetails.name && repoDetails.name.trim().length > 0) {
       debouncedNameCheck(repoDetails.name);
     }
+    // Recompute defaults for advanced settings
+    updateAdvancedDefaults();
   }
 
   // GRASP relay URL handler
@@ -269,8 +382,8 @@
         maintainers: advancedSettings.maintainers,
         relays: advancedSettings.relays,
         tags: advancedSettings.tags,
-        webUrl: advancedSettings.webUrl,
-        cloneUrl: advancedSettings.cloneUrl
+        webUrl: (advancedSettings.webUrls.find((v) => v && v.trim()) || ''),
+        cloneUrl: (advancedSettings.cloneUrls.find((v) => v && v.trim()) || '')
       });
     } catch (error) {
       console.error('Repository creation failed:', error);
@@ -296,6 +409,8 @@
     debouncedNameCheck(name);
     // Update validation errors after change
     updateValidationErrors();
+    // Recompute defaults for advanced settings
+    updateAdvancedDefaults();
   }
 
   function handleDescriptionChange(description: string) {
@@ -342,13 +457,22 @@
     advancedSettings.tags = tags;
   }
 
-  function handleWebUrlChange(url: string) {
-    advancedSettings.webUrl = url;
+  function handleWebUrlsChange(urls: string[]) {
+    advancedSettings.webUrls = urls;
+    userEditedWebUrl = true;
   }
 
-  function handleCloneUrlChange(url: string) {
-    advancedSettings.cloneUrl = url;
+  function handleCloneUrlsChange(urls: string[]) {
+    advancedSettings.cloneUrls = urls;
+    userEditedCloneUrl = true;
   }
+
+  // When availability results arrive (e.g., we learned the username), try to fill defaults
+  $effect(() => {
+    // Trigger whenever nameAvailabilityResults changes
+    void nameAvailabilityResults;
+    updateAdvancedDefaults();
+  });
 </script>
 
 <div
@@ -464,8 +588,8 @@
         maintainers={advancedSettings.maintainers}
         relays={advancedSettings.relays}
         tags={advancedSettings.tags}
-        webUrl={advancedSettings.webUrl}
-        cloneUrl={advancedSettings.cloneUrl}
+        webUrls={advancedSettings.webUrls}
+        cloneUrls={advancedSettings.cloneUrls}
         onGitignoreChange={handleGitignoreChange}
         onLicenseChange={handleLicenseChange}
         onDefaultBranchChange={handleDefaultBranchChange}
@@ -474,8 +598,8 @@
         onMaintainersChange={handleMaintainersChange}
         onRelaysChange={handleRelaysChange}
         onTagsChange={handleTagsChange}
-        onWebUrlChange={handleWebUrlChange}
-        onCloneUrlChange={handleCloneUrlChange}
+        onWebUrlsChange={handleWebUrlsChange}
+        onCloneUrlsChange={handleCloneUrlsChange}
       />
     {:else if currentStep === 4}
       <RepoProgressStep
