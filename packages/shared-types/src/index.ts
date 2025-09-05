@@ -91,3 +91,7 @@ export {
   validateStatusEvent,
 } from "./validation.js"
 export type {NostrTagRuntime, NostrEventLike} from "./validation.js"
+
+// NIP-32 labels (helpers)
+export { extractSelfLabels, extractLabelEvents, mergeEffectiveLabels } from "./nip32.js"
+export type { Label as Nip32Label, EffectiveLabels as Nip32EffectiveLabels } from "./nip32.js"

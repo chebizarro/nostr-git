@@ -19,3 +19,11 @@ export * from './lib/utils/canonicalRepoKey.js';
 export * from './lib/grasp-lists.js';
 export * from './lib/utils/binaryUtils.js';
 export * from './lib/validation.js';
+// NIP-34 alignment scaffolding exports
+export * from './lib/repositories.js';
+export * from './lib/repoState.js';
+export * from './lib/patchGraph.js';
+export * from './lib/issues.js';
+export * from './lib/labels.js';
+export * from './lib/subscriptions.js';
+export * from './lib/status-resolver.js';
