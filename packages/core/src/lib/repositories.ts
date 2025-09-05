@@ -53,6 +53,10 @@ export function isMaintainer(npub: string, group: RepoGroup): boolean {
   return group.maintainers.includes(npub);
 }
 
+export function deriveMaintainers(group: RepoGroup): Set<string> {
+  return new Set(group.maintainers);
+}
+
 export async function loadRepositories(io: IO): Promise<RepoGroup[]> {
   // TODO: define concrete filters for 30617 via app policy; injected by app
   const events = await io.fetchEvents([{ kinds: [30617] }]);
