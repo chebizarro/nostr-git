@@ -9,6 +9,7 @@
     CircleCheck,
     FileCode,
   } from "@lucide/svelte";
+  // @ts-ignore monorepo alias resolution may not map $lib in this package during isolated lints
   import { toast } from "$lib/stores/toast";
   import type { CommentEvent, IssueEvent, StatusEvent } from "@nostr-git/shared-types";
   import {
@@ -30,13 +31,15 @@
     status: StatusEvent | undefined;
     currentCommenter: string;
     onCommentCreated: (comment: CommentEvent) => Promise<void>;
+    extraLabels?: string[];
   }
   // Accept event and optional author (Profile store)
-  const { event, comments, status, currentCommenter, onCommentCreated }: Props = $props();
+  const { event, comments, status, currentCommenter, onCommentCreated, extraLabels = [] }: Props = $props();
 
   const parsed = parseIssueEvent(event);
 
   const { id, subject: title, content: description, labels, createdAt } = parsed;
+  const displayLabels = $derived.by(() => Array.from(new Set([...(labels || []), ...(extraLabels || [])])));
 
   const commentsOnThisIssue = $derived.by(() => {
     return comments?.filter((c) => getTagValue(c, "E") === id);
@@ -117,9 +120,9 @@
         <p class="my-3 line-clamp-2 text-sm text-muted-foreground">
           {description}
         </p>
-        {#if labels && labels.length}
+        {#if displayLabels && displayLabels.length}
           <div class="mb-2 inline-flex gap-1">
-            {#each labels as label}
+            {#each displayLabels as label}
               <span class="rounded bg-muted px-2 py-0.5 text-xs">{label}</span>
             {/each}
           </div>

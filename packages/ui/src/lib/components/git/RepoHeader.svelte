@@ -107,11 +107,11 @@
   </div>
   <p class="text-muted-foreground mb-4">{description}</p>
   
-  <!-- Authentication Status Indicator -->
+  <!-- Authentication Status Indicator
   <div class="mb-4">
     <AuthStatusIndicator repository={repoClass} pubkey={pubkey} />
   </div>
-
+ -->
   <nav
     class={cn(
       "bg-muted text-muted-foreground rounded-md w-full"

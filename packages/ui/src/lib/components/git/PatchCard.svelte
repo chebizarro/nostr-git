@@ -16,6 +16,7 @@
   } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
   const { Button, Card, ProfileComponent, EventActions, ReactionSummary } = useRegistry();
+  // @ts-ignore monorepo alias resolution may not map $lib in this package during isolated lints
   import { toast } from "$lib/stores/toast";
   import {
     GIT_STATUS_APPLIED,
@@ -37,13 +38,15 @@
     comments?: CommentEvent[];
     currentCommenter: string;
     onCommentCreated: (comment: CommentEvent) => Promise<void>;
+    extraLabels?: string[];
   }
 
-  const { event, status, patches, comments, currentCommenter, onCommentCreated }: Props = $props();
+  const { event, status, patches, comments, currentCommenter, onCommentCreated, extraLabels = [] }: Props = $props();
 
   const parsed = parseGitPatchFromEvent(event);
 
   const { id, title, description, baseBranch, commitCount } = parsed;
+  const displayLabels = $derived.by(() => Array.from(new Set([...(extraLabels || [])])));
 
   let isExpanded = $state(false);
   let isBookmarked = $state(false);
@@ -249,6 +252,13 @@
           </div>
         </div>
         
+        {#if displayLabels && displayLabels.length}
+          <div class="mt-3 inline-flex gap-1">
+            {#each displayLabels as label}
+              <span class="rounded bg-muted px-2 py-0.5 text-xs">{label}</span>
+            {/each}
+          </div>
+        {/if}
         <div class="mt-4 flex items-center justify-between">
           <Button size="sm" variant="outline">
             <a href={`patches/${id}`}>View Diff</a>
