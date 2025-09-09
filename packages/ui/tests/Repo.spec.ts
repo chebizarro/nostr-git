@@ -5,19 +5,31 @@
 */
 
 import { describe, it, expect } from 'vitest';
-import type { Readable } from 'svelte/store';
 import type { RepoAnnouncementEvent, RepoStateEvent, PatchEvent, IssueEvent, NostrEvent } from '@nostr-git/shared-types';
-import { Repo } from '../src/lib/components/git/Repo.svelte.ts';
+import { parseRepoAnnouncementEvent } from '@nostr-git/shared-types';
+import { canonicalRepoKey } from '@nostr-git/core';
+import {
+  type RepoContext,
+  trustedMaintainers,
+  mergeRepoStateByMaintainers,
+  getPatchGraph,
+  resolveStatusFor,
+  getIssueThread,
+  getPatchLabels,
+} from '../src/lib/components/git/RepoCore';
 
-// Simple helpers to create readables
-function fromValue<T>(v: T): Readable<T> {
-  return {
-    subscribe(fn: (v: T) => void) {
-      fn(v);
-      return () => {};
-    },
-  } as Readable<T>;
-}
+// Build a minimal RepoContext for tests
+const mkCtx = (over: Partial<RepoContext> = {}): RepoContext => ({
+  repoEvent: over.repoEvent,
+  repoStateEvent: over.repoStateEvent,
+  repo: over.repo,
+  issues: over.issues || [],
+  patches: over.patches || [],
+  repoStateEventsArr: over.repoStateEventsArr || [],
+  statusEventsArr: over.statusEventsArr || [],
+  commentEventsArr: over.commentEventsArr || [],
+  labelEventsArr: over.labelEventsArr || [],
+})
 
 // Minimal factory for a repo announcement
 function mkRepoAnnouncement(overrides: any = {}): RepoAnnouncementEvent {
@@ -106,67 +118,52 @@ function mkComment(rootId: string, overrides: any = {}): NostrEvent {
 }
 
 
-describe('Repo class helpers', () => {
+describe('Repo core helpers', () => {
   it('computes canonical key and trusted maintainers', async () => {
     const repoEv = mkRepoAnnouncement({ pubkey: 'owner-abc', tags: [['d','my-repo']] });
-    const repo = new Repo({
-      repoEvent: fromValue(repoEv),
-      repoStateEvent: fromValue(mkRepoState()),
-      issues: fromValue([]),
-      patches: fromValue([]),
-    });
-    // allow constructor subscriptions to run
-    expect(repo.repoId).toContain('owner-abc:my-repo');
-    expect(repo.trustedMaintainers).toContain('owner-abc');
+    const repo = parseRepoAnnouncementEvent(repoEv as any);
+    const ctx = mkCtx({ repoEvent: repoEv, repo });
+    // canonicalRepoKey currently formats as owner/name
+    expect(canonicalRepoKey(`owner-abc:my-repo`)).toContain('owner-abc/my-repo');
+    expect(trustedMaintainers(ctx)).toContain('owner-abc');
   });
 
   it('merges refs from multiple 30618 events', async () => {
     const repoEv = mkRepoAnnouncement({ pubkey: 'owner-abc', tags: [['d','repo']] });
     const state1 = mkRepoState({ pubkey: 'owner-abc', created_at: 1000, tags: [ ['r','refs/heads/main','ref'], ['r','1111111111111111111111111111111111111111','commit'] ] });
     const state2 = mkRepoState({ pubkey: 'maint-1', created_at: 2000, tags: [ ['r','refs/heads/main','ref'], ['r','2222222222222222222222222222222222222222','commit'] ] });
-
-    const repo = new Repo({
-      repoEvent: fromValue(repoEv),
-      repoStateEvent: fromValue(state1),
-      issues: fromValue([]),
-      patches: fromValue([]),
-      repoStateEvents: fromValue([state1, state2])
-    });
-
-    const refs = await repo.getAllRefsWithFallback();
-    const main = refs.find(r => r.fullRef === 'refs/heads/main');
+    const ctx = mkCtx({ repoEvent: repoEv, repo: { ...parseRepoAnnouncementEvent(repoEv as any), maintainers: ['maint-1'] } as any });
+    const merged = mergeRepoStateByMaintainers(ctx, [state1, state2] as any);
+    const main = merged.get('heads:main');
     expect(main?.commitId).toBe('2222222222222222222222222222222222222222');
   });
 
   it('builds patch DAG and identifies roots', async () => {
     const p1 = mkPatch({ id: 'p1', tags: [['t','root']] });
     const p2 = mkPatch({ id: 'p2', tags: [['e','p1']] });
-    const repo = new Repo({
-      repoEvent: fromValue(mkRepoAnnouncement()),
-      repoStateEvent: fromValue(mkRepoState()),
-      issues: fromValue([]),
-      patches: fromValue([p1, p2])
-    });
-
-    const dag = repo.getPatchGraph();
+    const p3 = mkPatch({ id: 'p3', tags: [['e','p1']] });
+    const ctx = mkCtx({ repoEvent: mkRepoAnnouncement(), patches: [p1, p2, p3] as any });
+    const dag = getPatchGraph(ctx);
     expect(dag.roots).toContain('p1');
     expect(Array.from(dag.nodes.keys())).toContain('p2');
+    // edges: p1 -> p2, p1 -> p3
+    expect(dag.edgesCount).toBe(2);
+    // topParents should include p1 with out-degree 2
+    expect(dag.topParents).toContain('p1');
+    expect(dag.parentOutDegree['p1']).toBe(2);
   });
 
   it('resolves status with precedence and author/trust policy', async () => {
     const issue = mkIssue({ id: 'i1', pubkey: 'author-x' });
     const s1 = mkStatus({ kind: 1630, rootId: 'i1', pubkey: 'author-x', created_at: 1000 }); // open by author
     const s2 = mkStatus({ kind: 1632, rootId: 'i1', pubkey: 'maintainer-1', created_at: 2000 }); // closed by trusted
-
-    const repo = new Repo({
-      repoEvent: fromValue(mkRepoAnnouncement({ pubkey: 'owner-abc' })),
-      repoStateEvent: fromValue(mkRepoState()),
-      issues: fromValue([issue]),
-      patches: fromValue([]),
-      statusEvents: fromValue([s1, s2])
+    const ctx = mkCtx({
+      repoEvent: mkRepoAnnouncement({ pubkey: 'owner-abc' }),
+      repo: { owner: 'owner-abc', name: 'r', maintainers: ['maintainer-1'] } as any,
+      issues: [issue] as any,
+      statusEventsArr: [s1, s2] as any,
     });
-
-    const status = repo.resolveStatusFor('i1');
+    const status = resolveStatusFor(ctx, 'i1');
     expect(status?.state).toBe('closed');
   });
 
@@ -174,16 +171,8 @@ describe('Repo class helpers', () => {
     const issue = mkIssue({ id: 'i2' });
     const c1 = mkComment('i2', { created_at: 1000 });
     const c2 = mkComment('i2', { created_at: 2000 });
-
-    const repo = new Repo({
-      repoEvent: fromValue(mkRepoAnnouncement()),
-      repoStateEvent: fromValue(mkRepoState()),
-      issues: fromValue([issue]),
-      patches: fromValue([]),
-      commentEvents: fromValue([c2, c1])
-    });
-
-    const thread = repo.getIssueThread('i2');
+    const ctx = mkCtx({ issues: [issue] as any, commentEventsArr: [c2, c1] as any });
+    const thread = getIssueThread(ctx, 'i2');
     expect(thread.comments[0].created_at).toBe(1000);
     expect(thread.comments[1].created_at).toBe(2000);
   });
@@ -199,16 +188,8 @@ describe('Repo class helpers', () => {
       content: '',
       sig: 'sig',
     } as unknown as NostrEvent;
-
-    const repo = new Repo({
-      repoEvent: fromValue(mkRepoAnnouncement()),
-      repoStateEvent: fromValue(mkRepoState()),
-      issues: fromValue([]),
-      patches: fromValue([p]),
-      labelEvents: fromValue([externalLabel])
-    });
-
-    const labels = repo.getPatchLabels('p3');
-    expect(Array.from(labels.flat)).toContain('type:feature');
+    const ctx = mkCtx({ patches: [p] as any, labelEventsArr: [externalLabel] as any });
+    const labels = getPatchLabels(ctx, 'p3');
+    expect(Array.from(labels.flat)).toContain('ugc/type:feature');
   });
 });

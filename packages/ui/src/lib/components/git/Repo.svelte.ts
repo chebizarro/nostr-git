@@ -213,6 +213,8 @@ export class Repo {
         
         // Invalidate branch cache when repo event changes
         this.invalidateBranchCache();
+        // Invalidate DAG cache when repo event changes
+        this.#patchDagCache = undefined;
 
         // Store the initial event for later processing
         if (!initialRepoEvent) {
@@ -236,6 +238,8 @@ export class Repo {
         
         // Invalidate branch cache when repo state changes
         this.invalidateBranchCache();
+        // Invalidate DAG cache when repo state changes (may affect patch interpretation)
+        this.#patchDagCache = undefined;
         
 
       }
@@ -429,7 +433,7 @@ export class Repo {
   // Patch DAG (1617 + NIP-10)
   // -------------------------
   /** Build a patch DAG from NIP-10 relations and identify roots/revision roots. */
-  public getPatchGraph(): { nodes: Map<string, PatchEvent>; roots: string[]; rootRevisions: string[]; edgesCount: number; topParents: string[] } {
+  public getPatchGraph(): { nodes: Map<string, PatchEvent>; roots: string[]; rootRevisions: string[]; edgesCount: number; topParents: string[]; parentOutDegree: Record<string, number> } {
     const ids = (this.patches || []).map(p => p.id).sort().join(",");
     if (this.#patchDagCache?.key === ids) return this.#patchDagCache.value as any;
 
@@ -463,7 +467,9 @@ export class Repo {
       .sort((a, b) => (b[1].size - a[1].size))
       .slice(0, 10)
       .map(([id]) => id);
-    const value = { nodes, roots: Array.from(new Set(roots)), rootRevisions: Array.from(new Set(rootRevisions)), edgesCount, topParents };
+    const parentOutDegree: Record<string, number> = {};
+    for (const [pid, set] of edges.entries()) parentOutDegree[pid] = set.size;
+    const value = { nodes, roots: Array.from(new Set(roots)), rootRevisions: Array.from(new Set(rootRevisions)), edgesCount, topParents, parentOutDegree };
     this.#patchDagCache = { key: ids, value: value as any };
     return value as any;
   }
