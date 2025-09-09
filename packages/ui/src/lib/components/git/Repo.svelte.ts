@@ -67,7 +67,7 @@ export class Repo {
 
   // Private caches used across helpers
   #mergedRefsCache: Map<string, { commitId: string; type: "heads"|"tags"; fullRef: string }> | undefined;
-  #patchDagCache: { key: string; value: { nodes: Map<string, any>; roots: string[]; rootRevisions: string[] } } | undefined;
+  #patchDagCache: { key: string; value: { nodes: Map<string, any>; roots: string[]; rootRevisions: string[]; edgesCount?: number; topParents?: string[] } } | undefined;
   #statusCache: Map<string, { state: "open"|"draft"|"closed"|"merged"|"resolved"; by: string; at: number; eventId: string } | null> = new Map();
   #issueThreadCache: Map<string, { rootId: string; comments: NostrEvent[] }> = new Map();
   #labelsCache: Map<string, EffectiveLabelsV2> = new Map();
@@ -265,6 +265,8 @@ export class Repo {
       if (this.workerManager.isReady) {
         this.#performMergeAnalysis(patchEvents);
       }
+      // Invalidate DAG cache when patch set changes
+      this.#patchDagCache = undefined;
     });
 
     tokens.subscribe(async (tokenList) => {
