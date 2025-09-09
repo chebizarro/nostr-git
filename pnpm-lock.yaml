@@ -139,6 +139,9 @@ importers:
       typescript-eslint:
         specifier: ^8.20.0
         version: 8.39.1(eslint@9.33.0(jiti@1.21.7))(typescript@5.8.3)
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@24.3.0)(happy-dom@15.11.7)(jsdom@26.1.0)
 
   packages/extension:
     dependencies:
@@ -238,16 +241,10 @@ importers:
       ui:
         specifier: ^0.2.4
         version: 0.2.4
-      uuid:
-        specifier: ^9.0.1
-        version: 9.0.1
     devDependencies:
       '@chromatic-com/storybook':
         specifier: ^3
         version: 3.2.7(react@19.1.1)(storybook@8.6.14(prettier@3.6.2))
-      '@storybook/addon-actions':
-        specifier: ^8.6.12
-        version: 8.6.14(storybook@8.6.14(prettier@3.6.2))
       '@storybook/addon-essentials':
         specifier: ^8.6.12
         version: 8.6.14(@types/react@19.1.10)(storybook@8.6.14(prettier@3.6.2))
@@ -266,15 +263,6 @@ importers:
       '@storybook/cli':
         specifier: ^8.6.12
         version: 8.6.14(@babel/preset-env@7.28.3(@babel/core@7.28.3))(prettier@3.6.2)
-      '@storybook/core':
-        specifier: ^8.6.12
-        version: 8.6.14(prettier@3.6.2)(storybook@8.6.14(prettier@3.6.2))
-      '@storybook/docs-tools':
-        specifier: ^8.6.12
-        version: 8.6.14(storybook@8.6.14(prettier@3.6.2))
-      '@storybook/instrumenter':
-        specifier: ^8.6.12
-        version: 8.6.14(storybook@8.6.14(prettier@3.6.2))
       '@storybook/manager-api':
         specifier: ^8.6.12
         version: 8.6.14(storybook@8.6.14(prettier@3.6.2))
@@ -326,9 +314,6 @@ importers:
       vite:
         specifier: 6.3.3
         version: 6.3.3(@types/node@24.3.0)(jiti@1.21.7)(yaml@2.8.1)
-      zimmerframe:
-        specifier: ^1.1.2
-        version: 1.1.2
 
   packages/ui:
     dependencies:
@@ -1980,11 +1965,6 @@ packages:
 
   '@storybook/csf@0.1.13':
     resolution: {integrity: sha512-7xOOwCLGB3ebM87eemep89MYRFTko+D8qE7EdAAq74lgdqRR5cOUtYWJLjO2dLtP94nqoOdHJo6MdLLKzg412Q==}
-
-  '@storybook/docs-tools@8.6.14':
-    resolution: {integrity: sha512-wbNMhVEBwNGat3kIIdJSHLKeWxegvI9nIuAjAKU2ZUztbEPnmhVLLEQqghmk0dtyJDK/Ee08RGxi3dsueC34Rw==}
-    peerDependencies:
-      storybook: ^8.2.0 || ^8.3.0-0 || ^8.4.0-0 || ^8.5.0-0 || ^8.6.0-0
 
   '@storybook/global@5.0.0':
     resolution: {integrity: sha512-FcOqPAXACP0I3oJ/ws6/rrPT9WGhu915Cg8D02a9YxLo0DE9zI+a9A5gRGvmQ09fiWPukqI8ZAEoQEdWUKMQdQ==}
@@ -7023,10 +7003,6 @@ snapshots:
   '@storybook/csf@0.1.13':
     dependencies:
       type-fest: 2.19.0
-
-  '@storybook/docs-tools@8.6.14(storybook@8.6.14(prettier@3.6.2))':
-    dependencies:
-      storybook: 8.6.14(prettier@3.6.2)
 
   '@storybook/global@5.0.0': {}
 

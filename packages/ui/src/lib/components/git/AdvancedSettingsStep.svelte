@@ -140,10 +140,10 @@
       
       <div class="space-y-4">
         <!-- Web URLs -->
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">
+        <fieldset>
+          <legend class="block text-sm font-medium text-gray-300 mb-2">
             Web URLs
-          </label>
+          </legend>
           <div class="space-y-2">
             {#each webUrls as url, index}
               <div class="flex items-center space-x-2">
@@ -166,13 +166,13 @@
           <p class="mt-1 text-sm text-gray-400">
             URL(s) for browsing the repository online
           </p>
-        </div>
+        </fieldset>
 
         <!-- Clone URLs -->
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">
+        <fieldset>
+          <legend class="block text-sm font-medium text-gray-300 mb-2">
             Clone URLs
-          </label>
+          </legend>
           <div class="space-y-2">
             {#each cloneUrls as url, index}
               <div class="flex items-center space-x-2">
@@ -195,13 +195,13 @@
           <p class="mt-1 text-sm text-gray-400">
             Git clone URL(s) for the repository
           </p>
-        </div>
+        </fieldset>
 
         <!-- Tags -->
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">
+        <fieldset>
+          <legend class="block text-sm font-medium text-gray-300 mb-2">
             Tags/Topics
-          </label>
+          </legend>
           <div class="space-y-2">
             {#each tags as tag, index}
               <div class="flex items-center space-x-2">
@@ -224,13 +224,13 @@
           <p class="mt-1 text-sm text-gray-400">
             Add tags or topics for this repository
           </p>
-        </div>
+        </fieldset>
 
         <!-- Maintainers -->
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">
+        <fieldset>
+          <legend class="block text-sm font-medium text-gray-300 mb-2">
             Additional Maintainers
-          </label>
+          </legend>
           <div class="space-y-2">
             {#each maintainers as m, index}
               <div class="flex items-center space-x-2">
@@ -253,13 +253,13 @@
           <p class="mt-1 text-sm text-gray-400">
             Maintainer public keys (npub or hex)
           </p>
-        </div>
+        </fieldset>
 
         <!-- Relays -->
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">
+        <fieldset>
+          <legend class="block text-sm font-medium text-gray-300 mb-2">
             Preferred Relays
-          </label>
+          </legend>
           <div class="space-y-2">
             {#each relays as r, index}
               <div class="flex items-center space-x-2">
@@ -282,7 +282,7 @@
           <p class="mt-1 text-sm text-gray-400">
             Preferred relay URLs (wss://)
           </p>
-        </div>
+        </fieldset>
       </div>
     </div>
 

@@ -73,6 +73,7 @@ This monorepo follows a modular architecture where each package serves a specifi
 - [AI Context](AI_CONTEXT.md) - LLM-specific coding context and patterns
 - [Coding Standards](CODING_STANDARDS.md) - Code style and conventions
 - [Deployment Guide](DEPLOYMENT.md) - Build and deployment processes
+- [Subscription Cookbook](docs/subscription-cookbook.md) - Practical NIP-34/22/32 subscription patterns
 
 ## 🤝 Contributing
 

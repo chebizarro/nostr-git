@@ -95,3 +95,17 @@ export type {NostrTagRuntime, NostrEventLike} from "./validation.js"
 // NIP-32 labels (helpers)
 export { extractSelfLabels, extractLabelEvents, mergeEffectiveLabels } from "./nip32.js"
 export type { Label as Nip32Label, EffectiveLabels as Nip32EffectiveLabels } from "./nip32.js"
+
+// NIP-32 V2 convergence helpers and types
+export {
+  extractSelfLabelsV2,
+  extractLabelEventsV2,
+  mergeEffectiveLabelsV2,
+} from "./nip32.js"
+export type {
+  EffectiveLabelsInput as Nip32EffectiveLabelsInput,
+  EffectiveLabelsV2 as Nip32EffectiveLabelsV2,
+  LabelTargets as Nip32LabelTargets,
+  LabelNamespace as Nip32LabelNamespace,
+  LabelValue as Nip32LabelValue,
+} from "./nip32.js"

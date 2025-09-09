@@ -2,7 +2,6 @@ import { WorkerManager } from "./WorkerManager";
 import { CacheManager } from "./CacheManager";
 import type { RepoAnnouncementEvent } from "@nostr-git/shared-types";
 import { parseRepoAnnouncementEvent } from "@nostr-git/shared-types";
-import { canonicalRepoKey } from "@nostr-git/core";
 import { toast } from "$lib/stores/toast";
 
 /**
@@ -134,24 +133,24 @@ export class FileManager {
    * Compute a canonical repo key for stable UI cache keys
    */
   private getCanonicalRepoKey(repoEvent: RepoAnnouncementEvent): string {
+    // Stable, non-throwing canonical key used only for client-side caching.
+    // Strategy:
+    // 1) If 'd' tag is present, pair it with author pubkey to avoid collisions.
+    // 2) Else, use parsed.repoId if available.
+    // 3) Else, fall back to event id.
     try {
-      const parsed = parseRepoAnnouncementEvent(repoEvent as any);
-      // Prefer NIP-34 identifier ('d' tag) if present
       const dTag = (repoEvent as any).tags?.find((t: any[]) => t?.[0] === "d");
-      const idFromD = dTag?.[1];
-      if (idFromD) {
-        return canonicalRepoKey(String(idFromD));
+      const identifier = dTag?.[1]?.trim();
+      if (identifier) {
+        return `${repoEvent.pubkey}/${identifier}`;
       }
-      // Fallbacks: parsed.repoId or owner/name
-      if ((parsed as any)?.repoId) {
-        return canonicalRepoKey(String((parsed as any).repoId));
+      const parsed = parseRepoAnnouncementEvent(repoEvent as any) as any;
+      if (parsed?.repoId) {
+        return String(parsed.repoId);
       }
-      throw new Error("Invalid repo announcement event: missing canonical repoId ('d' tag) and parsed.repoId");
-    } catch {
-      // Fall back to canonicalizing whatever ID we have
-      // (helper will warn if it's an event id-like string)
-      throw new Error("Invalid repoId: unable to compute canonical key from RepoAnnouncementEvent");
-    }
+    } catch {}
+    // Last resort: event id ensures stability even if suboptimal.
+    return (repoEvent as any)?.id || `${repoEvent.pubkey}`;
   }
 
   /**

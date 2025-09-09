@@ -44,18 +44,19 @@ export function buildPatchGraph(patches: PatchEvent[]): Map<string, PatchNode> {
     const supersededEventIds = allEventIds.slice(0, -1);
 
     const parents = getTagValues(effective, 'parent-commit');
-    const isRootTag = hasTag(effective, 't', 'root');
-    const isRevisionRoot = hasTag(effective, 't', 'root-revision');
-    // Only treat as root if explicitly tagged; absence of parents does not imply a root
-    const isRoot = isRootTag;
+
+    // Root flags should persist across revisions for a commit: if any revision tagged root/root-revision,
+    // the node remains a root/root-revision even if the latest revision lacks the tag.
+    const anyRoot = sorted.some((e) => hasTag(e, 't', 'root'));
+    const anyRootRevision = sorted.some((e) => hasTag(e, 't', 'root-revision'));
 
     nodes.set(commit, {
       id: commit,
       event: effective,
       parents,
       children: [],
-      isRoot,
-      isRevisionRoot,
+      isRoot: anyRoot,
+      isRevisionRoot: anyRootRevision,
       commit,
       allEventIds,
       supersededEventIds,
