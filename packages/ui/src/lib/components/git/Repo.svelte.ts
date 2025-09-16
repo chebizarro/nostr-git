@@ -31,6 +31,19 @@ import { PatchManager } from "./PatchManager";
 import { CommitManager } from "./CommitManager";
 import { BranchManager } from "./BranchManager";
 import { FileManager } from "./FileManager";
+import {
+  type RepoContext,
+  mergeRepoStateByMaintainers as coreMergeRepoStateByMaintainers,
+  getPatchGraph as coreGetPatchGraph,
+  resolveStatusFor as coreResolveStatusFor,
+  getIssueThread as coreGetIssueThread,
+  getEffectiveLabelsFor as coreGetEffectiveLabelsFor,
+  getRepoLabels as coreGetRepoLabels,
+  getIssueLabels as coreGetIssueLabels,
+  getPatchLabels as coreGetPatchLabels,
+  getMaintainerBadge as coreGetMaintainerBadge,
+  getRecommendedFilters as coreGetRecommendedFilters,
+} from './RepoCore'
 
 // Inline label result type (shared-types does not export this interface)
 type EffectiveLabelsV2 = {
@@ -382,6 +395,21 @@ export class Repo {
     return (this.repoEvent?.pubkey || '').trim();
   }
 
+  /** Build a RepoCore context snapshot from current reactive state */
+  #coreCtx(): RepoContext {
+    return {
+      repoEvent: this.repoEvent,
+      repoStateEvent: this.repoStateEvent as any,
+      repo: this.repo as any,
+      issues: this.issues,
+      patches: this.patches,
+      repoStateEventsArr: this.repoStateEventsArr,
+      statusEventsArr: this.statusEventsArr,
+      commentEventsArr: this.commentEventsArr,
+      labelEventsArr: this.labelEventsArr,
+    } as RepoContext;
+  }
+
   // -------------------------
   // Trust policy
   // -------------------------
@@ -404,72 +432,17 @@ export class Repo {
   // Merged refs from 30618 by maintainers
   // -------------------------
   private mergeRepoStateByMaintainers(events: RepoStateEvent[]): Map<string, { commitId: string; type: "heads"|"tags"; fullRef: string }>{
-    const merged = new Map<string, { commitId: string; type: "heads"|"tags"; fullRef: string; at: number }>();
-    for (const ev of events) {
-      if (!this.isTrusted(ev.pubkey)) continue;
-      const parsed = parseRepoStateEvent(ev);
-      const at = (ev as any).created_at || 0;
-      for (const ref of (parsed as any).refs || []) {
-        const fullRef: string = (ref as any).ref ?? (ref.type && ref.name ? `refs/${ref.type}/${ref.name}` : "");
-        if (!fullRef) continue;
-        const m = /^refs\/(heads|tags)\/(.+)$/.exec(fullRef);
-        if (!m) continue;
-        const type = m[1] as "heads"|"tags";
-        const name = m[2];
-        const key = `${type}:${name}`;
-        const prev = merged.get(key);
-        const commitId: string = (ref as any).commit || "";
-        if (!prev || at > prev.at) {
-          merged.set(key, { commitId, type, fullRef, at });
-        }
-      }
-    }
-    const out = new Map<string, { commitId: string; type: "heads"|"tags"; fullRef: string }>();
-    for (const [k, v] of merged.entries()) out.set(k, { commitId: v.commitId, type: v.type, fullRef: v.fullRef });
-    return out;
+    return coreMergeRepoStateByMaintainers(this.#coreCtx(), events)
   }
 
   // -------------------------
   // Patch DAG (1617 + NIP-10)
   // -------------------------
   /** Build a patch DAG from NIP-10 relations and identify roots/revision roots. */
-  public getPatchGraph(): { nodes: Map<string, PatchEvent>; roots: string[]; rootRevisions: string[]; edgesCount: number; topParents: string[]; parentOutDegree: Record<string, number> } {
+  public getPatchGraph(): { nodes: Map<string, PatchEvent>; roots: string[]; rootRevisions: string[]; edgesCount: number; topParents: string[]; parentOutDegree: Record<string, number>; parentChildren: Record<string, string[]> } {
     const ids = (this.patches || []).map(p => p.id).sort().join(",");
     if (this.#patchDagCache?.key === ids) return this.#patchDagCache.value as any;
-
-    const nodes = new Map<string, PatchEvent>();
-    const edges = new Map<string, Set<string>>(); // parent -> children
-    const roots: string[] = [];
-    const rootRevisions: string[] = [];
-    const getTags = (evt: any, k: string) => (evt.tags || []).filter((t: string[]) => t[0] === k);
-
-    for (const p of this.patches || []) {
-      nodes.set(p.id, p);
-    }
-    for (const p of this.patches || []) {
-      const parents = [
-        ...getTags(p, "e").map((t: string[]) => t[1]),
-        ...getTags(p, "E").map((t: string[]) => t[1]),
-      ];
-      for (const parent of parents) {
-        if (!nodes.has(parent)) continue;
-        const set = edges.get(parent) || new Set<string>();
-        set.add(p.id);
-        edges.set(parent, set);
-      }
-      const tTags = getTags(p, "t").map((t: string[]) => t[1]);
-      if (tTags.includes("root")) roots.push(p.id);
-      if (tTags.includes("root-revision")) rootRevisions.push(p.id);
-    }
-    // compute edges count and top parents by out-degree
-    const edgesCount = Array.from(edges.values()).reduce((acc, s) => acc + s.size, 0);
-    const topParents = Array.from(edges.entries())
-      .sort((a, b) => (b[1].size - a[1].size))
-      .slice(0, 10)
-      .map(([id]) => id);
-    const parentOutDegree: Record<string, number> = {};
-    for (const [pid, set] of edges.entries()) parentOutDegree[pid] = set.size;
-    const value = { nodes, roots: Array.from(new Set(roots)), rootRevisions: Array.from(new Set(rootRevisions)), edgesCount, topParents, parentOutDegree };
+    const value = coreGetPatchGraph(this.#coreCtx());
     this.#patchDagCache = { key: ids, value: value as any };
     return value as any;
   }
@@ -482,25 +455,9 @@ export class Repo {
     if (!this.statusEventsArr || this.statusEventsArr.length === 0) return null;
     const cached = this.#statusCache.get(rootId);
     if (cached !== undefined) return cached;
-    const rootAuthor = this.findRootAuthor(rootId);
-    const rootIsIssue = !!(this.issues || []).find(i => i.id === rootId);
-    const kindToState = (kind: number): "open"|"draft"|"closed"|"merged"|"resolved" => {
-      if (kind === 1630) return "open";
-      if (kind === 1633) return "draft";
-      if (kind === 1632) return "closed";
-      if (kind === 1631) return rootIsIssue ? "resolved" : "merged";
-      return "open";
-    };
-    const events = this.statusEventsArr
-      .filter((ev) => (ev.tags || []).some((t: string[]) => t[0] === "e" && t[1] === rootId))
-      .filter((ev) => this.isTrusted(ev.pubkey) || (!!rootAuthor && ev.pubkey === rootAuthor))
-      .sort((a, b) => (a.created_at || 0) - (b.created_at || 0));
-    const last = events.at(-1);
-    if (!last) { this.#statusCache.set(rootId, null); return null; }
-    const state = kindToState((last as any).kind);
-    const result = { state, by: last.pubkey, at: (last as any).created_at || 0, eventId: last.id };
-    this.#statusCache.set(rootId, result);
-    return result;
+    const result = coreResolveStatusFor(this.#coreCtx(), rootId);
+    this.#statusCache.set(rootId, result as any);
+    return result as any;
   }
 
   private findRootAuthor(rootId: string): string | undefined {
@@ -515,16 +472,7 @@ export class Repo {
   public getIssueThread(rootId: string): { rootId: string; comments: NostrEvent[] } {
     const cached = this.#issueThreadCache.get(rootId);
     if (cached) return cached;
-    const out: NostrEvent[] = [];
-    if (!this.commentEventsArr) { const res = { rootId, comments: out }; this.#issueThreadCache.set(rootId, res); return res; }
-    for (const ev of this.commentEventsArr) {
-      const tags = (ev.tags || []) as string[][];
-      const hasE = tags.some(t => (t[0] === 'e' || t[0] === 'E') && t[1] === rootId);
-      // K/k may specify kind scoping; accept if present or unspecified
-      const ok = hasE;
-      if (ok) out.push(ev);
-    }
-    const res = { rootId, comments: out.sort((a, b) => (a.created_at || 0) - (b.created_at || 0)) };
+    const res = coreGetIssueThread(this.#coreCtx(), rootId);
     this.#issueThreadCache.set(rootId, res);
     return res;
   }
@@ -537,35 +485,23 @@ export class Repo {
     const key = `${target.id || ''}|${target.address || ''}|${target.euc || ''}`;
     const cached = this.#labelsCache.get(key);
     if (cached) return cached;
-    const selfEvt = target.id ? (this.issues.find(i => i.id === target.id) || this.patches.find(p => p.id === target.id)) : undefined;
-    const self = selfEvt ? extractSelfLabelsV2(selfEvt as any) : [];
-    const external = extractLabelEventsV2((this.labelEventsArr || []) as any);
-    const legacyT = new Set<string>((selfEvt?.tags || []).filter((t: any[]) => t[0] === 't').map(t => t[1]));
-    const result = mergeEffectiveLabelsV2({ self, external, t: Array.from(legacyT) }) as EffectiveLabelsV2;
+    const result = coreGetEffectiveLabelsFor(this.#coreCtx(), target) as unknown as EffectiveLabelsV2;
     this.#labelsCache.set(key, result);
     return result;
   }
 
   public getRepoLabels(): EffectiveLabelsV2 {
-    const address = this.repoEvent ? `30617:${this.getOwnerPubkey()}:${this.repo?.name || ''}` : '';
-    return this.getEffectiveLabelsFor({ address });
+    return coreGetRepoLabels(this.#coreCtx()) as unknown as EffectiveLabelsV2;
   }
 
-  public getIssueLabels(rootId: string): EffectiveLabelsV2 { return this.getEffectiveLabelsFor({ id: rootId }); }
-  public getPatchLabels(rootId: string): EffectiveLabelsV2 { return this.getEffectiveLabelsFor({ id: rootId }); }
+  public getIssueLabels(rootId: string): EffectiveLabelsV2 { return coreGetIssueLabels(this.#coreCtx(), rootId) as unknown as EffectiveLabelsV2; }
+  public getPatchLabels(rootId: string): EffectiveLabelsV2 { return coreGetPatchLabels(this.#coreCtx(), rootId) as unknown as EffectiveLabelsV2; }
 
   // -------------------------
   // Subscription hints (no network)
   // -------------------------
   public getRecommendedFilters(): any[] {
-    const filters: any[] = [];
-    const a = this.repoEvent ? `30617:${this.getOwnerPubkey()}:${this.repo?.name || ''}` : undefined;
-    if (a) filters.push({ kinds: [30617, 1617, 1621, 1630, 1631, 1632, 1633], '#a': [a] });
-    const roots = [...(this.issues || []), ...(this.patches || [])].map(e => e.id);
-    if (roots.length > 0) filters.push({ '#e': roots });
-    const euc = (this.repoEvent?.tags || []).find(t => t[0] === 'r' && t[2] === 'euc')?.[1];
-    if (euc) filters.push({ '#r': [euc] });
-    return filters;
+    return coreGetRecommendedFilters(this.#coreCtx());
   }
 
   // -------------------------
@@ -606,11 +542,7 @@ export class Repo {
 
   /** Return a maintainer badge for a pubkey: "owner" | "maintainer" | null. */
   public getMaintainerBadge(pubkey: string): "owner" | "maintainer" | null {
-    if (!pubkey) return null;
-    const owner = this.getOwnerPubkey();
-    if (pubkey === owner) return "owner";
-    if ((this.repo?.maintainers || []).includes(pubkey)) return "maintainer";
-    return null;
+    return coreGetMaintainerBadge(this.#coreCtx(), pubkey);
   }
 
   // Public API for getting merge analysis result (requires patch object for proper validation)

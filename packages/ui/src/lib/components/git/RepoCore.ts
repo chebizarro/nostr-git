@@ -82,7 +82,7 @@ export function mergeRepoStateByMaintainers(ctx: RepoContext, events: RepoStateE
   return out
 }
 
-export function getPatchGraph(ctx: RepoContext): { nodes: Map<string, PatchEvent>; roots: string[]; rootRevisions: string[]; edgesCount: number; topParents: string[]; parentOutDegree: Record<string, number> } {
+export function getPatchGraph(ctx: RepoContext): { nodes: Map<string, PatchEvent>; roots: string[]; rootRevisions: string[]; edgesCount: number; topParents: string[]; parentOutDegree: Record<string, number>; parentChildren: Record<string, string[]> } {
   const nodes = new Map<string, PatchEvent>()
   const edges = new Map<string, Set<string>>()
   const roots: string[] = []
@@ -107,8 +107,12 @@ export function getPatchGraph(ctx: RepoContext): { nodes: Map<string, PatchEvent
   const edgesCount = Array.from(edges.values()).reduce((acc, s) => acc + s.size, 0)
   const topParents = Array.from(edges.entries()).sort((a, b) => b[1].size - a[1].size).slice(0, 10).map(([id]) => id)
   const parentOutDegree: Record<string, number> = {}
-  for (const [pid, set] of edges.entries()) parentOutDegree[pid] = set.size
-  return { nodes, roots: Array.from(new Set(roots)), rootRevisions: Array.from(new Set(rootRevisions)), edgesCount, topParents, parentOutDegree }
+  const parentChildren: Record<string, string[]> = {}
+  for (const [pid, set] of edges.entries()) {
+    parentOutDegree[pid] = set.size
+    parentChildren[pid] = Array.from(set)
+  }
+  return { nodes, roots: Array.from(new Set(roots)), rootRevisions: Array.from(new Set(rootRevisions)), edgesCount, topParents, parentOutDegree, parentChildren }
 }
 
 export function resolveStatusFor(ctx: RepoContext, rootId: string): { state: 'open'|'draft'|'closed'|'merged'|'resolved'; by: string; at: number; eventId: string } | null {

@@ -128,6 +128,41 @@ describe('Repo core helpers', () => {
     expect(trustedMaintainers(ctx)).toContain('owner-abc');
   });
 
+  it('labels merge across namespaces with legacy t', async () => {
+    const evt = mkPatch({ id: 'p4', tags: [['t','bug'], ['l','org.nostr.git.type:feature'], ['l','org.nostr.git.area:ui']] });
+    const external: NostrEvent = {
+      id: 'lbl-ex-1', kind: 1985, pubkey: 'maint-9', created_at: 999,
+      tags: [ ['L','p4','e'], ['l','org.nostr.git.status:triaged'], ['l','ugc/custom:needs-review'] ], content: '', sig: 'sig',
+    } as any;
+    const ctx = mkCtx({ patches: [evt] as any, labelEventsArr: [external] as any });
+    const eff = getPatchLabels(ctx, 'p4');
+    // Namespaced labels should be in `flat`, legacy `t` values should be in `legacyT`
+    const flat = Array.from(eff.flat);
+    const legacyT = Array.from(eff.legacyT);
+    const has = (...needles: string[]) =>
+      flat.some((s) => needles.some((n) => s === n || s.includes(n)));
+    expect(legacyT).toContain('bug');
+    expect(has('org.nostr.git.type/feature', 'org.nostr.git.type:feature', 'type:feature')).toBe(true);
+    expect(has('org.nostr.git.area/ui', 'org.nostr.git.area:ui', 'area:ui')).toBe(true);
+    expect(has('org.nostr.git.status/triaged', 'org.nostr.git.status:triaged', 'status:triaged')).toBe(true);
+    expect(has('ugc/custom/needs-review', 'ugc/custom:needs-review', 'custom:needs-review')).toBe(true);
+  });
+
+  it('status precedence: author later overrides earlier maintainer (patch merged)', async () => {
+    const patch = mkPatch({ id: 'p5', pubkey: 'author-z' });
+    const maintClose = mkStatus({ kind: 1632, rootId: 'p5', pubkey: 'maint-x', created_at: 1200 });
+    const authorMerge = mkStatus({ kind: 1631, rootId: 'p5', pubkey: 'author-z', created_at: 1300 });
+    const ctx = mkCtx({
+      repoEvent: mkRepoAnnouncement({ pubkey: 'owner-yy' }),
+      repo: { owner: 'owner-yy', name: 'r', maintainers: ['maint-x'] } as any,
+      patches: [patch] as any,
+      statusEventsArr: [maintClose, authorMerge] as any,
+    });
+    const status = resolveStatusFor(ctx, 'p5');
+    expect(status?.state).toBe('merged');
+    expect(status?.by).toBe('author-z');
+  });
+
   it('merges refs from multiple 30618 events', async () => {
     const repoEv = mkRepoAnnouncement({ pubkey: 'owner-abc', tags: [['d','repo']] });
     const state1 = mkRepoState({ pubkey: 'owner-abc', created_at: 1000, tags: [ ['r','refs/heads/main','ref'], ['r','1111111111111111111111111111111111111111','commit'] ] });
@@ -151,6 +186,9 @@ describe('Repo core helpers', () => {
     // topParents should include p1 with out-degree 2
     expect(dag.topParents).toContain('p1');
     expect(dag.parentOutDegree['p1']).toBe(2);
+    // children listing should include both p2 and p3
+    expect(dag.parentChildren['p1']).toContain('p2');
+    expect(dag.parentChildren['p1']).toContain('p3');
   });
 
   it('resolves status with precedence and author/trust policy', async () => {
@@ -191,5 +229,43 @@ describe('Repo core helpers', () => {
     const ctx = mkCtx({ patches: [p] as any, labelEventsArr: [externalLabel] as any });
     const labels = getPatchLabels(ctx, 'p3');
     expect(Array.from(labels.flat)).toContain('ugc/type:feature');
+  });
+
+  it('handles multiple roots and root-revisions in DAG', async () => {
+    const pRoot = mkPatch({ id: 'r1', tags: [['t','root']] });
+    const pRevRoot = mkPatch({ id: 'rr1', tags: [['t','root-revision']] });
+    const c1 = mkPatch({ id: 'c1', tags: [['e','r1']] });
+    const c2 = mkPatch({ id: 'c2', tags: [['e','rr1']] });
+    const ctx = mkCtx({ patches: [pRoot, pRevRoot, c1, c2] as any });
+    const dag = getPatchGraph(ctx);
+    expect(dag.roots).toContain('r1');
+    expect(dag.rootRevisions).toContain('rr1');
+    expect(dag.parentOutDegree['r1']).toBe(1);
+    expect(dag.parentOutDegree['rr1']).toBe(1);
+    expect(dag.parentChildren['r1']).toContain('c1');
+    expect(dag.parentChildren['rr1']).toContain('c2');
+  });
+
+  it('applies status precedence: ignores non-trusted, latest trusted/author wins (issue resolved)', async () => {
+    const issue = mkIssue({ id: 'i3', pubkey: 'author-y' });
+    // author opens at t=1000
+    const s1 = mkStatus({ kind: 1630, rootId: 'i3', pubkey: 'author-y', created_at: 1000 });
+    // non-trusted attempts to close later (should be ignored)
+    const sIgnored = mkStatus({ kind: 1632, rootId: 'i3', pubkey: 'random', created_at: 1500 });
+    // trusted maintainer sets draft (older than final)
+    const s2 = mkStatus({ kind: 1633, rootId: 'i3', pubkey: 'maint-2', created_at: 1200 });
+    // author closes even later
+    const s3 = mkStatus({ kind: 1632, rootId: 'i3', pubkey: 'author-y', created_at: 2000 });
+    // maintainer finally resolves (for issues, kind 1631 → resolved) at t=2500
+    const s4 = mkStatus({ kind: 1631, rootId: 'i3', pubkey: 'maint-2', created_at: 2500 });
+
+    const ctx = mkCtx({
+      repoEvent: mkRepoAnnouncement({ pubkey: 'owner-zz' }),
+      repo: { owner: 'owner-zz', name: 'r', maintainers: ['maint-2'] } as any,
+      issues: [issue] as any,
+      statusEventsArr: [s1, sIgnored, s2, s3, s4] as any,
+    });
+    const status = resolveStatusFor(ctx, 'i3');
+    expect(status?.state).toBe('resolved');
   });
 });

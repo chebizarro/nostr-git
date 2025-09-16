@@ -242,6 +242,52 @@ pnpm test --coverage
 pnpm test:visual
 ```
 
+## 🧩 RepoCore (Testable Core) and Repo Getters
+
+This UI package includes a testable core for Git/Nostr repo features, decoupled from Svelte runes, plus a reactive Repo class for UI consumption.
+
+- Core module: `src/lib/components/git/RepoCore.ts`
+  - `trustedMaintainers(ctx)`
+  - `mergeRepoStateByMaintainers(ctx, events)` — merges trusted 30618 refs; includes legacy `r` tag pair fallback
+  - `getPatchGraph(ctx)` returns:
+    - `nodes: Map<string, PatchEvent>`
+    - `roots: string[]`, `rootRevisions: string[]`
+    - `edgesCount: number`, `topParents: string[]`
+    - `parentOutDegree: Record<string, number>`, `parentChildren: Record<string, string[]>`
+  - `resolveStatusFor(ctx, rootId)` — trust/author precedence; maps NIP-163x kinds to UI states
+  - `getIssueThread(ctx, rootId)` — NIP-22 comments
+  - Labels: `getEffectiveLabelsFor`, `getIssueLabels`, `getPatchLabels`, `getRepoLabels`
+  - `getMaintainerBadge(ctx, pubkey)` — 'owner' | 'maintainer' | null
+
+- Reactive Repo class: `src/lib/components/git/Repo.svelte.ts`
+  - Mirrors `getPatchGraph()` fields for UI
+  - Caches invalidate on repo event/state changes and on patch set changes
+  - Delegates core logic to RepoCore (preserving caches):
+    - `mergeRepoStateByMaintainers()`, `getPatchGraph()`, `resolveStatusFor()`
+    - `getIssueThread()`, `getEffectiveLabelsFor()` and label helpers
+    - `getMaintainerBadge()`, `getRecommendedFilters()`
+  - The class builds a `RepoContext` snapshot and passes it to RepoCore functions
+
+### Focused UI Repo tests
+
+Run the focused Repo tests from the workspace root:
+
+```bash
+pnpm -w test:repo
+```
+
+This uses a dedicated Vitest config to run `packages/nostr-git/packages/ui/tests/Repo.spec.ts` with:
+
+- jsdom environment and setup (`vitest.repo.config.ts`, `vitest.setup.ts`)
+- Stubs for `$lib/stores/context|tokens|toast`
+- Polyfills (`fake-indexeddb`, `self`)
+
+### UI Components related
+
+- `src/lib/components/StatusChip.svelte` — resolved/raw status with reason tooltip
+- `src/lib/components/MaintainerBadge.svelte` — displays owner/maintainer role
+- `src/lib/components/PatchDagSummary.svelte` — DAG summary: nodes, edges, roots, top parents; hover shows up to 3 child IDs (truncated)
+
 ## 🔧 Configuration
 
 ### Build Configuration
