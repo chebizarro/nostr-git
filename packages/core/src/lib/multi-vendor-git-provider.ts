@@ -1,6 +1,11 @@
 import type { GitProvider } from '@nostr-git/git-wrapper';
 import { getGitProvider } from '@nostr-git/git-wrapper';
-import type { VendorProvider, RepoMetadata, CreateRepoOptions, UpdateRepoOptions } from './vendor-providers.js';
+import type {
+  VendorProvider,
+  RepoMetadata,
+  CreateRepoOptions,
+  UpdateRepoOptions
+} from './vendor-providers.js';
 import { resolveVendorProvider, parseRepoFromUrl } from './vendor-provider-factory.js';
 // Core no longer imports isomorphic-git or LightningFS directly; we rely on git-wrapper factory.
 
@@ -37,14 +42,17 @@ export class MultiVendorGitProvider implements GitProvider {
 
     const { provider, owner, repo } = parsed;
     const token = this.getToken(provider.hostname);
-    
+
     return provider.getRepoMetadata(owner, repo, token);
   }
 
-  async createRemoteRepo(name: string, options: CreateRepoOptions & { targetHost: string }): Promise<RepoMetadata> {
+  async createRemoteRepo(
+    name: string,
+    options: CreateRepoOptions & { targetHost: string }
+  ): Promise<RepoMetadata> {
     const vendor = resolveVendorProvider(`https://${options.targetHost}`);
     const token = this.getToken(vendor.hostname);
-    
+
     if (!token) {
       throw new Error(`No authentication token found for ${vendor.hostname}`);
     }
@@ -60,7 +68,7 @@ export class MultiVendorGitProvider implements GitProvider {
 
     const { provider, owner, repo } = parsed;
     const token = this.getToken(provider.hostname);
-    
+
     if (!token) {
       throw new Error(`No authentication token found for ${provider.hostname}`);
     }
@@ -76,7 +84,7 @@ export class MultiVendorGitProvider implements GitProvider {
 
     const { provider, owner, repo } = parsed;
     const token = this.getToken(provider.hostname);
-    
+
     if (!token) {
       throw new Error(`No authentication token found for ${provider.hostname}`);
     }

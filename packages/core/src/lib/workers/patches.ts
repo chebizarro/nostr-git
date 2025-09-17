@@ -34,7 +34,10 @@ export async function analyzePatchMergeUtil(
     const dir = `${rootDir}/${key}`;
 
     // Resolve target branch robustly
-    const effectiveTargetBranch = await resolveRobustBranch(dir, targetBranch || patchData.baseBranch);
+    const effectiveTargetBranch = await resolveRobustBranch(
+      dir,
+      targetBranch || patchData.baseBranch
+    );
 
     // Prepare patch structure for analysis
     const patch = {
@@ -97,7 +100,11 @@ function parsePatchContent(patchLines: string[]): Array<{
   type: 'add' | 'modify' | 'delete' | 'unsupported';
   content: string;
 }> {
-  const changes: Array<{ filepath: string; type: 'add' | 'modify' | 'delete' | 'unsupported'; content: string }> = [];
+  const changes: Array<{
+    filepath: string;
+    type: 'add' | 'modify' | 'delete' | 'unsupported';
+    content: string;
+  }> = [];
   let currentFile: string | null = null;
   let currentContent: string[] = [];
   let currentType: 'add' | 'modify' | 'delete' | 'unsupported' = 'modify';
@@ -112,7 +119,11 @@ function parsePatchContent(patchLines: string[]): Array<{
       // finalize previous
       if (currentFile) {
         // Push even if no hunks when we flagged unsupported
-        changes.push({ filepath: currentFile, type: currentType, content: currentContent.join('\n') });
+        changes.push({
+          filepath: currentFile,
+          type: currentType,
+          content: currentContent.join('\n')
+        });
       }
       const match = line.match(/diff --git a\/(.*) b\/(.*)/);
       currentFile = match ? match[2] : null;
@@ -126,7 +137,11 @@ function parsePatchContent(patchLines: string[]): Array<{
     }
 
     // Unsupported patterns detection
-    if (line.startsWith('GIT binary patch') || line.includes('Binary files') || line.includes('binary files')) {
+    if (
+      line.startsWith('GIT binary patch') ||
+      line.includes('Binary files') ||
+      line.includes('binary files')
+    ) {
       sawUnsupported = true;
       currentType = 'unsupported';
       continue;
@@ -171,10 +186,14 @@ function extractNewFileContentFromPatch(patchContent: string): string {
   const contentLines: string[] = [];
   let inContent = false;
   for (const line of lines) {
-    if (line.startsWith('@@')) { inContent = true; continue; }
+    if (line.startsWith('@@')) {
+      inContent = true;
+      continue;
+    }
     if (!inContent) continue;
     if (line.startsWith('+') && !line.startsWith('+++')) contentLines.push(line.substring(1));
-    else if (!line.startsWith('-') && !line.startsWith('\\')) contentLines.push(line.startsWith(' ') ? line.substring(1) : line);
+    else if (!line.startsWith('-') && !line.startsWith('\\'))
+      contentLines.push(line.startsWith(' ') ? line.substring(1) : line);
   }
   return contentLines.join('\n');
 }
@@ -214,7 +233,10 @@ function applyUnifiedDiffPatch(existingContent: string, patchContent: string): s
     for (let i = begin; i <= end; i++) {
       let ok = true;
       for (let j = 0; j < ctx.length; j++) {
-        if (src[i + j] !== ctx[j]) { ok = false; break; }
+        if (src[i + j] !== ctx[j]) {
+          ok = false;
+          break;
+        }
       }
       if (ok) return i;
     }
@@ -236,10 +258,16 @@ function applyUnifiedDiffPatch(existingContent: string, patchContent: string): s
     // Apply hunk
     for (const l of h.lines) {
       if (!l) continue;
-      if (l.startsWith(' ')) { out.push(l.substring(1)); cursor++; }
-      else if (l.startsWith('+')) { out.push(l.substring(1)); }
-      else if (l.startsWith('-')) { cursor++; }
-      else if (l.startsWith('\\')) { /* ignore no newline markers */ }
+      if (l.startsWith(' ')) {
+        out.push(l.substring(1));
+        cursor++;
+      } else if (l.startsWith('+')) {
+        out.push(l.substring(1));
+      } else if (l.startsWith('-')) {
+        cursor++;
+      } else if (l.startsWith('\\')) {
+        /* ignore no newline markers */
+      }
     }
   }
 
@@ -271,7 +299,15 @@ export async function applyPatchAndPushUtil(
 }> {
   const { repoId, patchData, targetBranch, mergeCommitMessage, authorName, authorEmail } = opts;
   const progress = opts.onProgress || (() => {});
-  const { rootDir, canonicalRepoKey, resolveRobustBranch, ensureFullClone, getAuthCallback, getConfiguredAuthHosts, getProviderFs } = deps;
+  const {
+    rootDir,
+    canonicalRepoKey,
+    resolveRobustBranch,
+    ensureFullClone,
+    getAuthCallback,
+    getConfiguredAuthHosts,
+    getProviderFs
+  } = deps;
 
   try {
     const key = canonicalRepoKey(repoId);
@@ -297,9 +333,12 @@ export async function applyPatchAndPushUtil(
     const fs = getProviderFs(git);
 
     // Fail fast on unsupported changes
-    const unsupported = fileChanges.find(c => c.type === 'unsupported');
+    const unsupported = fileChanges.find((c) => c.type === 'unsupported');
     if (unsupported) {
-      return { success: false, error: 'Unsupported patch features detected (rename/binary). Aborting.' };
+      return {
+        success: false,
+        error: 'Unsupported patch features detected (rename/binary). Aborting.'
+      };
     }
 
     for (const change of fileChanges) {
@@ -309,7 +348,9 @@ export async function applyPatchAndPushUtil(
         if (pathParts.length > 1) {
           const dirPath = pathParts.slice(0, -1).join('/');
           const fullDirPath = `${dir}/${dirPath}`;
-          try { await fs.promises.mkdir(fullDirPath, { recursive: true }); } catch {}
+          try {
+            await fs.promises.mkdir(fullDirPath, { recursive: true });
+          } catch {}
         }
         let finalContent = '';
         if (change.type === 'add') {
@@ -334,16 +375,21 @@ export async function applyPatchAndPushUtil(
     // Verify there are actually staged/working changes before committing
     try {
       const status = await (git as any).statusMatrix({ dir });
-      const hasChanges = Array.isArray(status) && status.some((row: any[]) => {
-        // isomorphic-git statusMatrix: [filepath, head, workdir, stage]
-        const head = row?.[1];
-        const workdir = row?.[2];
-        const stage = row?.[3];
-        // Any difference between head and workdir or anything staged indicates changes
-        return head !== workdir || stage !== 0;
-      });
+      const hasChanges =
+        Array.isArray(status) &&
+        status.some((row: any[]) => {
+          // isomorphic-git statusMatrix: [filepath, head, workdir, stage]
+          const head = row?.[1];
+          const workdir = row?.[2];
+          const stage = row?.[3];
+          // Any difference between head and workdir or anything staged indicates changes
+          return head !== workdir || stage !== 0;
+        });
       if (!hasChanges) {
-        return { success: false, error: 'No changes to apply - patch may already be merged or invalid' };
+        return {
+          success: false,
+          error: 'No changes to apply - patch may already be merged or invalid'
+        };
       }
       progress('Changes staged', 70);
     } catch {
@@ -354,7 +400,11 @@ export async function applyPatchAndPushUtil(
     // Create merge commit
     const defaultMessage = `Merge patch: ${patchData.id.slice(0, 8)}`;
     const commitMessage = mergeCommitMessage || defaultMessage;
-    const mergeCommitOid = await git.commit({ dir, message: commitMessage, author: { name: authorName, email: authorEmail } });
+    const mergeCommitOid = await git.commit({
+      dir,
+      message: commitMessage,
+      author: { name: authorName, email: authorEmail }
+    });
     progress('Merge commit created', 80);
 
     // Push to remotes
@@ -362,26 +412,52 @@ export async function applyPatchAndPushUtil(
     const pushedRemotes: string[] = [];
     const skippedRemotes: string[] = [];
     if (remotes.length === 0) {
-      return { success: true, mergeCommitOid, pushedRemotes: [], skippedRemotes: [], warning: 'No remotes configured - changes only applied locally' };
+      return {
+        success: true,
+        mergeCommitOid,
+        pushedRemotes: [],
+        skippedRemotes: [],
+        warning: 'No remotes configured - changes only applied locally'
+      };
     }
 
-    const pushErrors: Array<{ remote: string; url: string; error: string; code: string; stack: string }> = [];
+    const pushErrors: Array<{
+      remote: string;
+      url: string;
+      error: string;
+      code: string;
+      stack: string;
+    }> = [];
     for (const remote of remotes) {
       try {
         if (!remote.url) {
           const errorMsg = `Remote ${remote.remote} has no URL configured`;
-          pushErrors.push({ remote: remote.remote, url: 'N/A', error: errorMsg, code: 'NO_URL', stack: '' });
+          pushErrors.push({
+            remote: remote.remote,
+            url: 'N/A',
+            error: errorMsg,
+            code: 'NO_URL',
+            stack: ''
+          });
           skippedRemotes.push(remote.remote);
           continue;
         }
         const authCallback = getAuthCallback(remote.url);
-        await git.push({ dir, url: remote.url, ref: effectiveTargetBranch, force: true, ...(authCallback && { onAuth: authCallback }) });
+        await git.push({
+          dir,
+          url: remote.url,
+          ref: effectiveTargetBranch,
+          force: true,
+          ...(authCallback && { onAuth: authCallback })
+        });
         pushedRemotes.push(remote.remote);
       } catch (pushError: any) {
         // If push to protected branch is rejected by a pre-receive hook, retry to a topic branch
-        const rawMsg = pushError instanceof Error ? pushError.message || '' : String(pushError || '');
+        const rawMsg =
+          pushError instanceof Error ? pushError.message || '' : String(pushError || '');
         const code = (pushError && (pushError.code || pushError.name)) || 'UNKNOWN';
-        const looksProtected = /pre-receive hook declined/i.test(rawMsg) || /protected branch/i.test(rawMsg);
+        const looksProtected =
+          /pre-receive hook declined/i.test(rawMsg) || /protected branch/i.test(rawMsg);
         const graspLike = /relay\.ngit\.dev|grasp/i.test(remote.url || '');
 
         if (looksProtected || graspLike) {
@@ -411,7 +487,13 @@ export async function applyPatchAndPushUtil(
             continue;
           } catch (fallbackErr: any) {
             const fbMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
-            pushErrors.push({ remote: remote.remote, url: remote.url || 'N/A', error: fbMsg, code: fallbackErr?.code || 'FALLBACK_FAILED', stack: fallbackErr?.stack || '' });
+            pushErrors.push({
+              remote: remote.remote,
+              url: remote.url || 'N/A',
+              error: fbMsg,
+              code: fallbackErr?.code || 'FALLBACK_FAILED',
+              stack: fallbackErr?.stack || ''
+            });
             skippedRemotes.push(remote.remote);
             continue;
           }
@@ -419,16 +501,31 @@ export async function applyPatchAndPushUtil(
 
         // Non-protection-related error, report as-is
         const errorMsg = rawMsg;
-        pushErrors.push({ remote: remote.remote, url: remote.url || 'N/A', error: errorMsg, code, stack: pushError?.stack || '' });
+        pushErrors.push({
+          remote: remote.remote,
+          url: remote.url || 'N/A',
+          error: errorMsg,
+          code,
+          stack: pushError?.stack || ''
+        });
         skippedRemotes.push(remote.remote);
       }
     }
 
     progress('Push complete', 100);
     // Aggregate warning if any fallback behavior occurred
-    const hadFallback = (pushErrors || []).some(e => e.code === 'FALLBACK_TOPIC_PUSH');
-    const warning = hadFallback ? 'Primary push rejected by remote policy; patch was pushed to a topic branch for review.' : undefined;
-    return { success: true, mergeCommitOid, pushedRemotes, skippedRemotes, warning, pushErrors: pushErrors.length ? pushErrors : undefined };
+    const hadFallback = (pushErrors || []).some((e) => e.code === 'FALLBACK_TOPIC_PUSH');
+    const warning = hadFallback
+      ? 'Primary push rejected by remote policy; patch was pushed to a topic branch for review.'
+      : undefined;
+    return {
+      success: true,
+      mergeCommitOid,
+      pushedRemotes,
+      skippedRemotes,
+      warning,
+      pushErrors: pushErrors.length ? pushErrors : undefined
+    };
   } catch (error: any) {
     return { success: false, error: error?.message || String(error) };
   }

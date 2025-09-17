@@ -12,7 +12,7 @@ function makeMemFs() {
     },
     writeFile: async (p: string, data: string, enc: string) => {
       files.set(p, data);
-    },
+    }
   } as any;
   return { files, fs: { promises } };
 }
@@ -25,15 +25,20 @@ function makeGit(overrides: Partial<GitProvider> = {}): GitProvider {
     commit: vi.fn(async () => 'merge1234'),
     listRemotes: vi.fn(async () => [{ remote: 'origin', url: 'https://example.com/repo.git' }]),
     push: vi.fn(async () => {}),
-    statusMatrix: vi.fn(async () => [[ 'src/a.txt', 0, 2, 2 ], [ 'docs/b.txt', 0, 2, 2 ], [ 'old/c.txt', 1, 0, 0 ]]),
+    statusMatrix: vi.fn(async () => [
+      ['src/a.txt', 0, 2, 2],
+      ['docs/b.txt', 0, 2, 2],
+      ['old/c.txt', 1, 0, 0]
+    ])
   };
   return Object.assign(base, overrides) as any;
 }
 
 // Multi-file diff: add src/a.txt, modify docs/b.txt, delete old/c.txt
-const multiFilePatch = `diff --git a/src/a.txt b/src/a.txt\nnew file mode 100644\nindex 0000000..e69de29\n--- /dev/null\n+++ b/src/a.txt\n@@ -0,0 +1,2 @@\n+hello\n+world\n\n` +
-`diff --git a/docs/b.txt b/docs/b.txt\nindex e69de29..0cfbf08 100644\n--- a/docs/b.txt\n+++ b/docs/b.txt\n@@ -0,0 +1,1 @@\n+intro\n\n` +
-`diff --git a/old/c.txt b/old/c.txt\ndeleted file mode 100644\nindex e69de29..0000000\n--- a/old/c.txt\n+++ /dev/null\n@@ -1 +0,0 @@\n-legacy\n`;
+const multiFilePatch =
+  `diff --git a/src/a.txt b/src/a.txt\nnew file mode 100644\nindex 0000000..e69de29\n--- /dev/null\n+++ b/src/a.txt\n@@ -0,0 +1,2 @@\n+hello\n+world\n\n` +
+  `diff --git a/docs/b.txt b/docs/b.txt\nindex e69de29..0cfbf08 100644\n--- a/docs/b.txt\n+++ b/docs/b.txt\n@@ -0,0 +1,1 @@\n+intro\n\n` +
+  `diff --git a/old/c.txt b/old/c.txt\ndeleted file mode 100644\nindex e69de29..0000000\n--- a/old/c.txt\n+++ /dev/null\n@@ -1 +0,0 @@\n-legacy\n`;
 
 describe('integration: multi-file patch', () => {
   it('applies add/modify/delete across directories and pushes', async () => {
@@ -53,7 +58,7 @@ describe('integration: multi-file patch', () => {
         repoId,
         patchData: { id: 'mf1', commits: [], baseBranch: 'main', rawContent: multiFilePatch },
         authorName: 'Zed',
-        authorEmail: 'zed@example.com',
+        authorEmail: 'zed@example.com'
       },
       {
         rootDir,
@@ -62,7 +67,7 @@ describe('integration: multi-file patch', () => {
         ensureFullClone: async () => ({}),
         getAuthCallback: (_url) => undefined,
         getConfiguredAuthHosts: () => [],
-        getProviderFs: () => mem.fs,
+        getProviderFs: () => mem.fs
       }
     );
 
@@ -70,7 +75,7 @@ describe('integration: multi-file patch', () => {
     expect(mem.files.get(`${dir}/src/a.txt`)).toContain('world');
     expect(mem.files.get(`${dir}/docs/b.txt`)).toContain('intro');
     // deletion is not reflected in mem.files map automatically; we assert remove() called
-    expect((git.remove as any)).toHaveBeenCalledWith({ dir, filepath: 'old/c.txt' });
+    expect(git.remove as any).toHaveBeenCalledWith({ dir, filepath: 'old/c.txt' });
     expect(res.pushedRemotes).toEqual(['origin']);
   });
 });

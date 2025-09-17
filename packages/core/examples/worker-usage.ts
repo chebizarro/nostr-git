@@ -2,7 +2,9 @@
 import { wrap } from 'comlink';
 
 // Example: Using git-worker.ts with Comlink in the main thread
-const worker = new Worker(new URL('../src/lib/workers/git-worker.ts', import.meta.url), { type: 'module' });
+const worker = new Worker(new URL('../src/lib/workers/git-worker.ts', import.meta.url), {
+  type: 'module'
+});
 const api = wrap<any>(worker);
 
 (async () => {

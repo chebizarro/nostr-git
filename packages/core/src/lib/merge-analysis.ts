@@ -48,8 +48,10 @@ async function resolveRobustBranchInMergeAnalysis(
   repoDir: string,
   preferredBranch?: string
 ): Promise<string> {
-  const candidates = preferredBranch ? [preferredBranch, 'main', 'master', 'develop', 'dev'] : ['main', 'master', 'develop', 'dev'];
-  
+  const candidates = preferredBranch
+    ? [preferredBranch, 'main', 'master', 'develop', 'dev']
+    : ['main', 'master', 'develop', 'dev'];
+
   for (const branch of candidates) {
     try {
       await git.resolveRef({
@@ -62,19 +64,21 @@ async function resolveRobustBranchInMergeAnalysis(
       continue;
     }
   }
-  
+
   // If no candidates work, try to find any existing branch
   try {
     const branches = await git.listBranches({ dir: repoDir });
     if (branches.length > 0) {
       const firstBranch = branches[0];
-      console.warn(`All specific branch resolution attempts failed in merge analysis, using first available branch: ${firstBranch}`);
+      console.warn(
+        `All specific branch resolution attempts failed in merge analysis, using first available branch: ${firstBranch}`
+      );
       return firstBranch;
     }
   } catch (error) {
     console.warn('Failed to list branches in merge analysis:', error);
   }
-  
+
   // Ultimate fallback
   return preferredBranch || 'main';
 }
@@ -92,17 +96,17 @@ export async function analyzePatchMergeability(
   let remoteCommit: string | undefined;
   let targetCommit: string | undefined;
   let patchCommits: string[] = [];
-  
+
   try {
     // Use robust multi-fallback branch resolution
     const resolvedBranch = await resolveRobustBranchInMergeAnalysis(git, repoDir, targetBranch);
-    
+
     // Get remote URL for fetch operation
     const remotes = await git.listRemotes({ dir: repoDir });
     const originRemote = remotes.find((r: any) => r.remote === 'origin');
-    
+
     let remoteDivergence = false;
-    
+
     if (originRemote && originRemote.url) {
       try {
         // Fetch with more depth to detect divergence
@@ -113,7 +117,7 @@ export async function analyzePatchMergeability(
           singleBranch: true,
           depth: 50 // Get more history to detect divergence
         });
-        
+
         // Get remote branch HEAD
         try {
           remoteCommit = await git.resolveRef({
@@ -135,7 +139,7 @@ export async function analyzePatchMergeability(
       dir: repoDir,
       ref: `refs/heads/${resolvedBranch}`
     });
-    
+
     // Check for remote divergence if we have both commits
     if (remoteCommit && targetCommit !== remoteCommit) {
       try {
@@ -145,7 +149,7 @@ export async function analyzePatchMergeability(
           oid: targetCommit,
           ancestor: remoteCommit
         });
-        
+
         if (!isAncestor) {
           // Local is not a descendant of remote - branches have diverged
           remoteDivergence = true;
@@ -159,8 +163,8 @@ export async function analyzePatchMergeability(
     }
 
     // Parse patch to get commit information
-    patchCommits = patch.commits.map(c => c.oid);
-    
+    patchCommits = patch.commits.map((c) => c.oid);
+
     if (patchCommits.length === 0) {
       return {
         canMerge: false,
@@ -199,10 +203,10 @@ export async function analyzePatchMergeability(
       throw new Error('Failed to resolve target commit');
     }
     const mergeBase = await findMergeBase(git, repoDir, patchCommits[0], targetCommit);
-    
+
     // Check if it's a fast-forward merge
     const isFastForward = mergeBase === targetCommit;
-    
+
     if (isFastForward) {
       return {
         canMerge: true,
@@ -236,10 +240,15 @@ export async function analyzePatchMergeability(
         errorMessage: 'Local branch has diverged from remote. Force push or rebase required.'
       };
     }
-    
+
     // Perform a dry-run merge to detect conflicts
-    const conflictAnalysis = await performDryRunMerge(git, repoDir, patch as SimplifiedPatch, resolvedBranch);
-    
+    const conflictAnalysis = await performDryRunMerge(
+      git,
+      repoDir,
+      patch as SimplifiedPatch,
+      resolvedBranch
+    );
+
     return {
       canMerge: !conflictAnalysis.hasConflicts,
       hasConflicts: conflictAnalysis.hasConflicts,
@@ -253,7 +262,6 @@ export async function analyzePatchMergeability(
       patchCommits,
       analysis: conflictAnalysis.hasConflicts ? 'conflicts' : 'clean'
     };
-
   } catch (error) {
     return {
       canMerge: false,
@@ -291,17 +299,19 @@ async function checkIfPatchApplied(
     });
 
     const targetCommits = log.map((commit: any) => commit.oid);
-    
+
     // Check if any patch commits exist in target branch
-    const hasAnyPatchCommit = patchCommits.some(patchCommit => 
+    const hasAnyPatchCommit = patchCommits.some((patchCommit) =>
       targetCommits.includes(patchCommit)
     );
-    
+
     if (hasAnyPatchCommit) {
-      console.log(`Patch already merged: found commits ${patchCommits.filter(c => targetCommits.includes(c))} in branch ${targetBranch}`);
+      console.log(
+        `Patch already merged: found commits ${patchCommits.filter((c) => targetCommits.includes(c))} in branch ${targetBranch}`
+      );
       return true;
     }
-    
+
     // Strategy 2: Check if patch content matches recent commits
     // This catches cases where patch was applied but with different commit IDs
     // (e.g., rebased, cherry-picked, or manually applied)
@@ -312,16 +322,19 @@ async function checkIfPatchApplied(
           dir: repoDir,
           oid: patchCommits[0]
         });
-        
+
         // Look for commits with same author and message in recent history
         const recentCommits = log.slice(0, 50); // Check last 50 commits
-        const matchingCommit = recentCommits.find((commit: any) => 
-          commit.commit.author.email === patchCommit.commit.author.email &&
-          commit.commit.message.trim() === patchCommit.commit.message.trim()
+        const matchingCommit = recentCommits.find(
+          (commit: any) =>
+            commit.commit.author.email === patchCommit.commit.author.email &&
+            commit.commit.message.trim() === patchCommit.commit.message.trim()
         );
-        
+
         if (matchingCommit) {
-          console.log(`Patch content already merged: found matching commit ${matchingCommit.oid} with same author/message`);
+          console.log(
+            `Patch content already merged: found matching commit ${matchingCommit.oid} with same author/message`
+          );
           return true;
         }
       } catch (commitError) {
@@ -329,7 +342,7 @@ async function checkIfPatchApplied(
         console.warn('Could not read patch commit for content comparison:', commitError);
       }
     }
-    
+
     return false;
   } catch (error) {
     console.warn('Error checking if patch is applied:', error);
@@ -373,7 +386,7 @@ async function performDryRunMerge(
   try {
     // Analyze the diff to predict potential conflicts
     const conflictAnalysis = await analyzeDiffForConflicts(git, repoDir, patch, targetBranch);
-    
+
     return conflictAnalysis;
   } catch (error) {
     console.error('Error performing dry-run merge:', error);
@@ -405,12 +418,12 @@ async function analyzeDiffForConflicts(
     // Parse the patch diff
     const patchContent = 'raw' in patch ? patch.raw.content : (patch as any).raw.content;
     const parsedDiff = parseDiff(patchContent);
-    
+
     for (const file of parsedDiff) {
       if (!file.to || file.to === '/dev/null') continue;
-      
+
       const filePath = file.to;
-      
+
       try {
         // Get current file content from target branch
         const currentContent = await git.readBlob({
@@ -433,10 +446,7 @@ async function analyzeDiffForConflicts(
 
         if (hasLocalChanges) {
           // Potential conflict - file modified in both patch and target
-          const conflictMarkers = await detectConflictMarkers(
-            file,
-            currentContent.toString()
-          );
+          const conflictMarkers = await detectConflictMarkers(file, currentContent.toString());
 
           if (conflictMarkers.length > 0) {
             conflictFiles.push(filePath);
@@ -450,7 +460,7 @@ async function analyzeDiffForConflicts(
         }
       } catch (error) {
         // File might not exist in current branch - check if it's a new file conflict
-        if ((file as any).type === 'add' || file.to && !file.from) {
+        if ((file as any).type === 'add' || (file.to && !file.from)) {
           try {
             // Check if file was added in target branch too
             await git.readBlob({
@@ -461,18 +471,20 @@ async function analyzeDiffForConflicts(
               }),
               filepath: filePath
             });
-            
+
             // File exists in both - potential conflict
             conflictFiles.push(filePath);
             conflictDetails.push({
               file: filePath,
               type: 'content',
-              conflictMarkers: [{
-                start: 1,
-                end: -1,
-                content: 'File added in both branches',
-                type: 'added-by-both'
-              }]
+              conflictMarkers: [
+                {
+                  start: 1,
+                  end: -1,
+                  content: 'File added in both branches',
+                  type: 'added-by-both'
+                }
+              ]
             });
           } catch {
             // File doesn't exist in target - no conflict
@@ -537,12 +549,9 @@ async function checkFileModifiedSinceBase(
 /**
  * Detect potential conflict markers in diff hunks
  */
-async function detectConflictMarkers(
-  file: any,
-  currentContent: string
-): Promise<ConflictMarker[]> {
+async function detectConflictMarkers(file: any, currentContent: string): Promise<ConflictMarker[]> {
   const markers: ConflictMarker[] = [];
-  
+
   if (!file.hunks) return markers;
 
   for (const hunk of file.hunks) {
@@ -571,7 +580,7 @@ async function detectConflictMarkers(
 export function getMergeStatusMessage(result: MergeAnalysisResult): string {
   switch (result.analysis) {
     case 'clean':
-      return result.fastForward 
+      return result.fastForward
         ? 'This patch can be fast-forward merged without conflicts.'
         : 'This patch can be merged cleanly without conflicts.';
     case 'conflicts':

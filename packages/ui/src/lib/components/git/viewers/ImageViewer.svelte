@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { createDataUrl } from '@nostr-git/core';
-  
+  import { onMount } from "svelte";
+  import { createDataUrl } from "@nostr-git/core";
+
   const {
     content,
     filename,
-    mimeType
+    mimeType,
   }: {
     content: string;
     filename: string;
@@ -19,16 +19,16 @@
   let error = $state<string | null>(null);
 
   // Convert binary content to data URL for display
-  let dataUrl = $state('');
-  
+  let dataUrl = $state("");
+
   $effect(() => {
     if (content) {
       try {
         dataUrl = createDataUrl(content, mimeType);
         error = null;
       } catch (err) {
-        console.error('Failed to create data URL for image:', err);
-        error = 'Failed to process image data';
+        console.error("Failed to create data URL for image:", err);
+        error = "Failed to process image data";
         dataUrl = null;
       }
     }
@@ -40,7 +40,7 @@
         imageLoaded = true;
         imageDimensions = {
           width: imageElement.naturalWidth,
-          height: imageElement.naturalHeight
+          height: imageElement.naturalHeight,
         };
       };
       imageElement.onerror = () => {
@@ -54,7 +54,7 @@
   {#if error || imageError}
     <div class="flex flex-col items-center justify-center p-8 text-gray-500">
       <p>Failed to load image {filename}</p>
-      <p class="text-sm">{error || 'Unknown error'}</p>
+      <p class="text-sm">{error || "Unknown error"}</p>
     </div>
   {:else if dataUrl}
     <div class="relative">
@@ -69,10 +69,10 @@
         }}
         onerror={() => {
           imageError = true;
-          error = 'Image failed to display';
+          error = "Image failed to display";
         }}
       />
-      
+
       {#if imageLoaded && imageDimensions}
         <div class="mt-2 text-sm text-muted-foreground text-center">
           {imageDimensions.width} × {imageDimensions.height} pixels

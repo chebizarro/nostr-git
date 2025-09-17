@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { nip19, type NostrEvent } from 'nostr-tools';
-  import { onMount } from 'svelte';
-  import { GitBranch, Copy } from '@lucide/svelte';
+  import { nip19, type NostrEvent } from "nostr-tools";
+  import { onMount } from "svelte";
+  import { GitBranch, Copy } from "@lucide/svelte";
 
   interface Props {
     event: NostrEvent;
@@ -9,42 +9,42 @@
 
   let { event }: Props = $props();
 
-  let repoId = $state('');
-  let cloneUrl = $state('');
-  let authorNpub = $state('');
-  let headCommit = $state('');
+  let repoId = $state("");
+  let cloneUrl = $state("");
+  let authorNpub = $state("");
+  let headCommit = $state("");
   let branches = $state<string[]>([]);
   let tags = $state<string[]>([]);
   let lastUpdate = $state<Date | null>(null);
 
   // Derived computed values
-  const displayId = $derived(repoId || 'Unknown Repository');
-  const shortNpub = $derived(authorNpub ? authorNpub.slice(0, 16) + '...' : '');
-  const shortCommit = $derived(headCommit ? headCommit.slice(0, 8) : '');
+  const displayId = $derived(repoId || "Unknown Repository");
+  const shortNpub = $derived(authorNpub ? authorNpub.slice(0, 16) + "..." : "");
+  const shortCommit = $derived(headCommit ? headCommit.slice(0, 8) : "");
   const formattedDate = $derived(
-    lastUpdate ? lastUpdate.toLocaleDateString() + ' ' + lastUpdate.toLocaleTimeString() : ''
+    lastUpdate ? lastUpdate.toLocaleDateString() + " " + lastUpdate.toLocaleTimeString() : ""
   );
 
   const parseEventData = () => {
     const eventTags = event.tags || [];
-    
+
     for (const tag of eventTags) {
       switch (tag[0]) {
-        case 'd':
-          repoId = tag[1] || '';
+        case "d":
+          repoId = tag[1] || "";
           break;
-        case 'clone':
-          cloneUrl = tag[1] || '';
+        case "clone":
+          cloneUrl = tag[1] || "";
           break;
-        case 'head':
-          headCommit = tag[1] || '';
+        case "head":
+          headCommit = tag[1] || "";
           break;
-        case 'branch':
+        case "branch":
           if (tag[1] && !branches.includes(tag[1])) {
             branches = [...branches, tag[1]];
           }
           break;
-        case 'tag':
+        case "tag":
           if (tag[1] && !tags.includes(tag[1])) {
             tags = [...tags, tag[1]];
           }
@@ -57,8 +57,8 @@
       try {
         authorNpub = nip19.npubEncode(event.pubkey);
       } catch (error) {
-        console.warn('Failed to encode npub:', error);
-        authorNpub = event.pubkey.slice(0, 16) + '...';
+        console.warn("Failed to encode npub:", error);
+        authorNpub = event.pubkey.slice(0, 16) + "...";
       }
     }
 
@@ -79,7 +79,7 @@
       await navigator.clipboard.writeText(text);
       // Could integrate with toast system here
     } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
+      console.error("Failed to copy to clipboard:", error);
     }
   };
 
@@ -92,15 +92,13 @@
 <div class="git-repo-state-event border-l-4 border-green-500 bg-green-50 p-4 rounded-r-lg">
   <div class="flex items-start gap-3">
     <GitBranch class="text-green-600 mt-1" size={20} />
-    
+
     <div class="flex-1">
       <div class="flex items-center gap-2 mb-2">
         <h3 class="font-semibold text-lg text-gray-900">
           Repository State: {displayId}
         </h3>
-        <span class="text-sm text-gray-500 bg-gray-200 px-2 py-1 rounded">
-          State Update
-        </span>
+        <span class="text-sm text-gray-500 bg-gray-200 px-2 py-1 rounded"> State Update </span>
       </div>
 
       {#if event.content}
@@ -114,11 +112,12 @@
             <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono flex-1">
               {cloneUrl}
             </code>
-            <button 
+            <button
               type="button"
               onclick={() => copyToClipboard(cloneUrl)}
               class="text-green-600 hover:text-green-800 text-sm p-1"
-              title="Copy clone URL">
+              title="Copy clone URL"
+            >
               <Copy size={16} />
             </button>
           </div>
@@ -130,11 +129,12 @@
             <code class="bg-gray-100 px-2 py-1 rounded text-sm font-mono">
               {shortCommit}
             </code>
-            <button 
+            <button
               type="button"
               onclick={() => copyToClipboard(headCommit)}
               class="text-green-600 hover:text-green-800 text-sm p-1"
-              title="Copy full commit hash">
+              title="Copy full commit hash"
+            >
               <Copy size={16} />
             </button>
           </div>
@@ -194,7 +194,7 @@
     /* Custom styling for git repository state events */
     transition: all 0.2s ease-in-out;
   }
-  
+
   .git-repo-state-event:hover {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }

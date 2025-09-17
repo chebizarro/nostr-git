@@ -1,26 +1,26 @@
 /**
  * GitLab REST API Implementation
- * 
+ *
  * Implements the GitServiceApi interface for GitLab's REST API v4.
  * Supports both GitLab.com and self-hosted GitLab instances.
- * 
+ *
  * API Documentation: https://docs.gitlab.com/ee/api/
  */
 
-import type { 
-  GitServiceApi, 
-  RepoMetadata, 
-  Commit, 
-  Issue, 
-  PullRequest, 
-  Patch, 
-  NewIssue, 
-  NewPullRequest, 
-  ListCommitsOptions, 
-  ListIssuesOptions, 
-  ListPullRequestsOptions, 
-  User, 
-  GitForkOptions 
+import type {
+  GitServiceApi,
+  RepoMetadata,
+  Commit,
+  Issue,
+  PullRequest,
+  Patch,
+  NewIssue,
+  NewPullRequest,
+  ListCommitsOptions,
+  ListIssuesOptions,
+  ListPullRequestsOptions,
+  User,
+  GitForkOptions
 } from '../api.js';
 
 /**
@@ -40,14 +40,14 @@ export class GitLabApi implements GitServiceApi {
    */
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    
+
     const response = await fetch(url, {
       ...options,
       headers: {
-        'Authorization': `Bearer ${this.token}`,
+        Authorization: `Bearer ${this.token}`,
         'Content-Type': 'application/json',
-        ...options.headers,
-      },
+        ...options.headers
+      }
     });
 
     if (!response.ok) {
@@ -75,7 +75,7 @@ export class GitLabApi implements GitServiceApi {
     const projectPath = `${owner}/${repo}`;
     const encodedPath = encodeURIComponent(projectPath);
     const data = await this.request<any>(`/projects/${encodedPath}`);
-    
+
     return {
       id: data.id.toString(),
       name: data.name,
@@ -87,12 +87,17 @@ export class GitLabApi implements GitServiceApi {
       htmlUrl: data.web_url,
       owner: {
         login: data.namespace.path,
-        type: data.namespace.kind === 'group' ? 'Organization' : 'User',
-      },
+        type: data.namespace.kind === 'group' ? 'Organization' : 'User'
+      }
     };
   }
 
-  async createRepo(options: { name: string; description?: string; private?: boolean; autoInit?: boolean }): Promise<RepoMetadata> {
+  async createRepo(options: {
+    name: string;
+    description?: string;
+    private?: boolean;
+    autoInit?: boolean;
+  }): Promise<RepoMetadata> {
     const data = await this.request<any>('/projects', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -100,8 +105,8 @@ export class GitLabApi implements GitServiceApi {
         name: options.name,
         description: options.description,
         visibility: options.private ? 'private' : 'public',
-        initialize_with_readme: options.autoInit || false,
-      }),
+        initialize_with_readme: options.autoInit || false
+      })
     });
 
     return {
@@ -115,22 +120,27 @@ export class GitLabApi implements GitServiceApi {
       htmlUrl: data.web_url,
       owner: {
         login: data.namespace.path,
-        type: data.namespace.kind === 'group' ? 'Organization' : 'User',
-      },
+        type: data.namespace.kind === 'group' ? 'Organization' : 'User'
+      }
     };
   }
 
-  async updateRepo(owner: string, repo: string, updates: { name?: string; description?: string; private?: boolean }): Promise<RepoMetadata> {
+  async updateRepo(
+    owner: string,
+    repo: string,
+    updates: { name?: string; description?: string; private?: boolean }
+  ): Promise<RepoMetadata> {
     const projectId = await this.getProjectId(owner, repo);
-    
+
     const data = await this.request<any>(`/projects/${projectId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: updates.name,
         description: updates.description,
-        visibility: updates.private !== undefined ? (updates.private ? 'private' : 'public') : undefined,
-      }),
+        visibility:
+          updates.private !== undefined ? (updates.private ? 'private' : 'public') : undefined
+      })
     });
 
     return {
@@ -144,8 +154,8 @@ export class GitLabApi implements GitServiceApi {
       htmlUrl: data.web_url,
       owner: {
         login: data.namespace.path,
-        type: data.namespace.kind === 'group' ? 'Organization' : 'User',
-      },
+        type: data.namespace.kind === 'group' ? 'Organization' : 'User'
+      }
     };
   }
 
@@ -153,7 +163,7 @@ export class GitLabApi implements GitServiceApi {
     // First, try to find the project on GitLab (same-provider forking)
     try {
       const projectId = await this.getProjectId(owner, repo);
-      
+
       const body: any = {};
       if (options?.name) {
         body.name = options.name;
@@ -166,9 +176,9 @@ export class GitLabApi implements GitServiceApi {
       const data = await this.request<any>(`/projects/${projectId}/fork`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(body)
       });
-      
+
       return {
         id: data.id.toString(),
         name: data.name,
@@ -180,8 +190,8 @@ export class GitLabApi implements GitServiceApi {
         htmlUrl: data.web_url,
         owner: {
           login: data.namespace.path,
-          type: data.namespace.kind === 'user' ? 'User' : 'Organization',
-        },
+          type: data.namespace.kind === 'user' ? 'User' : 'Organization'
+        }
       };
     } catch (error: any) {
       // If project not found on GitLab, attempt cross-provider import from GitHub
@@ -191,29 +201,33 @@ export class GitLabApi implements GitServiceApi {
       throw error;
     }
   }
-  
+
   /**
    * Import a repository from GitHub to GitLab (cross-provider forking)
    */
-  private async importFromGitHub(owner: string, repo: string, options?: GitForkOptions): Promise<RepoMetadata> {
+  private async importFromGitHub(
+    owner: string,
+    repo: string,
+    options?: GitForkOptions
+  ): Promise<RepoMetadata> {
     const githubUrl = `https://github.com/${owner}/${repo}.git`;
     const projectName = options?.name || repo;
     const projectPath = options?.name || repo;
-    
+
     const importBody = {
       name: projectName,
       path: projectPath,
       import_url: githubUrl,
       visibility: 'public', // Default to public, could be made configurable
-      description: `Imported from GitHub: ${owner}/${repo}`,
+      description: `Imported from GitHub: ${owner}/${repo}`
     };
 
     const data = await this.request<any>('/projects', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(importBody),
+      body: JSON.stringify(importBody)
     });
-    
+
     // Wait for import to complete before returning
     await this.waitForImportCompletion(data.id);
 
@@ -228,47 +242,51 @@ export class GitLabApi implements GitServiceApi {
       htmlUrl: data.web_url,
       owner: {
         login: data.namespace.path,
-        type: data.namespace.kind === 'group' ? 'Organization' : 'User',
-      },
+        type: data.namespace.kind === 'group' ? 'Organization' : 'User'
+      }
     };
   }
-  
+
   /**
    * Wait for GitLab import to complete
    */
   private async waitForImportCompletion(projectId: number): Promise<void> {
     const maxAttempts = 60; // 5 minutes max (5 second intervals)
     let attempts = 0;
-    
+
     while (attempts < maxAttempts) {
       try {
         // Check import status via project API
         const project = await this.request<any>(`/projects/${projectId}`);
-        
+
         // GitLab sets import_status field during import
-        if (project.import_status === 'finished' || project.import_status === 'none' || !project.import_status) {
+        if (
+          project.import_status === 'finished' ||
+          project.import_status === 'none' ||
+          !project.import_status
+        ) {
           // Import completed successfully
           return;
         }
-        
+
         if (project.import_status === 'failed') {
           throw new Error('GitLab repository import failed');
         }
-        
+
         // Import still in progress, wait and retry
-        await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+        await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait 5 seconds
         attempts++;
-        
       } catch (error: any) {
         // If we can't check status, assume import is complete after a reasonable wait
-        if (attempts > 6) { // After 30 seconds, assume it's ready
+        if (attempts > 6) {
+          // After 30 seconds, assume it's ready
           return;
         }
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        await new Promise((resolve) => setTimeout(resolve, 5000));
         attempts++;
       }
     }
-    
+
     // Timeout reached, but don't fail - the import might still be working
     console.warn('GitLab import status check timed out, proceeding with clone attempt');
   }
@@ -278,7 +296,7 @@ export class GitLabApi implements GitServiceApi {
    */
   async listCommits(owner: string, repo: string, options?: ListCommitsOptions): Promise<Commit[]> {
     const projectId = await this.getProjectId(owner, repo);
-    
+
     const params = new URLSearchParams();
     if (options?.sha) params.append('ref_name', options.sha);
     if (options?.path) params.append('path', options.path);
@@ -289,64 +307,68 @@ export class GitLabApi implements GitServiceApi {
 
     const queryString = params.toString();
     const endpoint = `/projects/${projectId}/repository/commits${queryString ? `?${queryString}` : ''}`;
-    
+
     const data = await this.request<any[]>(endpoint);
-    
-    return data.map(commit => ({
+
+    return data.map((commit) => ({
       sha: commit.id,
       message: commit.message,
       author: {
         name: commit.author_name,
         email: commit.author_email,
-        date: commit.authored_date,
+        date: commit.authored_date
       },
       committer: {
         name: commit.committer_name,
         email: commit.committer_email,
-        date: commit.committed_date,
+        date: commit.committed_date
       },
       url: commit.web_url,
       htmlUrl: commit.web_url,
       parents: commit.parent_ids.map((parentId: string) => ({
         sha: parentId,
-        url: `${this.baseUrl}/projects/${projectId}/repository/commits/${parentId}`,
+        url: `${this.baseUrl}/projects/${projectId}/repository/commits/${parentId}`
       })),
-      stats: commit.stats ? {
-        additions: commit.stats.additions,
-        deletions: commit.stats.deletions,
-        total: commit.stats.additions + commit.stats.deletions,
-      } : undefined,
+      stats: commit.stats
+        ? {
+            additions: commit.stats.additions,
+            deletions: commit.stats.deletions,
+            total: commit.stats.additions + commit.stats.deletions
+          }
+        : undefined
     }));
   }
 
   async getCommit(owner: string, repo: string, sha: string): Promise<Commit> {
     const projectId = await this.getProjectId(owner, repo);
     const data = await this.request<any>(`/projects/${projectId}/repository/commits/${sha}`);
-    
+
     return {
       sha: data.id,
       message: data.message,
       author: {
         name: data.author_name,
         email: data.author_email,
-        date: data.authored_date,
+        date: data.authored_date
       },
       committer: {
         name: data.committer_name,
         email: data.committer_email,
-        date: data.committed_date,
+        date: data.committed_date
       },
       url: data.web_url,
       htmlUrl: data.web_url,
       parents: data.parent_ids.map((parentId: string) => ({
         sha: parentId,
-        url: `${this.baseUrl}/projects/${projectId}/repository/commits/${parentId}`,
+        url: `${this.baseUrl}/projects/${projectId}/repository/commits/${parentId}`
       })),
-      stats: data.stats ? {
-        additions: data.stats.additions,
-        deletions: data.stats.deletions,
-        total: data.stats.additions + data.stats.deletions,
-      } : undefined,
+      stats: data.stats
+        ? {
+            additions: data.stats.additions,
+            deletions: data.stats.deletions,
+            total: data.stats.additions + data.stats.deletions
+          }
+        : undefined
     };
   }
 
@@ -355,7 +377,7 @@ export class GitLabApi implements GitServiceApi {
    */
   async listIssues(owner: string, repo: string, options?: ListIssuesOptions): Promise<Issue[]> {
     const projectId = await this.getProjectId(owner, repo);
-    
+
     const params = new URLSearchParams();
     if (options?.state) params.append('state', options.state);
     if (options?.labels) params.append('labels', options.labels.join(','));
@@ -367,10 +389,10 @@ export class GitLabApi implements GitServiceApi {
 
     const queryString = params.toString();
     const endpoint = `/projects/${projectId}/issues${queryString ? `?${queryString}` : ''}`;
-    
+
     const data = await this.request<any[]>(endpoint);
-    
-    return data.map(issue => ({
+
+    return data.map((issue) => ({
       id: issue.iid, // GitLab uses iid for issue numbers
       number: issue.iid,
       title: issue.title,
@@ -378,29 +400,29 @@ export class GitLabApi implements GitServiceApi {
       state: issue.state === 'closed' ? 'closed' : 'open',
       author: {
         login: issue.author.username,
-        avatarUrl: issue.author.avatar_url,
+        avatarUrl: issue.author.avatar_url
       },
       assignees: issue.assignees.map((assignee: any) => ({
         login: assignee.username,
-        avatarUrl: assignee.avatar_url,
+        avatarUrl: assignee.avatar_url
       })),
       labels: issue.labels.map((label: string) => ({
         name: label,
         color: '', // GitLab doesn't provide label colors in issue list
-        description: '',
+        description: ''
       })),
       createdAt: issue.created_at,
       updatedAt: issue.updated_at,
       closedAt: issue.closed_at,
       url: issue.web_url,
-      htmlUrl: issue.web_url,
+      htmlUrl: issue.web_url
     }));
   }
 
   async getIssue(owner: string, repo: string, issueNumber: number): Promise<Issue> {
     const projectId = await this.getProjectId(owner, repo);
     const data = await this.request<any>(`/projects/${projectId}/issues/${issueNumber}`);
-    
+
     return {
       id: data.iid,
       number: data.iid,
@@ -409,28 +431,28 @@ export class GitLabApi implements GitServiceApi {
       state: data.state === 'closed' ? 'closed' : 'open',
       author: {
         login: data.author.username,
-        avatarUrl: data.author.avatar_url,
+        avatarUrl: data.author.avatar_url
       },
       assignees: data.assignees.map((assignee: any) => ({
         login: assignee.username,
-        avatarUrl: assignee.avatar_url,
+        avatarUrl: assignee.avatar_url
       })),
       labels: data.labels.map((label: string) => ({
         name: label,
         color: '',
-        description: '',
+        description: ''
       })),
       createdAt: data.created_at,
       updatedAt: data.updated_at,
       closedAt: data.closed_at,
       url: data.web_url,
-      htmlUrl: data.web_url,
+      htmlUrl: data.web_url
     };
   }
 
   async createIssue(owner: string, repo: string, issue: NewIssue): Promise<Issue> {
     const projectId = await this.getProjectId(owner, repo);
-    
+
     const data = await this.request<any>(`/projects/${projectId}/issues`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -438,8 +460,8 @@ export class GitLabApi implements GitServiceApi {
         title: issue.title,
         description: issue.body,
         assignee_ids: issue.assignees, // GitLab uses IDs, not usernames
-        labels: issue.labels?.join(','),
-      }),
+        labels: issue.labels?.join(',')
+      })
     });
 
     return {
@@ -450,28 +472,33 @@ export class GitLabApi implements GitServiceApi {
       state: data.state === 'closed' ? 'closed' : 'open',
       author: {
         login: data.author.username,
-        avatarUrl: data.author.avatar_url,
+        avatarUrl: data.author.avatar_url
       },
       assignees: data.assignees.map((assignee: any) => ({
         login: assignee.username,
-        avatarUrl: assignee.avatar_url,
+        avatarUrl: assignee.avatar_url
       })),
       labels: data.labels.map((label: string) => ({
         name: label,
         color: '',
-        description: '',
+        description: ''
       })),
       createdAt: data.created_at,
       updatedAt: data.updated_at,
       closedAt: data.closed_at,
       url: data.web_url,
-      htmlUrl: data.web_url,
+      htmlUrl: data.web_url
     };
   }
 
-  async updateIssue(owner: string, repo: string, issueNumber: number, updates: Partial<NewIssue>): Promise<Issue> {
+  async updateIssue(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    updates: Partial<NewIssue>
+  ): Promise<Issue> {
     const projectId = await this.getProjectId(owner, repo);
-    
+
     const body: any = {};
     if (updates.title) body.title = updates.title;
     if (updates.body) body.description = updates.body;
@@ -481,7 +508,7 @@ export class GitLabApi implements GitServiceApi {
     const data = await this.request<any>(`/projects/${projectId}/issues/${issueNumber}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(body)
     });
 
     return {
@@ -492,32 +519,32 @@ export class GitLabApi implements GitServiceApi {
       state: data.state === 'closed' ? 'closed' : 'open',
       author: {
         login: data.author.username,
-        avatarUrl: data.author.avatar_url,
+        avatarUrl: data.author.avatar_url
       },
       assignees: data.assignees.map((assignee: any) => ({
         login: assignee.username,
-        avatarUrl: assignee.avatar_url,
+        avatarUrl: assignee.avatar_url
       })),
       labels: data.labels.map((label: string) => ({
         name: label,
         color: '',
-        description: '',
+        description: ''
       })),
       createdAt: data.created_at,
       updatedAt: data.updated_at,
       closedAt: data.closed_at,
       url: data.web_url,
-      htmlUrl: data.web_url,
+      htmlUrl: data.web_url
     };
   }
 
   async closeIssue(owner: string, repo: string, issueNumber: number): Promise<Issue> {
     const projectId = await this.getProjectId(owner, repo);
-    
+
     const data = await this.request<any>(`/projects/${projectId}/issues/${issueNumber}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ state_event: 'close' }),
+      body: JSON.stringify({ state_event: 'close' })
     });
 
     return {
@@ -528,31 +555,35 @@ export class GitLabApi implements GitServiceApi {
       state: 'closed',
       author: {
         login: data.author.username,
-        avatarUrl: data.author.avatar_url,
+        avatarUrl: data.author.avatar_url
       },
       assignees: data.assignees.map((assignee: any) => ({
         login: assignee.username,
-        avatarUrl: assignee.avatar_url,
+        avatarUrl: assignee.avatar_url
       })),
       labels: data.labels.map((label: string) => ({
         name: label,
         color: '',
-        description: '',
+        description: ''
       })),
       createdAt: data.created_at,
       updatedAt: data.updated_at,
       closedAt: data.closed_at,
       url: data.web_url,
-      htmlUrl: data.web_url,
+      htmlUrl: data.web_url
     };
   }
 
   /**
    * Pull Request Operations (GitLab calls them Merge Requests)
    */
-  async listPullRequests(owner: string, repo: string, options?: ListPullRequestsOptions): Promise<PullRequest[]> {
+  async listPullRequests(
+    owner: string,
+    repo: string,
+    options?: ListPullRequestsOptions
+  ): Promise<PullRequest[]> {
     const projectId = await this.getProjectId(owner, repo);
-    
+
     const params = new URLSearchParams();
     if (options?.state) params.append('state', options.state);
     if (options?.head) params.append('source_branch', options.head);
@@ -564,34 +595,34 @@ export class GitLabApi implements GitServiceApi {
 
     const queryString = params.toString();
     const endpoint = `/projects/${projectId}/merge_requests${queryString ? `?${queryString}` : ''}`;
-    
+
     const data = await this.request<any[]>(endpoint);
-    
-    return data.map(mr => ({
+
+    return data.map((mr) => ({
       id: mr.iid,
       number: mr.iid,
       title: mr.title,
       body: mr.description || '',
-      state: mr.state === 'merged' ? 'merged' : (mr.state === 'closed' ? 'closed' : 'open'),
+      state: mr.state === 'merged' ? 'merged' : mr.state === 'closed' ? 'closed' : 'open',
       author: {
         login: mr.author.username,
-        avatarUrl: mr.author.avatar_url,
+        avatarUrl: mr.author.avatar_url
       },
       head: {
         ref: mr.source_branch,
         sha: mr.sha,
         repo: {
           name: mr.source_project_id.toString(),
-          owner: owner,
-        },
+          owner: owner
+        }
       },
       base: {
         ref: mr.target_branch,
         sha: mr.target_project_id.toString(),
         repo: {
           name: repo,
-          owner: owner,
-        },
+          owner: owner
+        }
       },
       mergeable: mr.merge_status === 'can_be_merged',
       merged: mr.state === 'merged',
@@ -601,39 +632,39 @@ export class GitLabApi implements GitServiceApi {
       url: mr.web_url,
       htmlUrl: mr.web_url,
       diffUrl: `${mr.web_url}.diff`,
-      patchUrl: `${mr.web_url}.patch`,
+      patchUrl: `${mr.web_url}.patch`
     }));
   }
 
   async getPullRequest(owner: string, repo: string, prNumber: number): Promise<PullRequest> {
     const projectId = await this.getProjectId(owner, repo);
     const data = await this.request<any>(`/projects/${projectId}/merge_requests/${prNumber}`);
-    
+
     return {
       id: data.iid,
       number: data.iid,
       title: data.title,
       body: data.description || '',
-      state: data.state === 'merged' ? 'merged' : (data.state === 'closed' ? 'closed' : 'open'),
+      state: data.state === 'merged' ? 'merged' : data.state === 'closed' ? 'closed' : 'open',
       author: {
         login: data.author.username,
-        avatarUrl: data.author.avatar_url,
+        avatarUrl: data.author.avatar_url
       },
       head: {
         ref: data.source_branch,
         sha: data.sha,
         repo: {
           name: data.source_project_id.toString(),
-          owner: owner,
-        },
+          owner: owner
+        }
       },
       base: {
         ref: data.target_branch,
         sha: data.target_project_id.toString(),
         repo: {
           name: repo,
-          owner: owner,
-        },
+          owner: owner
+        }
       },
       mergeable: data.merge_status === 'can_be_merged',
       merged: data.state === 'merged',
@@ -643,13 +674,13 @@ export class GitLabApi implements GitServiceApi {
       url: data.web_url,
       htmlUrl: data.web_url,
       diffUrl: `${data.web_url}.diff`,
-      patchUrl: `${data.web_url}.patch`,
+      patchUrl: `${data.web_url}.patch`
     };
   }
 
   async createPullRequest(owner: string, repo: string, pr: NewPullRequest): Promise<PullRequest> {
     const projectId = await this.getProjectId(owner, repo);
-    
+
     const data = await this.request<any>(`/projects/${projectId}/merge_requests`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -658,8 +689,8 @@ export class GitLabApi implements GitServiceApi {
         description: pr.body,
         source_branch: pr.head,
         target_branch: pr.base,
-        remove_source_branch: false,
-      }),
+        remove_source_branch: false
+      })
     });
 
     return {
@@ -667,26 +698,26 @@ export class GitLabApi implements GitServiceApi {
       number: data.iid,
       title: data.title,
       body: data.description || '',
-      state: data.state === 'merged' ? 'merged' : (data.state === 'closed' ? 'closed' : 'open'),
+      state: data.state === 'merged' ? 'merged' : data.state === 'closed' ? 'closed' : 'open',
       author: {
         login: data.author.username,
-        avatarUrl: data.author.avatar_url,
+        avatarUrl: data.author.avatar_url
       },
       head: {
         ref: data.source_branch,
         sha: data.sha,
         repo: {
           name: data.source_project_id.toString(),
-          owner: owner,
-        },
+          owner: owner
+        }
       },
       base: {
         ref: data.target_branch,
         sha: data.target_project_id.toString(),
         repo: {
           name: repo,
-          owner: owner,
-        },
+          owner: owner
+        }
       },
       mergeable: data.merge_status === 'can_be_merged',
       merged: data.state === 'merged',
@@ -696,13 +727,18 @@ export class GitLabApi implements GitServiceApi {
       url: data.web_url,
       htmlUrl: data.web_url,
       diffUrl: `${data.web_url}.diff`,
-      patchUrl: `${data.web_url}.patch`,
+      patchUrl: `${data.web_url}.patch`
     };
   }
 
-  async updatePullRequest(owner: string, repo: string, prNumber: number, updates: Partial<NewPullRequest>): Promise<PullRequest> {
+  async updatePullRequest(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    updates: Partial<NewPullRequest>
+  ): Promise<PullRequest> {
     const projectId = await this.getProjectId(owner, repo);
-    
+
     const body: any = {};
     if (updates.title) body.title = updates.title;
     if (updates.body) body.description = updates.body;
@@ -712,7 +748,7 @@ export class GitLabApi implements GitServiceApi {
     const data = await this.request<any>(`/projects/${projectId}/merge_requests/${prNumber}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(body)
     });
 
     return {
@@ -720,26 +756,26 @@ export class GitLabApi implements GitServiceApi {
       number: data.iid,
       title: data.title,
       body: data.description || '',
-      state: data.state === 'merged' ? 'merged' : (data.state === 'closed' ? 'closed' : 'open'),
+      state: data.state === 'merged' ? 'merged' : data.state === 'closed' ? 'closed' : 'open',
       author: {
         login: data.author.username,
-        avatarUrl: data.author.avatar_url,
+        avatarUrl: data.author.avatar_url
       },
       head: {
         ref: data.source_branch,
         sha: data.sha,
         repo: {
           name: data.source_project_id.toString(),
-          owner: owner,
-        },
+          owner: owner
+        }
       },
       base: {
         ref: data.target_branch,
         sha: data.target_project_id.toString(),
         repo: {
           name: repo,
-          owner: owner,
-        },
+          owner: owner
+        }
       },
       mergeable: data.merge_status === 'can_be_merged',
       merged: data.state === 'merged',
@@ -749,13 +785,22 @@ export class GitLabApi implements GitServiceApi {
       url: data.web_url,
       htmlUrl: data.web_url,
       diffUrl: `${data.web_url}.diff`,
-      patchUrl: `${data.web_url}.patch`,
+      patchUrl: `${data.web_url}.patch`
     };
   }
 
-  async mergePullRequest(owner: string, repo: string, prNumber: number, options?: { commitTitle?: string; commitMessage?: string; mergeMethod?: 'merge' | 'squash' | 'rebase' }): Promise<PullRequest> {
+  async mergePullRequest(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    options?: {
+      commitTitle?: string;
+      commitMessage?: string;
+      mergeMethod?: 'merge' | 'squash' | 'rebase';
+    }
+  ): Promise<PullRequest> {
     const projectId = await this.getProjectId(owner, repo);
-    
+
     const body: any = {};
     if (options?.commitTitle) body.merge_commit_message = options.commitTitle;
     if (options?.mergeMethod === 'squash') body.squash = true;
@@ -764,7 +809,7 @@ export class GitLabApi implements GitServiceApi {
     await this.request(`/projects/${projectId}/merge_requests/${prNumber}/merge`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(body)
     });
 
     // Return updated MR after merge
@@ -776,8 +821,8 @@ export class GitLabApi implements GitServiceApi {
    */
   async listPatches(owner: string, repo: string): Promise<Patch[]> {
     const mrs = await this.listPullRequests(owner, repo);
-    
-    return mrs.map(mr => ({
+
+    return mrs.map((mr) => ({
       id: mr.id.toString(),
       title: mr.title,
       description: mr.body,
@@ -785,13 +830,13 @@ export class GitLabApi implements GitServiceApi {
       commits: [],
       files: [],
       createdAt: mr.createdAt,
-      updatedAt: mr.updatedAt,
+      updatedAt: mr.updatedAt
     }));
   }
 
   async getPatch(owner: string, repo: string, patchId: string): Promise<Patch> {
     const mr = await this.getPullRequest(owner, repo, parseInt(patchId));
-    
+
     return {
       id: mr.id.toString(),
       title: mr.title,
@@ -800,7 +845,7 @@ export class GitLabApi implements GitServiceApi {
       commits: [],
       files: [],
       createdAt: mr.createdAt,
-      updatedAt: mr.updatedAt,
+      updatedAt: mr.updatedAt
     };
   }
 
@@ -809,7 +854,7 @@ export class GitLabApi implements GitServiceApi {
    */
   async getCurrentUser(): Promise<User> {
     const data = await this.request<any>('/user');
-    
+
     return {
       login: data.username,
       id: data.id,
@@ -820,14 +865,14 @@ export class GitLabApi implements GitServiceApi {
       company: data.organization,
       location: data.location,
       blog: data.website_url,
-      htmlUrl: data.web_url,
+      htmlUrl: data.web_url
     };
   }
 
   async getUser(username: string): Promise<User> {
     const data = await this.request<any>(`/users?username=${username}`);
     const user = data[0]; // GitLab returns array for user search
-    
+
     return {
       login: user.username,
       id: user.id,
@@ -838,90 +883,118 @@ export class GitLabApi implements GitServiceApi {
       company: user.organization,
       location: user.location,
       blog: user.website_url,
-      htmlUrl: user.web_url,
+      htmlUrl: user.web_url
     };
   }
 
   /**
    * Repository Content Operations
    */
-  async getFileContent(owner: string, repo: string, path: string, ref?: string): Promise<{ content: string; encoding: string; sha: string }> {
+  async getFileContent(
+    owner: string,
+    repo: string,
+    path: string,
+    ref?: string
+  ): Promise<{ content: string; encoding: string; sha: string }> {
     const projectId = await this.getProjectId(owner, repo);
-    
+
     const params = new URLSearchParams();
     if (ref) params.append('ref', ref);
-    
+
     const queryString = params.toString();
     const encodedPath = encodeURIComponent(path);
     const endpoint = `/projects/${projectId}/repository/files/${encodedPath}${queryString ? `?${queryString}` : ''}`;
-    
+
     const data = await this.request<any>(endpoint);
-    
+
     return {
       content: data.content,
       encoding: data.encoding,
-      sha: data.blob_id,
+      sha: data.blob_id
     };
   }
 
   /**
    * Branch Operations
    */
-  async listBranches(owner: string, repo: string): Promise<Array<{ name: string; commit: { sha: string; url: string } }>> {
+  async listBranches(
+    owner: string,
+    repo: string
+  ): Promise<Array<{ name: string; commit: { sha: string; url: string } }>> {
     const projectId = await this.getProjectId(owner, repo);
     const data = await this.request<any[]>(`/projects/${projectId}/repository/branches`);
-    
-    return data.map(branch => ({
+
+    return data.map((branch) => ({
       name: branch.name,
       commit: {
         sha: branch.commit.id,
-        url: branch.commit.web_url,
-      },
+        url: branch.commit.web_url
+      }
     }));
   }
 
-  async getBranch(owner: string, repo: string, branch: string): Promise<{ name: string; commit: { sha: string; url: string }; protected: boolean }> {
+  async getBranch(
+    owner: string,
+    repo: string,
+    branch: string
+  ): Promise<{ name: string; commit: { sha: string; url: string }; protected: boolean }> {
     const projectId = await this.getProjectId(owner, repo);
-    const data = await this.request<any>(`/projects/${projectId}/repository/branches/${encodeURIComponent(branch)}`);
-    
+    const data = await this.request<any>(
+      `/projects/${projectId}/repository/branches/${encodeURIComponent(branch)}`
+    );
+
     return {
       name: data.name,
       commit: {
         sha: data.commit.id,
-        url: data.commit.web_url,
+        url: data.commit.web_url
       },
-      protected: data.protected,
+      protected: data.protected
     };
   }
 
   /**
    * Tag Operations
    */
-  async listTags(owner: string, repo: string): Promise<Array<{ name: string; commit: { sha: string; url: string } }>> {
+  async listTags(
+    owner: string,
+    repo: string
+  ): Promise<Array<{ name: string; commit: { sha: string; url: string } }>> {
     const projectId = await this.getProjectId(owner, repo);
     const data = await this.request<any[]>(`/projects/${projectId}/repository/tags`);
-    
-    return data.map(tag => ({
+
+    return data.map((tag) => ({
       name: tag.name,
       commit: {
         sha: tag.commit.id,
-        url: tag.commit.web_url,
-      },
+        url: tag.commit.web_url
+      }
     }));
   }
 
-  async getTag(owner: string, repo: string, tag: string): Promise<{ name: string; commit: { sha: string; url: string }; zipballUrl: string; tarballUrl: string }> {
+  async getTag(
+    owner: string,
+    repo: string,
+    tag: string
+  ): Promise<{
+    name: string;
+    commit: { sha: string; url: string };
+    zipballUrl: string;
+    tarballUrl: string;
+  }> {
     const projectId = await this.getProjectId(owner, repo);
-    const data = await this.request<any>(`/projects/${projectId}/repository/tags/${encodeURIComponent(tag)}`);
-    
+    const data = await this.request<any>(
+      `/projects/${projectId}/repository/tags/${encodeURIComponent(tag)}`
+    );
+
     return {
       name: data.name,
       commit: {
         sha: data.commit.id,
-        url: data.commit.web_url,
+        url: data.commit.web_url
       },
       zipballUrl: `${this.baseUrl}/projects/${projectId}/repository/archive.zip?sha=${tag}`,
-      tarballUrl: `${this.baseUrl}/projects/${projectId}/repository/archive.tar.gz?sha=${tag}`,
+      tarballUrl: `${this.baseUrl}/projects/${projectId}/repository/archive.tar.gz?sha=${tag}`
     };
   }
 }

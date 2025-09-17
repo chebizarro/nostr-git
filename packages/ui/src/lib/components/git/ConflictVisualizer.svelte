@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AlertTriangle, FileText, ChevronDown, ChevronRight, Zap, Target } from '@lucide/svelte';
+  import { AlertTriangle, FileText, ChevronDown, ChevronRight, Zap, Target } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
   import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../components";
   const { Card, CardContent, CardHeader, CardTitle, Badge, Button } = useRegistry();
@@ -18,18 +18,16 @@
     expandedConflicts = newExpanded;
   };
 
-    
-
   const getSeverityColor = (severity: string) => {
     switch (severity) {
-      case 'high':
-        return 'border-red-200 bg-red-50';
-      case 'medium':
-        return 'border-orange-200 bg-orange-50';
-      case 'low':
-        return 'border-yellow-200 bg-yellow-50';
+      case "high":
+        return "border-red-200 bg-red-50";
+      case "medium":
+        return "border-orange-200 bg-orange-50";
+      case "low":
+        return "border-yellow-200 bg-yellow-50";
       default:
-        return 'border-gray-200 bg-gray-50';
+        return "border-gray-200 bg-gray-50";
     }
   };
 
@@ -37,14 +35,14 @@
 
   const getSeverityBadge = (severity: string) => {
     switch (severity) {
-      case 'high':
-        return {variant: 'destructive', label: 'High Risk'};
-      case 'medium':
-        return {variant: 'secondary', label: 'Medium Risk'};
-      case 'low':
-        return {variant: 'secondary', label: 'Low Risk'};
+      case "high":
+        return { variant: "destructive", label: "High Risk" };
+      case "medium":
+        return { variant: "secondary", label: "Medium Risk" };
+      case "low":
+        return { variant: "secondary", label: "Low Risk" };
       default:
-        return {variant: 'outline', label: 'Unknown'};
+        return { variant: "outline", label: "Unknown" };
     }
   };
 
@@ -52,19 +50,19 @@
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'content':
-        return {icon: FileText, color: 'text-gray-500'};
-      case 'formatting':
-        return {icon: Target, color: 'text-orange-500'};
-      case 'structure':
-        return {icon: Zap, color: 'text-blue-500'};
+      case "content":
+        return { icon: FileText, color: "text-gray-500" };
+      case "formatting":
+        return { icon: Target, color: "text-orange-500" };
+      case "structure":
+        return { icon: Zap, color: "text-blue-500" };
       default:
-        return {icon: AlertTriangle, color: 'text-gray-500'};
+        return { icon: AlertTriangle, color: "text-gray-500" };
     }
   };
 
   const mockConflictContent = {
-    'src/components/App.tsx': `<<<<<<< HEAD (Current)
+    "src/components/App.tsx": `<<<<<<< HEAD (Current)
 const [theme, setTheme] = useState('dark');
 const [sidebar, setSidebar] = useState(true);
 =======
@@ -72,7 +70,7 @@ const [theme, setTheme] = useState('light');
 const [colorScheme, setColorScheme] = useState('blue');
 const [sidebarVisible, setSidebarVisible] = useState(false);
 >>>>>>> Patch: Fix responsive layout`,
-    'src/styles/main.css': `<<<<<<< HEAD (Current)
+    "src/styles/main.css": `<<<<<<< HEAD (Current)
 .container {
   max-width: 1200px;
   margin: 0 auto;
@@ -84,7 +82,7 @@ const [sidebarVisible, setSidebarVisible] = useState(false);
   padding: 0 1rem;
 }
 >>>>>>> Patch: Fix responsive layout`,
-    'src/auth/login.tsx': `<<<<<<< HEAD (Current)
+    "src/auth/login.tsx": `<<<<<<< HEAD (Current)
 export const LoginForm = () => {
   return <form>...</form>;
 };
@@ -93,14 +91,14 @@ export const LoginForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   return <form>...</form>;
 };
->>>>>>> Patch: Fix responsive layout`
+>>>>>>> Patch: Fix responsive layout`,
   };
 
   interface Conflict {
     file: string;
     lines: string;
-    type: 'content' | 'formatting' | 'structure';
-    severity: 'low' | 'medium' | 'high';
+    type: "content" | "formatting" | "structure";
+    severity: "low" | "medium" | "high";
   }
 </script>
 
@@ -111,8 +109,8 @@ export const LoginForm: React.FC = () => {
         <Target class="h-12 w-12 mx-auto mb-4 text-green-500" />
         <h3 class="text-lg font-medium text-green-800 mb-2">No Conflicts Detected</h3>
         <p class="text-sm text-green-600">
-          This patch can be merged cleanly without any conflicts. 
-          The merge operation is safe to proceed.
+          This patch can be merged cleanly without any conflicts. The merge operation is safe to
+          proceed.
         </p>
       </div>
     </CardContent>
@@ -131,19 +129,19 @@ export const LoginForm: React.FC = () => {
         <div class="grid grid-cols-3 gap-4">
           <div class="text-center">
             <div class="text-2xl font-bold text-red-600">
-              {conflicts.filter(c => c.severity === 'high').length}
+              {conflicts.filter((c) => c.severity === "high").length}
             </div>
             <div class="text-xs text-muted-foreground">High Risk</div>
           </div>
           <div class="text-center">
             <div class="text-2xl font-bold text-orange-600">
-              {conflicts.filter(c => c.severity === 'medium').length}
+              {conflicts.filter((c) => c.severity === "medium").length}
             </div>
             <div class="text-xs text-muted-foreground">Medium Risk</div>
           </div>
           <div class="text-center">
             <div class="text-2xl font-bold text-yellow-600">
-              {conflicts.filter(c => c.severity === 'low').length}
+              {conflicts.filter((c) => c.severity === "low").length}
             </div>
             <div class="text-xs text-muted-foreground">Low Risk</div>
           </div>
@@ -156,10 +154,7 @@ export const LoginForm: React.FC = () => {
       {#each conflicts as conflict (conflict.file)}
         <Card class={getSeverityColor(conflict.severity)}>
           <Collapsible>
-            <CollapsibleTrigger 
-              class="w-full"
-              onclick={() => toggleConflict(conflict.file)}
-            >
+            <CollapsibleTrigger class="w-full" onclick={() => toggleConflict(conflict.file)}>
               <CardHeader class="pb-3 hover:bg-black/5 transition-colors">
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-3">
@@ -188,19 +183,17 @@ export const LoginForm: React.FC = () => {
                 </div>
               </CardHeader>
             </CollapsibleTrigger>
-            
+
             <CollapsibleContent>
               <CardContent class="pt-0">
                 <div class="bg-background rounded border p-3">
-                  <div class="text-xs text-muted-foreground mb-2">
-                    Conflict preview:
-                  </div>
+                  <div class="text-xs text-muted-foreground mb-2">Conflict preview:</div>
                   <pre class="text-xs font-mono whitespace-pre-wrap overflow-x-auto">
-                    {mockConflictContent[conflict.file as keyof typeof mockConflictContent] || 
-                     'Conflict content preview not available'}
+                    {mockConflictContent[conflict.file as keyof typeof mockConflictContent] ||
+                      "Conflict content preview not available"}
                   </pre>
                 </div>
-                
+
                 <div class="flex gap-2 mt-3">
                   <Button variant="outline" size="sm">View Full Diff</Button>
                   <Button variant="outline" size="sm">Resolve Manually</Button>

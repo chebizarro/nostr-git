@@ -34,12 +34,21 @@
     extraLabels?: string[];
   }
   // Accept event and optional author (Profile store)
-  const { event, comments, status, currentCommenter, onCommentCreated, extraLabels = [] }: Props = $props();
+  const {
+    event,
+    comments,
+    status,
+    currentCommenter,
+    onCommentCreated,
+    extraLabels = [],
+  }: Props = $props();
 
   const parsed = parseIssueEvent(event);
 
   const { id, subject: title, content: description, labels, createdAt } = parsed;
-  const displayLabels = $derived.by(() => Array.from(new Set([...(labels || []), ...(extraLabels || [])])));
+  const displayLabels = $derived.by(() =>
+    Array.from(new Set([...(labels || []), ...(extraLabels || [])]))
+  );
 
   const commentsOnThisIssue = $derived.by(() => {
     return comments?.filter((c) => getTagValue(c, "E") === id);

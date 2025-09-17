@@ -8,7 +8,7 @@ export interface NostrSigner {
    * Encrypt a message using NIP-04
    */
   encrypt(recipientPubkey: string, message: string): Promise<string>;
-  
+
   /**
    * Decrypt a message using NIP-04
    */

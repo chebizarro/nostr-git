@@ -1,9 +1,5 @@
 <script lang="ts">
-
-  let {
-    pubkey
-  }: {pubkey?:string} = $props();
-
+  let { pubkey }: { pubkey?: string } = $props();
 </script>
 
 <div>

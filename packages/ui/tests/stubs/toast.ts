@@ -2,5 +2,5 @@
 export const toast = {
   push(_opts: any) {
     // no-op
-  }
-}
+  },
+};

@@ -34,7 +34,6 @@
   function formatDate(timestamp: number): string {
     return formatDistanceToNow(new Date(timestamp * 1000), { addSuffix: true });
   }
-
 </script>
 
 <Card>
@@ -55,7 +54,7 @@
                 : "border-gray-200 hover:border-gray-300"
             }`}
             onclick={() => onCommitSelect(commit)}
-            onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && onCommitSelect(commit)}
+            onkeydown={(e) => (e.key === "Enter" || e.key === " ") && onCommitSelect(commit)}
             aria-pressed={selectedCommit?.oid === commit.commit.oid}
           >
             <div class="flex items-start gap-3">

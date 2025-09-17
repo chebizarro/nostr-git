@@ -15,7 +15,7 @@ function makeStateEvent(
     created_at,
     content: '',
     tags,
-    sig: '',
+    sig: ''
   } as unknown as RepoStateEvent;
 }
 
@@ -28,7 +28,7 @@ describe('mergeRepoStateByMaintainers', () => {
       makeStateEvent('e2', 'maint1', 1500, [[`refs/heads/main`, 'c2']]),
       makeStateEvent('e3', 'other', 2000, [[`refs/heads/main`, 'c3']]), // should be ignored (not maintainer)
       makeStateEvent('e4', 'maint1', 1200, [[`refs/tags/v1.0.0`, 't1']]),
-      makeStateEvent('e5', 'maint1', 1100, [[`refs/tags/v1.0.0`, 't0']]), // older tag ref
+      makeStateEvent('e5', 'maint1', 1100, [[`refs/tags/v1.0.0`, 't0']]) // older tag ref
     ];
 
     const refs = mergeRepoStateByMaintainers({ states: events, maintainers: maint });
@@ -48,7 +48,7 @@ describe('mergeRepoStateByMaintainers', () => {
     const events: RepoStateEvent[] = [
       makeStateEvent('h1', 'm1', 1000, [[`HEAD`, 'ref: refs/heads/main']]),
       makeStateEvent('h2', 'm1', 2000, [[`HEAD`, 'ref: refs/heads/dev']]),
-      makeStateEvent('h3', 'm2', 3000, [[`HEAD`, 'ref: refs/heads/other']]), // not a maintainer
+      makeStateEvent('h3', 'm2', 3000, [[`HEAD`, 'ref: refs/heads/other']]) // not a maintainer
     ];
 
     const refs = mergeRepoStateByMaintainers({ states: events, maintainers: maint });

@@ -23,14 +23,14 @@ export {
   type Commit as GitCommit,
   type Issue as GitIssue,
   type PullRequest as GitPullRequest,
-  type Patch as GitPatch,
+  type Patch as GitPatch
 } from './api.js';
 export {
   getGitServiceApi,
   getGitServiceApiFromUrl,
   getAvailableProviders,
   supportsRestApi,
-  getDefaultApiBaseUrl,
+  getDefaultApiBaseUrl
 } from './factory.js';
 export { GitHubApi } from './providers/github.js';
 export { GitLabApi } from './providers/gitlab.js';
@@ -73,7 +73,7 @@ export const git = {
     GitHubApi,
     GitLabApi,
     GiteaApi,
-    BitbucketApi,
+    BitbucketApi
   },
   detectVendorFromUrl
 };

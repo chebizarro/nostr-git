@@ -9,3 +9,4 @@ This GitHub Action posts GitHub metadata (issues, PRs, etc.) to a Nostr relay.
   with:
     nostr-private-key: ${{ secrets.NOSTR_PRIVATE_KEY }}
     nostr-relay-url: wss://relay.damus.io
+```

@@ -4,7 +4,7 @@ import { MultiVendorGitProvider } from './multi-vendor-git-provider.js';
 
 // Create the multi-vendor GitProvider instance using git-wrapper factory
 let gitProvider: GitProvider = new MultiVendorGitProvider({
-  baseProvider: getBaseGitProvider(),
+  baseProvider: getBaseGitProvider()
 });
 
 /**

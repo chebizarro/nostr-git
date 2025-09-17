@@ -15,36 +15,36 @@
 
   // Get tokens from store
   let tokenList: Token[] = $state([]);
-  tokens.subscribe(t => tokenList = t);
-  
+  tokens.subscribe((t) => (tokenList = t));
+
   // Loading state for refresh operations
   let isRefreshing = $state(false);
-  
+
   // Refresh tokens manually
   async function refreshTokens() {
     isRefreshing = true;
     try {
       await tokens.refresh();
     } catch (error) {
-      console.error('Failed to refresh tokens:', error);
+      console.error("Failed to refresh tokens:", error);
     } finally {
       isRefreshing = false;
     }
   }
-  
+
   onMount(async () => {
     // Tokens are initialized at app level - just wait if needed
     try {
       await tokens.waitForInitialization();
     } catch (error) {
-      console.warn('Failed to load tokens in AuthStatusIndicator:', error);
+      console.warn("Failed to load tokens in AuthStatusIndicator:", error);
     }
   });
-  
+
   // Extract hosts from clone URLs
   const repoHosts = $derived.by(() => {
     const hosts = new Set<string>();
-    
+
     // Extract from clone URLs
     repository.repo?.clone?.forEach((url) => {
       try {
@@ -54,7 +54,7 @@
         // Skip invalid URLs
       }
     });
-    
+
     // Extract from web URLs
     repository.repo?.web?.forEach((url) => {
       try {
@@ -64,80 +64,82 @@
         // Skip invalid URLs
       }
     });
-    
+
     return Array.from(hosts);
   });
-  
+
   // Check if we have tokens for this repo's hosts
-  const hasTokensForRepo = $derived.by(() => tokenList.some((token) => repoHosts.includes(token.host)));
-  
+  const hasTokensForRepo = $derived.by(() =>
+    tokenList.some((token) => repoHosts.includes(token.host))
+  );
+
   // Get matching tokens for this repo
-  const matchingTokens = $derived.by(() => tokenList.filter((token) => repoHosts.includes(token.host)));
-  
+  const matchingTokens = $derived.by(() =>
+    tokenList.filter((token) => repoHosts.includes(token.host))
+  );
+
   // Check if user is a maintainer/owner
   const isMaintainer = $derived.by(() => {
     const userPubkey = pubkey;
     if (!userPubkey || !repository) return false;
-    
+
     // Check if user is the repo owner (event author)
     if (repository.maintainers.includes(userPubkey)) return true;
 
     return false;
   });
-  
+
   // Determine overall auth status
   const authStatus = $derived.by(() => {
     const userPubkey = pubkey;
     if (!userPubkey) {
       return {
-        type: 'no-user',
+        type: "no-user",
         icon: AlertCircle,
-        color: 'text-gray-500',
-        bgColor: 'bg-gray-100',
-        message: 'Not logged in'
+        color: "text-gray-500",
+        bgColor: "bg-gray-100",
+        message: "Not logged in",
       };
     }
-    
+
     if (isMaintainer && hasTokensForRepo) {
       return {
-        type: 'authorized',
+        type: "authorized",
         icon: CheckCircle,
-        color: 'text-green-600',
-        bgColor: 'bg-green-100',
-        message: 'Authorized maintainer'
+        color: "text-green-600",
+        bgColor: "bg-green-100",
+        message: "Authorized maintainer",
       };
     }
-    
+
     if (isMaintainer && !hasTokensForRepo) {
       return {
-        type: 'maintainer-no-token',
+        type: "maintainer-no-token",
         icon: Key,
-        color: 'text-orange-600',
-        bgColor: 'bg-orange-100',
-        message: 'Maintainer - needs auth token'
+        color: "text-orange-600",
+        bgColor: "bg-orange-100",
+        message: "Maintainer - needs auth token",
       };
     }
-    
+
     if (!isMaintainer && hasTokensForRepo) {
       return {
-        type: 'token-no-access',
+        type: "token-no-access",
         icon: Shield,
-        color: 'text-blue-600',
-        bgColor: 'bg-blue-100',
-        message: 'Has token - not maintainer'
+        color: "text-blue-600",
+        bgColor: "bg-blue-100",
+        message: "Has token - not maintainer",
       };
     }
-    
+
     return {
-      type: 'no-access',
+      type: "no-access",
       icon: AlertCircle,
-      color: 'text-gray-500',
-      bgColor: 'bg-gray-100',
-      message: 'Read-only access'
+      color: "text-gray-500",
+      bgColor: "bg-gray-100",
+      message: "Read-only access",
     };
   });
-
-
 </script>
 
 <div class="flex items-center gap-2">
@@ -147,7 +149,7 @@
     <IconComponent class="h-3 w-3 mr-1" />
     {authStatus.message}
   </Badge>
-  
+
   <!-- Token Count Indicator -->
   {#if tokenList.length > 0}
     <Badge variant="secondary" class="text-xs">
@@ -155,14 +157,12 @@
       {matchingTokens.length}/{tokenList.length} tokens
     </Badge>
   {/if}
-  
+
   <!-- Action Button for maintainers without tokens -->
-  {#if authStatus.type === 'maintainer-no-token'}
+  {#if authStatus.type === "maintainer-no-token"}
     <Button variant="outline" size="sm" class="text-xs">
       <Key class="h-3 w-3 mr-1" />
       Add Token
     </Button>
   {/if}
 </div>
-
-

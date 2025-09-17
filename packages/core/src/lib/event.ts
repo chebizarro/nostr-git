@@ -131,13 +131,13 @@ async function permalinkEventExists(
       // handle optional line range
       if (linkData.startLine) {
         const linesTag = getTag(evt as any, 'lines');
-        const hasStart = (linesTag?.[1]) === linkData.startLine!.toString();
+        const hasStart = linesTag?.[1] === linkData.startLine!.toString();
         if (!hasStart) return false;
 
         // if endLine also present, check for lines[2] = linkData.endLine
         if (linkData.endLine) {
           // The "lines" tag might store them as [ 'lines', start, end ]
-          const hasEnd = (linesTag?.[2]) === linkData.endLine!.toString();
+          const hasEnd = linesTag?.[2] === linkData.endLine!.toString();
           if (!hasEnd) return false;
         }
       }

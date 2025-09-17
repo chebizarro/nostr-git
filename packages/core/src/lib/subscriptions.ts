@@ -53,7 +53,11 @@ function mergeFilters(a: FilterShape, b: FilterShape): FilterShape | undefined {
   return out;
 }
 
-export function buildRepoSubscriptions(args: { addressA?: string; rootEventId?: string; euc?: string }): RepoSubscriptions {
+export function buildRepoSubscriptions(args: {
+  addressA?: string;
+  rootEventId?: string;
+  euc?: string;
+}): RepoSubscriptions {
   const candidates: FilterShape[] = [];
   const notes: string[] = [];
 

@@ -9,19 +9,19 @@ const useStubs = process.env.USE_STUBS === 'true';
 
 export default defineConfig({
   test: {
-    environment: 'node',
+    environment: 'node'
   },
   // Ensure Vite transforms git-wrapper so our aliases apply to its imports
   ssr: {
-    noExternal: ['@nostr-git/git-wrapper'],
+    noExternal: ['@nostr-git/git-wrapper']
   },
   resolve: {
     alias: useStubs
       ? {
           'isomorphic-git': resolve(__dirname, 'test/__stubs__/isomorphic-git.ts'),
           'isomorphic-git/http/web': resolve(__dirname, 'test/__stubs__/http-web.ts'),
-          '@isomorphic-git/lightning-fs': resolve(__dirname, 'test/__stubs__/lightning-fs.ts'),
+          '@isomorphic-git/lightning-fs': resolve(__dirname, 'test/__stubs__/lightning-fs.ts')
         }
-      : {},
-  },
+      : {}
+  }
 });

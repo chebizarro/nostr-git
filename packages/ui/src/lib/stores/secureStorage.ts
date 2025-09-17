@@ -1,11 +1,7 @@
 type EncryptFn = (plaintext: string) => Promise<string>;
 type DecryptFn = (ciphertext: string) => Promise<string>;
 
-export function createSecureStorage(
-    storageKey: string,
-    encrypt: EncryptFn,
-    decrypt: DecryptFn
-) {
+export function createSecureStorage(storageKey: string, encrypt: EncryptFn, decrypt: DecryptFn) {
   async function saveToken(token: string) {
     const encrypted = await encrypt(token);
     localStorage.setItem(storageKey, encrypted);

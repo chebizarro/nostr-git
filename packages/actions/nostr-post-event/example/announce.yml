@@ -2,7 +2,7 @@ name: Scheduled Repo Announcement to Nostr
 
 on:
   schedule:
-    - cron: "0 12 * * 1"  # Every Monday at 12:00 UTC
+    - cron: "0 12 * * 1" # Every Monday at 12:00 UTC
   workflow_dispatch:
 
 jobs:

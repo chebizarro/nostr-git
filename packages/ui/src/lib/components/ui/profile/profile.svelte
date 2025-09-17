@@ -6,8 +6,7 @@
     ref = $bindable(null),
     class: className,
     ...restProps
-  }: AvatarPrimitive.RootProps & {pubkey?:string, hideDetails?:boolean} = $props();
-
+  }: AvatarPrimitive.RootProps & { pubkey?: string; hideDetails?: boolean } = $props();
 </script>
 
 <AvatarPrimitive.Root

@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { EditRepoPanel } from '../components/git/EditRepoPanel.svelte';
-  import { useEditRepo } from '../hooks/useEditRepo.svelte.ts';
-  import type { Event } from 'nostr-tools';
-  import type { RepoAnnouncementEvent, RepoStateEvent } from '@nostr-git/shared-types';
-  import { getTagValue } from '@nostr-git/shared-types';
+  import { EditRepoPanel } from "../components/git/EditRepoPanel.svelte";
+  import { useEditRepo } from "../hooks/useEditRepo.svelte.ts";
+  import type { Event } from "nostr-tools";
+  import type { RepoAnnouncementEvent, RepoStateEvent } from "@nostr-git/shared-types";
+  import { getTagValue } from "@nostr-git/shared-types";
 
   // Example of how to integrate the Edit Repository feature
   let showEditPanel = $state(false);
@@ -11,37 +11,37 @@
   // Example current repository events (would come from Nostr subscriptions)
   const currentAnnouncement: RepoAnnouncementEvent = {
     kind: 30617,
-    id: 'mock-announcement-id',
-    pubkey: 'mock-pubkey',
+    id: "mock-announcement-id",
+    pubkey: "mock-pubkey",
     created_at: Math.floor(Date.now() / 1000),
-    content: '',
-    sig: 'mock-signature',
+    content: "",
+    sig: "mock-signature",
     tags: [
-      ['d', 'example-repo'],
-      ['name', 'Example Repository'],
-      ['description', 'An example repository for testing'],
-      ['clone', 'https://github.com/octocat/example-repo.git'],
-      ['web', 'https://github.com/octocat/example-repo'],
-      ['maintainers', 'mock-pubkey'],
-      ['t', 'example'],
-      ['t', 'demo']
-    ]
+      ["d", "example-repo"],
+      ["name", "Example Repository"],
+      ["description", "An example repository for testing"],
+      ["clone", "https://github.com/octocat/example-repo.git"],
+      ["web", "https://github.com/octocat/example-repo"],
+      ["maintainers", "mock-pubkey"],
+      ["t", "example"],
+      ["t", "demo"],
+    ],
   };
 
   const currentState: RepoStateEvent = {
     kind: 30618,
-    id: 'mock-state-id',
-    pubkey: 'mock-pubkey',
+    id: "mock-state-id",
+    pubkey: "mock-pubkey",
     created_at: Math.floor(Date.now() / 1000),
-    content: '',
-    sig: 'mock-signature',
+    content: "",
+    sig: "mock-signature",
     tags: [
-      ['d', 'example-repo'],
-      ['refs/heads/main', 'abc123def456'],
-      ['refs/heads/develop', 'def456ghi789'],
-      ['refs/tags/v1.0.0', 'ghi789jkl012'],
-      ['HEAD', 'ref: refs/heads/main']
-    ]
+      ["d", "example-repo"],
+      ["refs/heads/main", "abc123def456"],
+      ["refs/heads/develop", "def456ghi789"],
+      ["refs/tags/v1.0.0", "ghi789jkl012"],
+      ["HEAD", "ref: refs/heads/main"],
+    ],
   };
 
   // Initialize the edit repository hook
@@ -50,14 +50,14 @@
   // Example event signing closure (would be provided by parent app)
   const signEvent = async (event: Partial<Event>): Promise<Event> => {
     // This would use the app's signer (NIP-07, NIP-46, etc.)
-    console.log('Signing repository update event:', event);
-    
+    console.log("Signing repository update event:", event);
+
     // Mock implementation - replace with actual signing logic
     return {
       ...event,
-      id: 'mock-updated-event-id',
-      pubkey: 'mock-user-pubkey',
-      sig: 'mock-signature',
+      id: "mock-updated-event-id",
+      pubkey: "mock-user-pubkey",
+      sig: "mock-signature",
       created_at: Math.floor(Date.now() / 1000),
     } as Event;
   };
@@ -65,8 +65,8 @@
   // Example event publishing closure (would be provided by parent app)
   const publishEvent = async (event: Event): Promise<void> => {
     // This would publish to the app's configured relays
-    console.log('Publishing repository update event:', event);
-    
+    console.log("Publishing repository update event:", event);
+
     // Mock implementation - replace with actual publishing logic
     // await pool.publish(relays, event);
   };
@@ -74,8 +74,8 @@
   // Example store update closure (would be provided by parent app)
   const updateStore = async (repoId: string, updates: any): Promise<void> => {
     // This would update the app's global repository store/state
-    console.log('Updating repository store:', { repoId, updates });
-    
+    console.log("Updating repository store:", { repoId, updates });
+
     // Mock implementation - replace with actual store integration
     // await repoStore.updateRepository(repoId, updates);
   };
@@ -91,20 +91,15 @@
 
   async function handleSaveRepo(config: any) {
     try {
-      await editRepo.editRepository(
-        currentAnnouncement,
-        currentState,
-        config,
-        {
-          token: 'ghp_example_token_here', // Would come from token store
-          currentUser: 'current-user', // Would come from user profile
-          repoDir: '/repos/example-repo', // Would come from repo manager
-          onSignEvent: signEvent,
-          onPublishEvent: publishEvent,
-          onUpdateStore: updateStore
-        }
-      );
-      
+      await editRepo.editRepository(currentAnnouncement, currentState, config, {
+        token: "ghp_example_token_here", // Would come from token store
+        currentUser: "current-user", // Would come from user profile
+        repoDir: "/repos/example-repo", // Would come from repo manager
+        onSignEvent: signEvent,
+        onPublishEvent: publishEvent,
+        onUpdateStore: updateStore,
+      });
+
       // Panel will close automatically on success via progress.isComplete
       if (editRepo.progress?.isComplete) {
         setTimeout(() => {
@@ -112,7 +107,7 @@
         }, 2000); // Show success for 2 seconds
       }
     } catch (error) {
-      console.error('Edit failed:', error);
+      console.error("Edit failed:", error);
       // Error is handled by the panel component
     }
   }
@@ -121,10 +116,10 @@
 <!-- Example usage of Edit Repository feature -->
 <div class="p-6 space-y-4">
   <h2 class="text-2xl font-bold text-white">Edit Repository Example</h2>
-  
+
   <p class="text-gray-300">
-    This example demonstrates how to integrate the Edit Repository feature
-    with your application's event signing, publishing, and repository management.
+    This example demonstrates how to integrate the Edit Repository feature with your application's
+    event signing, publishing, and repository management.
   </p>
 
   <!-- Current Repository Display -->
@@ -134,28 +129,32 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
         <div>
           <span class="text-gray-400">Name:</span>
-          <span class="text-white ml-2">{getTagValue(currentAnnouncement as any, 'name')}</span>
+          <span class="text-white ml-2">{getTagValue(currentAnnouncement as any, "name")}</span>
         </div>
         <div>
           <span class="text-gray-400">Visibility:</span>
           <span class="text-white ml-2">
-            {getTagValue(currentAnnouncement as any, 'clone')?.includes('private') ? 'Private' : 'Public'}
+            {getTagValue(currentAnnouncement as any, "clone")?.includes("private")
+              ? "Private"
+              : "Public"}
           </span>
         </div>
         <div class="md:col-span-2">
           <span class="text-gray-400">Description:</span>
-          <span class="text-white ml-2">{getTagValue(currentAnnouncement as any, 'description')}</span>
+          <span class="text-white ml-2"
+            >{getTagValue(currentAnnouncement as any, "description")}</span
+          >
         </div>
         <div>
           <span class="text-gray-400">Default Branch:</span>
           <span class="text-white ml-2">
-            {getTagValue(currentState as any, 'HEAD')?.replace('ref: refs/heads/', '') || 'main'}
+            {getTagValue(currentState as any, "HEAD")?.replace("ref: refs/heads/", "") || "main"}
           </span>
         </div>
         <div>
           <span class="text-gray-400">Clone URL:</span>
           <span class="text-white ml-2 font-mono text-xs">
-            {getTagValue(currentAnnouncement as any, 'clone')}
+            {getTagValue(currentAnnouncement as any, "clone")}
           </span>
         </div>
       </div>
@@ -168,7 +167,12 @@
     class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center space-x-2"
   >
     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+      ></path>
     </svg>
     <span>Edit Repository</span>
   </button>
@@ -177,8 +181,8 @@
   {#if showEditPanel}
     <EditRepoPanel
       isOpen={showEditPanel}
-      {currentAnnouncement}
-      {currentState}
+      currentAnnouncement={currentAnnouncement}
+      currentState={currentState}
       onClose={handleCloseEditPanel}
       onSave={handleSaveRepo}
       onSignEvent={signEvent}
@@ -195,7 +199,7 @@
       <h3 class="text-lg font-semibold text-white mb-2">Edit Status</h3>
       <p class="text-gray-300">{editRepo.progress.stage}</p>
       <div class="w-full bg-gray-700 rounded-full h-2 mt-2">
-        <div 
+        <div
           class="bg-blue-600 h-2 rounded-full transition-all duration-300"
           style="width: {editRepo.progress.percentage}%"
         ></div>
@@ -234,19 +238,27 @@
       <div>
         <h4 class="text-sm font-medium text-gray-300 mb-2">Repository Announcement (Kind 30617)</h4>
         <pre class="text-xs text-gray-400 bg-gray-900 p-2 rounded overflow-x-auto">
-{JSON.stringify({
-  kind: currentAnnouncement.kind,
-  tags: currentAnnouncement.tags.slice(0, 5) // Show first 5 tags
-}, null, 2)}
+{JSON.stringify(
+            {
+              kind: currentAnnouncement.kind,
+              tags: currentAnnouncement.tags.slice(0, 5), // Show first 5 tags
+            },
+            null,
+            2
+          )}
         </pre>
       </div>
       <div>
         <h4 class="text-sm font-medium text-gray-300 mb-2">Repository State (Kind 30618)</h4>
         <pre class="text-xs text-gray-400 bg-gray-900 p-2 rounded overflow-x-auto">
-{JSON.stringify({
-  kind: currentState.kind,
-  tags: currentState.tags.slice(0, 5) // Show first 5 tags
-}, null, 2)}
+{JSON.stringify(
+            {
+              kind: currentState.kind,
+              tags: currentState.tags.slice(0, 5), // Show first 5 tags
+            },
+            null,
+            2
+          )}
         </pre>
       </div>
     </div>

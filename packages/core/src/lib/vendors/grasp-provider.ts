@@ -1,4 +1,10 @@
-import type { VendorProvider, RepoMetadata, CreateRepoOptions, UpdateRepoOptions, GitVendor } from '../vendor-providers.js';
+import type {
+  VendorProvider,
+  RepoMetadata,
+  CreateRepoOptions,
+  UpdateRepoOptions,
+  GitVendor
+} from '../vendor-providers.js';
 
 /**
  * GRASP Vendor Provider
@@ -29,22 +35,42 @@ export class GraspProvider implements VendorProvider {
       htmlUrl: `https://${this.hostname}/${owner}/${repo}`,
       owner: {
         login: owner,
-        type: 'User',
-      },
+        type: 'User'
+      }
     };
   }
 
   // REST mutations are not supported through VendorProvider; use GraspApi instead
-  async createRepo(_name: string, _options: CreateRepoOptions, _token: string): Promise<RepoMetadata> {
-    throw new Error('GRASP repository creation is not supported via VendorProvider. Use GraspApi through getGitServiceApi("grasp", pubkey, relayUrl).');
+  async createRepo(
+    _name: string,
+    _options: CreateRepoOptions,
+    _token: string
+  ): Promise<RepoMetadata> {
+    throw new Error(
+      'GRASP repository creation is not supported via VendorProvider. Use GraspApi through getGitServiceApi("grasp", pubkey, relayUrl).'
+    );
   }
 
-  async updateRepo(_owner: string, _repo: string, _options: UpdateRepoOptions, _token: string): Promise<RepoMetadata> {
-    throw new Error('GRASP repository update is not supported via VendorProvider. Use GraspApi through getGitServiceApi("grasp", pubkey, relayUrl).');
+  async updateRepo(
+    _owner: string,
+    _repo: string,
+    _options: UpdateRepoOptions,
+    _token: string
+  ): Promise<RepoMetadata> {
+    throw new Error(
+      'GRASP repository update is not supported via VendorProvider. Use GraspApi through getGitServiceApi("grasp", pubkey, relayUrl).'
+    );
   }
 
-  async forkRepo(_owner: string, _repo: string, _forkName: string, _token: string): Promise<RepoMetadata> {
-    throw new Error('GRASP repository forking is not supported via VendorProvider. Use GraspApi through getGitServiceApi("grasp", pubkey, relayUrl).');
+  async forkRepo(
+    _owner: string,
+    _repo: string,
+    _forkName: string,
+    _token: string
+  ): Promise<RepoMetadata> {
+    throw new Error(
+      'GRASP repository forking is not supported via VendorProvider. Use GraspApi through getGitServiceApi("grasp", pubkey, relayUrl).'
+    );
   }
 
   // Smart HTTP clone URL (unauthenticated)
@@ -66,7 +92,7 @@ export class GraspProvider implements VendorProvider {
       // HTTPS Smart HTTP: https://relay.host/owner/repo(.git)
       new RegExp(`https?://${hostRe}/([^/]+)/([^/]+)(?:\\.git)?$`),
       // WS Relay paths: wss://relay.host/owner/repo (optional .git)
-      new RegExp(`wss?://${hostRe}/([^/]+)/([^/]+)(?:\\.git)?$`),
+      new RegExp(`wss?://${hostRe}/([^/]+)/([^/]+)(?:\\.git)?$`)
     ];
 
     for (const pattern of patterns) {

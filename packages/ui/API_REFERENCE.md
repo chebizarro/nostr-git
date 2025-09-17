@@ -11,6 +11,7 @@ This document provides a comprehensive API reference for the Nostr-Git UI compon
 The main entry point for git repository operations, coordinating between specialized manager components.
 
 #### Constructor
+
 ```typescript
 constructor(config: RepoConfig)
 
@@ -24,6 +25,7 @@ interface RepoConfig {
 ```
 
 #### Properties
+
 ```typescript
 // Reactive state (Svelte 5 runes)
 readonly repoEvent: GitRepoEvent;
@@ -59,6 +61,7 @@ readonly hasMoreCommits: boolean;
 ```
 
 #### File Operations
+
 ```typescript
 // List files and directories
 async listRepoFiles(options: {
@@ -129,6 +132,7 @@ interface FileHistoryEntry {
 ```
 
 #### Commit Operations
+
 ```typescript
 // Load commit history page
 async loadPage(page: number): Promise<void>
@@ -154,6 +158,7 @@ interface CommitInfo {
 ```
 
 #### Patch Operations
+
 ```typescript
 // Get cached merge analysis result
 getMergeAnalysis(patchId: string): MergeAnalysisResult | null
@@ -178,6 +183,7 @@ interface MergeAnalysisResult {
 ```
 
 #### Branch Operations
+
 ```typescript
 // Refresh branch and tag data
 async refreshBranches(): Promise<void>
@@ -190,6 +196,7 @@ async switchBranch(branch: string): Promise<void>
 ```
 
 #### Cache Management
+
 ```typescript
 // Clear all caches for this repository
 async clearCache(): Promise<void>
@@ -210,6 +217,7 @@ interface CacheStats {
 ```
 
 #### Lifecycle Management
+
 ```typescript
 // Dispose of all resources
 dispose(): void
@@ -229,32 +237,32 @@ Handles all git worker operations and communication.
 
 ```typescript
 class WorkerManager {
-  constructor(config?: WorkerConfig)
-  
+  constructor(config?: WorkerConfig);
+
   // Initialize repository with minimal data
-  async initializeRepo(repoEvent: GitRepoEvent): Promise<void>
-  
+  async initializeRepo(repoEvent: GitRepoEvent): Promise<void>;
+
   // Ensure shallow clone (HEAD + tree)
-  async ensureShallowClone(repoEvent: GitRepoEvent, branch?: string): Promise<void>
-  
+  async ensureShallowClone(repoEvent: GitRepoEvent, branch?: string): Promise<void>;
+
   // Ensure full clone (complete history)
-  async ensureFullClone(repoEvent: GitRepoEvent, depth?: number): Promise<void>
-  
+  async ensureFullClone(repoEvent: GitRepoEvent, depth?: number): Promise<void>;
+
   // Get current repository data level
-  getRepoDataLevel(repoId: string): RepoDataLevel
-  
+  getRepoDataLevel(repoId: string): RepoDataLevel;
+
   // Execute git operation
-  async executeGitOperation(operation: GitOperation): Promise<any>
-  
+  async executeGitOperation(operation: GitOperation): Promise<any>;
+
   // Dispose worker resources
-  dispose(): void
+  dispose(): void;
 }
 
 enum RepoDataLevel {
-  NONE = 'none',
-  REFS = 'refs',
-  SHALLOW = 'shallow',
-  FULL = 'full'
+  NONE = "none",
+  REFS = "refs",
+  SHALLOW = "shallow",
+  FULL = "full",
 }
 ```
 
@@ -264,37 +272,37 @@ Unified caching system supporting multiple storage backends.
 
 ```typescript
 class CacheManager {
-  constructor(config: CacheConfig)
-  
+  constructor(config: CacheConfig);
+
   // Get cached data
-  async get<T>(cacheName: string, key: string): Promise<T | null>
-  
+  async get<T>(cacheName: string, key: string): Promise<T | null>;
+
   // Set cached data
   async set<T>(
-    cacheName: string, 
-    key: string, 
-    data: T, 
+    cacheName: string,
+    key: string,
+    data: T,
     ttl?: number,
     metadata?: any
-  ): Promise<void>
-  
+  ): Promise<void>;
+
   // Remove cached entry
-  async remove(cacheName: string, key: string): Promise<void>
-  
+  async remove(cacheName: string, key: string): Promise<void>;
+
   // Clear entire cache
-  async clear(cacheName: string): Promise<void>
-  
+  async clear(cacheName: string): Promise<void>;
+
   // Clear by pattern
-  async clearByPattern(pattern: string): Promise<void>
-  
+  async clearByPattern(pattern: string): Promise<void>;
+
   // Cleanup expired entries
-  async cleanup(): Promise<number>
-  
+  async cleanup(): Promise<number>;
+
   // Get cache statistics
-  getStats(cacheName: string): CacheStats
-  
+  getStats(cacheName: string): CacheStats;
+
   // List cache keys
-  listKeys(cacheName: string): string[]
+  listKeys(cacheName: string): string[];
 }
 
 interface CacheConfig {
@@ -307,10 +315,10 @@ interface CacheConfig {
 }
 
 enum CacheType {
-  MEMORY = 'memory',
-  LOCAL_STORAGE = 'localStorage',
-  SESSION_STORAGE = 'sessionStorage',
-  INDEXED_DB = 'indexedDB'
+  MEMORY = "memory",
+  LOCAL_STORAGE = "localStorage",
+  SESSION_STORAGE = "sessionStorage",
+  INDEXED_DB = "indexedDB",
 }
 ```
 
@@ -324,25 +332,25 @@ class FileManager {
     workerManager: WorkerManager,
     cacheManager?: CacheManager,
     config?: FileManagerConfig
-  )
-  
+  );
+
   // List repository files
-  async listRepoFiles(options: ListFilesOptions): Promise<FileListingResult>
-  
+  async listRepoFiles(options: ListFilesOptions): Promise<FileListingResult>;
+
   // Get file content
-  async getFileContent(options: GetFileContentOptions): Promise<FileContent>
-  
+  async getFileContent(options: GetFileContentOptions): Promise<FileContent>;
+
   // Check file existence
-  async fileExistsAtCommit(options: FileExistsOptions): Promise<boolean>
-  
+  async fileExistsAtCommit(options: FileExistsOptions): Promise<boolean>;
+
   // Get file history
-  async getFileHistory(options: FileHistoryOptions): Promise<FileHistoryEntry[]>
-  
+  async getFileHistory(options: FileHistoryOptions): Promise<FileHistoryEntry[]>;
+
   // Clear file caches
-  async clearCache(repoId?: string): Promise<void>
-  
+  async clearCache(repoId?: string): Promise<void>;
+
   // Dispose resources
-  dispose(): void
+  dispose(): void;
 }
 
 interface FileManagerConfig {
@@ -367,29 +375,22 @@ class CommitManager {
     workerManager: WorkerManager,
     cacheManager?: CacheManager,
     config?: CommitManagerConfig
-  )
-  
+  );
+
   // Load commit page
-  async loadPage(
-    repoEvent: GitRepoEvent,
-    page: number,
-    branch?: string
-  ): Promise<GitCommit[]>
-  
+  async loadPage(repoEvent: GitRepoEvent, page: number, branch?: string): Promise<GitCommit[]>;
+
   // Get total commit count
-  async getTotalCommits(
-    repoEvent: GitRepoEvent,
-    branch?: string
-  ): Promise<number>
-  
+  async getTotalCommits(repoEvent: GitRepoEvent, branch?: string): Promise<number>;
+
   // Set page size
-  setPageSize(size: number): void
-  
+  setPageSize(size: number): void;
+
   // Clear commit caches
-  async clearCache(repoId?: string): Promise<void>
-  
+  async clearCache(repoId?: string): Promise<void>;
+
   // Dispose resources
-  dispose(): void
+  dispose(): void;
 }
 
 interface CommitManagerConfig {
@@ -413,31 +414,25 @@ class PatchManager {
     workerManager: WorkerManager,
     cacheManager?: CacheManager,
     config?: PatchManagerConfig
-  )
-  
+  );
+
   // Get merge analysis (cached)
-  getMergeAnalysis(patchId: string): MergeAnalysisResult | null
-  
+  getMergeAnalysis(patchId: string): MergeAnalysisResult | null;
+
   // Check if analysis exists
-  hasMergeAnalysis(patchId: string): boolean
-  
+  hasMergeAnalysis(patchId: string): boolean;
+
   // Analyze patch merge
-  async analyzeMerge(
-    patch: GitPatch,
-    repoEvent: GitRepoEvent
-  ): Promise<MergeAnalysisResult>
-  
+  async analyzeMerge(patch: GitPatch, repoEvent: GitRepoEvent): Promise<MergeAnalysisResult>;
+
   // Process patches in background
-  async processBackgroundAnalysis(
-    patches: GitPatch[],
-    repoEvent: GitRepoEvent
-  ): Promise<void>
-  
+  async processBackgroundAnalysis(patches: GitPatch[], repoEvent: GitRepoEvent): Promise<void>;
+
   // Clear patch caches
-  async clearCache(repoId?: string): Promise<void>
-  
+  async clearCache(repoId?: string): Promise<void>;
+
   // Dispose resources
-  dispose(): void
+  dispose(): void;
 }
 
 interface PatchManagerConfig {
@@ -460,31 +455,28 @@ Manages branch operations and NIP-34 compliance.
 
 ```typescript
 class BranchManager {
-  constructor(
-    workerManager: WorkerManager,
-    config?: BranchManagerConfig
-  )
-  
+  constructor(workerManager: WorkerManager, config?: BranchManagerConfig);
+
   // Get branches from repository state
-  getBranches(): string[]
-  
+  getBranches(): string[];
+
   // Get tags from repository state
-  getTags(): string[]
-  
+  getTags(): string[];
+
   // Get main branch
-  getMainBranch(): string
-  
+  getMainBranch(): string;
+
   // Refresh branch data
-  async refreshBranches(repoEvent: GitRepoEvent): Promise<void>
-  
+  async refreshBranches(repoEvent: GitRepoEvent): Promise<void>;
+
   // Convert NIP-34 ref to git ref
-  nip34ToGitRef(nip34Ref: string): string
-  
+  nip34ToGitRef(nip34Ref: string): string;
+
   // Convert git ref to NIP-34 ref
-  gitRefToNip34(gitRef: string): string
-  
+  gitRefToNip34(gitRef: string): string;
+
   // Dispose resources
-  dispose(): void
+  dispose(): void;
 }
 
 interface BranchManagerConfig {
@@ -496,6 +488,7 @@ interface BranchManagerConfig {
 ## Type Definitions
 
 ### Core Types
+
 ```typescript
 // Git repository event (NIP-34)
 interface GitRepoEvent {
@@ -546,7 +539,7 @@ interface GitIssue {
   repoId: string;
   title: string;
   content: string;
-  state: 'open' | 'closed';
+  state: "open" | "closed";
   author: string;
   created_at: Date;
   labels?: string[];
@@ -554,6 +547,7 @@ interface GitIssue {
 ```
 
 ### Configuration Types
+
 ```typescript
 // Main repository configuration
 interface RepoConfig {
@@ -562,7 +556,7 @@ interface RepoConfig {
   issues?: GitIssue[];
   patches?: GitPatch[];
   relayList?: string[];
-  
+
   // Manager configurations
   workerConfig?: WorkerConfig;
   cacheConfig?: CacheConfig;
@@ -584,61 +578,64 @@ interface WorkerConfig {
 ## Usage Examples
 
 ### Basic Repository Setup
+
 ```typescript
-import { Repo } from '@nostr-git/ui';
+import { Repo } from "@nostr-git/ui";
 
 // Create repository instance
 const repo = new Repo({
   repoEvent,
   repoStateEvent,
   issues,
-  patches
+  patches,
 });
 
 // Wait for initialization
 await repo.waitForReady();
 
 // Access reactive state
-console.log('Repository name:', repo.name);
-console.log('Available branches:', repo.branches);
+console.log("Repository name:", repo.name);
+console.log("Available branches:", repo.branches);
 ```
 
 ### File Operations
+
 ```typescript
 // List files in directory
 const listing = await repo.listRepoFiles({
-  branch: 'main',
-  path: 'src/',
-  useCache: true
+  branch: "main",
+  path: "src/",
+  useCache: true,
 });
 
-console.log('Files:', listing.files);
-console.log('From cache:', listing.fromCache);
+console.log("Files:", listing.files);
+console.log("From cache:", listing.fromCache);
 
 // Get file content
 const content = await repo.getFileContent({
-  path: 'README.md',
-  branch: 'main'
+  path: "README.md",
+  branch: "main",
 });
 
-console.log('Content:', content.content);
-console.log('Size:', content.size);
+console.log("Content:", content.content);
+console.log("Size:", content.size);
 
 // Check file existence
 const exists = await repo.fileExistsAtCommit({
-  path: 'package.json',
-  commit: 'abc123'
+  path: "package.json",
+  commit: "abc123",
 });
 
-console.log('File exists:', exists);
+console.log("File exists:", exists);
 ```
 
 ### Commit History
+
 ```typescript
 // Load first page of commits
 await repo.loadPage(1);
-console.log('Commits:', repo.commits);
-console.log('Total:', repo.totalCommits);
+console.log("Commits:", repo.commits);
+console.log("Total:", repo.totalCommits);
 
 // Configure page size
 repo.setCommitsPerPage(50);
@@ -648,33 +645,36 @@ await repo.loadMoreCommits();
 ```
 
 ### Patch Analysis
+
 ```typescript
 // Check if analysis is available
 if (repo.hasMergeAnalysis(patchId)) {
   const analysis = repo.getMergeAnalysis(patchId);
-  console.log('Can merge:', analysis.canMerge);
-  console.log('Conflicts:', analysis.conflicts);
+  console.log("Can merge:", analysis.canMerge);
+  console.log("Conflicts:", analysis.conflicts);
 } else {
   // Force analysis
   const analysis = await repo.refreshMergeAnalysis(patch);
-  console.log('Analysis complete:', analysis);
+  console.log("Analysis complete:", analysis);
 }
 ```
 
 ### Cache Management
+
 ```typescript
 // Get cache statistics
 const stats = repo.getCacheStats();
-console.log('Cache stats:', stats);
+console.log("Cache stats:", stats);
 
 // Clear specific cache
-await repo.clearCacheType('files');
+await repo.clearCacheType("files");
 
 // Clear all caches
 await repo.clearCache();
 ```
 
 ### Advanced Manager Usage
+
 ```typescript
 // Direct manager access for advanced operations
 const fileManager = repo.fileManager;
@@ -684,13 +684,14 @@ await fileManager.clearCache(repo.repoId);
 
 // Direct cache manager usage
 const cacheManager = repo.cacheManager;
-await cacheManager.set('custom_cache', 'key', data, 600000);
-const cached = await cacheManager.get('custom_cache', 'key');
+await cacheManager.set("custom_cache", "key", data, 600000);
+const cached = await cacheManager.get("custom_cache", "key");
 ```
 
 ## Error Handling
 
 ### Common Error Types
+
 ```typescript
 // Repository not ready
 if (!repo.isReady()) {
@@ -699,10 +700,10 @@ if (!repo.isReady()) {
 
 // File not found
 try {
-  const content = await repo.getFileContent({ path: 'missing.txt' });
+  const content = await repo.getFileContent({ path: "missing.txt" });
 } catch (error) {
-  if (error.code === 'FILE_NOT_FOUND') {
-    console.log('File does not exist');
+  if (error.code === "FILE_NOT_FOUND") {
+    console.log("File does not exist");
   }
 }
 
@@ -710,8 +711,8 @@ try {
 try {
   await repo.loadPage(1);
 } catch (error) {
-  if (error.code === 'NETWORK_ERROR') {
-    console.log('Network request failed');
+  if (error.code === "NETWORK_ERROR") {
+    console.log("Network request failed");
   }
 }
 
@@ -720,11 +721,12 @@ try {
   const listing = await repo.listRepoFiles({ useCache: true });
 } catch (error) {
   // Cache errors don't break functionality
-  console.log('Cache error, but data still loaded:', listing);
+  console.log("Cache error, but data still loaded:", listing);
 }
 ```
 
 ### Best Practices
+
 ```typescript
 // Always dispose resources
 const repo = new Repo(config);
@@ -736,7 +738,7 @@ try {
 
 // Handle loading states
 if (repo.isLoadingCommits) {
-  console.log('Loading commits...');
+  console.log("Loading commits...");
 }
 
 // Check data availability
@@ -746,20 +748,21 @@ if (repo.hasMoreCommits) {
 
 // Use caching appropriately
 const content = await repo.getFileContent({
-  path: 'large-file.txt',
-  useCache: false // Skip cache for large files
+  path: "large-file.txt",
+  useCache: false, // Skip cache for large files
 });
 ```
 
 ## Migration from Legacy API
 
 ### Breaking Changes
+
 ```typescript
 // OLD: Direct file content return
-const content = await repo.getFileContent('README.md');
+const content = await repo.getFileContent("README.md");
 
 // NEW: Structured return object
-const result = await repo.getFileContent({ path: 'README.md' });
+const result = await repo.getFileContent({ path: "README.md" });
 const content = result.content;
 
 // OLD: resetRepo method
@@ -776,16 +779,17 @@ const commits = repo.commits;
 ```
 
 ### Compatibility Layer
+
 ```typescript
 // Legacy wrapper for backward compatibility
 class LegacyRepoWrapper {
   constructor(private repo: Repo) {}
-  
+
   async getFileContent(path: string): Promise<string> {
     const result = await this.repo.getFileContent({ path });
     return result.content;
   }
-  
+
   resetRepo(): void {
     this.repo.clearCache();
   }

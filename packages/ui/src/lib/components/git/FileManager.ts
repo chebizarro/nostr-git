@@ -452,12 +452,7 @@ export class FileManager {
   }): Promise<FileHistoryEntry[]> {
     const shortBranch = this.getShortBranchName(branch);
     const repoKey = providedRepoKey || this.getCanonicalRepoKey(repoEvent);
-    const cacheKey = this.generateCacheKey(
-      "HISTORY",
-      repoKey,
-      `${path}_${maxCount}`,
-      shortBranch
-    );
+    const cacheKey = this.generateCacheKey("HISTORY", repoKey, `${path}_${maxCount}`, shortBranch);
 
     // Try cache first if enabled
     if (this.config.enableCaching && useCache && this.cacheManager) {

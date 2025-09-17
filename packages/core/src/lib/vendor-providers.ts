@@ -21,18 +21,23 @@ export interface RepoMetadata {
 export interface VendorProvider {
   readonly vendor: GitVendor;
   readonly hostname: string;
-  
+
   // Repository operations
   getRepoMetadata(owner: string, repo: string, token?: string): Promise<RepoMetadata>;
   createRepo(name: string, options: CreateRepoOptions, token: string): Promise<RepoMetadata>;
-  updateRepo(owner: string, repo: string, options: UpdateRepoOptions, token: string): Promise<RepoMetadata>;
+  updateRepo(
+    owner: string,
+    repo: string,
+    options: UpdateRepoOptions,
+    token: string
+  ): Promise<RepoMetadata>;
   forkRepo(owner: string, repo: string, forkName: string, token: string): Promise<RepoMetadata>;
-  
+
   // URL transformations
   getCloneUrl(owner: string, repo: string): string;
   getApiUrl(path: string): string;
   parseRepoUrl(url: string): { owner: string; repo: string } | null;
-  
+
   // Authentication
   getTokenKey(): string;
   getAuthHeaders(token: string): Record<string, string>;
@@ -63,7 +68,7 @@ export interface UpdateRepoOptions {
  */
 export function detectVendorFromUrl(url: string): GitVendor {
   const normalizedUrl = url.toLowerCase();
-  
+
   if (normalizedUrl.includes('github.com')) {
     return 'github';
   } else if (normalizedUrl.includes('gitlab.com') || normalizedUrl.includes('gitlab.')) {
@@ -76,7 +81,7 @@ export function detectVendorFromUrl(url: string): GitVendor {
     // GRASP URLs start with ws:// or wss:// protocols
     return 'grasp';
   }
-  
+
   return 'generic';
 }
 
@@ -90,7 +95,7 @@ export function extractHostname(url: string): string {
       const match = url.match(/git@([^:]+):/);
       return match ? match[1] : '';
     }
-    
+
     // Handle HTTPS URLs
     const urlObj = new URL(url);
     return urlObj.hostname;
@@ -110,11 +115,11 @@ export function normalizeGitUrl(url: string): string {
       return `https://${match[1]}/${match[2]}.git`;
     }
   }
-  
+
   // Ensure .git suffix
   if (!url.endsWith('.git')) {
     return `${url}.git`;
   }
-  
+
   return url;
 }

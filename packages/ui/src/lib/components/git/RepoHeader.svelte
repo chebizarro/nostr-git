@@ -1,13 +1,6 @@
 <script lang="ts">
   import { cn } from "../../utils";
-  import {
-    GitBranch,
-    Eye,
-    GitFork,
-    RotateCcw,
-    Settings,
-    LayoutDashboard,
-  } from "@lucide/svelte";
+  import { GitBranch, Eye, GitFork, RotateCcw, Settings, LayoutDashboard } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
   const { Button } = useRegistry();
   import type { RepoAnnouncementEvent } from "@nostr-git/shared-types";
@@ -84,13 +77,13 @@
       >
         <GitFork class="h-4 w-4" />
       </Button>
-      <Button 
-        variant="outline" 
-        size="sm" 
-        class="gap-1 sm:gap-2 px-2 sm:px-3" 
+      <Button
+        variant="outline"
+        size="sm"
+        class="gap-1 sm:gap-2 px-2 sm:px-3"
         onclick={refreshRepo}
         disabled={isRefreshing}
-        title={isRefreshing ? 'Syncing...' : 'Refresh'}
+        title={isRefreshing ? "Syncing..." : "Refresh"}
       >
         <RotateCcw class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''}" />
       </Button>
@@ -106,17 +99,13 @@
     </div>
   </div>
   <p class="text-muted-foreground mb-4">{description}</p>
-  
+
   <!-- Authentication Status Indicator
   <div class="mb-4">
     <AuthStatusIndicator repository={repoClass} pubkey={pubkey} />
   </div>
  -->
-  <nav
-    class={cn(
-      "bg-muted text-muted-foreground rounded-md w-full"
-    )}
-  >
+  <nav class={cn("bg-muted text-muted-foreground rounded-md w-full")}>
     <div class="flex overflow-x-auto scrollbar-hide">
       <div class="w-full flex justify-evenly gap-1 m-1 min-w-max">
         {@render children?.(activeTab)}
@@ -130,10 +119,10 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
-  
+
   /* Hide scrollbar for IE, Edge and Firefox */
   .scrollbar-hide {
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
   }
 </style>

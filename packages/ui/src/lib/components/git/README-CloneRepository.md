@@ -18,6 +18,7 @@ A comprehensive GitHub-style clone repository feature for the Budabit-Flotilla c
 A modal dialog component that provides the clone repository interface.
 
 **Props:**
+
 - `isOpen: boolean` - Controls dialog visibility
 - `onClose: () => void` - Called when dialog is closed
 - `onClone: (config: CloneConfig) => Promise<void>` - Called to initiate clone
@@ -29,6 +30,7 @@ A modal dialog component that provides the clone repository interface.
 - `isCloning?: boolean` - Whether clone is in progress
 
 **Features:**
+
 - Repository URL/Naddr input with validation
 - Clone depth selector (shallow vs full)
 - Destination path input (auto-filled from URL)
@@ -41,20 +43,22 @@ A modal dialog component that provides the clone repository interface.
 A Svelte 5 composable that manages the clone repository workflow.
 
 **API:**
+
 ```typescript
 const cloneRepo = useCloneRepo();
 
 // State
-cloneRepo.progress    // Current progress information
-cloneRepo.error       // Current error message
-cloneRepo.isCloning   // Whether clone is in progress
+cloneRepo.progress; // Current progress information
+cloneRepo.error; // Current error message
+cloneRepo.isCloning; // Whether clone is in progress
 
 // Methods
-await cloneRepo.cloneRepository(config)  // Start clone operation
-cloneRepo.reset()                        // Reset state
+await cloneRepo.cloneRepository(config); // Start clone operation
+cloneRepo.reset(); // Reset state
 ```
 
 **Features:**
+
 - Interfaces with git-worker's `cloneRemoteRepo` method
 - Manages progress state and error handling
 - Creates and emits NIP-34 repository state events
@@ -67,6 +71,7 @@ cloneRepo.reset()                        // Reset state
 The core git operation that performs the actual repository cloning.
 
 **Signature:**
+
 ```typescript
 async function cloneRemoteRepo(
   url: string,
@@ -82,10 +87,11 @@ async function cloneRemoteRepo(
   tags: string[];
   defaultBranch: string;
   error?: string;
-}>
+}>;
 ```
 
 **Features:**
+
 - Supports both shallow and full clones
 - Automatic authentication using configured tokens
 - Progress callbacks for UI updates
@@ -96,8 +102,8 @@ async function cloneRemoteRepo(
 
 ```svelte
 <script lang="ts">
-  import { CloneRepoDialog } from '@nostr-git/ui';
-  import { useCloneRepo } from '@nostr-git/ui';
+  import { CloneRepoDialog } from "@nostr-git/ui";
+  import { useCloneRepo } from "@nostr-git/ui";
 
   let showCloneDialog = $state(false);
   const cloneRepo = useCloneRepo();
@@ -126,11 +132,11 @@ async function cloneRemoteRepo(
 {#if showCloneDialog}
   <CloneRepoDialog
     isOpen={showCloneDialog}
-    onClose={() => showCloneDialog = false}
+    onClose={() => (showCloneDialog = false)}
     onClone={handleClone}
-    {signEvent}
-    {publishEvent}
-    {registerRepo}
+    signEvent={signEvent}
+    publishEvent={publishEvent}
+    registerRepo={registerRepo}
     progress={cloneRepo.progress}
     error={cloneRepo.error}
     isCloning={cloneRepo.isCloning}
@@ -144,9 +150,9 @@ async function cloneRemoteRepo(
 
 ```typescript
 interface CloneConfig {
-  url: string;           // Repository URL or Naddr
+  url: string; // Repository URL or Naddr
   destinationPath: string; // Local destination path
-  depth: number;         // Clone depth (1 for shallow, 0 for full)
+  depth: number; // Clone depth (1 for shallow, 0 for full)
 }
 ```
 
@@ -154,8 +160,8 @@ interface CloneConfig {
 
 ```typescript
 interface CloneProgress {
-  message: string;       // Current status message
-  percentage: number;    // Progress percentage (0-100)
+  message: string; // Current status message
+  percentage: number; // Progress percentage (0-100)
 }
 ```
 

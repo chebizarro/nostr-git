@@ -18,22 +18,25 @@ export const rootDir = '/repos';
  * @param repoEvent Repository event
  * @returns Promise resolving to the default branch name
  */
-export async function detectDefaultBranch(repoEvent: RepoAnnouncement, repoKey?: string): Promise<string> {
+export async function detectDefaultBranch(
+  repoEvent: RepoAnnouncement,
+  repoKey?: string
+): Promise<string> {
   const git = getGitProvider();
   const dir = `${rootDir}/${repoKey || canonicalRepoKey(repoEvent.repoId)}`;
-  
+
   try {
     // First try to get the symbolic ref for HEAD
     const headRef = await git.resolveRef({ dir, ref: 'HEAD', depth: 2 });
-    
+
     // If HEAD points to a symbolic ref, extract the branch name
     if (headRef && typeof headRef === 'string' && headRef.startsWith('refs/heads/')) {
       return headRef.replace('refs/heads/', '');
     }
-    
+
     // Fallback: try to list refs and find the default branch
     const refs = await git.listRefs({ dir });
-    
+
     // Look for common default branch names in order of preference
     const commonDefaults = ['main', 'master', 'develop', 'dev'];
     for (const defaultName of commonDefaults) {
@@ -42,17 +45,16 @@ export async function detectDefaultBranch(repoEvent: RepoAnnouncement, repoKey?:
         return defaultName;
       }
     }
-    
+
     // If no common defaults found, use the first branch
     const firstBranch = refs.find((ref: any) => ref.ref.startsWith('refs/heads/'));
     if (firstBranch) {
       return firstBranch.ref.replace('refs/heads/', '');
     }
-    
   } catch (error) {
     console.warn('Failed to detect default branch:', error);
   }
-  
+
   // Ultimate fallback
   return 'main';
 }
@@ -62,16 +64,19 @@ export async function detectDefaultBranch(repoEvent: RepoAnnouncement, repoKey?:
  */
 const defaultBranchCache = new Map<string, string>();
 
-export async function getDefaultBranch(repoEvent: RepoAnnouncement, repoKey?: string): Promise<string> {
+export async function getDefaultBranch(
+  repoEvent: RepoAnnouncement,
+  repoKey?: string
+): Promise<string> {
   const cacheKey = repoKey || canonicalRepoKey(repoEvent.repoId);
-  
+
   if (defaultBranchCache.has(cacheKey)) {
     return defaultBranchCache.get(cacheKey)!;
   }
-  
+
   const defaultBranch = await detectDefaultBranch(repoEvent, repoKey);
   defaultBranchCache.set(cacheKey, defaultBranch);
-  
+
   return defaultBranch;
 }
 
@@ -89,16 +94,12 @@ export async function resolveRobustBranch(
   preferredBranch?: string,
   options?: { onBranchNotFound?: (branchName: string, error: any) => void }
 ): Promise<string> {
-  const branchesToTry = [
-    preferredBranch,
-    'main',
-    'master', 
-    'develop',
-    'dev'
-  ].filter(Boolean) as string[];
-  
+  const branchesToTry = [preferredBranch, 'main', 'master', 'develop', 'dev'].filter(
+    Boolean
+  ) as string[];
+
   let lastError = null;
-  
+
   for (const branchName of branchesToTry) {
     try {
       const oid = await git.resolveRef({ dir, ref: branchName });
@@ -109,13 +110,16 @@ export async function resolveRobustBranch(
       if (options?.onBranchNotFound) {
         options.onBranchNotFound(branchName, branchError);
       } else {
-        console.log(`Failed to resolve branch '${branchName}':`, branchError.message || String(branchError));
+        console.log(
+          `Failed to resolve branch '${branchName}':`,
+          branchError.message || String(branchError)
+        );
       }
       lastError = branchError;
       continue;
     }
   }
-  
+
   throw lastError || new Error('Failed to resolve any common default branch');
 }
 
@@ -150,12 +154,17 @@ export async function isRepoCloned(dir: string): Promise<boolean> {
   }
 }
 
-export async function ensureRepo(opts: { host: string; owner: string; repo: string; branch: string }, depth: number = 1) {
+export async function ensureRepo(
+  opts: { host: string; owner: string; repo: string; branch: string },
+  depth: number = 1
+) {
   const git = getGitProvider();
   const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
   if (!(await isRepoCloned(dir))) {
-    console.log(`Cloning https://${opts.host}/${opts.owner}/${opts.repo}.git to ${dir} (depth: ${depth})`);
-    
+    console.log(
+      `Cloning https://${opts.host}/${opts.owner}/${opts.repo}.git to ${dir} (depth: ${depth})`
+    );
+
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => reject(new Error('Clone operation timed out after 60 seconds')), 60000);
     });
@@ -174,9 +183,11 @@ export async function ensureRepo(opts: { host: string; owner: string; repo: stri
       onProgress: (progress: any) => {
         // Only log major progress milestones to reduce overhead
         if (progress.phase === 'Receiving objects' || progress.phase === 'Resolving deltas') {
-          console.log(`${progress.phase}: ${progress.loaded}/${progress.total} (${Math.round(progress.loaded/progress.total*100)}%)`);
+          console.log(
+            `${progress.phase}: ${progress.loaded}/${progress.total} (${Math.round((progress.loaded / progress.total) * 100)}%)`
+          );
         }
-      },
+      }
     });
 
     // Race between clone and timeout
@@ -199,17 +210,20 @@ export async function ensureRepo(opts: { host: string; owner: string; repo: stri
   }
 }
 
-export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; branch?: string; repoKey?: string }, depth: number = 1) {
+export async function ensureRepoFromEvent(
+  opts: { repoEvent: RepoAnnouncement; branch?: string; repoKey?: string },
+  depth: number = 1
+) {
   const git = getGitProvider();
   const dir = `${rootDir}/${opts.repoKey || canonicalRepoKey(opts.repoEvent.repoId)}`;
 
   // Prefer HTTPS clone URL
-  let cloneUrl = opts.repoEvent.clone?.find((url) => url.startsWith("https://"));
+  let cloneUrl = opts.repoEvent.clone?.find((url) => url.startsWith('https://'));
 
   // If not found, try to convert SSH to HTTPS
   if (!cloneUrl && opts.repoEvent.clone?.length) {
     for (const url of opts.repoEvent.clone) {
-      if (url.startsWith("git@")) {
+      if (url.startsWith('git@')) {
         const httpsUrl = sshToHttps(url);
         if (httpsUrl) {
           cloneUrl = httpsUrl;
@@ -220,21 +234,24 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
   }
 
   if (!cloneUrl) {
-    throw new Error("No supported clone URL found in repo announcement");
+    throw new Error('No supported clone URL found in repo announcement');
   }
 
   const isCloned = await isRepoCloned(dir);
-  
+
   // Determine the branch to use
   let targetBranch = opts.branch;
-  
+
   if (!targetBranch) {
     if (isCloned) {
       // If repo exists, detect the actual default branch
       try {
         targetBranch = await detectDefaultBranch(opts.repoEvent, opts.repoKey);
       } catch (error) {
-        console.warn('Failed to detect default branch, will use robust resolution after clone:', error);
+        console.warn(
+          'Failed to detect default branch, will use robust resolution after clone:',
+          error
+        );
         targetBranch = 'main'; // Temporary, will be resolved robustly after clone
       }
     } else {
@@ -242,10 +259,10 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
       targetBranch = 'main'; // Temporary start, will be resolved robustly after clone
     }
   }
-  
+
   if (!isCloned) {
     console.log(`Cloning ${cloneUrl} to ${dir} (depth: ${depth})`);
-    
+
     // Create a timeout promise to prevent infinite stalling
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => reject(new Error('Clone operation timed out after 60 seconds')), 60000);
@@ -265,21 +282,26 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
       onProgress: (progress: any) => {
         // Only log major progress milestones to reduce overhead
         if (progress.phase === 'Receiving objects' || progress.phase === 'Resolving deltas') {
-          console.log(`${progress.phase}: ${progress.loaded}/${progress.total} (${Math.round(progress.loaded/progress.total*100)}%)`);
+          console.log(
+            `${progress.phase}: ${progress.loaded}/${progress.total} (${Math.round((progress.loaded / progress.total) * 100)}%)`
+          );
         }
       },
-      onMessage: (message: any) => console.log('Git message:', message),
+      onMessage: (message: any) => console.log('Git message:', message)
     });
 
     // Race between clone and timeout
     try {
       await Promise.race([clonePromise, timeoutPromise]);
       console.log(`Successfully cloned ${cloneUrl}`);
-      
+
       // After successful clone, detect the actual default branch
       try {
         const actualDefault = await detectDefaultBranch(opts.repoEvent, opts.repoKey);
-        defaultBranchCache.set(opts.repoKey || canonicalRepoKey(opts.repoEvent.repoId), actualDefault);
+        defaultBranchCache.set(
+          opts.repoKey || canonicalRepoKey(opts.repoEvent.repoId),
+          actualDefault
+        );
         console.log(`Detected default branch: ${actualDefault}`);
       } catch (error) {
         console.warn('Failed to detect default branch after clone:', error);
@@ -297,22 +319,29 @@ export async function ensureRepoFromEvent(opts: { repoEvent: RepoAnnouncement; b
   } else if (depth > 1) {
     // Repository exists but might be shallow - try to deepen it if we need more history
     try {
-      console.log(`Repository exists at ${dir}, attempting to fetch more history (depth: ${depth})`);
-      
+      console.log(
+        `Repository exists at ${dir}, attempting to fetch more history (depth: ${depth})`
+      );
+
       // Use robust branch resolution instead of hardcoded fallback
       const resolvedBranch = await resolveRobustBranch(git, dir, targetBranch);
-      
+
       try {
         await git.fetch({
           dir,
           url: cloneUrl,
           ref: resolvedBranch,
           depth,
-          singleBranch: true,
+          singleBranch: true
         });
-        console.log(`Successfully deepened repository using resolved branch '${resolvedBranch}' to depth ${depth}`);
+        console.log(
+          `Successfully deepened repository using resolved branch '${resolvedBranch}' to depth ${depth}`
+        );
       } catch (fetchError: any) {
-        console.log(`Failed to fetch resolved branch '${resolvedBranch}':`, fetchError.message || String(fetchError));
+        console.log(
+          `Failed to fetch resolved branch '${resolvedBranch}':`,
+          fetchError.message || String(fetchError)
+        );
         throw fetchError;
       }
     } catch (error) {
@@ -349,19 +378,41 @@ export async function determineMimeType(data?: Uint8Array, extension?: string): 
     const ext = extension.replace(/^\./, '').toLowerCase();
     const map: Record<string, string> = {
       // text/code
-      md: 'text/markdown', markdown: 'text/markdown', txt: 'text/plain',
-      html: 'text/html', css: 'text/css',
-      js: 'application/javascript', mjs: 'application/javascript', cjs: 'application/javascript',
-      ts: 'application/typescript', tsx: 'application/typescript', jsx: 'text/jsx',
-      json: 'application/json', yaml: 'application/x-yaml', yml: 'application/x-yaml',
-      svelte: 'text/svelte', vue: 'text/vue',
+      md: 'text/markdown',
+      markdown: 'text/markdown',
+      txt: 'text/plain',
+      html: 'text/html',
+      css: 'text/css',
+      js: 'application/javascript',
+      mjs: 'application/javascript',
+      cjs: 'application/javascript',
+      ts: 'application/typescript',
+      tsx: 'application/typescript',
+      jsx: 'text/jsx',
+      json: 'application/json',
+      yaml: 'application/x-yaml',
+      yml: 'application/x-yaml',
+      svelte: 'text/svelte',
+      vue: 'text/vue',
       // images
-      png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
-      webp: 'image/webp', svg: 'image/svg+xml', ico: 'image/x-icon', bmp: 'image/bmp',
+      png: 'image/png',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      svg: 'image/svg+xml',
+      ico: 'image/x-icon',
+      bmp: 'image/bmp',
       // fonts
-      ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2',
+      ttf: 'font/ttf',
+      otf: 'font/otf',
+      woff: 'font/woff',
+      woff2: 'font/woff2',
       // archives
-      zip: 'application/zip', gz: 'application/gzip', tar: 'application/x-tar', tgz: 'application/gzip',
+      zip: 'application/zip',
+      gz: 'application/gzip',
+      tar: 'application/x-tar',
+      tgz: 'application/gzip',
       // docs
       pdf: 'application/pdf'
     };
@@ -440,7 +491,9 @@ async function getFileChanges(
   dir: string,
   oldOid: string,
   newOid: string
-): Promise<Array<{ filepath: string; type: 'add' | 'remove' | 'modify'; Aoid?: string; Boid?: string }>> {
+): Promise<
+  Array<{ filepath: string; type: 'add' | 'remove' | 'modify'; Aoid?: string; Boid?: string }>
+> {
   const git = getGitProvider();
   const results = await git.walk({
     dir,
@@ -457,7 +510,7 @@ async function getFileChanges(
       if (Aoid === undefined) type = 'add';
       if (Boid === undefined) type = 'remove';
       return { filepath, type, Aoid, Boid };
-    },
+    }
   });
   return results.filter(Boolean);
 }
@@ -473,23 +526,13 @@ async function createFilePatch(
   changeType: 'add' | 'remove' | 'modify'
 ) {
   const git = getGitProvider();
-  const oldContent = oldOid
-    ? (await git.readBlob({ dir, oid: oldOid, filepath })).blob
-    : '';
-  const newContent = newOid
-    ? (await git.readBlob({ dir, oid: newOid, filepath })).blob
-    : '';
+  const oldContent = oldOid ? (await git.readBlob({ dir, oid: oldOid, filepath })).blob : '';
+  const newContent = newOid ? (await git.readBlob({ dir, oid: newOid, filepath })).blob : '';
 
   const oldBuf = oldContent;
   const newBuf = newContent;
 
-  return createPatch(
-    filepath,
-    oldContent,
-    newContent,
-    oldOid.slice(0, 7),
-    newOid.slice(0, 7)
-  );
+  return createPatch(filepath, oldContent, newContent, oldOid.slice(0, 7), newOid.slice(0, 7));
 }
 
 /**
@@ -500,7 +543,7 @@ export async function githubPermalinkDiffId(filePath: string): Promise<string> {
   const data = encoder.encode(filePath);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  const hex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
   return hex;
 }
 
@@ -513,7 +556,7 @@ export async function mapDiffHashToFile(
   oldOid: string,
   newOid: string,
   diffFileHash: string
-): Promise<{ filepath: string, type: 'add' | 'remove' | 'modify' } | null> {
+): Promise<{ filepath: string; type: 'add' | 'remove' | 'modify' } | null> {
   const changes = await getFileChanges(dir, oldOid, newOid);
   if (!changes.length) return null;
 

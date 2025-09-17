@@ -25,15 +25,15 @@ Then you can publish it using another action:
 
 ## Inputs
 
-| Name         | Description                                | Default                    |
-|--------------|--------------------------------------------|----------------------------|
-| `output-path`| Output file path for JSON                  | `.repo-announcement.json` |
+| Name          | Description               | Default                   |
+| ------------- | ------------------------- | ------------------------- |
+| `output-path` | Output file path for JSON | `.repo-announcement.json` |
 
 ## Outputs
 
-| Name        | Description                         |
-|-------------|-------------------------------------|
-| `json-path` | Path to the generated JSON file     |
+| Name        | Description                     |
+| ----------- | ------------------------------- |
+| `json-path` | Path to the generated JSON file |
 
 ## Requirements
 

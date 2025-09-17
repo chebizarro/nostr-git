@@ -1,14 +1,6 @@
 <script lang="ts">
   import { formatDistanceToNow } from "date-fns";
-  import {
-    MessageSquare,
-    Heart,
-    Share,
-    MoreHorizontal,
-    Copy,
-    Check,
-    User,
-  } from "@lucide/svelte";
+  import { MessageSquare, Heart, Share, MoreHorizontal, Copy, Check, User } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
   import NostrAvatar from "./NostrAvatar.svelte";
   import {
@@ -17,13 +9,7 @@
     DropdownMenuItem,
     DropdownMenuTrigger,
   } from "../ui/dropdown-menu";
-  const {
-    Button,
-    Card,
-    CardContent,
-    Textarea,
-    Separator,
-  } = useRegistry();
+  const { Button, Card, CardContent, Textarea, Separator } = useRegistry();
 
   // Real git commit data structure
   interface GitCommitData {

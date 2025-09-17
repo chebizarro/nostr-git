@@ -8,8 +8,17 @@ export interface TerminalHandle {
   abort(): void;
 }
 
-export interface FeedMessage { id: string; kind: string; content: string; author: string; created_at: number }
-export interface FeedStore { subscribe: (cb: (msgs: FeedMessage[]) => void) => () => void; post: (content: string) => Promise<void> }
+export interface FeedMessage {
+  id: string;
+  kind: string;
+  content: string;
+  author: string;
+  created_at: number;
+}
+export interface FeedStore {
+  subscribe: (cb: (msgs: FeedMessage[]) => void) => () => void;
+  post: (content: string) => Promise<void>;
+}
 
 export function createTerminalFeedBridge(
   terminal: TerminalHandle,
@@ -25,7 +34,7 @@ export function createTerminalFeedBridge(
       if (!m.content) continue;
       // Only act on commands prefixed with /git or /sh
       const trimmed = m.content.trim();
-      const isCmd = trimmed.startsWith('/git ') || trimmed.startsWith('/sh ');
+      const isCmd = trimmed.startsWith("/git ") || trimmed.startsWith("/sh ");
       if (!isCmd) continue;
       // Never auto-run our own commands, just echo
       if (m.author === currentUser.npub) continue;

@@ -1,12 +1,12 @@
-import type { CommentEvent, CommentTag } from './nip22.js';
+import type {CommentEvent, CommentTag} from "./nip22.js"
 
 export interface Comment {
-  id: string;
-  content: string;
-  author: { pubkey: string };
-  tags: CommentTag[];
-  createdAt: string;
-  raw: CommentEvent;
+  id: string
+  content: string
+  author: {pubkey: string}
+  tags: CommentTag[]
+  createdAt: string
+  raw: CommentEvent
 }
 
 /**
@@ -14,11 +14,11 @@ export interface Comment {
  */
 export function parseCommentEvent(event: CommentEvent): Comment {
   return {
-    id: (event as any).id ?? '',
+    id: (event as any).id ?? "",
     content: event.content,
-    author: { pubkey: (event as any).pubkey ?? '' },
+    author: {pubkey: (event as any).pubkey ?? ""},
     tags: event.tags,
     createdAt: new Date(event.created_at * 1000).toISOString(),
     raw: event,
-  };
+  }
 }

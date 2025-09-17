@@ -9,7 +9,7 @@ function patchEvt(partial: Partial<any>): any {
     content: partial.content ?? '',
     created_at: partial.created_at ?? 0,
     tags: partial.tags ?? [],
-    sig: '',
+    sig: ''
   };
 }
 
@@ -20,10 +20,24 @@ describe('buildPatchGraph', () => {
     const C1v2 = patchEvt({ id: 'c1v2', created_at: 200, tags: [['commit', 'C1']] });
 
     // Commit C2 with parent C1
-    const C2 = patchEvt({ id: 'c2', created_at: 150, tags: [['commit', 'C2'], ['parent-commit', 'C1']] });
+    const C2 = patchEvt({
+      id: 'c2',
+      created_at: 150,
+      tags: [
+        ['commit', 'C2'],
+        ['parent-commit', 'C1']
+      ]
+    });
 
     // Commit C3 root (no parent)
-    const C3 = patchEvt({ id: 'c3', created_at: 120, tags: [['commit', 'C3'], ['t', 'root']] });
+    const C3 = patchEvt({
+      id: 'c3',
+      created_at: 120,
+      tags: [
+        ['commit', 'C3'],
+        ['t', 'root']
+      ]
+    });
 
     const graph = buildPatchGraph([C1v1, C1v2, C2, C3]);
 

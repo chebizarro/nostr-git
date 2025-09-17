@@ -16,13 +16,15 @@ export function makeGitHubHttp(token: string) {
       const buffer = new Uint8Array(await res.arrayBuffer());
       // Build minimal response compatible with isomorphic-git expectations
       const outHeaders: Record<string, string> = {};
-      res.headers.forEach((v, k) => { outHeaders[k] = v; });
+      res.headers.forEach((v, k) => {
+        outHeaders[k] = v;
+      });
       return {
         url: res.url,
         statusCode: res.status,
         statusMessage: res.statusText,
         headers: outHeaders,
-        body: buffer,
+        body: buffer
       };
     }
   };

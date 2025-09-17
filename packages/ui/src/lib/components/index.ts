@@ -71,7 +71,12 @@ export { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 export { Profile, ProfileLink } from "./ui/profile";
 export { Progress } from "./ui/progress";
 export { Select, SelectContent, SelectItem, SelectTrigger } from "./ui/select";
-export { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
+export {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 
 // Common actions
 export { default as EventActions } from "./EventActions.svelte";
@@ -90,5 +95,4 @@ export { default as FunctionProvider } from "../FunctionProvider.svelte";
 
 // Terminal
 export { default as Terminal } from "./terminal/Terminal.svelte";
-export { createTerminalFeedBridge } from "./terminal/feed-bridge"; 
-
+export { createTerminalFeedBridge } from "./terminal/feed-bridge";

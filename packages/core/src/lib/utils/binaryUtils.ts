@@ -23,7 +23,7 @@ export function binaryStringToBytes(content: string): Uint8Array {
   for (let i = 0; i < content.length; i++) {
     const charCode = content.charCodeAt(i);
     // Handle Unicode replacement character (65533) as a best-effort fallback
-    bytes[i] = charCode === 0xfffd /* 65533 */ ? 0x00 : (charCode & 0xff);
+    bytes[i] = charCode === 0xfffd /* 65533 */ ? 0x00 : charCode & 0xff;
   }
   return bytes;
 }

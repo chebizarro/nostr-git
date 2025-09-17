@@ -1,5 +1,5 @@
 <script lang="ts">
-  const { event, url, noun, customActions } = $props()
+  const { event, url, noun, customActions } = $props();
 </script>
 
 <div class="flex items-center gap-2">

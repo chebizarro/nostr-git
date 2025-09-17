@@ -31,7 +31,7 @@ export function clearProviderOverrides(): void {
  */
 export function resolveVendorProvider(url: string): VendorProvider {
   const hostname = extractHostname(url).toLowerCase();
-  
+
   // Check if we already have a provider for this hostname
   if (providerRegistry.has(hostname)) {
     return providerRegistry.get(hostname)!;
@@ -43,7 +43,7 @@ export function resolveVendorProvider(url: string): VendorProvider {
 
   // Create the appropriate provider
   let provider: VendorProvider;
-  
+
   switch (vendor) {
     case 'github':
       provider = new GitHubProvider(hostname);
@@ -69,7 +69,7 @@ export function resolveVendorProvider(url: string): VendorProvider {
 
   // Cache the provider
   providerRegistry.set(hostname, provider);
-  
+
   return provider;
 }
 
@@ -78,13 +78,13 @@ export function resolveVendorProvider(url: string): VendorProvider {
  */
 export function getVendorProvider(vendor: GitVendor, hostname: string): VendorProvider {
   const key = `${vendor}:${hostname.toLowerCase()}`;
-  
+
   if (providerRegistry.has(key)) {
     return providerRegistry.get(key)!;
   }
 
   let provider: VendorProvider;
-  
+
   switch (vendor) {
     case 'github':
       provider = new GitHubProvider(hostname);
@@ -113,14 +113,14 @@ export function getVendorProvider(vendor: GitVendor, hostname: string): VendorPr
 /**
  * Parse repository information from URL using the appropriate vendor provider
  */
-export function parseRepoFromUrl(url: string): { 
-  provider: VendorProvider; 
-  owner: string; 
-  repo: string; 
+export function parseRepoFromUrl(url: string): {
+  provider: VendorProvider;
+  owner: string;
+  repo: string;
 } | null {
   const provider = resolveVendorProvider(url);
   const parsed = provider.parseRepoUrl(url);
-  
+
   if (!parsed) {
     return null;
   }

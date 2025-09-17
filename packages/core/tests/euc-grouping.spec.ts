@@ -11,22 +11,24 @@ function mkEvt(overrides: Partial<any> = {}) {
       ['d', 'owner/repo'],
       ['web', 'https://site'],
       ['clone', 'https://git'],
-      ['maintainers', 'npub1maint'],
+      ['maintainers', 'npub1maint']
     ],
-    ...overrides,
+    ...overrides
   };
 }
 
 describe('groupByEuc', () => {
   it('groups announcements by r:euc and unions facets', () => {
     const a = mkEvt();
-    const b = mkEvt({ tags: [
-      ['r', 'wss://relay.example/euc-123', 'euc'],
-      ['d', 'owner/repo2'],
-      ['web', 'https://site2'],
-      ['clone', 'https://git2'],
-      ['maintainers', 'npub1maint', 'npub1other'],
-    ]});
+    const b = mkEvt({
+      tags: [
+        ['r', 'wss://relay.example/euc-123', 'euc'],
+        ['d', 'owner/repo2'],
+        ['web', 'https://site2'],
+        ['clone', 'https://git2'],
+        ['maintainers', 'npub1maint', 'npub1other']
+      ]
+    });
 
     const groups = groupByEuc([a, b]);
     expect(groups.length).toBe(1);

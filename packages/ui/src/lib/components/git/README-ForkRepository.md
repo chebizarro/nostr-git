@@ -19,6 +19,7 @@ A comprehensive GitHub-style fork repository feature for the Budabit-Flotilla cl
 A modal dialog component that provides the fork repository interface with GitHub-style design.
 
 **Props:**
+
 - `isOpen: boolean` - Controls dialog visibility
 - `originalRepo: OriginalRepo` - Original repository information
 - `defaultForkName: string` - Pre-filled fork name
@@ -31,6 +32,7 @@ A modal dialog component that provides the fork repository interface with GitHub
 - `isForking?: boolean` - Whether fork is in progress
 
 **Features:**
+
 - Original repository display with owner/name/description
 - Fork name input with live validation
 - Visibility selector (public/private) with icons
@@ -43,20 +45,22 @@ A modal dialog component that provides the fork repository interface with GitHub
 A Svelte 5 composable that manages the complete fork repository workflow.
 
 **API:**
+
 ```typescript
 const forkRepo = useForkRepo();
 
 // State
-forkRepo.progress    // Current progress information
-forkRepo.error       // Current error message
-forkRepo.isForking   // Whether fork is in progress
+forkRepo.progress; // Current progress information
+forkRepo.error; // Current error message
+forkRepo.isForking; // Whether fork is in progress
 
 // Methods
-await forkRepo.forkRepository(originalRepo, config, options)  // Start fork operation
-forkRepo.reset()                                              // Reset state
+await forkRepo.forkRepository(originalRepo, config, options); // Start fork operation
+forkRepo.reset(); // Reset state
 ```
 
 **Features:**
+
 - Interfaces with git-worker's `forkAndCloneRepo` method
 - Manages progress state and error handling
 - Creates and emits NIP-34 repository state events
@@ -70,12 +74,13 @@ forkRepo.reset()                                              // Reset state
 The core git operation that performs the complete fork workflow.
 
 **Signature:**
+
 ```typescript
 async function forkAndCloneRepo(options: {
   owner: string;
   repo: string;
   forkName: string;
-  visibility: 'public' | 'private';
+  visibility: "public" | "private";
   token: string;
   dir: string;
   onProgress?: (stage: string, pct?: number) => void;
@@ -87,10 +92,11 @@ async function forkAndCloneRepo(options: {
   branches: string[];
   tags: string[];
   error?: string;
-}>
+}>;
 ```
 
 **Workflow:**
+
 1. **Create Remote Fork**: POST to GitHub API `/repos/{owner}/{repo}/forks`
 2. **Poll for Readiness**: GET `/repos/{user}/{forkName}` until ready
 3. **Clone Locally**: Use `cloneRemoteRepo` to clone fork into LightningFS
@@ -98,6 +104,7 @@ async function forkAndCloneRepo(options: {
 5. **Cleanup on Error**: Remove partial clones if operation fails
 
 **Features:**
+
 - GitHub API integration with proper authentication headers
 - Intelligent polling with timeout protection (30 seconds max)
 - Full clone for forks (depth: 0) to ensure complete history
@@ -108,15 +115,15 @@ async function forkAndCloneRepo(options: {
 
 ```svelte
 <script lang="ts">
-  import { ForkRepoDialog, useForkRepo } from '@nostr-git/ui';
+  import { ForkRepoDialog, useForkRepo } from "@nostr-git/ui";
 
   let showForkDialog = $state(false);
   const forkRepo = useForkRepo();
 
   const originalRepo = {
-    owner: 'octocat',
-    name: 'Hello-World',
-    description: 'This your first repo!'
+    owner: "octocat",
+    name: "Hello-World",
+    description: "This your first repo!",
   };
 
   // Event signing closure (provided by parent app)
@@ -131,35 +138,31 @@ async function forkAndCloneRepo(options: {
 
   // Repository registration closure (provided by parent app)
   const registerRepo = async (repoId, forkUrl) => {
-    await repoStore.addRepository({ id: repoId, forkUrl, type: 'fork' });
+    await repoStore.addRepository({ id: repoId, forkUrl, type: "fork" });
     // Navigate to forked repository
     goto(`/repos/${repoId}`);
   };
 
   async function handleFork(config) {
-    await forkRepo.forkRepository(
-      originalRepo,
-      config,
-      {
-        token: await tokenStore.getToken('github.com'),
-        currentUser: user.login,
-        onSignEvent: signEvent,
-        onPublishEvent: publishEvent,
-        onRegisterRepo: registerRepo
-      }
-    );
+    await forkRepo.forkRepository(originalRepo, config, {
+      token: await tokenStore.getToken("github.com"),
+      currentUser: user.login,
+      onSignEvent: signEvent,
+      onPublishEvent: publishEvent,
+      onRegisterRepo: registerRepo,
+    });
   }
 </script>
 
 {#if showForkDialog}
   <ForkRepoDialog
     isOpen={showForkDialog}
-    {originalRepo}
+    originalRepo={originalRepo}
     defaultForkName={originalRepo.name}
-    onClose={() => showForkDialog = false}
+    onClose={() => (showForkDialog = false)}
     onFork={handleFork}
-    {onSignEvent}
-    {onPublishEvent}
+    onSignEvent={onSignEvent}
+    onPublishEvent={onPublishEvent}
     progress={forkRepo.progress}
     error={forkRepo.error}
     isForking={forkRepo.isForking}
@@ -173,8 +176,8 @@ async function forkAndCloneRepo(options: {
 
 ```typescript
 interface OriginalRepo {
-  owner: string;        // Repository owner/organization
-  name: string;         // Repository name
+  owner: string; // Repository owner/organization
+  name: string; // Repository name
   description?: string; // Optional description
 }
 ```
@@ -183,8 +186,8 @@ interface OriginalRepo {
 
 ```typescript
 interface ForkConfig {
-  forkName: string;              // Name for the fork
-  visibility: 'public' | 'private'; // Fork visibility
+  forkName: string; // Name for the fork
+  visibility: "public" | "private"; // Fork visibility
 }
 ```
 
@@ -192,9 +195,9 @@ interface ForkConfig {
 
 ```typescript
 interface ForkProgress {
-  stage: string;        // Current operation stage
-  percentage: number;   // Progress percentage (0-100)
-  isComplete: boolean;  // Whether operation is complete
+  stage: string; // Current operation stage
+  percentage: number; // Progress percentage (0-100)
+  isComplete: boolean; // Whether operation is complete
 }
 ```
 
@@ -203,16 +206,19 @@ interface ForkProgress {
 The feature integrates with GitHub's REST API for fork creation:
 
 ### Authentication
+
 - Uses Git tokens from the app's token store
 - Sends `Authorization: token {token}` header
 - Includes proper `User-Agent` and `Accept` headers
 
 ### Fork Creation
+
 - **Endpoint**: `POST /repos/{owner}/{repo}/forks`
 - **Payload**: `{ name: forkName, private: visibility === 'private' }`
 - **Response**: Fork metadata including clone URL and owner info
 
 ### Polling for Readiness
+
 - **Endpoint**: `GET /repos/{forkOwner}/{forkName}`
 - **Frequency**: Every 1 second for up to 30 seconds
 - **Success**: Repository exists and is not empty

@@ -1,8 +1,5 @@
 import type { RepoAnnouncementEvent, RepoStateEvent } from '@nostr-git/shared-types';
-import {
-  validateRepoAnnouncementEvent,
-  validateRepoStateEvent
-} from '@nostr-git/shared-types';
+import { validateRepoAnnouncementEvent, validateRepoStateEvent } from '@nostr-git/shared-types';
 
 /**
  * Feature flag for runtime event validation.
@@ -17,7 +14,8 @@ export function shouldValidateEvents(): boolean {
     return !!g.NOSTR_GIT_VALIDATE_EVENTS;
   }
   // Node/process env if present
-  const env = (typeof process !== 'undefined' && (process as any)?.env) ? (process as any).env : undefined;
+  const env =
+    typeof process !== 'undefined' && (process as any)?.env ? (process as any).env : undefined;
   if (env && typeof env.NOSTR_GIT_VALIDATE_EVENTS !== 'undefined') {
     const v = String(env.NOSTR_GIT_VALIDATE_EVENTS).toLowerCase();
     return v === '1' || v === 'true' || v === 'yes';

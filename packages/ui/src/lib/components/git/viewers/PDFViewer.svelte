@@ -1,23 +1,23 @@
 <script lang="ts">
-  import { createDataUrl, createBlob } from '@nostr-git/core';
-  
+  import { createDataUrl, createBlob } from "@nostr-git/core";
+
   const {
     content,
-    filename
+    filename,
   }: {
     content: string;
     filename: string;
   } = $props();
 
   // Convert content to data URL for PDF display
-  let dataUrl = $state('');
+  let dataUrl = $state("");
   let pdfError = $state(false);
 
   $effect(() => {
     try {
-      dataUrl = createDataUrl(content, 'application/pdf');
+      dataUrl = createDataUrl(content, "application/pdf");
     } catch (error) {
-      console.error('Failed to create data URL for PDF:', error);
+      console.error("Failed to create data URL for PDF:", error);
       pdfError = true;
     }
   });
@@ -28,9 +28,9 @@
 
   function downloadPdf() {
     try {
-      const blob = createBlob(content, 'application/pdf');
+      const blob = createBlob(content, "application/pdf");
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = filename;
       document.body.appendChild(a);
@@ -38,7 +38,7 @@
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Failed to download PDF:', error);
+      console.error("Failed to download PDF:", error);
     }
   }
 </script>
@@ -67,7 +67,7 @@
         class="rounded-lg shadow-sm"
         onerror={handlePdfError}
       />
-      
+
       <div class="mt-2 flex justify-center">
         <button
           onclick={downloadPdf}

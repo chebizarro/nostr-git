@@ -1,4 +1,10 @@
-import type { VendorProvider, RepoMetadata, CreateRepoOptions, UpdateRepoOptions, GitVendor } from '../vendor-providers.js';
+import type {
+  VendorProvider,
+  RepoMetadata,
+  CreateRepoOptions,
+  UpdateRepoOptions,
+  GitVendor
+} from '../vendor-providers.js';
 
 export class GenericProvider implements VendorProvider {
   readonly vendor: GitVendor = 'generic';
@@ -31,11 +37,21 @@ export class GenericProvider implements VendorProvider {
     throw new Error(`Repository creation not supported for generic Git provider: ${this.hostname}`);
   }
 
-  async updateRepo(owner: string, repo: string, options: UpdateRepoOptions, token: string): Promise<RepoMetadata> {
+  async updateRepo(
+    owner: string,
+    repo: string,
+    options: UpdateRepoOptions,
+    token: string
+  ): Promise<RepoMetadata> {
     throw new Error(`Repository updates not supported for generic Git provider: ${this.hostname}`);
   }
 
-  async forkRepo(owner: string, repo: string, forkName: string, token: string): Promise<RepoMetadata> {
+  async forkRepo(
+    owner: string,
+    repo: string,
+    forkName: string,
+    token: string
+  ): Promise<RepoMetadata> {
     throw new Error(`Repository forking not supported for generic Git provider: ${this.hostname}`);
   }
 
@@ -77,7 +93,7 @@ export class GenericProvider implements VendorProvider {
   getAuthHeaders(token: string): Record<string, string> {
     // Use generic Authorization header for unknown providers
     return {
-      'Authorization': `Bearer ${token}`
+      Authorization: `Bearer ${token}`
     };
   }
 }

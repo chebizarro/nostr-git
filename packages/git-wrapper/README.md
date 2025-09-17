@@ -13,7 +13,7 @@ TypeScript wrapper that bridges a Git backend with Nostr NIP-34 collaboration ev
 
 ## Quick start
 
-```ts
+````ts
 import { NostrGitProvider } from './src/nostr-git-provider.js';
 import { makeRepoAddr } from './src/repo-addr.js';
 import { FileProtocolPrefs } from './src/prefs-store.js';
@@ -83,19 +83,19 @@ import { getGitProvider } from '@nostr-git/git-wrapper';
 const git = getGitProvider();
 await git.clone({ dir: '/my/repo', url: 'https://github.com/owner/repo.git' });
 const head = await git.resolveRef({ dir: '/my/repo', ref: 'HEAD' });
-```
+````
 
 ### Browser usage snippet
 
 When used in a browser app (e.g., Svelte with `ssr=false`), the browser entry is selected automatically. LightningFS and `http/web` are wired for you:
 
 ```ts
-import { getGitProvider } from '@nostr-git/git-wrapper';
+import {getGitProvider} from "@nostr-git/git-wrapper"
 
-const git = getGitProvider();
-await git.init({ dir: '/my-repo' });
-const status = await git.statusMatrix({ dir: '/my-repo' });
-console.log('entries:', status.length);
+const git = getGitProvider()
+await git.init({dir: "/my-repo"})
+const status = await git.statusMatrix({dir: "/my-repo"})
+console.log("entries:", status.length)
 ```
 
 Configure behavior via env (Node) or by calling `loadConfig()` with overrides when embedding:
@@ -119,11 +119,11 @@ The factory returns a singleton `GitProvider` with optional caching layered on t
 Programmatic override when embedding:
 
 ```ts
-import { getGitProvider } from '@nostr-git/git-wrapper';
-import { loadConfig } from '@nostr-git/git-wrapper';
+import {getGitProvider} from "@nostr-git/git-wrapper"
+import {loadConfig} from "@nostr-git/git-wrapper"
 
 // Override at call site
-const git = getGitProvider({ cacheMode: 'per-session', cacheTtlMs: 45_000 });
+const git = getGitProvider({cacheMode: "per-session", cacheTtlMs: 45_000})
 ```
 
 The singleton is reused across calls to `getGitProvider()` for the process/session.
@@ -152,17 +152,17 @@ The `package.json` exports map selects the right entry automatically:
 Most consumers can simply:
 
 ```ts
-import { getGitProvider } from '@nostr-git/git-wrapper';
+import {getGitProvider} from "@nostr-git/git-wrapper"
 ```
 
 If you need to target explicitly:
 
 ```ts
 // Browser explicit
-import { getGitProvider } from '@nostr-git/git-wrapper/dist/index.web.js';
+import {getGitProvider} from "@nostr-git/git-wrapper/dist/index.web.js"
 
 // Node explicit
-import { getGitProvider } from '@nostr-git/git-wrapper/dist/index.node.js';
+import {getGitProvider} from "@nostr-git/git-wrapper/dist/index.node.js"
 ```
 
 ### Direct adapter
@@ -170,11 +170,15 @@ import { getGitProvider } from '@nostr-git/git-wrapper/dist/index.node.js';
 If you need to wire your own fs/http, use the adapter:
 
 ```ts
-import { IsomorphicGitProvider } from '@nostr-git/git-wrapper';
-import http from 'isomorphic-git/http/web';
-import LightningFS from '@isomorphic-git/lightning-fs';
+import {IsomorphicGitProvider} from "@nostr-git/git-wrapper"
+import http from "isomorphic-git/http/web"
+import LightningFS from "@isomorphic-git/lightning-fs"
 
-const git = new IsomorphicGitProvider({ fs: LightningFS, http, corsProxy: 'https://cors.isomorphic-git.org' });
+const git = new IsomorphicGitProvider({
+  fs: LightningFS,
+  http,
+  corsProxy: "https://cors.isomorphic-git.org",
+})
 ```
 
 ## Examples

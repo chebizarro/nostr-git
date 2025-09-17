@@ -4,7 +4,7 @@
   import { GitCommit } from "@lucide/svelte";
   import TimeAgo from "../../TimeAgo.svelte";
 
-  import type { Profile } from '@nostr-git/shared-types';
+  import type { Profile } from "@nostr-git/shared-types";
   const {
     content,
     author,
@@ -20,8 +20,13 @@
 
 <div class="flex gap-3 group py-2">
   <Avatar class="h-8 w-8 mt-0.5">
-    <AvatarImage src={author?.avatar ?? author?.picture ?? ''} alt={author?.name ?? author?.display_name ?? ''} />
-    <AvatarFallback>{(author?.name ?? author?.display_name ?? '').substring(0, 2).toUpperCase()}</AvatarFallback>
+    <AvatarImage
+      src={author?.avatar ?? author?.picture ?? ""}
+      alt={author?.name ?? author?.display_name ?? ""}
+    />
+    <AvatarFallback
+      >{(author?.name ?? author?.display_name ?? "").substring(0, 2).toUpperCase()}</AvatarFallback
+    >
   </Avatar>
   <div class="flex-1">
     <div class="flex items-center gap-2">

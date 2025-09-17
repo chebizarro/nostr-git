@@ -8,5 +8,13 @@ export type HexString = Uint8Array<ArrayBufferLike>;
  * @param relays - The relays to query for existing git repos
  * @returns a signed permalink @NostrEvent
  */
-export declare function createEventFromPermalink(permalink: string, signer: (event: EventTemplate) => Promise<NostrEvent>, relays: string[]): Promise<NostrEvent>;
-export declare function createNeventFromPermalink(permalink: string, signer: (event: EventTemplate) => Promise<NostrEvent>, relays: string[]): Promise<string>;
+export declare function createEventFromPermalink(
+  permalink: string,
+  signer: (event: EventTemplate) => Promise<NostrEvent>,
+  relays: string[]
+): Promise<NostrEvent>;
+export declare function createNeventFromPermalink(
+  permalink: string,
+  signer: (event: EventTemplate) => Promise<NostrEvent>,
+  relays: string[]
+): Promise<string>;

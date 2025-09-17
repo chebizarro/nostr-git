@@ -41,7 +41,9 @@ export type AnnounceRepoOptions = {
   publishEvent?: (event: RepoAnnouncementEvent) => Promise<void>;
 };
 
-export async function announceRepoAndPublish(opts: AnnounceRepoOptions): Promise<RepoAnnouncementEvent> {
+export async function announceRepoAndPublish(
+  opts: AnnounceRepoOptions
+): Promise<RepoAnnouncementEvent> {
   const event = createRepoAnnouncementEvent(opts);
   let signedEvent = event;
   if (opts.signEvent) {

@@ -2,7 +2,7 @@ import type {
   RepoAnnouncementEvent,
   RepoStateEvent,
   RepoAnnouncement,
-  RepoState,
+  RepoState
 } from '@nostr-git/shared-types';
 import type { GitProvider } from '@nostr-git/git-wrapper';
 import { parseRepoAnnouncementEvent, parseRepoStateEvent } from '@nostr-git/shared-types';
@@ -39,7 +39,7 @@ export async function fetchRepo(
   return {
     repo,
     announcement: parsedAnnouncement,
-    state: parsedState,
+    state: parsedState
   };
 }
 
@@ -57,11 +57,15 @@ export class GitRepository {
 
   async getBranches(): Promise<Branch[]> {
     if (this.state)
-      return this.state.refs.map((b) => ({ name: b.ref, oid: b.commit, isHead: b.ref === this.state?.head }));
-    
+      return this.state.refs.map((b) => ({
+        name: b.ref,
+        oid: b.commit,
+        isHead: b.ref === this.state?.head
+      }));
+
     const url = this.announcement.clone?.find((u) => u.startsWith('https://'));
     if (!url) throw new Error('No clone URL found in announcement event');
-    
+
     return await listBranches({ url, dir: this.dir });
   }
 
@@ -76,12 +80,12 @@ export class GitRepository {
       ref: this.state?.head,
       singleBranch: true,
       depth: 1,
-      noCheckout: true,
+      noCheckout: true
     });
     return {
       repo,
       announcement: this.announcement,
-      state: this.state,
+      state: this.state
     };
   }
-} 
+}

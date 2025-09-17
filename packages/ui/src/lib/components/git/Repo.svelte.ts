@@ -1,5 +1,3 @@
- 
- 
 import {
   IssueEvent,
   parseRepoAnnouncementEvent,
@@ -18,15 +16,13 @@ import {
   extractLabelEventsV2,
   mergeEffectiveLabelsV2,
 } from "@nostr-git/shared-types";
-import {
-  type MergeAnalysisResult,
-} from "@nostr-git/core";
+import { type MergeAnalysisResult } from "@nostr-git/core";
 import { canonicalRepoKey } from "@nostr-git/core";
 import { type Readable } from "svelte/store";
 import { context } from "$lib/stores/context";
 import { Token, tokens } from "$lib/stores/tokens";
 import { WorkerManager, type WorkerProgressEvent, type CloneProgress } from "./WorkerManager";
-import { CacheManager, MergeAnalysisCacheManager, CacheType } from './CacheManager';
+import { CacheManager, MergeAnalysisCacheManager, CacheType } from "./CacheManager";
 import { PatchManager } from "./PatchManager";
 import { CommitManager } from "./CommitManager";
 import { BranchManager } from "./BranchManager";
@@ -43,7 +39,7 @@ import {
   getPatchLabels as coreGetPatchLabels,
   getMaintainerBadge as coreGetMaintainerBadge,
   getRecommendedFilters as coreGetRecommendedFilters,
-} from './RepoCore'
+} from "./RepoCore";
 
 // Inline label result type (shared-types does not export this interface)
 type EffectiveLabelsV2 = {
@@ -66,7 +62,7 @@ export class Repo {
   labelEventsArr = $state<NostrEvent[] | undefined>(undefined);
   // Stable, canonical key used for all UI caches and internal maps
   canonicalKey: string = $state("");
-  
+
   // Manager components
   workerManager!: WorkerManager;
   cacheManager!: CacheManager;
@@ -79,9 +75,30 @@ export class Repo {
   tokens = $state<Token[]>([]);
 
   // Private caches used across helpers
-  #mergedRefsCache: Map<string, { commitId: string; type: "heads"|"tags"; fullRef: string }> | undefined;
-  #patchDagCache: { key: string; value: { nodes: Map<string, any>; roots: string[]; rootRevisions: string[]; edgesCount?: number; topParents?: string[] } } | undefined;
-  #statusCache: Map<string, { state: "open"|"draft"|"closed"|"merged"|"resolved"; by: string; at: number; eventId: string } | null> = new Map();
+  #mergedRefsCache:
+    | Map<string, { commitId: string; type: "heads" | "tags"; fullRef: string }>
+    | undefined;
+  #patchDagCache:
+    | {
+        key: string;
+        value: {
+          nodes: Map<string, any>;
+          roots: string[];
+          rootRevisions: string[];
+          edgesCount?: number;
+          topParents?: string[];
+        };
+      }
+    | undefined;
+  #statusCache: Map<
+    string,
+    {
+      state: "open" | "draft" | "closed" | "merged" | "resolved";
+      by: string;
+      at: number;
+      eventId: string;
+    } | null
+  > = new Map();
   #issueThreadCache: Map<string, { rootId: string; comments: NostrEvent[] }> = new Map();
   #labelsCache: Map<string, EffectiveLabelsV2> = new Map();
 
@@ -137,77 +154,62 @@ export class Repo {
       try {
         await this.workerManager.setAuthConfig({ tokens: t });
         if (t?.length) {
-          console.log('🔐 Updated git auth tokens for', t.length, 'hosts');
+          console.log("🔐 Updated git auth tokens for", t.length, "hosts");
         } else {
-          console.log('🔐 Cleared git auth tokens');
+          console.log("🔐 Cleared git auth tokens");
         }
       } catch (e) {
-        console.warn('🔐 Failed to update worker auth config from token changes:', e);
+        console.warn("🔐 Failed to update worker auth config from token changes:", e);
       }
     });
 
     // Initialize cache managers
     this.cacheManager = new CacheManager();
-    
+
     // Register cache configurations for file operations
-    this.cacheManager.registerCache('file_content', {
+    this.cacheManager.registerCache("file_content", {
       type: CacheType.MEMORY,
-      keyPrefix: 'file_content_',
+      keyPrefix: "file_content_",
       defaultTTL: 10 * 60 * 1000, // 10 minutes
       maxSize: 100,
       autoCleanup: true,
-      cleanupInterval: 5 * 60 * 1000 // 5 minutes
+      cleanupInterval: 5 * 60 * 1000, // 5 minutes
     });
-    
-    this.cacheManager.registerCache('file_listing', {
+
+    this.cacheManager.registerCache("file_listing", {
       type: CacheType.MEMORY,
-      keyPrefix: 'file_listing_',
+      keyPrefix: "file_listing_",
       defaultTTL: 5 * 60 * 1000, // 5 minutes
       maxSize: 50,
       autoCleanup: true,
-      cleanupInterval: 5 * 60 * 1000 // 5 minutes
+      cleanupInterval: 5 * 60 * 1000, // 5 minutes
     });
-    
+
     this.mergeAnalysisCacheManager = new MergeAnalysisCacheManager(this.cacheManager);
-    
+
     // Initialize PatchManager with dependencies
-    this.patchManager = new PatchManager(
-      this.workerManager,
-      this.mergeAnalysisCacheManager
-    );
+    this.patchManager = new PatchManager(this.workerManager, this.mergeAnalysisCacheManager);
 
     // Initialize CommitManager with dependencies
-    this.commitManager = new CommitManager(
-      this.workerManager,
-      this.cacheManager,
-      {
-        defaultCommitsPerPage: 30,
-        enableCaching: true,
-      }
-    );
+    this.commitManager = new CommitManager(this.workerManager, this.cacheManager, {
+      defaultCommitsPerPage: 30,
+      enableCaching: true,
+    });
 
     // Initialize BranchManager with dependencies
-    this.branchManager = new BranchManager(
-      this.workerManager,
-      this.cacheManager,
-      {
-        enableCaching: true,
-        autoRefresh: false,
-      }
-    );
+    this.branchManager = new BranchManager(this.workerManager, this.cacheManager, {
+      enableCaching: true,
+      autoRefresh: false,
+    });
 
     // Initialize FileManager
-    this.fileManager = new FileManager(
-      this.workerManager,
-      this.cacheManager,
-      {
-        enableCaching: true,
-        contentCacheTTL: 10 * 60 * 1000, // 10 minutes
-        listingCacheTTL: 5 * 60 * 1000, // 5 minutes
-        maxCacheFileSize: 1024 * 1024, // 1MB
-        autoCleanup: true
-      }
-    );
+    this.fileManager = new FileManager(this.workerManager, this.cacheManager, {
+      enableCaching: true,
+      contentCacheTTL: 10 * 60 * 1000, // 10 minutes
+      listingCacheTTL: 5 * 60 * 1000, // 5 minutes
+      maxCacheFileSize: 1024 * 1024, // 1MB
+      autoCleanup: true,
+    });
 
     // Store initial repo event for deferred branch loading
     let initialRepoEvent: RepoAnnouncementEvent | null = null;
@@ -223,7 +225,7 @@ export class Repo {
           canonicalKey: this.canonicalKey,
           workerRepoId: this.repoEvent.id,
         });
-        
+
         // Invalidate branch cache when repo event changes
         this.invalidateBranchCache();
         // Invalidate DAG cache when repo event changes
@@ -245,16 +247,14 @@ export class Repo {
       if (event) {
         this.repoStateEvent = event; // Set the reactive state
         this.state = parseRepoStateEvent(event);
-        
+
         // Process the Repository State event in BranchManager
         this.branchManager.processRepoStateEvent(event);
-        
+
         // Invalidate branch cache when repo state changes
         this.invalidateBranchCache();
         // Invalidate DAG cache when repo state changes (may affect patch interpretation)
         this.#patchDagCache = undefined;
-        
-
       }
     });
 
@@ -288,12 +288,12 @@ export class Repo {
 
     tokens.subscribe(async (tokenList) => {
       this.tokens = tokenList;
-      console.log('🔐 Token store updated in Repo:', tokenList.length, 'tokens');
-      
+      console.log("🔐 Token store updated in Repo:", tokenList.length, "tokens");
+
       // Update WorkerManager authentication if it's ready
       if (this.workerManager.isReady) {
         await this.workerManager.setAuthConfig({ tokens: tokenList });
-        console.log('🔐 Updated WorkerManager authentication with', tokenList.length, 'tokens');
+        console.log("🔐 Updated WorkerManager authentication with", tokenList.length, "tokens");
       }
     });
 
@@ -302,19 +302,19 @@ export class Repo {
       try {
         // Initialize the WorkerManager first
         await this.workerManager.initialize();
-        
+
         // Wait for tokens to be loaded from localStorage before configuring auth
         const loadedTokens = await tokens.waitForInitialization();
         if (loadedTokens.length > 0) {
           await this.workerManager.setAuthConfig({ tokens: loadedTokens });
-          console.log('🔐 Configured git authentication for', loadedTokens.length, 'hosts');
+          console.log("🔐 Configured git authentication for", loadedTokens.length, "hosts");
         } else {
-          console.log('🔐 No authentication tokens found');
+          console.log("🔐 No authentication tokens found");
         }
-        
+
         // Delegate initialization and commit loading to a single method
         await this.#loadCommitsFromRepo();
-        
+
         // Ensure background merge analysis runs once worker is ready
         if (this.patches.length > 0) {
           await this.#performMergeAnalysis(this.patches);
@@ -339,14 +339,14 @@ export class Repo {
 
     tokens.subscribe(async (tokens) => {
       this.tokens = tokens;
-      
+
       // Update authentication configuration when tokens change
       if (this.workerManager.isReady && tokens.length > 0) {
         try {
           await this.workerManager.setAuthConfig({ tokens });
-          console.log('Updated git authentication for', tokens.length, 'hosts');
+          console.log("Updated git authentication for", tokens.length, "hosts");
         } catch (error) {
-          console.error('Failed to update git authentication:', error);
+          console.error("Failed to update git authentication:", error);
         }
       }
     });
@@ -358,33 +358,35 @@ export class Repo {
    */
   async getResolvedDefaultBranch(requestedBranch?: string): Promise<string> {
     const now = Date.now();
-    
+
     // Check if we have a valid cached result
-    if (this.#resolvedDefaultBranch && 
-        (now - this.#branchResolutionTimestamp) < this.#branchResolutionTTL) {
+    if (
+      this.#resolvedDefaultBranch &&
+      now - this.#branchResolutionTimestamp < this.#branchResolutionTTL
+    ) {
       console.log(`Using cached resolved branch: ${this.#resolvedDefaultBranch}`);
       return this.#resolvedDefaultBranch;
     }
-    
+
     // Perform fresh branch resolution
-    console.log('Resolving default branch (cache miss or expired)');
-    
+    console.log("Resolving default branch (cache miss or expired)");
+
     // Use BranchManager's robust branch resolution
     const resolvedBranch = requestedBranch || this.branchManager.getMainBranch();
-    
+
     // Cache the result
     this.#resolvedDefaultBranch = resolvedBranch;
     this.#branchResolutionTimestamp = now;
-    
+
     console.log(`Cached resolved branch: ${resolvedBranch}`);
     return resolvedBranch;
   }
-  
+
   /**
    * Invalidate the cached resolved branch (call when repository state changes)
    */
   invalidateBranchCache(): void {
-    console.log('Invalidating branch resolution cache');
+    console.log("Invalidating branch resolution cache");
     this.#resolvedDefaultBranch = null;
     this.#branchResolutionTimestamp = 0;
   }
@@ -392,7 +394,7 @@ export class Repo {
   private getOwnerPubkey(): string {
     const owner = this.repo?.owner?.trim();
     if (owner && owner.length > 0) return owner;
-    return (this.repoEvent?.pubkey || '').trim();
+    return (this.repoEvent?.pubkey || "").trim();
   }
 
   /** Build a RepoCore context snapshot from current reactive state */
@@ -431,16 +433,29 @@ export class Repo {
   // -------------------------
   // Merged refs from 30618 by maintainers
   // -------------------------
-  private mergeRepoStateByMaintainers(events: RepoStateEvent[]): Map<string, { commitId: string; type: "heads"|"tags"; fullRef: string }>{
-    return coreMergeRepoStateByMaintainers(this.#coreCtx(), events)
+  private mergeRepoStateByMaintainers(
+    events: RepoStateEvent[]
+  ): Map<string, { commitId: string; type: "heads" | "tags"; fullRef: string }> {
+    return coreMergeRepoStateByMaintainers(this.#coreCtx(), events);
   }
 
   // -------------------------
   // Patch DAG (1617 + NIP-10)
   // -------------------------
   /** Build a patch DAG from NIP-10 relations and identify roots/revision roots. */
-  public getPatchGraph(): { nodes: Map<string, PatchEvent>; roots: string[]; rootRevisions: string[]; edgesCount: number; topParents: string[]; parentOutDegree: Record<string, number>; parentChildren: Record<string, string[]> } {
-    const ids = (this.patches || []).map(p => p.id).sort().join(",");
+  public getPatchGraph(): {
+    nodes: Map<string, PatchEvent>;
+    roots: string[];
+    rootRevisions: string[];
+    edgesCount: number;
+    topParents: string[];
+    parentOutDegree: Record<string, number>;
+    parentChildren: Record<string, string[]>;
+  } {
+    const ids = (this.patches || [])
+      .map((p) => p.id)
+      .sort()
+      .join(",");
     if (this.#patchDagCache?.key === ids) return this.#patchDagCache.value as any;
     const value = coreGetPatchGraph(this.#coreCtx());
     this.#patchDagCache = { key: ids, value: value as any };
@@ -451,7 +466,14 @@ export class Repo {
   // Status resolution (1630–1633)
   // -------------------------
   /** Resolve final status for a root id (issue or patch). */
-  public resolveStatusFor(rootId: string): { state: "open"|"draft"|"closed"|"merged"|"resolved"; by: string; at: number; eventId: string } | null {
+  public resolveStatusFor(
+    rootId: string
+  ): {
+    state: "open" | "draft" | "closed" | "merged" | "resolved";
+    by: string;
+    at: number;
+    eventId: string;
+  } | null {
     if (!this.statusEventsArr || this.statusEventsArr.length === 0) return null;
     const cached = this.#statusCache.get(rootId);
     if (cached !== undefined) return cached;
@@ -461,7 +483,9 @@ export class Repo {
   }
 
   private findRootAuthor(rootId: string): string | undefined {
-    const root = (this.issues || []).find(i => i.id === rootId) || (this.patches || []).find(p => p.id === rootId);
+    const root =
+      (this.issues || []).find((i) => i.id === rootId) ||
+      (this.patches || []).find((p) => p.id === rootId);
     return root?.pubkey;
   }
 
@@ -481,11 +505,18 @@ export class Repo {
   // Labels (1985 + self)
   // -------------------------
   /** Materialize effective labels for an event/address/euc target. */
-  public getEffectiveLabelsFor(target: { id?: string; address?: string; euc?: string }): EffectiveLabelsV2 {
-    const key = `${target.id || ''}|${target.address || ''}|${target.euc || ''}`;
+  public getEffectiveLabelsFor(target: {
+    id?: string;
+    address?: string;
+    euc?: string;
+  }): EffectiveLabelsV2 {
+    const key = `${target.id || ""}|${target.address || ""}|${target.euc || ""}`;
     const cached = this.#labelsCache.get(key);
     if (cached) return cached;
-    const result = coreGetEffectiveLabelsFor(this.#coreCtx(), target) as unknown as EffectiveLabelsV2;
+    const result = coreGetEffectiveLabelsFor(
+      this.#coreCtx(),
+      target
+    ) as unknown as EffectiveLabelsV2;
     this.#labelsCache.set(key, result);
     return result;
   }
@@ -494,8 +525,12 @@ export class Repo {
     return coreGetRepoLabels(this.#coreCtx()) as unknown as EffectiveLabelsV2;
   }
 
-  public getIssueLabels(rootId: string): EffectiveLabelsV2 { return coreGetIssueLabels(this.#coreCtx(), rootId) as unknown as EffectiveLabelsV2; }
-  public getPatchLabels(rootId: string): EffectiveLabelsV2 { return coreGetPatchLabels(this.#coreCtx(), rootId) as unknown as EffectiveLabelsV2; }
+  public getIssueLabels(rootId: string): EffectiveLabelsV2 {
+    return coreGetIssueLabels(this.#coreCtx(), rootId) as unknown as EffectiveLabelsV2;
+  }
+  public getPatchLabels(rootId: string): EffectiveLabelsV2 {
+    return coreGetPatchLabels(this.#coreCtx(), rootId) as unknown as EffectiveLabelsV2;
+  }
 
   // -------------------------
   // Subscription hints (no network)
@@ -513,7 +548,12 @@ export class Repo {
    */
   public describeAheadBehind(ref: string): { ahead: number | string[] } | null {
     // Normalize ref to fullRef if short name is passed
-    const toFullRef = (s: string): string => s.startsWith('refs/') ? s : (s.startsWith('heads/') || s.startsWith('tags/') ? `refs/${s}` : `refs/heads/${s}`);
+    const toFullRef = (s: string): string =>
+      s.startsWith("refs/")
+        ? s
+        : s.startsWith("heads/") || s.startsWith("tags/")
+          ? `refs/${s}`
+          : `refs/heads/${s}`;
     const fullRef = toFullRef(ref);
     // Prefer merged refs if present
     if (this.repoStateEventsArr && this.repoStateEventsArr.length > 0) {
@@ -528,7 +568,9 @@ export class Repo {
     // Fallback to single repo state event with possible lineage
     if (this.repoStateEvent) {
       const parsed: any = parseRepoStateEvent(this.repoStateEvent);
-      const hit = (parsed.refs || []).find((r: any) => (r.ref || `refs/${r.type}/${r.name}`) === fullRef);
+      const hit = (parsed.refs || []).find(
+        (r: any) => (r.ref || `refs/${r.type}/${r.name}`) === fullRef
+      );
       if (hit) {
         const lineage: string[] | undefined = hit.lineage || hit.ancestry || undefined;
         if (Array.isArray(lineage) && lineage.length > 0) {
@@ -546,12 +588,16 @@ export class Repo {
   }
 
   // Public API for getting merge analysis result (requires patch object for proper validation)
-  async getMergeAnalysis(patch: PatchEvent, targetBranch?: string): Promise<MergeAnalysisResult | null> {
+  async getMergeAnalysis(
+    patch: PatchEvent,
+    targetBranch?: string
+  ): Promise<MergeAnalysisResult | null> {
     if (!this.repoEvent) return null;
-  
+
     const repoId = this.canonicalKey;
     const fallbackMain = this.branchManager.getMainBranch();
-    const branch = (targetBranch ?? this.mainBranch ?? fallbackMain).split("/").pop() || fallbackMain;
+    const branch =
+      (targetBranch ?? this.mainBranch ?? fallbackMain).split("/").pop() || fallbackMain;
     // Use workerRepoId (event id) for worker calls when available
     const workerRepoId = this.repoEvent?.id;
     return await this.patchManager.getMergeAnalysis(patch, branch, repoId, workerRepoId);
@@ -563,12 +609,16 @@ export class Repo {
   }
 
   // Public API for force refresh merge analysis for a patch
-  async refreshMergeAnalysis(patch: PatchEvent, targetBranch?: string): Promise<MergeAnalysisResult | null> {
+  async refreshMergeAnalysis(
+    patch: PatchEvent,
+    targetBranch?: string
+  ): Promise<MergeAnalysisResult | null> {
     if (!this.repoEvent) return null;
 
     const repoId = this.canonicalKey;
     const fallbackMain = this.branchManager.getMainBranch();
-    const branch = (targetBranch ?? this.mainBranch ?? fallbackMain).split("/").pop() || fallbackMain;
+    const branch =
+      (targetBranch ?? this.mainBranch ?? fallbackMain).split("/").pop() || fallbackMain;
     // Use workerRepoId (event id) for worker calls when available
     const workerRepoId = this.repoEvent?.id;
     return await this.patchManager.refreshMergeAnalysis(patch, branch, repoId, workerRepoId);
@@ -660,7 +710,7 @@ export class Repo {
     if (this.repoStateEvent) {
       this.branchManager.processRepoStateEvent(this.repoStateEvent);
     }
-    
+
     // Delegate to BranchManager
     await this.branchManager.loadBranchesFromRepo(repoEvent);
   }
@@ -690,7 +740,9 @@ export class Repo {
   // Expose maintainers from the parsed repo announcement
   get maintainers(): string[] {
     const owner = this.getOwnerPubkey();
-    const combined = owner ? [...(this.repo?.maintainers || []), owner] : (this.repo?.maintainers || []);
+    const combined = owner
+      ? [...(this.repo?.maintainers || []), owner]
+      : this.repo?.maintainers || [];
     return Array.from(new Set(combined.filter(Boolean)));
   }
 
@@ -708,19 +760,28 @@ export class Repo {
    * - Automatic branch loading with error handling
    * @returns Promise<Array<{name: string; type: "heads" | "tags"; fullRef: string; commitId: string}>>
    */
-  async getAllRefsWithFallback(): Promise<Array<{name: string; type: "heads" | "tags"; fullRef: string; commitId: string}>> {
+  async getAllRefsWithFallback(): Promise<
+    Array<{ name: string; type: "heads" | "tags"; fullRef: string; commitId: string }>
+  > {
     // Prefer merged refs by trusted maintainers when multiple 30618s are available
     if (this.repoStateEventsArr && this.repoStateEventsArr.length > 0) {
       if (!this.#mergedRefsCache) {
         this.#mergedRefsCache = this.mergeRepoStateByMaintainers(this.repoStateEventsArr);
       }
-      const refs: Array<{name: string; type: "heads" | "tags"; fullRef: string; commitId: string}> = [];
+      const refs: Array<{
+        name: string;
+        type: "heads" | "tags";
+        fullRef: string;
+        commitId: string;
+      }> = [];
       for (const [key, ref] of this.#mergedRefsCache.entries()) {
         const name = key.split(":")[1];
         refs.push({ name, type: ref.type, fullRef: ref.fullRef, commitId: ref.commitId });
       }
       if (refs.length > 0) {
-        return refs.sort((a, b) => a.type === b.type ? a.name.localeCompare(b.name) : (a.type === "heads" ? -1 : 1));
+        return refs.sort((a, b) =>
+          a.type === b.type ? a.name.localeCompare(b.name) : a.type === "heads" ? -1 : 1
+        );
       }
     }
 
@@ -732,15 +793,11 @@ export class Repo {
       }
     } else if (!this.repoStateEvent) {
       // Load branches from repository if not available and we have a repo event
-      if (
-        this.branchManager &&
-        this.branchManager.getBranches().length === 0 &&
-        this.repoEvent
-      ) {
+      if (this.branchManager && this.branchManager.getBranches().length === 0 && this.repoEvent) {
         try {
           await this.branchManager.loadBranchesFromRepo(this.repoEvent);
         } catch (error) {
-          console.error('Failed to load branches from git repository:', error);
+          console.error("Failed to load branches from git repository:", error);
           // Continue with empty branches rather than throwing
         }
       }
@@ -750,7 +807,8 @@ export class Repo {
     const nip34Refs = this.branchManager?.getAllNIP34References() || new Map();
     const processedBranches = this.branchManager?.getBranches() || [];
 
-    const refs: Array<{name: string; type: "heads" | "tags"; fullRef: string; commitId: string}> = [];
+    const refs: Array<{ name: string; type: "heads" | "tags"; fullRef: string; commitId: string }> =
+      [];
 
     // Process NIP-34 references first
     for (const [shortName, ref] of nip34Refs) {
@@ -790,7 +848,7 @@ export class Repo {
    */
   async getBranchNames(): Promise<string[]> {
     const refs = await this.getAllRefsWithFallback();
-    return refs.filter(ref => ref.type === "heads").map(ref => ref.name);
+    return refs.filter((ref) => ref.type === "heads").map((ref) => ref.name);
   }
 
   /**
@@ -799,7 +857,7 @@ export class Repo {
    */
   async getTagNames(): Promise<string[]> {
     const refs = await this.getAllRefsWithFallback();
-    return refs.filter(ref => ref.type === "tags").map(ref => ref.name);
+    return refs.filter((ref) => ref.type === "tags").map((ref) => ref.name);
   }
 
   get selectedBranch() {
@@ -810,9 +868,10 @@ export class Repo {
     this.branchManager.setSelectedBranch(branchName);
   }
 
-
   get isLoading() {
-    return Object.values(this.#loadingIds).some((id) => id !== null) || this.commitManager.isLoading();
+    return (
+      Object.values(this.#loadingIds).some((id) => id !== null) || this.commitManager.isLoading()
+    );
   }
 
   get totalCommits() {
@@ -842,19 +901,18 @@ export class Repo {
 
   async loadPage(page: number) {
     try {
-      
       // Use canonical repo ID consistently for worker calls
       const effectiveRepoId = this.repoId;
-      
+
       // Get the actual resolved default branch with fallback
       let effectiveMainBranch: string;
       try {
         effectiveMainBranch = await this.getResolvedDefaultBranch();
       } catch (branchError) {
-        console.warn('⚠️ getResolvedDefaultBranch failed, using fallback:', branchError);
-        effectiveMainBranch = this.mainBranch || '';
+        console.warn("⚠️ getResolvedDefaultBranch failed, using fallback:", branchError);
+        effectiveMainBranch = this.mainBranch || "";
       }
-      
+
       if (!this.repoEvent || !effectiveMainBranch || !effectiveRepoId) {
         const error = "Repository event, main branch, and repository ID are required";
         return { success: false, error };
@@ -862,7 +920,7 @@ export class Repo {
 
       // Use the CommitManager's loadPage method which sets the page and calls loadCommits
       const originalLoadCommits = this.commitManager.loadCommits.bind(this.commitManager);
-      
+
       // Temporarily override loadCommits to provide the required parameters
       this.commitManager.loadCommits = async () => {
         return await originalLoadCommits(
@@ -871,7 +929,7 @@ export class Repo {
           effectiveMainBranch!
         );
       };
-      
+
       try {
         const result = await this.commitManager.loadPage(page);
         return result;
@@ -880,8 +938,11 @@ export class Repo {
         this.commitManager.loadCommits = originalLoadCommits;
       }
     } catch (error) {
-      console.error('❌ loadPage error:', error);
-      return { success: false, error: error instanceof Error ? error.message : String(error) } as const;
+      console.error("❌ loadPage error:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      } as const;
     }
   }
 
@@ -903,7 +964,15 @@ export class Repo {
     });
   }
 
-  async getFileContent({ path, branch, commit }: { path: string; branch?: string; commit?: string }) {
+  async getFileContent({
+    path,
+    branch,
+    commit,
+  }: {
+    path: string;
+    branch?: string;
+    commit?: string;
+  }) {
     const targetBranch = branch || this.branchManager.getMainBranch();
     if (!this.repoEvent) {
       return {
@@ -924,7 +993,15 @@ export class Repo {
     });
   }
 
-  async fileExistsAtCommit({ path, branch, commit }: { path: string; branch?: string; commit?: string }) {
+  async fileExistsAtCommit({
+    path,
+    branch,
+    commit,
+  }: {
+    path: string;
+    branch?: string;
+    commit?: string;
+  }) {
     const targetBranch = branch || this.branchManager.getMainBranch();
     if (!this.repoEvent) return false;
     return this.fileManager.fileExistsAtCommit({
@@ -936,7 +1013,15 @@ export class Repo {
     });
   }
 
-  async getFileHistory({ path, branch, maxCount }: { path: string; branch?: string; maxCount?: number }) {
+  async getFileHistory({
+    path,
+    branch,
+    maxCount,
+  }: {
+    path: string;
+    branch?: string;
+    maxCount?: number;
+  }) {
     const targetBranch = branch || this.branchManager.getMainBranch();
     if (!this.repoEvent) return [];
     return this.fileManager.getFileHistory({
@@ -962,66 +1047,66 @@ export class Repo {
    * Forces fresh data to be loaded from remote and resets local git state
    */
   async reset() {
-    console.log('Resetting repository state...');
-    
+    console.log("Resetting repository state...");
+
     // Reset managers that have reset methods
     this.commitManager?.reset();
     this.branchManager?.reset();
-    
+
     // Clear caches for managers that have clearCache methods
     try {
       await this.fileManager?.clearCache();
       await this.patchManager?.clearCache();
       await this.mergeAnalysisCacheManager?.clear();
-      
+
       // Clear individual cache types in CacheManager
       if (this.cacheManager) {
-        await this.cacheManager.clear('file_content');
-        await this.cacheManager.clear('file_listing');
-        await this.cacheManager.clear('file_exists');
-        await this.cacheManager.clear('file_history');
+        await this.cacheManager.clear("file_content");
+        await this.cacheManager.clear("file_listing");
+        await this.cacheManager.clear("file_exists");
+        await this.cacheManager.clear("file_history");
       }
     } catch (error) {
-      console.warn('Error clearing caches during reset:', error);
+      console.warn("Error clearing caches during reset:", error);
     }
-    
+
     // Reset branch resolution cache
     this.invalidateBranchCache();
-    
+
     // Reset clone progress
     this.cloneProgress = {
       isCloning: false,
-      phase: '',
+      phase: "",
       progress: 0,
     };
-    
+
     // Reset local git repository to match remote HEAD state
     if (this.repoEvent) {
       try {
-        console.log('Resetting local git repository to match remote...');
+        console.log("Resetting local git repository to match remote...");
         const resetResult = await this.workerManager.resetRepoToRemote(
           this.canonicalKey,
           this.mainBranch
         );
-        
+
         if (resetResult.success) {
           console.log(`Git reset successful: ${resetResult.message}`);
         }
       } catch (resetError) {
-        console.warn('Git reset to remote failed:', resetError);
+        console.warn("Git reset to remote failed:", resetError);
         // Continue with cache clearing even if git reset fails
       }
-      
+
       // Force reload branches and other data
       await this.#loadBranchesFromRepo(this.repoEvent);
-      
+
       // Trigger merge analysis refresh if patches exist
       if (this.patches.length > 0) {
         await this.#performMergeAnalysis(this.patches);
       }
     }
-    
-    console.log('Repository reset complete');
+
+    console.log("Repository reset complete");
   }
 
   /**
@@ -1029,21 +1114,19 @@ export class Repo {
    * @param repoData Repository creation data
    * @returns Unsigned event object for external signing and publishing
    */
-  createRepoAnnouncementEvent(
-    repoData: {
-      name: string;
-      description?: string;
-      cloneUrl?: string; // Legacy single URL support
-      webUrl?: string; // Legacy single URL support
-      clone?: string[]; // NIP-34 multiple clone URLs
-      web?: string[]; // NIP-34 multiple web URLs
-      defaultBranch?: string;
-      maintainers?: string[];
-      relays?: string[];
-      hashtags?: string[];
-      earliestUniqueCommit?: string;
-    }
-  ): RepoAnnouncementEvent {
+  createRepoAnnouncementEvent(repoData: {
+    name: string;
+    description?: string;
+    cloneUrl?: string; // Legacy single URL support
+    webUrl?: string; // Legacy single URL support
+    clone?: string[]; // NIP-34 multiple clone URLs
+    web?: string[]; // NIP-34 multiple web URLs
+    defaultBranch?: string;
+    maintainers?: string[];
+    relays?: string[];
+    hashtags?: string[];
+    earliestUniqueCommit?: string;
+  }): RepoAnnouncementEvent {
     // Use the shared-types utility function
     // Resolve a robust earliestUniqueCommit:
     // - Prefer provided value if valid 40-hex
@@ -1056,7 +1139,9 @@ export class Repo {
     const resolvedFromBranch = branchObj?.nip34Ref?.commitId || branchObj?.oid || branchObj?.commit;
     const euc = is40Hex(providedEuc)
       ? providedEuc
-      : (is40Hex(resolvedFromBranch) ? resolvedFromBranch : undefined);
+      : is40Hex(resolvedFromBranch)
+        ? resolvedFromBranch
+        : undefined;
 
     // Pass the canonical repo key for addressable a-tags; name is used for NIP-34 d-tag (short id)
     return createRepoAnnouncementEvent({
@@ -1078,33 +1163,31 @@ export class Repo {
    * @param stateData Repository state data
    * @returns Unsigned event object for external signing and publishing
    */
-  createRepoStateEvent(
-    stateData: {
-      repositoryId: string;
-      headBranch?: string;
-      branches?: string[];
-      tags?: string[];
-      refs?: Array<{ type: "heads" | "tags", name: string, commit: string, ancestry?: string[] }>;
-    }
-  ): RepoStateEvent {
+  createRepoStateEvent(stateData: {
+    repositoryId: string;
+    headBranch?: string;
+    branches?: string[];
+    tags?: string[];
+    refs?: Array<{ type: "heads" | "tags"; name: string; commit: string; ancestry?: string[] }>;
+  }): RepoStateEvent {
     // Use the shared-types utility function
     return createRepoStateEvent({
       repoId: stateData.repositoryId,
       head: stateData.headBranch,
       refs: stateData.refs || [
         // Convert branches to refs format
-        ...(stateData.branches?.map(branch => ({
+        ...(stateData.branches?.map((branch) => ({
           type: "heads" as const,
           name: branch,
-          commit: "HEAD" // This would be the actual commit hash
+          commit: "HEAD", // This would be the actual commit hash
         })) || []),
         // Convert tags to refs format
-        ...(stateData.tags?.map(tag => ({
+        ...(stateData.tags?.map((tag) => ({
           type: "tags" as const,
           name: tag,
-          commit: "HEAD" // This would be the actual commit hash
-        })) || [])
-      ]
+          commit: "HEAD", // This would be the actual commit hash
+        })) || []),
+      ],
     });
   }
 
@@ -1116,17 +1199,17 @@ export class Repo {
     this.branchManager?.dispose();
     this.fileManager?.dispose();
     this.workerManager?.dispose();
-    console.log('Repo disposed');
+    console.log("Repo disposed");
   }
 
   // Perform background merge analysis for patches
   async #performMergeAnalysis(patches: PatchEvent[]) {
     if (!patches?.length) return;
-    
+
     const repoId = this.canonicalKey;
     const targetBranch = this.mainBranch?.split("/").pop() || "";
     const workerRepoId = this.repoEvent?.id;
-    
+
     // Delegate to PatchManager for background processing
     await this.patchManager.processInBackground(patches, targetBranch, repoId, workerRepoId);
   }

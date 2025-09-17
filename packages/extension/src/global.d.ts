@@ -1,3 +1,3 @@
 declare module "lang-map" {
-  export function languages(extension: string): string[] | undefined;
+  export function languages(extension: string): string[] | undefined
 }

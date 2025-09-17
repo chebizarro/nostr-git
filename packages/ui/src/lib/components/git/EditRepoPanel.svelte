@@ -29,7 +29,7 @@
   interface FormData {
     name: string;
     description: string;
-    visibility: 'public' | 'private';
+    visibility: "public" | "private";
     defaultBranch: string;
     maintainers: string[];
     relays: string[];
@@ -48,13 +48,7 @@
     isEditing?: boolean;
   }
 
-  const {
-    repo,
-    onPublishEvent,
-    progress,
-    error,
-    isEditing = false,
-  }: Props = $props();
+  const { repo, onPublishEvent, progress, error, isEditing = false }: Props = $props();
 
   // Extract current values from repo
   function extractCurrentValues(): FormData {
@@ -101,52 +95,69 @@
   let formData = $state<FormData>(extractCurrentValues());
 
   // Load repository references with robust fallback logic
-  let availableRefs: Array<{name: string; type: "heads" | "tags"; fullRef: string; commitId: string}> = []
-  let loadingRefs = $state(true)
+  let availableRefs: Array<{
+    name: string;
+    type: "heads" | "tags";
+    fullRef: string;
+    commitId: string;
+  }> = [];
+  let loadingRefs = $state(true);
 
   // Load refs when component mounts
   $effect(() => {
     if (repo) {
-      loadingRefs = true
-      repo.getAllRefsWithFallback()
-        .then(refs => {
-          availableRefs = refs
-          loadingRefs = false
+      loadingRefs = true;
+      repo
+        .getAllRefsWithFallback()
+        .then((refs) => {
+          availableRefs = refs;
+          loadingRefs = false;
         })
-        .catch(error => {
-          console.error('Failed to load repository references:', error)
-          availableRefs = []
-          loadingRefs = false
-        })
+        .catch((error) => {
+          console.error("Failed to load repository references:", error);
+          availableRefs = [];
+          loadingRefs = false;
+        });
     }
-  })
+  });
 
   // Auto-fill earliest unique commit from default branch's commitId when available
   $effect(() => {
     // Only set if empty and refs are loaded
     if (!loadingRefs && !formData.earliestUniqueCommit?.trim() && formData.defaultBranch) {
-      const ref = availableRefs.find(r => r.type === 'heads' && r.name === formData.defaultBranch);
-      const commitId = ref?.commitId || '';
+      const ref = availableRefs.find(
+        (r) => r.type === "heads" && r.name === formData.defaultBranch
+      );
+      const commitId = ref?.commitId || "";
       if (commitId && /^[a-f0-9]{40}$/.test(commitId)) {
         formData.earliestUniqueCommit = commitId;
       }
     }
-  })
+  });
 
   // Get available branches for dropdown
-  let availableBranches = $derived(availableRefs.filter(ref => ref.type === "heads"))
+  let availableBranches = $derived(availableRefs.filter((ref) => ref.type === "heads"));
 
   // Helper functions for multi-value fields
-  function addArrayItem(field: keyof Pick<FormData, 'maintainers' | 'relays' | 'webUrls' | 'cloneUrls' | 'hashtags'>) {
+  function addArrayItem(
+    field: keyof Pick<FormData, "maintainers" | "relays" | "webUrls" | "cloneUrls" | "hashtags">
+  ) {
     formData[field] = [...formData[field], ""];
   }
 
-  function removeArrayItem(field: keyof Pick<FormData, 'maintainers' | 'relays' | 'webUrls' | 'cloneUrls' | 'hashtags'>, index: number) {
+  function removeArrayItem(
+    field: keyof Pick<FormData, "maintainers" | "relays" | "webUrls" | "cloneUrls" | "hashtags">,
+    index: number
+  ) {
     formData[field] = formData[field].filter((_, i) => i !== index);
   }
 
-  function updateArrayItem(field: keyof Pick<FormData, 'maintainers' | 'relays' | 'webUrls' | 'cloneUrls' | 'hashtags'>, index: number, value: string) {
-    formData[field] = formData[field].map((item, i) => i === index ? value : item);
+  function updateArrayItem(
+    field: keyof Pick<FormData, "maintainers" | "relays" | "webUrls" | "cloneUrls" | "hashtags">,
+    index: number,
+    value: string
+  ) {
+    formData[field] = formData[field].map((item, i) => (i === index ? value : item));
   }
 
   // UI state
@@ -195,31 +206,38 @@
     }
 
     // Relays validation (wss:// URLs)
-    const invalidRelays = formData.relays.filter(r => r.trim() && !r.match(/^wss?:\/\/.+/));
+    const invalidRelays = formData.relays.filter((r) => r.trim() && !r.match(/^wss?:\/\/.+/));
     if (invalidRelays.length > 0) {
       errors.relays = "Relays must be valid WebSocket URLs (wss://...)";
     }
 
     // Web URLs validation
-    const invalidWebUrls = formData.webUrls.filter(w => w.trim() && !w.match(/^https?:\/\/.+/));
+    const invalidWebUrls = formData.webUrls.filter((w) => w.trim() && !w.match(/^https?:\/\/.+/));
     if (invalidWebUrls.length > 0) {
       errors.webUrls = "Web URLs must be valid HTTP/HTTPS URLs";
     }
 
     // Clone URLs validation
-    const invalidCloneUrls = formData.cloneUrls.filter(c => c.trim() && !c.match(/^(https?:\/\/|git@).+/));
+    const invalidCloneUrls = formData.cloneUrls.filter(
+      (c) => c.trim() && !c.match(/^(https?:\/\/|git@).+/)
+    );
     if (invalidCloneUrls.length > 0) {
       errors.cloneUrls = "Clone URLs must be valid git URLs (https:// or git@...)";
     }
 
     // Hashtags validation (no spaces, alphanumeric + hyphens)
-    const invalidHashtags = formData.hashtags.filter(h => h.trim() && !h.match(/^[a-zA-Z0-9-]+$/));
+    const invalidHashtags = formData.hashtags.filter(
+      (h) => h.trim() && !h.match(/^[a-zA-Z0-9-]+$/)
+    );
     if (invalidHashtags.length > 0) {
       errors.hashtags = "Hashtags can only contain letters, numbers, and hyphens";
     }
 
     // Earliest unique commit validation (40-character hex)
-    if (formData.earliestUniqueCommit.trim() && !formData.earliestUniqueCommit.match(/^[a-f0-9]{40}$/)) {
+    if (
+      formData.earliestUniqueCommit.trim() &&
+      !formData.earliestUniqueCommit.match(/^[a-f0-9]{40}$/)
+    ) {
       errors.earliestUniqueCommit = "Must be a valid 40-character commit hash";
     }
 
@@ -230,7 +248,6 @@
   $effect(() => {
     validationErrors = validateForm();
   });
-
 
   const back = () => history.back();
 
@@ -271,7 +288,7 @@
 
     try {
       // Filter out empty strings from arrays
-      const cleanMaintainers = formData.maintainers.filter(m => m.trim());
+      const cleanMaintainers = formData.maintainers.filter((m) => m.trim());
       // Normalize maintainers to hex pubkeys
       const normalizedMaintainers = cleanMaintainers.map((m) => {
         const v = m.trim();
@@ -287,10 +304,10 @@
         }
         return v.toLowerCase();
       });
-      const cleanRelays = formData.relays.filter(r => r.trim());
-      const cleanWebUrls = formData.webUrls.filter(w => w.trim());
-      const cleanCloneUrls = formData.cloneUrls.filter(c => c.trim());
-      const cleanHashtags = formData.hashtags.filter(h => h.trim());
+      const cleanRelays = formData.relays.filter((r) => r.trim());
+      const cleanWebUrls = formData.webUrls.filter((w) => w.trim());
+      const cleanCloneUrls = formData.cloneUrls.filter((c) => c.trim());
+      const cleanHashtags = formData.hashtags.filter((h) => h.trim());
 
       // Create updated repository announcement event using all NIP-34 fields
       const updatedAnnouncementEvent = repo.createRepoAnnouncementEvent({
@@ -358,21 +375,19 @@
     // Normalize arrays by trimming empties for fair comparison (handleSave filters them out)
     const norm = (arr: string[]) => arr.filter((v) => v.trim());
 
-    const basicChanged = (
+    const basicChanged =
       formData.name !== original.name ||
       formData.description !== original.description ||
       formData.visibility !== original.visibility ||
       formData.defaultBranch !== original.defaultBranch ||
-      formData.earliestUniqueCommit !== original.earliestUniqueCommit
-    );
+      formData.earliestUniqueCommit !== original.earliestUniqueCommit;
 
-    const arraysChanged = (
+    const arraysChanged =
       JSON.stringify(norm(formData.maintainers)) !== JSON.stringify(norm(original.maintainers)) ||
       JSON.stringify(norm(formData.relays)) !== JSON.stringify(norm(original.relays)) ||
       JSON.stringify(norm(formData.webUrls)) !== JSON.stringify(norm(original.webUrls)) ||
       JSON.stringify(norm(formData.cloneUrls)) !== JSON.stringify(norm(original.cloneUrls)) ||
-      JSON.stringify(norm(formData.hashtags)) !== JSON.stringify(norm(original.hashtags))
-    );
+      JSON.stringify(norm(formData.hashtags)) !== JSON.stringify(norm(original.hashtags));
 
     return basicChanged || arraysChanged;
   });
@@ -508,7 +523,9 @@
             </select>
           {:else if loadingRefs}
             <!-- Loading state -->
-            <div class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-gray-400 flex items-center space-x-2">
+            <div
+              class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-gray-400 flex items-center space-x-2"
+            >
               <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
               <span>Loading branches...</span>
             </div>
@@ -555,14 +572,15 @@
                 <input
                   type="text"
                   bind:value={formData.maintainers[index]}
-                  oninput={(e) => updateArrayItem('maintainers', index, (e.target as HTMLInputElement).value)}
+                  oninput={(e) =>
+                    updateArrayItem("maintainers", index, (e.target as HTMLInputElement).value)}
                   disabled={isEditing}
                   class="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                   placeholder="npub1..."
                 />
                 <button
                   type="button"
-                  onclick={() => removeArrayItem('maintainers', index)}
+                  onclick={() => removeArrayItem("maintainers", index)}
                   disabled={isEditing}
                   class="p-2 text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   aria-label="Remove maintainer"
@@ -573,7 +591,7 @@
             {/each}
             <button
               type="button"
-              onclick={() => addArrayItem('maintainers')}
+              onclick={() => addArrayItem("maintainers")}
               disabled={isEditing}
               class="flex items-center space-x-2 px-3 py-2 text-blue-400 hover:text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -582,7 +600,11 @@
             </button>
           </div>
           {#if validationErrors.maintainers}
-            <p class="text-red-400 text-sm mt-1 flex items-center space-x-1" role="alert" aria-live="polite">
+            <p
+              class="text-red-400 text-sm mt-1 flex items-center space-x-1"
+              role="alert"
+              aria-live="polite"
+            >
               <AlertCircle class="w-4 h-4" />
               <span>{validationErrors.maintainers}</span>
             </p>
@@ -601,14 +623,15 @@
                 <input
                   type="text"
                   bind:value={formData.relays[index]}
-                  oninput={(e) => updateArrayItem('relays', index, (e.target as HTMLInputElement).value)}
+                  oninput={(e) =>
+                    updateArrayItem("relays", index, (e.target as HTMLInputElement).value)}
                   disabled={isEditing}
                   class="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                   placeholder="wss://relay.example.com"
                 />
                 <button
                   type="button"
-                  onclick={() => removeArrayItem('relays', index)}
+                  onclick={() => removeArrayItem("relays", index)}
                   disabled={isEditing}
                   class="p-2 text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   aria-label="Remove relay"
@@ -619,7 +642,7 @@
             {/each}
             <button
               type="button"
-              onclick={() => addArrayItem('relays')}
+              onclick={() => addArrayItem("relays")}
               disabled={isEditing}
               class="flex items-center space-x-2 px-3 py-2 text-blue-400 hover:text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -628,7 +651,11 @@
             </button>
           </div>
           {#if validationErrors.relays}
-            <p class="text-red-400 text-sm mt-1 flex items-center space-x-1" role="alert" aria-live="polite">
+            <p
+              class="text-red-400 text-sm mt-1 flex items-center space-x-1"
+              role="alert"
+              aria-live="polite"
+            >
               <AlertCircle class="w-4 h-4" />
               <span>{validationErrors.relays}</span>
             </p>
@@ -647,14 +674,15 @@
                 <input
                   type="text"
                   bind:value={formData.webUrls[index]}
-                  oninput={(e) => updateArrayItem('webUrls', index, (e.target as HTMLInputElement).value)}
+                  oninput={(e) =>
+                    updateArrayItem("webUrls", index, (e.target as HTMLInputElement).value)}
                   disabled={isEditing}
                   class="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                   placeholder="https://github.com/user/repo"
                 />
                 <button
                   type="button"
-                  onclick={() => removeArrayItem('webUrls', index)}
+                  onclick={() => removeArrayItem("webUrls", index)}
                   disabled={isEditing}
                   class="p-2 text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   aria-label="Remove web URL"
@@ -665,7 +693,7 @@
             {/each}
             <button
               type="button"
-              onclick={() => addArrayItem('webUrls')}
+              onclick={() => addArrayItem("webUrls")}
               disabled={isEditing}
               class="flex items-center space-x-2 px-3 py-2 text-blue-400 hover:text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -674,7 +702,11 @@
             </button>
           </div>
           {#if validationErrors.webUrls}
-            <p class="text-red-400 text-sm mt-1 flex items-center space-x-1" role="alert" aria-live="polite">
+            <p
+              class="text-red-400 text-sm mt-1 flex items-center space-x-1"
+              role="alert"
+              aria-live="polite"
+            >
               <AlertCircle class="w-4 h-4" />
               <span>{validationErrors.webUrls}</span>
             </p>
@@ -693,14 +725,15 @@
                 <input
                   type="text"
                   bind:value={formData.cloneUrls[index]}
-                  oninput={(e) => updateArrayItem('cloneUrls', index, (e.target as HTMLInputElement).value)}
+                  oninput={(e) =>
+                    updateArrayItem("cloneUrls", index, (e.target as HTMLInputElement).value)}
                   disabled={isEditing}
                   class="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                   placeholder="https://github.com/user/repo.git"
                 />
                 <button
                   type="button"
-                  onclick={() => removeArrayItem('cloneUrls', index)}
+                  onclick={() => removeArrayItem("cloneUrls", index)}
                   disabled={isEditing}
                   class="p-2 text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   aria-label="Remove clone URL"
@@ -711,7 +744,7 @@
             {/each}
             <button
               type="button"
-              onclick={() => addArrayItem('cloneUrls')}
+              onclick={() => addArrayItem("cloneUrls")}
               disabled={isEditing}
               class="flex items-center space-x-2 px-3 py-2 text-blue-400 hover:text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -720,7 +753,11 @@
             </button>
           </div>
           {#if validationErrors.cloneUrls}
-            <p class="text-red-400 text-sm mt-1 flex items-center space-x-1" role="alert" aria-live="polite">
+            <p
+              class="text-red-400 text-sm mt-1 flex items-center space-x-1"
+              role="alert"
+              aria-live="polite"
+            >
               <AlertCircle class="w-4 h-4" />
               <span>{validationErrors.cloneUrls}</span>
             </p>
@@ -739,14 +776,15 @@
                 <input
                   type="text"
                   bind:value={formData.hashtags[index]}
-                  oninput={(e) => updateArrayItem('hashtags', index, (e.target as HTMLInputElement).value)}
+                  oninput={(e) =>
+                    updateArrayItem("hashtags", index, (e.target as HTMLInputElement).value)}
                   disabled={isEditing}
                   class="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                   placeholder="javascript"
                 />
                 <button
                   type="button"
-                  onclick={() => removeArrayItem('hashtags', index)}
+                  onclick={() => removeArrayItem("hashtags", index)}
                   disabled={isEditing}
                   class="p-2 text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   aria-label="Remove hashtag"
@@ -757,7 +795,7 @@
             {/each}
             <button
               type="button"
-              onclick={() => addArrayItem('hashtags')}
+              onclick={() => addArrayItem("hashtags")}
               disabled={isEditing}
               class="flex items-center space-x-2 px-3 py-2 text-blue-400 hover:text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -766,7 +804,11 @@
             </button>
           </div>
           {#if validationErrors.hashtags}
-            <p class="text-red-400 text-sm mt-1 flex items-center space-x-1" role="alert" aria-live="polite">
+            <p
+              class="text-red-400 text-sm mt-1 flex items-center space-x-1"
+              role="alert"
+              aria-live="polite"
+            >
               <AlertCircle class="w-4 h-4" />
               <span>{validationErrors.hashtags}</span>
             </p>
@@ -787,7 +829,9 @@
             class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed font-mono text-sm"
             class:border-red-500={validationErrors.earliestUniqueCommit}
             placeholder="40-character commit hash (optional)"
-            aria-describedby={validationErrors.earliestUniqueCommit ? "earliest-commit-error" : undefined}
+            aria-describedby={validationErrors.earliestUniqueCommit
+              ? "earliest-commit-error"
+              : undefined}
             aria-invalid={validationErrors.earliestUniqueCommit ? "true" : "false"}
           />
           {#if validationErrors.earliestUniqueCommit}

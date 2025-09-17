@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { Button } from '$lib/components/ui/button';
-  import type { NostrEvent } from 'nostr-tools';
-  
+  import { Button } from "$lib/components/ui/button";
+  import type { NostrEvent } from "nostr-tools";
+
   interface Props {
     isOpen: boolean;
     onClose: () => void;
@@ -17,25 +17,19 @@
     error?: string;
   }
 
-  const {
-    isOpen,
-    onClose,
-    onSignEvent,
-    onPublishEvent,
-    onCloneComplete
-  }: Props = $props();
+  const { isOpen, onClose, onSignEvent, onPublishEvent, onCloneComplete }: Props = $props();
 
   // Form state
-  let repoUrl = $state('');
-  let destinationPath = $state('');
-  let cloneDepth = $state<'full' | 'shallow'>('shallow');
-  
+  let repoUrl = $state("");
+  let destinationPath = $state("");
+  let cloneDepth = $state<"full" | "shallow">("shallow");
+
   // UI state
   let isCloning = $state(false);
   let progress = $state<CloneProgress>({
-    stage: '',
+    stage: "",
     percentage: 0,
-    isComplete: false
+    isComplete: false,
   });
   let validationError = $state<string | undefined>();
 
@@ -44,9 +38,9 @@
     if (repoUrl && !isCloning) {
       try {
         const url = new URL(repoUrl);
-        const pathParts = url.pathname.split('/').filter(Boolean);
+        const pathParts = url.pathname.split("/").filter(Boolean);
         if (pathParts.length >= 2) {
-          const repoName = pathParts[pathParts.length - 1].replace(/\.git$/, '');
+          const repoName = pathParts[pathParts.length - 1].replace(/\.git$/, "");
           destinationPath = repoName;
         }
       } catch {
@@ -57,43 +51,43 @@
 
   function validateUrl(url: string): string | undefined {
     if (!url.trim()) {
-      return 'Repository URL is required';
+      return "Repository URL is required";
     }
 
     try {
       const parsedUrl = new URL(url);
-      
+
       // Check for supported protocols
-      if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-        return 'Only HTTP and HTTPS URLs are supported';
+      if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+        return "Only HTTP and HTTPS URLs are supported";
       }
 
       // Check for common Git hosting patterns
       const hostname = parsedUrl.hostname.toLowerCase();
-      const supportedHosts = ['github.com', 'gitlab.com', 'bitbucket.org'];
-      const isKnownHost = supportedHosts.some(host => 
-        hostname === host || hostname.endsWith('.' + host)
+      const supportedHosts = ["github.com", "gitlab.com", "bitbucket.org"];
+      const isKnownHost = supportedHosts.some(
+        (host) => hostname === host || hostname.endsWith("." + host)
       );
 
-      if (!isKnownHost && !parsedUrl.pathname.endsWith('.git')) {
-        return 'URL should end with .git or be from a known Git hosting service';
+      if (!isKnownHost && !parsedUrl.pathname.endsWith(".git")) {
+        return "URL should end with .git or be from a known Git hosting service";
       }
 
       return undefined;
     } catch {
-      return 'Invalid URL format';
+      return "Invalid URL format";
     }
   }
 
   function validateDestination(path: string): string | undefined {
     if (!path.trim()) {
-      return 'Destination path is required';
+      return "Destination path is required";
     }
 
     // Check for invalid characters
     const invalidChars = /[<>:"|?*]/;
     if (invalidChars.test(path)) {
-      return 'Destination path contains invalid characters';
+      return "Destination path contains invalid characters";
     }
 
     return undefined;
@@ -103,7 +97,7 @@
     // Validate inputs
     const urlError = validateUrl(repoUrl);
     const pathError = validateDestination(destinationPath);
-    
+
     if (urlError || pathError) {
       validationError = urlError || pathError;
       return;
@@ -112,34 +106,34 @@
     validationError = undefined;
     isCloning = true;
     progress = {
-      stage: 'Initializing clone...',
+      stage: "Initializing clone...",
       percentage: 0,
-      isComplete: false
+      isComplete: false,
     };
 
     try {
       // Import the clone hook dynamically to avoid circular dependencies
-      const { useCloneRepo } = await import('$lib/hooks/useCloneRepo.svelte');
-      
+      const { useCloneRepo } = await import("$lib/hooks/useCloneRepo.svelte");
+
       const cloneHook = useCloneRepo({
         onProgress: (stage: string, pct: number = 0) => {
           progress = {
             stage,
             percentage: Math.min(100, Math.max(0, pct)),
-            isComplete: false
+            isComplete: false,
           };
         },
         onSignEvent,
-        onPublishEvent
+        onPublishEvent,
       });
 
-      const depth = cloneDepth === 'shallow' ? 1 : undefined;
+      const depth = cloneDepth === "shallow" ? 1 : undefined;
       await cloneHook.cloneRepository(repoUrl, destinationPath, depth);
 
       progress = {
-        stage: 'Clone completed successfully!',
+        stage: "Clone completed successfully!",
         percentage: 100,
-        isComplete: true
+        isComplete: true,
       };
 
       // Notify parent component
@@ -150,13 +144,12 @@
         onClose();
         resetForm();
       }, 2000);
-
     } catch (error) {
       progress = {
-        stage: 'Clone failed',
+        stage: "Clone failed",
         percentage: 0,
         isComplete: false,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       };
     } finally {
       isCloning = false;
@@ -164,13 +157,13 @@
   }
 
   function resetForm() {
-    repoUrl = '';
-    destinationPath = '';
-    cloneDepth = 'shallow';
+    repoUrl = "";
+    destinationPath = "";
+    cloneDepth = "shallow";
     progress = {
-      stage: '',
+      stage: "",
       percentage: 0,
-      isComplete: false
+      isComplete: false,
     };
     validationError = undefined;
   }
@@ -196,7 +189,7 @@
 
   function handleDepthChange(event: Event) {
     const target = event.target as HTMLSelectElement;
-    cloneDepth = target.value as 'full' | 'shallow';
+    cloneDepth = target.value as "full" | "shallow";
   }
 </script>
 
@@ -207,9 +200,7 @@
     <div class="bg-card text-card-foreground rounded-lg border shadow-lg w-full max-w-md mx-4">
       <!-- Header -->
       <div class="flex items-center justify-between p-6 border-b border-border">
-        <h2 class="text-lg font-semibold text-gray-100">
-          Clone Repository
-        </h2>
+        <h2 class="text-lg font-semibold text-gray-100">Clone Repository</h2>
         {#if !isCloning}
           <button
             onclick={handleCancel}
@@ -217,7 +208,12 @@
             aria-label="Close dialog"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              ></path>
             </svg>
           </button>
         {/if}
@@ -258,9 +254,7 @@
               class:border-red-500={validationError}
               disabled={isCloning}
             />
-            <p class="mt-1 text-sm text-gray-400">
-              Local directory name for the cloned repository
-            </p>
+            <p class="mt-1 text-sm text-gray-400">Local directory name for the cloned repository</p>
           </div>
 
           <!-- Clone Depth Selector -->
@@ -296,10 +290,10 @@
               <div class="text-sm font-medium text-gray-100 mb-2">
                 {progress.stage}
               </div>
-              
+
               <!-- Progress Bar -->
               <div class="w-full bg-gray-700 rounded-full h-2 mb-2">
-                <div 
+                <div
                   class="h-2 rounded-full transition-all duration-300 ease-in-out"
                   class:bg-blue-600={!progress.isComplete && !progress.error}
                   class:bg-green-600={progress.isComplete}
@@ -307,7 +301,7 @@
                   style="width: {progress.percentage}%"
                 ></div>
               </div>
-              
+
               <div class="text-xs text-gray-400">
                 {Math.round(progress.percentage)}% complete
               </div>
@@ -317,14 +311,10 @@
             {#if progress.error}
               <div class="p-3 bg-red-900/20 border border-red-500 rounded-md">
                 <p class="text-sm text-red-400 mb-2">
-                  <strong>Error:</strong> {progress.error}
+                  <strong>Error:</strong>
+                  {progress.error}
                 </p>
-                <Button
-                  onclick={handleClone}
-                  variant="outline"
-                  size="sm"
-                  class="w-full"
-                >
+                <Button onclick={handleClone} variant="outline" size="sm" class="w-full">
                   Retry Clone
                 </Button>
               </div>
@@ -336,14 +326,8 @@
       <!-- Footer -->
       {#if !isCloning}
         <div class="flex justify-end space-x-3 p-6 border-t border-border">
-          <Button
-            onclick={handleCancel}
-            variant="outline"
-            size="sm"
-          >
-            Cancel
-          </Button>
-          
+          <Button onclick={handleCancel} variant="outline" size="sm">Cancel</Button>
+
           <Button
             onclick={handleClone}
             size="sm"

@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { GitProvider } from '@nostr-git/git-wrapper';
-import { initializeRepoUtil, ensureShallowCloneUtil, ensureFullCloneUtil, smartInitializeRepoUtil } from '../src/lib/workers/repos.js';
+import {
+  initializeRepoUtil,
+  ensureShallowCloneUtil,
+  ensureFullCloneUtil,
+  smartInitializeRepoUtil
+} from '../src/lib/workers/repos.js';
 
 // Simple helpers/mocks
 const canonicalRepoKey = (id: string) => id.replace(/\s+/g, '-').toLowerCase();
@@ -12,14 +17,16 @@ function makeGitMock(partial: Partial<GitProvider> = {}): GitProvider {
     listBranches: vi.fn().mockResolvedValue(['main']),
     resolveRef: vi.fn().mockResolvedValue('abcdef1234567890'),
     // fetch/checkout
-    listRemotes: vi.fn().mockResolvedValue([{ remote: 'origin', url: 'https://example.com/repo.git' }]),
+    listRemotes: vi
+      .fn()
+      .mockResolvedValue([{ remote: 'origin', url: 'https://example.com/repo.git' }]),
     fetch: vi.fn().mockResolvedValue(undefined),
     checkout: vi.fn().mockResolvedValue(undefined),
     // write and others
     writeRef: vi.fn().mockResolvedValue(undefined),
     log: vi.fn().mockResolvedValue([]),
     statusMatrix: vi.fn().mockResolvedValue([] as any),
-    ...partial,
+    ...partial
   } as unknown as GitProvider;
 }
 
@@ -32,7 +39,7 @@ function makeCacheMock(initial?: any) {
       return undefined;
     }),
     clearOldCache: vi.fn(async () => undefined),
-    deleteRepoCache: vi.fn(async () => undefined),
+    deleteRepoCache: vi.fn(async () => undefined)
   } as any;
 }
 
@@ -84,7 +91,7 @@ describe('repos utils', () => {
         repoDataLevels,
         clonedRepos,
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveRobustBranch: async () => 'main'
       },
       sendProgress
     );
@@ -92,8 +99,8 @@ describe('repos utils', () => {
     expect(res.success).toBe(true);
     expect(res.dataLevel).toBe('shallow');
     expect(repoDataLevels.get(canonicalRepoKey(repoId))).toBe('shallow');
-    expect((git.fetch as any)).toHaveBeenCalled();
-    expect((git.checkout as any)).toHaveBeenCalled();
+    expect(git.fetch as any).toHaveBeenCalled();
+    expect(git.checkout as any).toHaveBeenCalled();
   });
 
   it('ensureFullCloneUtil should set level full after fetch', async () => {
@@ -111,7 +118,7 @@ describe('repos utils', () => {
         repoDataLevels,
         clonedRepos,
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveRobustBranch: async () => 'main'
       },
       (phase) => void phase
     );
@@ -143,7 +150,7 @@ describe('repos utils', () => {
         repoDataLevels,
         clonedRepos,
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveRobustBranch: async () => 'main'
       },
       () => {}
     );

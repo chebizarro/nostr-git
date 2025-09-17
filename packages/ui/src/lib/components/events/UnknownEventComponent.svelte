@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { nip19, type NostrEvent } from 'nostr-tools';
-  import { onMount } from 'svelte';
-  import { HelpCircle, Copy } from '@lucide/svelte';
+  import { nip19, type NostrEvent } from "nostr-tools";
+  import { onMount } from "svelte";
+  import { HelpCircle, Copy } from "@lucide/svelte";
 
   interface Props {
     event: NostrEvent;
@@ -9,16 +9,16 @@
 
   let { event }: Props = $props();
 
-  let authorNpub = $state('');
-  let eventId = $state('');
+  let authorNpub = $state("");
+  let eventId = $state("");
   let expandedRaw = $state(false);
 
-  const shortNpub = $derived(authorNpub ? authorNpub.slice(0, 16) + '...' : '');
-  const shortEventId = $derived(eventId ? eventId.slice(0, 16) + '...' : '');
-  const eventContent = $derived(event.content || '');
+  const shortNpub = $derived(authorNpub ? authorNpub.slice(0, 16) + "..." : "");
+  const shortEventId = $derived(eventId ? eventId.slice(0, 16) + "..." : "");
+  const eventContent = $derived(event.content || "");
   const createdDate = $derived(new Date(event.created_at * 1000));
   const formattedDate = $derived(
-    createdDate.toLocaleDateString() + ' ' + createdDate.toLocaleTimeString()
+    createdDate.toLocaleDateString() + " " + createdDate.toLocaleTimeString()
   );
   const tagCount = $derived(event.tags?.length || 0);
 
@@ -27,12 +27,12 @@
       try {
         authorNpub = nip19.npubEncode(event.pubkey);
       } catch (error) {
-        console.warn('Failed to encode npub:', error);
-        authorNpub = event.pubkey.slice(0, 16) + '...';
+        console.warn("Failed to encode npub:", error);
+        authorNpub = event.pubkey.slice(0, 16) + "...";
       }
     }
 
-    eventId = event.id || '';
+    eventId = event.id || "";
   };
 
   $effect(() => {
@@ -45,7 +45,7 @@
     try {
       await navigator.clipboard.writeText(text);
     } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
+      console.error("Failed to copy to clipboard:", error);
     }
   };
   const toggleRawData = () => {
@@ -61,7 +61,7 @@
 <div class="unknown-event border-l-4 border-yellow-500 bg-yellow-50 p-4 rounded-r-lg">
   <div class="flex items-start gap-3">
     <HelpCircle class="text-yellow-600 mt-1" size={20} />
-    
+
     <div class="flex-1">
       <div class="flex items-center gap-2 mb-2">
         <h3 class="font-semibold text-lg text-gray-900">
@@ -84,11 +84,12 @@
         <div class="flex items-center gap-2">
           <span class="text-sm font-medium text-gray-600">Author:</span>
           <span class="text-sm text-yellow-700 font-mono">{shortNpub}</span>
-          <button 
+          <button
             type="button"
             onclick={() => copyToClipboard(event.pubkey)}
             class="text-yellow-600 hover:text-yellow-800 text-sm"
-            title="Copy pubkey">
+            title="Copy pubkey"
+          >
             <Copy size={16} />
           </button>
         </div>
@@ -98,11 +99,12 @@
           <code class="bg-gray-100 px-2 py-1 rounded text-xs font-mono">
             {shortEventId}
           </code>
-          <button 
+          <button
             type="button"
             onclick={() => copyToClipboard(eventId)}
             class="text-yellow-600 hover:text-yellow-800 text-sm"
-            title="Copy full event ID">
+            title="Copy full event ID"
+          >
             <Copy size={16} />
           </button>
         </div>
@@ -110,7 +112,7 @@
         <div class="flex items-center gap-2">
           <span class="text-sm font-medium text-gray-600">Tags:</span>
           <span class="text-sm text-gray-700">
-            {tagCount} tag{tagCount !== 1 ? 's' : ''}
+            {tagCount} tag{tagCount !== 1 ? "s" : ""}
           </span>
         </div>
 
@@ -120,7 +122,9 @@
             <div class="flex gap-1 flex-wrap">
               {#each event.tags.slice(0, 3) as tag}
                 <span class="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded font-mono">
-                  {tag[0]}{tag[1] ? `: ${tag[1].slice(0, 20)}${tag[1].length > 20 ? '...' : ''}` : ''}
+                  {tag[0]}{tag[1]
+                    ? `: ${tag[1].slice(0, 20)}${tag[1].length > 20 ? "..." : ""}`
+                    : ""}
                 </span>
               {/each}
               {#if event.tags.length > 3}
@@ -137,12 +141,13 @@
         <div class="text-xs text-gray-500">
           Created {formattedDate}
         </div>
-        
+
         <button
           type="button"
           onclick={toggleRawData}
-          class="text-xs text-yellow-600 hover:text-yellow-800 underline">
-          {expandedRaw ? 'Hide' : 'Show'} Raw Data
+          class="text-xs text-yellow-600 hover:text-yellow-800 underline"
+        >
+          {expandedRaw ? "Hide" : "Show"} Raw Data
         </button>
       </div>
 
@@ -159,7 +164,7 @@
   .unknown-event {
     transition: all 0.2s ease-in-out;
   }
-  
+
   .unknown-event:hover {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }

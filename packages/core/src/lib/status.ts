@@ -12,7 +12,7 @@ export interface FileChange {
 /**
  * Get the status matrix for a repo.
  */
-export async function statusMatrix(opts: { owner: string; repo: string; }): Promise<any[]> {
+export async function statusMatrix(opts: { owner: string; repo: string }): Promise<any[]> {
   const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
   const git = getGitProvider();
   return git.statusMatrix({ dir });
@@ -21,7 +21,12 @@ export async function statusMatrix(opts: { owner: string; repo: string; }): Prom
 /**
  * Get file changes between two commits.
  */
-export async function getFileChanges(opts: { owner: string; repo: string; oldOid: string; newOid: string }): Promise<FileChange[]> {
+export async function getFileChanges(opts: {
+  owner: string;
+  repo: string;
+  oldOid: string;
+  newOid: string;
+}): Promise<FileChange[]> {
   const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
   const git = getGitProvider();
   const results = await git.walk({
@@ -39,7 +44,7 @@ export async function getFileChanges(opts: { owner: string; repo: string; oldOid
       if (Aoid === undefined) type = 'add';
       if (Boid === undefined) type = 'remove';
       return { filepath, type, Aoid, Boid };
-    },
+    }
   });
   return results.filter(Boolean);
 }

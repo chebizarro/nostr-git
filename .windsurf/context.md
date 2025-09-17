@@ -5,9 +5,11 @@ This directory contains AI-specific context files for optimal LLM performance wh
 ## Quick Reference
 
 ### Project Type
+
 Monorepo for Git-Nostr integration with TypeScript, Svelte 5, and TailwindCSS
 
 ### Key Patterns
+
 - Result types for error handling instead of exceptions
 - Barrel exports in index.ts files
 - ESM modules with .js extensions
@@ -15,6 +17,7 @@ Monorepo for Git-Nostr integration with TypeScript, Svelte 5, and TailwindCSS
 - NIP-34 Nostr events for Git collaboration
 
 ### Common Commands
+
 ```bash
 pnpm install          # Install dependencies
 pnpm build           # Build all packages
@@ -24,6 +27,7 @@ cd packages/storybook && pnpm storybook  # UI development
 ```
 
 ### Package Structure
+
 - `@nostr-git/core` - Core business logic
 - `@nostr-git/ui` - Svelte components
 - `@nostr-git/shared-types` - TypeScript definitions
@@ -32,6 +36,7 @@ cd packages/storybook && pnpm storybook  # UI development
 - GitHub Actions automation
 
 ### Important Files
+
 - `AI_CONTEXT.md` - Comprehensive LLM coding context
 - `ARCHITECTURE.md` - System design and patterns
 - `DEVELOPMENT.md` - Local setup and workflow

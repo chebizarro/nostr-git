@@ -27,7 +27,11 @@ function hasKindScoped(tags: string[][], kind: number): boolean {
   return true;
 }
 
-function commentMatchesRoot(comment: NostrEvent, root: NostrEvent, rootAddresses: Set<string>): boolean {
+function commentMatchesRoot(
+  comment: NostrEvent,
+  root: NostrEvent,
+  rootAddresses: Set<string>
+): boolean {
   const tags = (comment.tags as string[][]) || [];
   if (!hasKindScoped(tags, root.kind)) return false;
 
@@ -45,7 +49,11 @@ function commentMatchesRoot(comment: NostrEvent, root: NostrEvent, rootAddresses
   return false;
 }
 
-function statusMatchesRoot(status: NostrEvent, root: NostrEvent, rootAddresses: Set<string>): boolean {
+function statusMatchesRoot(
+  status: NostrEvent,
+  root: NostrEvent,
+  rootAddresses: Set<string>
+): boolean {
   const tags = (status.tags as string[][]) || [];
   // NIP-34 status often references root via e-tag with marker 'root'. Accept any 'e' id match.
   const eRefs = tags.filter((t) => t[0] === 'e');
@@ -71,7 +79,11 @@ function dedupeById<T extends { id?: string }>(items: T[]): T[] {
   return out;
 }
 
-export function assembleIssueThread(args: { root: NostrEvent; comments: NostrEvent[]; statuses: NostrEvent[] }): IssueThread {
+export function assembleIssueThread(args: {
+  root: NostrEvent;
+  comments: NostrEvent[];
+  statuses: NostrEvent[];
+}): IssueThread {
   const { root } = args;
   const addrSet = asSet(getRootAddresses(root));
 
@@ -79,8 +91,12 @@ export function assembleIssueThread(args: { root: NostrEvent; comments: NostrEve
   const filteredStatuses = args.statuses.filter((s) => statusMatchesRoot(s, root, addrSet));
 
   // Dedupe and order by created_at ascending for stable threading
-  const comments = dedupeById(filteredComments).sort((a, b) => (a.created_at ?? 0) - (b.created_at ?? 0));
-  const statuses = dedupeById(filteredStatuses).sort((a, b) => (a.created_at ?? 0) - (b.created_at ?? 0));
+  const comments = dedupeById(filteredComments).sort(
+    (a, b) => (a.created_at ?? 0) - (b.created_at ?? 0)
+  );
+  const statuses = dedupeById(filteredStatuses).sort(
+    (a, b) => (a.created_at ?? 0) - (b.created_at ?? 0)
+  );
 
   return { root, comments, statuses };
 }

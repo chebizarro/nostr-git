@@ -2,15 +2,15 @@ name: Monorepo Affected CI
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main]
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
     inputs:
       run_all:
-        description: 'Run across all packages regardless of changes'
+        description: "Run across all packages regardless of changes"
         required: false
-        default: 'false'
+        default: "false"
 
 jobs:
   determine-affected:
@@ -89,7 +89,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
+          cache: "pnpm"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4

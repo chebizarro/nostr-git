@@ -1,15 +1,15 @@
 export interface PermalinkData {
-    host: string;
-    platform: 'github' | 'gitlab' | 'gitea' | 'unknown';
-    owner: string;
-    repo: string;
-    branch: string;
-    filePath: string;
-    startLine?: number;
-    endLine?: number;
-    isDiff?: boolean;
-    diffFileHash?: string;
-    diffSide?: 'L' | 'R';
+  host: string;
+  platform: 'github' | 'gitlab' | 'gitea' | 'unknown';
+  owner: string;
+  repo: string;
+  branch: string;
+  filePath: string;
+  startLine?: number;
+  endLine?: number;
+  isDiff?: boolean;
+  diffFileHash?: string;
+  diffSide?: 'L' | 'R';
 }
 /**
  * Determines if the URL is a valid permalink for GitHub, GitLab, or Gitea.

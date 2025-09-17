@@ -4,33 +4,52 @@
   import { useRegistry } from "../../useRegistry";
   const { Avatar, Button, AvatarImage, AvatarFallback } = useRegistry();
 
-  import type { RepoAnnouncementEvent, Profile } from '@nostr-git/shared-types';
-  import { parseRepoAnnouncementEvent } from '@nostr-git/shared-types';
+  import type { RepoAnnouncementEvent, Profile } from "@nostr-git/shared-types";
+  import { parseRepoAnnouncementEvent } from "@nostr-git/shared-types";
   // Accept event and optional owner (Profile)
-  const { event, owner = {
-    pubkey: ""
-  }, issueCount = 0, lastUpdated = undefined }: { event: RepoAnnouncementEvent, owner?: Profile, issueCount?: number, lastUpdated?: string } = $props();
+  const {
+    event,
+    owner = {
+      pubkey: "",
+    },
+    issueCount = 0,
+    lastUpdated = undefined,
+  }: {
+    event: RepoAnnouncementEvent;
+    owner?: Profile;
+    issueCount?: number;
+    lastUpdated?: string;
+  } = $props();
   const parsed = parseRepoAnnouncementEvent(event);
   // Prefer owner for avatar/name if provided
   const repoOwner: Profile = { ...owner };
   const id = parsed.repoId;
-  const name = parsed.name ?? '';
-  const description = parsed.description ?? '';
+  const name = parsed.name ?? "";
+  const description = parsed.description ?? "";
   // Use event createdAt if lastUpdated not provided
   const updated = lastUpdated ?? parsed.createdAt;
-
 </script>
 
 <div class="bg-card text-card-foreground rounded-lg border shadow-sm p-4">
   <div class="flex items-start gap-3">
     <Avatar class="size-8 border bg-muted text-muted-foreground">
-      <AvatarImage src={repoOwner.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(repoOwner.display_name || repoOwner.name || 'Unknown')}&background=random`} alt={repoOwner.display_name || repoOwner.name || 'Unknown'} />
-      <AvatarFallback>{((repoOwner.display_name || repoOwner.name || 'U').slice(0, 2).toUpperCase())}</AvatarFallback>
+      <AvatarImage
+        src={repoOwner.picture ||
+          `https://ui-avatars.com/api/?name=${encodeURIComponent(repoOwner.display_name || repoOwner.name || "Unknown")}&background=random`}
+        alt={repoOwner.display_name || repoOwner.name || "Unknown"}
+      />
+      <AvatarFallback
+        >{(repoOwner.display_name || repoOwner.name || "U")
+          .slice(0, 2)
+          .toUpperCase()}</AvatarFallback
+      >
     </Avatar>
     <div class="flex-1">
       <div class="flex items-center gap-1 mb-1">
         <Circle class="h-3 w-3 text-amber-500" />
-        <span class="text-xs text-muted-foreground">{repoOwner.display_name || repoOwner.name || 'Unknown'}</span>
+        <span class="text-xs text-muted-foreground"
+          >{repoOwner.display_name || repoOwner.name || "Unknown"}</span
+        >
         <span class="text-xs text-muted-foreground"><TimeAgo date={updated} /></span>
       </div>
       <a href={`/git/repo/${id}`} class="block">

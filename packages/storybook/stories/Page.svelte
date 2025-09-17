@@ -1,17 +1,16 @@
 <script lang="ts">
-  import './page.css';
-  import Header from './Header.svelte';
+  import "./page.css"
+  import Header from "./Header.svelte"
 
-  let user = $state<{ name: string }>();
+  let user = $state<{name: string}>()
 </script>
 
 <article>
   <Header
     {user}
-    onLogin={() => (user = { name: 'Jane Doe' })}
+    onLogin={() => (user = {name: "Jane Doe"})}
     onLogout={() => (user = undefined)}
-    onCreateAccount={() => (user = { name: 'Jane Doe' })}
-  />
+    onCreateAccount={() => (user = {name: "Jane Doe"})} />
 
   <section class="storybook-page">
     <h2>Pages in Storybook</h2>
@@ -20,8 +19,7 @@
       <a
         href="https://blog.hichroma.com/component-driven-development-ce1109d56c8e"
         target="_blank"
-        rel="noopener noreferrer"
-      >
+        rel="noopener noreferrer">
         <strong>component-driven</strong>
       </a>
       process starting with atomic components and ending with pages.
@@ -60,8 +58,7 @@
             01-.5-.4V5.7c0-.3.2-.5.5-.5zm0-2.1h6.9c.3 0 .5.2.5.4v7a.5.5 0 01-1 0V4H1.5a.5.5 0
             010-1zm0-2.1h9c.3 0 .5.2.5.4v9.1a.5.5 0 01-1 0V2H1.5a.5.5 0 010-1zm4.3 5.2H2V10h3.8V6.2z"
             id="a"
-            fill="#999"
-          />
+            fill="#999" />
         </g>
       </svg>
       Viewports addon in the toolbar

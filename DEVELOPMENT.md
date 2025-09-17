@@ -5,12 +5,14 @@ This guide covers local development setup, workflows, and best practices for the
 ## Prerequisites
 
 ### Required Software
+
 - **Node.js**: Version 18.0.0 or higher
 - **pnpm**: Version 8.0.0 or higher (preferred package manager)
 - **Git**: Version 2.30.0 or higher
 - **VSCode**: Recommended IDE with extensions
 
 ### Recommended VSCode Extensions
+
 - **Svelte for VS Code**: Svelte language support
 - **TypeScript and JavaScript**: Enhanced TypeScript support
 - **Prettier**: Code formatting
@@ -20,6 +22,7 @@ This guide covers local development setup, workflows, and best practices for the
 ## Initial Setup
 
 ### 1. Clone and Install
+
 ```bash
 # Clone the repository
 git clone https://github.com/your-org/nostr-git.git
@@ -51,16 +54,16 @@ node --version
 ### Examples
 
 ```ts
-import { getTag, getTags, getTagValue } from '@nostr-git/shared-types';
+import {getTag, getTags, getTagValue} from "@nostr-git/shared-types"
 
 // First committer tag
-const committer = getTag(event, 'committer');
+const committer = getTag(event, "committer")
 
 // All clone tags in order
-const clones = getTags(announcement, 'clone');
+const clones = getTags(announcement, "clone")
 
 // Single value from first matching tag
-const repoUrl = getTagValue(announcement, 'r');
+const repoUrl = getTagValue(announcement, "r")
 ```
 
 ## Runtime Validation (Zod)
@@ -75,20 +78,24 @@ For optional runtime guarantees, `@nostr-git/shared-types` exposes Zod schemas a
 Example:
 
 ```ts
-import {
-  validateRepoAnnouncementEvent,
-  validatePatchTags
-} from '@nostr-git/shared-types';
+import {validateRepoAnnouncementEvent, validatePatchTags} from "@nostr-git/shared-types"
 
-const evt = { kind: 30617, content: '', tags: [ ['d','repo-id'], ['clone','https://git'] ] };
-const ok = validateRepoAnnouncementEvent(evt);
-if (!ok.success) console.error(ok.error.format());
+const evt = {
+  kind: 30617,
+  content: "",
+  tags: [
+    ["d", "repo-id"],
+    ["clone", "https://git"],
+  ],
+}
+const ok = validateRepoAnnouncementEvent(evt)
+if (!ok.success) console.error(ok.error.format())
 
 const tagsOk = validatePatchTags([
-  ['a','30617:<owner>:<repo>'],
-  ['p','npub1...'],
-  ['committer','Alice','alice@example.com','1734038123','-420']
-]);
+  ["a", "30617:<owner>:<repo>"],
+  ["p", "npub1..."],
+  ["committer", "Alice", "alice@example.com", "1734038123", "-420"],
+])
 ```
 
 Notes:
@@ -136,11 +143,11 @@ NOSTR_GIT_VALIDATE_EVENTS=false pnpm -r test
 
 ```ts
 // validation.spec.ts
-import { beforeEach } from 'vitest';
+import {beforeEach} from "vitest"
 
 beforeEach(() => {
-  process.env.NOSTR_GIT_VALIDATE_EVENTS = 'true';
-});
+  process.env.NOSTR_GIT_VALIDATE_EVENTS = "true"
+})
 ```
 
 - Verify both modes:
@@ -161,21 +168,22 @@ Snippet:
 
 ```ts
 // index.test-d.ts
-import { expectType } from 'tsd';
-import type { getTag, getTagValue, PatchEvent } from './dist/index.d.ts';
+import {expectType} from "tsd"
+import type {getTag, getTagValue, PatchEvent} from "./dist/index.d.ts"
 
-declare const patch: PatchEvent;
-const _getTag: typeof getTag = null as any;
-const _getTagValue: typeof getTagValue = null as any;
+declare const patch: PatchEvent
+const _getTag: typeof getTag = null as any
+const _getTagValue: typeof getTagValue = null as any
 
-const committer = _getTag(patch, 'committer');
-expectType<["committer", string, string, string, string] | undefined>(committer);
+const committer = _getTag(patch, "committer")
+expectType<["committer", string, string, string, string] | undefined>(committer)
 
-const committerName = _getTagValue(patch, 'committer');
-expectType<string | undefined>(committerName);
+const committerName = _getTagValue(patch, "committer")
+expectType<string | undefined>(committerName)
 ```
 
 ### 2. Build All Packages
+
 ```bash
 # Build all packages in dependency order
 pnpm build
@@ -185,6 +193,7 @@ ls packages/*/dist
 ```
 
 ### 3. Verify Setup
+
 ```bash
 # Run type checking across all packages
 pnpm -r typecheck
@@ -199,6 +208,7 @@ pnpm -r format
 ## Development Workflow
 
 ### Starting Development
+
 ```bash
 # Start all packages in watch mode
 pnpm watch:all
@@ -210,6 +220,7 @@ pnpm watch:shared-types  # Types package only
 ```
 
 ### Working with Storybook
+
 ```bash
 # Start Storybook for UI development
 cd packages/storybook
@@ -219,6 +230,7 @@ pnpm storybook
 ```
 
 ### Package-Specific Development
+
 ```bash
 # Work on core library
 cd packages/core
@@ -235,6 +247,7 @@ pnpm build          # Production build
 ## Environment Configuration
 
 ### Environment Variables
+
 Create a `.env.local` file in the project root:
 
 ```bash
@@ -254,22 +267,26 @@ DEBUG=nostr-git:*
 ### Package-Specific Configuration
 
 #### Core Package
+
 - Uses `tsconfig.json` for TypeScript compilation
 - ESM modules with `.js` extensions in imports
 - Web Workers for background Git operations
 
 #### UI Package
+
 - Svelte 5 with runes API
 - TailwindCSS with custom preset
 - PostCSS for CSS processing
 
 #### Extensions
+
 - Manifest V3 for browser extension
 - VSCode extension API for IDE integration
 
 ## Testing
 
 ### Running Tests
+
 ```bash
 # Run all tests
 pnpm -r test
@@ -286,6 +303,7 @@ pnpm test --coverage
 ```
 
 ### Test Structure
+
 ```
 packages/core/
 ├── src/
@@ -297,25 +315,27 @@ packages/core/
 ```
 
 ### Writing Tests
+
 ```typescript
 // Unit test example
-import { describe, it, expect } from 'vitest';
-import { createRepoEvent } from './event.js';
+import {describe, it, expect} from "vitest"
+import {createRepoEvent} from "./event.js"
 
-describe('createRepoEvent', () => {
-  it('should create valid repo announcement event', () => {
-    const repo = { name: 'test-repo', url: 'https://github.com/test/repo' };
-    const event = createRepoEvent(repo);
-    
-    expect(event.kind).toBe(30617);
-    expect(event.tags).toContainEqual(['r', repo.url]);
-  });
-});
+describe("createRepoEvent", () => {
+  it("should create valid repo announcement event", () => {
+    const repo = {name: "test-repo", url: "https://github.com/test/repo"}
+    const event = createRepoEvent(repo)
+
+    expect(event.kind).toBe(30617)
+    expect(event.tags).toContainEqual(["r", repo.url])
+  })
+})
 ```
 
 ## Debugging
 
 ### Browser Extension Debugging
+
 ```bash
 # Build Chrome MV3 bundle (development)
 cd packages/extension
@@ -332,12 +352,14 @@ pnpm build:firefox
 ```
 
 Notes:
-- __Viewer base URL__: set in the popup. Input is normalized to include scheme and trailing slash; default is `https://njump.me/`.
-- __Confirm dialogs__: shown before repo announcements and permalinks; cancel shows a gentle cancel snackbar.
-- __Snackbars__: persistent until dismissed; auto-dismiss 5s (success/error) or 3s (cancel). Animated fade/slide; respects reduced motion.
-- __Debug option visibility__: a compile-time flag controls visibility in the popup. In development it is visible by default; in release builds it can be hidden with `NOSTR_GIT_SHOW_DEBUG=false`.
+
+- **Viewer base URL**: set in the popup. Input is normalized to include scheme and trailing slash; default is `https://njump.me/`.
+- **Confirm dialogs**: shown before repo announcements and permalinks; cancel shows a gentle cancel snackbar.
+- **Snackbars**: persistent until dismissed; auto-dismiss 5s (success/error) or 3s (cancel). Animated fade/slide; respects reduced motion.
+- **Debug option visibility**: a compile-time flag controls visibility in the popup. In development it is visible by default; in release builds it can be hidden with `NOSTR_GIT_SHOW_DEBUG=false`.
 
 ### VSCode Extension Debugging
+
 ```bash
 # Open extension in development mode
 cd packages/vscode-ngit
@@ -348,16 +370,18 @@ code .
 ```
 
 ### Core Library Debugging
+
 ```typescript
 // Enable debug logging
-import { logger } from './logger.js';
+import {logger} from "./logger.js"
 
-logger.debug('Processing event', { eventId: event.id });
+logger.debug("Processing event", {eventId: event.id})
 ```
 
 ## Common Development Tasks
 
 ### Adding a New Package
+
 ```bash
 # Create package directory
 mkdir packages/new-package
@@ -371,6 +395,7 @@ pnpm init
 ```
 
 ### Adding Dependencies
+
 ```bash
 # Add dependency to specific package
 pnpm --filter @nostr-git/core add lodash
@@ -383,6 +408,7 @@ pnpm add -D -w prettier
 ```
 
 ### Cross-Package Dependencies
+
 ```bash
 # Link local packages
 pnpm --filter @nostr-git/ui add @nostr-git/shared-types
@@ -393,6 +419,7 @@ pnpm --filter @nostr-git/ui add @nostr-git/shared-types
 ## Build and Release
 
 ### Building for Production
+
 ```bash
 # Clean all build artifacts
 pnpm -r clean
@@ -405,6 +432,7 @@ pnpm -r publint  # Check package.json exports
 ```
 
 ### Publishing Packages
+
 ```bash
 # Build and publish specific package
 cd packages/core
@@ -422,6 +450,7 @@ pnpm changeset publish
 ### Common Issues
 
 #### TypeScript Compilation Errors
+
 ```bash
 # Clear TypeScript cache
 pnpm -r exec tsc --build --clean
@@ -431,6 +460,7 @@ pnpm build
 ```
 
 #### Package Resolution Issues
+
 ```bash
 # Clear node_modules and reinstall
 rm -rf node_modules packages/*/node_modules
@@ -438,6 +468,7 @@ pnpm install
 ```
 
 #### Storybook Build Failures
+
 ```bash
 # Clear Storybook cache
 cd packages/storybook
@@ -446,6 +477,7 @@ pnpm storybook
 ```
 
 #### Extension Loading Issues
+
 ```bash
 # Rebuild extension
 cd packages/extension
@@ -459,11 +491,13 @@ pnpm validate-manifest
 ### Performance Issues
 
 #### Slow TypeScript Compilation
+
 - Use `--incremental` flag for faster rebuilds
 - Consider using `tsc --build` for project references
 - Enable `skipLibCheck` in development
 
 #### Large Bundle Sizes
+
 - Use `pnpm bundle-analyzer` to identify large dependencies
 - Enable tree-shaking in build configuration
 - Use dynamic imports for code splitting
@@ -471,6 +505,7 @@ pnpm validate-manifest
 ### Development Server Issues
 
 #### Port Conflicts
+
 ```bash
 # Check for processes using ports
 lsof -i :6006  # Storybook
@@ -481,6 +516,7 @@ kill -9 <PID>
 ```
 
 #### File Watching Issues
+
 ```bash
 # Increase file watcher limits (macOS/Linux)
 echo fs.inotify.max_user_watches=524288 | sudo tee -a /etc/sysctl.conf
@@ -490,13 +526,16 @@ sudo sysctl -p
 ## Git Workflow
 
 ### Branch Naming
+
 - `feature/description` - New features
 - `fix/description` - Bug fixes
 - `docs/description` - Documentation updates
 - `refactor/description` - Code refactoring
 
 ### Commit Messages
+
 Follow conventional commits format:
+
 ```
 type(scope): description
 
@@ -506,6 +545,7 @@ docs(readme): update installation instructions
 ```
 
 ### Pre-commit Hooks
+
 ```bash
 # Install pre-commit hooks
 pnpm prepare
@@ -544,21 +584,21 @@ Persist preferred clone/push URLs per `repoId`. Three adapters are available:
 #### Node (File-backed)
 
 ```ts
-import { NostrGitProvider } from '@nostr-git/git-wrapper/src/nostr-git-provider.js';
-import { FileProtocolPrefs } from '@nostr-git/git-wrapper/src/prefs-store.js';
-import fs from 'node:fs';
+import {NostrGitProvider} from "@nostr-git/git-wrapper/src/nostr-git-provider.js"
+import {FileProtocolPrefs} from "@nostr-git/git-wrapper/src/prefs-store.js"
+import fs from "node:fs"
 
-const provider = new NostrGitProvider(git, nostr);
-provider.configureProtocolPrefsStore(new FileProtocolPrefs(fs, `${process.cwd()}/.ngit/prefs.json`));
+const provider = new NostrGitProvider(git, nostr)
+provider.configureProtocolPrefsStore(new FileProtocolPrefs(fs, `${process.cwd()}/.ngit/prefs.json`))
 ```
 
 #### Browser (localStorage)
 
 ```ts
-import { LocalStorageProtocolPrefs } from '@nostr-git/git-wrapper/src/prefs-store.js';
+import {LocalStorageProtocolPrefs} from "@nostr-git/git-wrapper/src/prefs-store.js"
 
-const provider = new NostrGitProvider(git, nostr);
-provider.configureProtocolPrefsStore(new LocalStorageProtocolPrefs(window.localStorage));
+const provider = new NostrGitProvider(git, nostr)
+provider.configureProtocolPrefsStore(new LocalStorageProtocolPrefs(window.localStorage))
 ```
 
 ### Repo Address Helpers
@@ -566,13 +606,12 @@ provider.configureProtocolPrefsStore(new LocalStorageProtocolPrefs(window.localS
 Always construct repo addresses via the helper for consistency:
 
 ```ts
-import { makeRepoAddr, isRepoAddr } from '@nostr-git/git-wrapper/src/repo-addr.js';
+import {makeRepoAddr, isRepoAddr} from "@nostr-git/git-wrapper/src/repo-addr.js"
 
-const repoAddr = makeRepoAddr(ownerPubkey, repoId);
-console.assert(isRepoAddr(repoAddr));
+const repoAddr = makeRepoAddr(ownerPubkey, repoId)
+console.assert(isRepoAddr(repoAddr))
 ```
 
 ### Unified Diff in Patch Content
 
 By providing `{ fs, dir }` and refs (e.g., `baseBranch` and the PR ref), the default patch content generator will append a lightweight unified diff generated by isomorphic-git.
-

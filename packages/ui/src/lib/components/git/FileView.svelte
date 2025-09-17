@@ -1,11 +1,5 @@
 <script lang="ts">
-  import {
-    FileCode,
-    Folder,
-    Share,
-    Download,
-    Copy,
-    Info } from "@lucide/svelte";
+  import { FileCode, Folder, Share, Download, Copy, Info } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
   const { Button, Spinner } = useRegistry();
   import { toast } from "$lib/stores/toast";
@@ -14,15 +8,11 @@
   import {
     detectFileType,
     getFileMetadata,
-    type FileTypeInfo } from "../../utils/fileTypeDetection";
+    type FileTypeInfo,
+  } from "../../utils/fileTypeDetection";
   import FileMetadataPanel from "./FileMetadataPanel.svelte";
-  import {
-    ImageViewer,
-    PDFViewer,
-    VideoViewer,
-    AudioViewer,
-    BinaryViewer }from "./viewers";
-  
+  import { ImageViewer, PDFViewer, VideoViewer, AudioViewer, BinaryViewer } from "./viewers";
+
   const {
     file,
     getFileContent,
@@ -43,25 +33,27 @@
 
   let fileTypeInfo = $state<FileTypeInfo | null>(null);
   let metadata = $state<Record<string, string>>({});
-  
+
   $effect(() => {
     if (isExpanded && type === "file") {
       if (!content) {
         isLoading = true;
-        getFileContent(path).then((c) => {
-          content = c;
-          isLoading = false;
-          
-          fileTypeInfo = detectFileType(name, c);
-          metadata = getFileMetadata(file, c, fileTypeInfo);
-        }).catch((error) => {
-          toast.push({
-            title: "Failed to load file content",
-            description: error.message,
-            variant: "destructive",
+        getFileContent(path)
+          .then((c) => {
+            content = c;
+            isLoading = false;
+
+            fileTypeInfo = detectFileType(name, c);
+            metadata = getFileMetadata(file, c, fileTypeInfo);
+          })
+          .catch((error) => {
+            toast.push({
+              title: "Failed to load file content",
+              description: error.message,
+              variant: "destructive",
+            });
+            isLoading = false;
           });
-          isLoading = false;
-        });
       }
     } else if (isExpanded && type === "directory") {
       content = "";
@@ -75,8 +67,8 @@
       if (!content) {
         content = await getFileContent(path);
       }
-      
-      if (fileTypeInfo?.category === 'binary') {
+
+      if (fileTypeInfo?.category === "binary") {
         toast.push({
           title: "Cannot copy binary file",
           description: "Binary files cannot be copied to clipboard. Use download instead.",
@@ -84,7 +76,7 @@
         });
         return;
       }
-      
+
       navigator.clipboard.writeText(content);
       toast.push({
         title: "Copied to clipboard",
@@ -104,7 +96,7 @@
     if (!content) {
       content = await getFileContent(path);
     }
-    
+
     const mimeType = fileTypeInfo?.mimeType || "text/plain";
     const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
@@ -136,20 +128,20 @@
     if (type === "directory") return Folder;
     if (fileTypeInfo?.icon) {
       const iconMap: Record<string, any> = {
-        'Image': FileCode,
-        'FileText': FileCode,
-        'Settings': FileCode,
-        'Container': FileCode,
-        'Hammer': FileCode,
-        'BookOpen': FileCode,
-        'Scale': FileCode,
-        'Braces': FileCode,
-        'Code2': FileCode,
-        'Terminal': FileCode,
-        'Binary': FileCode,
-        'Archive': FileCode,
-        'Video': FileCode,
-        'Music': FileCode,
+        Image: FileCode,
+        FileText: FileCode,
+        Settings: FileCode,
+        Container: FileCode,
+        Hammer: FileCode,
+        BookOpen: FileCode,
+        Scale: FileCode,
+        Braces: FileCode,
+        Code2: FileCode,
+        Terminal: FileCode,
+        Binary: FileCode,
+        Archive: FileCode,
+        Video: FileCode,
+        Music: FileCode,
       };
       return iconMap[fileTypeInfo.icon] || FileCode;
     }
@@ -205,25 +197,25 @@
           <Spinner>Fetching content...</Spinner>
         </div>
       {:else if content && fileTypeInfo}
-        {#if fileTypeInfo.category === 'image'}
+        {#if fileTypeInfo.category === "image"}
           <div class="p-4">
-            <ImageViewer {content} filename={name} mimeType={fileTypeInfo.mimeType} />
+            <ImageViewer content={content} filename={name} mimeType={fileTypeInfo.mimeType} />
           </div>
-        {:else if fileTypeInfo.category === 'pdf'}
+        {:else if fileTypeInfo.category === "pdf"}
           <div class="p-4">
-            <PDFViewer {content} filename={name} />
+            <PDFViewer content={content} filename={name} />
           </div>
-        {:else if fileTypeInfo.category === 'video'}
+        {:else if fileTypeInfo.category === "video"}
           <div class="p-4">
-            <VideoViewer {content} filename={name} mimeType={fileTypeInfo.mimeType} />
+            <VideoViewer content={content} filename={name} mimeType={fileTypeInfo.mimeType} />
           </div>
-        {:else if fileTypeInfo.category === 'audio'}
+        {:else if fileTypeInfo.category === "audio"}
           <div class="p-4">
-            <AudioViewer {content} filename={name} mimeType={fileTypeInfo.mimeType} />
+            <AudioViewer content={content} filename={name} mimeType={fileTypeInfo.mimeType} />
           </div>
-        {:else if fileTypeInfo.category === 'binary' || fileTypeInfo.category === 'archive'}
+        {:else if fileTypeInfo.category === "binary" || fileTypeInfo.category === "archive"}
           <div class="p-4">
-            <BinaryViewer {content} filename={name} />
+            <BinaryViewer content={content} filename={name} />
           </div>
         {:else}
           <div class="p-4 border-t" style="border-color: hsl(var(--border));">
@@ -231,36 +223,30 @@
               <div class="flex items-center gap-2">
                 <span class="text-sm font-medium text-muted-foreground">Language:</span>
                 <span class="text-sm px-2 py-1 bg-secondary rounded text-secondary-foreground">
-                  {fileTypeInfo?.language || 'text'}
+                  {fileTypeInfo?.language || "text"}
                 </span>
               </div>
             </div>
-            <CodeMirror 
-              bind:value={content}
-            />
+            <CodeMirror bind:value={content} />
           </div>
         {/if}
       {:else if content}
         <div class="p-4">
-          <CodeMirror 
-            bind:value={content}
-          />
+          <CodeMirror bind:value={content} />
         </div>
       {:else}
         <div class="p-4">
-          <div class="text-center text-muted-foreground py-8">
-            No content available
-          </div>
+          <div class="text-center text-muted-foreground py-8">No content available</div>
         </div>
       {/if}
     </div>
   {/if}
-  
-  <FileMetadataPanel 
+
+  <FileMetadataPanel
     bind:isOpen={isMetadataPanelOpen}
-    {file}
-    {content}
+    file={file}
+    content={content}
     typeInfo={fileTypeInfo}
-    {metadata}
+    metadata={metadata}
   />
 </div>

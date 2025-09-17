@@ -2,9 +2,15 @@
 
 import type { RepoStateEvent, NostrTag } from '@nostr-git/shared-types';
 
-export type RefHeads = Record<string, { commit: string; eventId: string; created_at: number; pubkey: string }>;
+export type RefHeads = Record<
+  string,
+  { commit: string; eventId: string; created_at: number; pubkey: string }
+>;
 
-export function mergeRepoStateByMaintainers(args: { states: RepoStateEvent[]; maintainers: Set<string> }): RefHeads {
+export function mergeRepoStateByMaintainers(args: {
+  states: RepoStateEvent[];
+  maintainers: Set<string>;
+}): RefHeads {
   const out: RefHeads = {};
   for (const evt of args.states) {
     if (!args.maintainers.has(evt.pubkey)) continue;
@@ -14,7 +20,12 @@ export function mergeRepoStateByMaintainers(args: { states: RepoStateEvent[]; ma
         const commit = tag[1];
         const existing = out[ref];
         if (!existing || evt.created_at > existing.created_at) {
-          out[ref] = { commit, eventId: (evt as any).id, created_at: evt.created_at, pubkey: evt.pubkey };
+          out[ref] = {
+            commit,
+            eventId: (evt as any).id,
+            created_at: evt.created_at,
+            pubkey: evt.pubkey
+          };
         }
       }
       if (tag[0] === 'HEAD') {
@@ -22,7 +33,12 @@ export function mergeRepoStateByMaintainers(args: { states: RepoStateEvent[]; ma
         const commit = tag[1];
         const existing = out[ref];
         if (!existing || evt.created_at > existing.created_at) {
-          out[ref] = { commit, eventId: (evt as any).id, created_at: evt.created_at, pubkey: evt.pubkey };
+          out[ref] = {
+            commit,
+            eventId: (evt as any).id,
+            created_at: evt.created_at,
+            pubkey: evt.pubkey
+          };
         }
       }
     }

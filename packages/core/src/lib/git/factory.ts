@@ -1,6 +1,6 @@
 /**
  * Git Service API Factory
- * 
+ *
  * Factory function to create the appropriate GitServiceApi implementation
  * based on the Git provider type and authentication token.
  */
@@ -15,82 +15,86 @@ import { GraspApi, type Signer } from './providers/grasp.js';
 
 /**
  * Create a GitServiceApi instance for the specified provider
- * 
+ *
  * @param provider - The Git service provider ('github', 'gitlab', 'gitea', 'bitbucket', 'grasp')
  * @param token - Authentication token for the provider (or pubkey for GRASP)
  * @param baseUrl - Optional custom base URL (for self-hosted instances) or relay URL for GRASP
  * @param signer - Optional Nostr signer (for direct signing in UI thread; not required when using message-based signing)
  * @returns GitServiceApi implementation for the provider
- * 
+ *
  * @example
  * ```typescript
  * // GitHub.com
  * const githubApi = getGitServiceApi('github', 'ghp_xxxxxxxxxxxx');
- * 
+ *
  * // Self-hosted GitLab
  * const gitlabApi = getGitServiceApi('gitlab', 'glpat-xxxxxxxxxxxx', 'https://gitlab.example.com');
- * 
+ *
  * // GRASP relay
  * const graspApi = getGitServiceApi('grasp', pubkey, 'wss://relay.example.com', signer);
  * ```
  */
 export function getGitServiceApi(
-  provider: GitVendor, 
-  token: string, 
+  provider: GitVendor,
+  token: string,
   baseUrl?: string,
   signer?: Signer
 ): GitServiceApi {
   switch (provider) {
     case 'github':
       return new GitHubApi(token, baseUrl);
-    
+
     case 'gitlab':
       return new GitLabApi(token, baseUrl);
-    
+
     case 'gitea':
       return new GiteaApi(token, baseUrl);
-    
+
     case 'bitbucket':
       return new BitbucketApi(token, baseUrl);
-    
+
     case 'grasp':
       if (!baseUrl) {
         throw new Error('GRASP provider requires a relay URL as baseUrl parameter');
       }
       // signer is optional when using message-based signing across worker boundary
       return new GraspApi(baseUrl, token, signer);
-    
+
     case 'generic':
-      throw new Error('Generic Git provider does not support REST API operations. Use a specific provider (github, gitlab, gitea, bitbucket, grasp).');
-    
+      throw new Error(
+        'Generic Git provider does not support REST API operations. Use a specific provider (github, gitlab, gitea, bitbucket, grasp).'
+      );
+
     default:
-      throw new Error(`Unknown Git provider: ${provider}. Supported providers: github, gitlab, gitea, bitbucket, grasp`);
+      throw new Error(
+        `Unknown Git provider: ${provider}. Supported providers: github, gitlab, gitea, bitbucket, grasp`
+      );
   }
 }
 
 /**
  * Detect Git provider from URL and create appropriate GitServiceApi instance
- * 
+ *
  * @param url - Git repository URL or service base URL
  * @param token - Authentication token for the provider
  * @returns GitServiceApi implementation for the detected provider
- * 
+ *
  * @example
  * ```typescript
  * // Auto-detect GitHub from repo URL
  * const api = getGitServiceApiFromUrl('https://github.com/owner/repo', 'ghp_xxxxxxxxxxxx');
- * 
+ *
  * // Auto-detect self-hosted GitLab
  * const api = getGitServiceApiFromUrl('https://gitlab.example.com/owner/repo', 'glpat-xxxxxxxxxxxx');
  * ```
  */
 export function getGitServiceApiFromUrl(url: string, token: string): GitServiceApi {
   const normalizedUrl = url.toLowerCase();
-  
+
   // Detect provider from URL
   let provider: GitVendor;
   let baseUrl: string | undefined;
-  
+
   if (normalizedUrl.includes('github.com')) {
     provider = 'github';
     baseUrl = 'https://api.github.com';
@@ -115,15 +119,17 @@ export function getGitServiceApiFromUrl(url: string, token: string): GitServiceA
     provider = 'grasp';
     baseUrl = url; // For GRASP, the URL is the relay URL
   } else {
-    throw new Error(`Unable to detect Git provider from URL: ${url}. Supported providers: GitHub, GitLab, Gitea, Bitbucket, GRASP`);
+    throw new Error(
+      `Unable to detect Git provider from URL: ${url}. Supported providers: GitHub, GitLab, Gitea, Bitbucket, GRASP`
+    );
   }
-  
+
   return getGitServiceApi(provider, token, baseUrl);
 }
 
 /**
  * Get available Git service providers
- * 
+ *
  * @returns Array of supported Git service provider names
  */
 export function getAvailableProviders(): GitVendor[] {
@@ -132,7 +138,7 @@ export function getAvailableProviders(): GitVendor[] {
 
 /**
  * Check if a provider supports REST API operations
- * 
+ *
  * @param provider - Git service provider name
  * @returns true if the provider supports REST API operations
  */
@@ -142,7 +148,7 @@ export function supportsRestApi(provider: GitVendor): boolean {
 
 /**
  * Get default API base URL for a provider
- * 
+ *
  * @param provider - Git service provider name
  * @returns Default API base URL for the provider
  */

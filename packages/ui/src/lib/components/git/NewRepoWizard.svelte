@@ -1,48 +1,60 @@
 <script lang="ts">
-  import RepoDetailsStep from './RepoDetailsStep.svelte';
-  import AdvancedSettingsStep from './AdvancedSettingsStep.svelte';
-  import RepoProgressStep from './RepoProgressStep.svelte';
-  import StepChooseService from './steps/StepChooseService.svelte';
-  import { type Event as NostrEvent, nip19 } from 'nostr-tools';
-  import { useRegistry } from '../../useRegistry';
-  import { useNewRepo, type NewRepoResult, checkProviderRepoAvailability } from '../../useNewRepo.svelte';
-  import { tokens as tokensStore, type Token } from '../../stores/tokens.js';
-  import { createGraspServersStore } from '../../stores/graspServers.js';
-  import { signer as signerStore } from '../../stores/signer';
-  
+  import RepoDetailsStep from "./RepoDetailsStep.svelte";
+  import AdvancedSettingsStep from "./AdvancedSettingsStep.svelte";
+  import RepoProgressStep from "./RepoProgressStep.svelte";
+  import StepChooseService from "./steps/StepChooseService.svelte";
+  import { type Event as NostrEvent, nip19 } from "nostr-tools";
+  import { useRegistry } from "../../useRegistry";
+  import {
+    useNewRepo,
+    type NewRepoResult,
+    checkProviderRepoAvailability,
+  } from "../../useNewRepo.svelte";
+  import { tokens as tokensStore, type Token } from "../../stores/tokens.js";
+  import { createGraspServersStore } from "../../stores/graspServers.js";
+  import { signer as signerStore } from "../../stores/signer";
+
   const { Button } = useRegistry();
 
   interface Props {
     onRepoCreated?: (repoData: NewRepoResult) => void;
     onCancel?: () => void;
-    onPublishEvent?: (event: Omit<NostrEvent, 'id' | 'sig' | 'pubkey' | 'created_at'>) => Promise<void>;
+    onPublishEvent?: (
+      event: Omit<NostrEvent, "id" | "sig" | "pubkey" | "created_at">
+    ) => Promise<void>;
     graspServerUrls?: string[]; // optional: preloaded grasp server options
     defaultRelays?: string[]; // optional: default relays for Advanced Settings
   }
 
-  const { onRepoCreated, onCancel, onPublishEvent, graspServerUrls = [], defaultRelays = [] }: Props = $props();
+  const {
+    onRepoCreated,
+    onCancel,
+    onPublishEvent,
+    graspServerUrls = [],
+    defaultRelays = [],
+  }: Props = $props();
 
   // Initialize the useNewRepo hook
   const { createRepository, isCreating, progress, error, reset } = useNewRepo({
     onProgress: (steps) => {
       // Transform status to completed boolean for RepoProgressStep
-      progressSteps = steps.map(step => ({
+      progressSteps = steps.map((step) => ({
         step: step.step,
         message: step.message,
-        completed: step.status === 'completed',
-        error: step.error
+        completed: step.status === "completed",
+        error: step.error,
       }));
     },
     onRepoCreated: (result) => {
       onRepoCreated?.(result);
     },
-    onPublishEvent: onPublishEvent
+    onPublishEvent: onPublishEvent,
   });
 
   // Token management
   let tokens = $state<Token[]>([]);
   let selectedProvider = $state<string | undefined>(undefined);
-  let graspRelayUrl = $state<string>('');
+  let graspRelayUrl = $state<string>("");
   let cachedNpub = $state<string | null>(null);
   let userEditedWebUrl = $state(false);
   let userEditedCloneUrl = $state(false);
@@ -93,10 +105,10 @@
   function providerHost(p?: string): string | undefined {
     if (!p) return undefined;
     const map: Record<string, string> = {
-      github: 'github.com',
-      gitlab: 'gitlab.com',
-      gitea: 'gitea.com',
-      bitbucket: 'bitbucket.org',
+      github: "github.com",
+      gitlab: "gitlab.com",
+      gitea: "gitea.com",
+      bitbucket: "bitbucket.org",
     };
     return map[p] || undefined;
   }
@@ -107,17 +119,21 @@
     const npub = await ensureNpub();
 
     // Derive username and host from availability results for the selected provider
-    const providerResult = nameAvailabilityResults?.results?.find((r) => r.provider === selectedProvider)
-      || nameAvailabilityResults?.results?.find((r) => r.host === providerHost(selectedProvider));
+    const providerResult =
+      nameAvailabilityResults?.results?.find((r) => r.provider === selectedProvider) ||
+      nameAvailabilityResults?.results?.find((r) => r.host === providerHost(selectedProvider));
     const username = providerResult?.username;
     const availabilityHost = providerResult?.host;
 
     // 1) webUrls (primary web URL default)
-    if (!userEditedWebUrl && (advancedSettings.webUrls.length === 0 || !advancedSettings.webUrls[0])) {
-      let url = '';
-      if (selectedProvider === 'grasp') {
+    if (
+      !userEditedWebUrl &&
+      (advancedSettings.webUrls.length === 0 || !advancedSettings.webUrls[0])
+    ) {
+      let url = "";
+      if (selectedProvider === "grasp") {
         // Use gitworkshop.dev for GRASP
-        url = npub ? `https://gitworkshop.dev/${npub}/${name}` : '';
+        url = npub ? `https://gitworkshop.dev/${npub}/${name}` : "";
       } else if (selectedProvider) {
         const host = availabilityHost || providerHost(selectedProvider);
         if (host && username) {
@@ -135,7 +151,7 @@
     if (!userEditedCloneUrl) {
       const host = availabilityHost || providerHost(selectedProvider);
 
-      if (selectedProvider === 'grasp') {
+      if (selectedProvider === "grasp") {
         // For GRASP, use only nostr as the auto-generated default
         const nostrUrl = npub ? `nostr://${npub}/${name}` : undefined;
         advancedSettings.cloneUrls = nostrUrl ? [nostrUrl] : [];
@@ -160,25 +176,25 @@
 
   // Repository details (Step 1)
   let repoDetails = $state({
-    name: '',
-    description: '',
-    initializeWithReadme: true
+    name: "",
+    description: "",
+    initializeWithReadme: true,
   });
 
   // Advanced settings (Step 2)
   let advancedSettings = $state({
-    gitignoreTemplate: '',
-    licenseTemplate: '',
-    defaultBranch: 'master',
+    gitignoreTemplate: "",
+    licenseTemplate: "",
+    defaultBranch: "master",
     // Author information (should be populated from current user)
-    authorName: '',
-    authorEmail: '',
+    authorName: "",
+    authorEmail: "",
     // NIP-34 metadata
     maintainers: [] as string[],
     relays: [...defaultRelays] as string[],
     tags: [] as string[],
     webUrls: [] as string[],
-    cloneUrls: [] as string[]
+    cloneUrls: [] as string[],
   });
 
   // Populate relays from defaultRelays if relays are empty and defaults are provided
@@ -189,12 +205,14 @@
   });
 
   // Creation progress (Step 3) - now managed by useNewRepo hook
-  let progressSteps = $state<{
-    step: string;
-    message: string;
-    completed: boolean;
-    error?: string;
-  }[]>([]);
+  let progressSteps = $state<
+    {
+      step: string;
+      message: string;
+      completed: boolean;
+      error?: string;
+    }[]
+  >([]);
 
   // Validation
   interface ValidationErrors {
@@ -217,11 +235,11 @@
         selectedProvider as string,
         name,
         tokens,
-        selectedProvider === 'grasp' ? graspRelayUrl : undefined
+        selectedProvider === "grasp" ? graspRelayUrl : undefined
       );
       nameAvailabilityResults = results;
     } catch (error) {
-      console.error('Error checking name availability:', error);
+      console.error("Error checking name availability:", error);
       nameAvailabilityResults = null;
     } finally {
       isCheckingAvailability = false;
@@ -242,52 +260,52 @@
   // Validation functions
   function validateRepoName(name: string): string | undefined {
     if (!name.trim()) {
-      return 'Repository name is required';
+      return "Repository name is required";
     }
     if (name.length < 3) {
-      return 'Repository name must be at least 3 characters';
+      return "Repository name must be at least 3 characters";
     }
     if (name.length > 100) {
-      return 'Repository name must be 100 characters or less';
+      return "Repository name must be 100 characters or less";
     }
     if (!/^[a-zA-Z0-9._-]+$/.test(name)) {
-      return 'Repository name can only contain letters, numbers, dots, hyphens, and underscores';
+      return "Repository name can only contain letters, numbers, dots, hyphens, and underscores";
     }
-    
+
     // Note: We no longer block form progression for name conflicts
     // This allows users to proceed even with conflicts, but we'll disable those providers later
-    
+
     return undefined;
   }
 
   function validateDescription(description: string): string | undefined {
     if (description.length > 350) {
-      return 'Description must be 350 characters or less';
+      return "Description must be 350 characters or less";
     }
     return undefined;
   }
 
   function validateStep1(): boolean {
     const errors: ValidationErrors = {};
-    
+
     const nameError = validateRepoName(repoDetails.name);
     if (nameError) errors.name = nameError;
-    
+
     const descError = validateDescription(repoDetails.description);
     if (descError) errors.description = descError;
-    
+
     return Object.keys(errors).length === 0;
   }
 
   function updateValidationErrors() {
     const errors: ValidationErrors = {};
-    
+
     const nameError = validateRepoName(repoDetails.name);
     if (nameError) errors.name = nameError;
-    
+
     const descError = validateDescription(repoDetails.description);
     if (descError) errors.description = descError;
-    
+
     validationErrors = errors;
   }
 
@@ -338,15 +356,18 @@
   function handleRelayUrlChange(url: string) {
     graspRelayUrl = url;
     // For GRASP, re-check availability when relay changes and name is present
-    if (selectedProvider === 'grasp' && repoDetails.name && repoDetails.name.trim().length > 0) {
+    if (selectedProvider === "grasp" && repoDetails.name && repoDetails.name.trim().length > 0) {
       debouncedNameCheck(repoDetails.name);
     }
   }
 
   // Validate relay URL for GRASP provider
   function isValidGraspConfig(): boolean {
-    if (selectedProvider !== 'grasp') return true;
-    return graspRelayUrl.trim() !== '' && (graspRelayUrl.startsWith('wss://') || graspRelayUrl.startsWith('ws://'));
+    if (selectedProvider !== "grasp") return true;
+    return (
+      graspRelayUrl.trim() !== "" &&
+      (graspRelayUrl.startsWith("wss://") || graspRelayUrl.startsWith("ws://"))
+    );
   }
 
   // Repository creation using useNewRepo hook
@@ -362,17 +383,17 @@
         licenseTemplate: advancedSettings.licenseTemplate,
         defaultBranch: advancedSettings.defaultBranch,
         provider: selectedProvider, // Pass the selected provider
-        relayUrl: selectedProvider === 'grasp' ? graspRelayUrl : undefined, // Pass relay URL for GRASP
+        relayUrl: selectedProvider === "grasp" ? graspRelayUrl : undefined, // Pass relay URL for GRASP
         authorName: advancedSettings.authorName,
         authorEmail: advancedSettings.authorEmail,
         maintainers: advancedSettings.maintainers,
         relays: advancedSettings.relays,
         tags: advancedSettings.tags,
-        webUrl: (advancedSettings.webUrls.find((v) => v && v.trim()) || ''),
-        cloneUrl: (advancedSettings.cloneUrls.find((v) => v && v.trim()) || '')
+        webUrl: advancedSettings.webUrls.find((v) => v && v.trim()) || "",
+        cloneUrl: advancedSettings.cloneUrls.find((v) => v && v.trim()) || "",
       });
     } catch (error) {
-      console.error('Repository creation failed:', error);
+      console.error("Repository creation failed:", error);
     }
   }
 
@@ -462,80 +483,79 @@
 </script>
 
 <div
- class="max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto p-6 space-y-6 bg-background text-foreground rounded-lg border border-border shadow">
+  class="max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto p-6 space-y-6 bg-background text-foreground rounded-lg border border-border shadow"
+>
   <!-- Header -->
   <div class="text-center space-y-2">
-    <h1 class="text-3xl font-bold tracking-tight text-foreground">
-      Create a New Repository
-    </h1>
-    <p class="text-muted-foreground">
-      Set up a new git repository with Nostr integration
-    </p>
+    <h1 class="text-3xl font-bold tracking-tight text-foreground">Create a New Repository</h1>
+    <p class="text-muted-foreground">Set up a new git repository with Nostr integration</p>
   </div>
 
   <!-- Progress Indicator -->
   <div class="flex items-center justify-center space-x-4 mb-8">
     <div class="flex items-center space-x-2">
-      <div 
+      <div
         class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium"
         class:bg-accent={currentStep >= 1}
         class:text-accent-foreground={currentStep >= 1}
         class:bg-muted={currentStep < 1}
         class:text-muted-foreground={currentStep < 1}
       >
-        {currentStep > 1 ? '✓' : '1'}
+        {currentStep > 1 ? "✓" : "1"}
       </div>
       <span class="text-sm font-medium text-foreground">Choose Service</span>
     </div>
-    
+
     <div class="w-12 h-px bg-border"></div>
-    
+
     <div class="flex items-center space-x-2">
-      <div 
+      <div
         class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium"
         class:bg-accent={currentStep >= 2}
         class:text-accent-foreground={currentStep >= 2}
         class:bg-muted={currentStep < 2}
         class:text-muted-foreground={currentStep < 2}
       >
-        {currentStep > 2 ? '✓' : '2'}
+        {currentStep > 2 ? "✓" : "2"}
       </div>
       <span class="text-sm font-medium text-foreground">Repository Details</span>
     </div>
-    
+
     <div class="w-12 h-px bg-border"></div>
-    
+
     <div class="flex items-center space-x-2">
-      <div 
+      <div
         class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium"
         class:bg-accent={currentStep >= 3}
         class:text-accent-foreground={currentStep >= 3}
         class:bg-muted={currentStep < 3}
         class:text-muted-foreground={currentStep < 3}
       >
-        {currentStep > 3 ? '✓' : '3'}
+        {currentStep > 3 ? "✓" : "3"}
       </div>
       <span class="text-sm font-medium text-foreground">Advanced Settings</span>
     </div>
-    
+
     <div class="w-12 h-px bg-border"></div>
-    
+
     <div class="flex items-center space-x-2">
-      <div 
+      <div
         class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium"
         class:bg-accent={currentStep >= 4}
         class:text-accent-foreground={currentStep >= 4}
         class:bg-muted={currentStep < 4}
         class:text-muted-foreground={currentStep < 4}
       >
-        {currentStep > 4 ? '✓' : '4'}
+        {currentStep > 4 ? "✓" : "4"}
       </div>
       <span class="text-sm font-medium text-foreground">Create Repository</span>
     </div>
   </div>
 
   <!-- Step Content -->
-  <div class="bg-card text-card-foreground rounded-lg border shadow-sm p-6 max-h-[70vh] overflow-auto">
+  <div
+    class="bg-card text-card-foreground rounded-lg border shadow-sm p-6 max-h-[70vh] overflow-auto"
+  >
     {#if currentStep === 1}
       <StepChooseService
         tokens={tokens}
@@ -608,7 +628,7 @@
       >
         Cancel
       </Button>
-      
+
       <div class="flex space-x-3">
         {#if currentStep > 1}
           <Button
@@ -620,18 +640,17 @@
             Previous
           </Button>
         {/if}
-        
+
         <Button
           onclick={nextStep}
-          disabled={
-            (currentStep === 1 && (!selectedProvider || (selectedProvider === 'grasp' && !isValidGraspConfig()))) ||
-            (currentStep === 2 && !validateStep1())
-          }
+          disabled={(currentStep === 1 &&
+            (!selectedProvider || (selectedProvider === "grasp" && !isValidGraspConfig()))) ||
+            (currentStep === 2 && !validateStep1())}
           variant="git"
           size="sm"
           class="h-8 px-3 py-0 text-xs font-medium rounded-md transition"
         >
-          {currentStep === 3 ? 'Create Repository' : 'Next'}
+          {currentStep === 3 ? "Create Repository" : "Next"}
         </Button>
       </div>
     </div>

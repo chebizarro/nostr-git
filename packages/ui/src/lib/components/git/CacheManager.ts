@@ -17,10 +17,10 @@ export interface MergeAnalysisCacheEntry {
 }
 
 export enum CacheType {
-  MEMORY = 'memory',
-  LOCAL_STORAGE = 'localStorage',
-  SESSION_STORAGE = 'sessionStorage',
-  INDEXED_DB = 'indexedDB'
+  MEMORY = "memory",
+  LOCAL_STORAGE = "localStorage",
+  SESSION_STORAGE = "sessionStorage",
+  INDEXED_DB = "indexedDB",
 }
 
 export interface CacheConfig {
@@ -43,12 +43,12 @@ export class CacheManager {
 
   constructor() {
     // Set up default cleanup for memory cache
-    this.setupAutoCleanup('memory', {
+    this.setupAutoCleanup("memory", {
       type: CacheType.MEMORY,
-      keyPrefix: 'mem_',
+      keyPrefix: "mem_",
       defaultTTL: 30 * 60 * 1000, // 30 minutes
       autoCleanup: true,
-      cleanupInterval: 5 * 60 * 1000 // 5 minutes
+      cleanupInterval: 5 * 60 * 1000, // 5 minutes
     });
   }
 
@@ -57,7 +57,7 @@ export class CacheManager {
    */
   registerCache(name: string, config: CacheConfig): void {
     this.configs.set(name, config);
-    
+
     if (config.autoCleanup) {
       this.setupAutoCleanup(name, config);
     }
@@ -71,9 +71,12 @@ export class CacheManager {
       clearInterval(this.cleanupIntervals.get(name)!);
     }
 
-    const interval = setInterval(() => {
-      this.cleanup(name);
-    }, config.cleanupInterval || 5 * 60 * 1000) as unknown as number;
+    const interval = setInterval(
+      () => {
+        this.cleanup(name);
+      },
+      config.cleanupInterval || 5 * 60 * 1000
+    ) as unknown as number;
 
     this.cleanupIntervals.set(name, interval);
   }
@@ -83,7 +86,7 @@ export class CacheManager {
    */
   private generateKey(cacheName: string, key: string): string {
     const config = this.configs.get(cacheName);
-    const prefix = config?.keyPrefix || '';
+    const prefix = config?.keyPrefix || "";
     return `${prefix}${key}`;
   }
 
@@ -103,16 +106,16 @@ export class CacheManager {
       switch (config.type) {
         case CacheType.MEMORY:
           return this.getFromMemory<T>(fullKey);
-        
+
         case CacheType.LOCAL_STORAGE:
           return this.getFromLocalStorage<T>(fullKey);
-        
+
         case CacheType.SESSION_STORAGE:
           return this.getFromSessionStorage<T>(fullKey);
-        
+
         case CacheType.INDEXED_DB:
           return await this.getFromIndexedDB<T>(fullKey);
-        
+
         default:
           console.warn(`Unsupported cache type: ${config.type}`);
           return null;
@@ -126,7 +129,13 @@ export class CacheManager {
   /**
    * Set data in cache
    */
-  async set<T>(cacheName: string, key: string, data: T, ttl?: number, metadata?: Record<string, any>): Promise<void> {
+  async set<T>(
+    cacheName: string,
+    key: string,
+    data: T,
+    ttl?: number,
+    metadata?: Record<string, any>
+  ): Promise<void> {
     const config = this.configs.get(cacheName);
     if (!config) {
       console.warn(`Cache configuration not found: ${cacheName}`);
@@ -138,7 +147,7 @@ export class CacheManager {
       data,
       timestamp: Date.now(),
       ttl: ttl || config.defaultTTL,
-      metadata
+      metadata,
     };
 
     try {
@@ -146,19 +155,19 @@ export class CacheManager {
         case CacheType.MEMORY:
           this.setInMemory(fullKey, entry);
           break;
-        
+
         case CacheType.LOCAL_STORAGE:
           this.setInLocalStorage(fullKey, entry);
           break;
-        
+
         case CacheType.SESSION_STORAGE:
           this.setInSessionStorage(fullKey, entry);
           break;
-        
+
         case CacheType.INDEXED_DB:
           await this.setInIndexedDB(fullKey, entry);
           break;
-        
+
         default:
           console.warn(`Unsupported cache type: ${config.type}`);
       }
@@ -181,15 +190,15 @@ export class CacheManager {
         case CacheType.MEMORY:
           this.memoryCache.delete(fullKey);
           break;
-        
+
         case CacheType.LOCAL_STORAGE:
           localStorage.removeItem(fullKey);
           break;
-        
+
         case CacheType.SESSION_STORAGE:
           sessionStorage.removeItem(fullKey);
           break;
-        
+
         case CacheType.INDEXED_DB:
           await this.removeFromIndexedDB(fullKey);
           break;
@@ -211,15 +220,15 @@ export class CacheManager {
         case CacheType.MEMORY:
           this.clearMemoryCache(config.keyPrefix);
           break;
-        
+
         case CacheType.LOCAL_STORAGE:
           this.clearWebStorage(localStorage, config.keyPrefix);
           break;
-        
+
         case CacheType.SESSION_STORAGE:
           this.clearWebStorage(sessionStorage, config.keyPrefix);
           break;
-        
+
         case CacheType.INDEXED_DB:
           await this.clearIndexedDB();
           break;
@@ -244,15 +253,15 @@ export class CacheManager {
         case CacheType.MEMORY:
           cleanedCount = this.cleanupMemoryCache(now);
           break;
-        
+
         case CacheType.LOCAL_STORAGE:
           cleanedCount = this.cleanupWebStorage(localStorage, config.keyPrefix, now);
           break;
-        
+
         case CacheType.SESSION_STORAGE:
           cleanedCount = this.cleanupWebStorage(sessionStorage, config.keyPrefix, now);
           break;
-        
+
         case CacheType.INDEXED_DB:
           // IndexedDB cleanup would be more complex, implement if needed
           break;
@@ -285,8 +294,10 @@ export class CacheManager {
   }
 
   private clearMemoryCache(prefix: string): void {
-    const keysToDelete = Array.from(this.memoryCache.keys()).filter(key => key.startsWith(prefix));
-    keysToDelete.forEach(key => this.memoryCache.delete(key));
+    const keysToDelete = Array.from(this.memoryCache.keys()).filter((key) =>
+      key.startsWith(prefix)
+    );
+    keysToDelete.forEach((key) => this.memoryCache.delete(key));
   }
 
   private cleanupMemoryCache(now: number): number {
@@ -339,12 +350,12 @@ export class CacheManager {
       storage.setItem(key, JSON.stringify(entry));
     } catch (error) {
       // Handle storage quota exceeded
-      console.warn('Storage quota exceeded, attempting cleanup');
-      this.cleanupWebStorage(storage, '', Date.now());
+      console.warn("Storage quota exceeded, attempting cleanup");
+      this.cleanupWebStorage(storage, "", Date.now());
       try {
         storage.setItem(key, JSON.stringify(entry));
       } catch (retryError) {
-        console.error('Failed to store after cleanup:', retryError);
+        console.error("Failed to store after cleanup:", retryError);
       }
     }
   }
@@ -357,12 +368,12 @@ export class CacheManager {
         keysToRemove.push(key);
       }
     }
-    keysToRemove.forEach(key => storage.removeItem(key));
+    keysToRemove.forEach((key) => storage.removeItem(key));
   }
 
   private cleanupWebStorage(storage: Storage, prefix: string, now: number): number {
     const keysToRemove: string[] = [];
-    
+
     for (let i = 0; i < storage.length; i++) {
       const key = storage.key(i);
       if (key && key.startsWith(prefix)) {
@@ -380,8 +391,8 @@ export class CacheManager {
         }
       }
     }
-    
-    keysToRemove.forEach(key => storage.removeItem(key));
+
+    keysToRemove.forEach((key) => storage.removeItem(key));
     return keysToRemove.length;
   }
 
@@ -412,10 +423,10 @@ export class CacheManager {
       clearInterval(interval);
     }
     this.cleanupIntervals.clear();
-    
+
     // Clear memory cache
     this.memoryCache.clear();
-    
+
     // Clear configurations
     this.configs.clear();
   }
@@ -429,12 +440,12 @@ export class CacheManager {
 
     switch (config.type) {
       case CacheType.MEMORY: {
-        const memorySize = Array.from(this.memoryCache.keys())
-          .filter(key => key.startsWith(config.keyPrefix))
-          .length;
+        const memorySize = Array.from(this.memoryCache.keys()).filter((key) =>
+          key.startsWith(config.keyPrefix)
+        ).length;
         return { size: memorySize };
       }
-      
+
       default:
         return { size: 0 };
     }
@@ -446,18 +457,18 @@ export class CacheManager {
  */
 export class MergeAnalysisCacheManager {
   private cacheManager: CacheManager;
-  private readonly CACHE_NAME = 'merge_analysis';
+  private readonly CACHE_NAME = "merge_analysis";
 
   constructor(cacheManager: CacheManager) {
     this.cacheManager = cacheManager;
-    
+
     // Register merge analysis cache configuration
     this.cacheManager.registerCache(this.CACHE_NAME, {
       type: CacheType.LOCAL_STORAGE,
-      keyPrefix: 'merge_analysis_cache_',
+      keyPrefix: "merge_analysis_cache_",
       defaultTTL: 30 * 60 * 1000, // 30 minutes
       autoCleanup: true,
-      cleanupInterval: 5 * 60 * 1000 // 5 minutes
+      cleanupInterval: 5 * 60 * 1000, // 5 minutes
     });
   }
 
@@ -470,14 +481,14 @@ export class MergeAnalysisCacheManager {
       content: patch.content,
       created_at: patch.created_at,
       pubkey: patch.pubkey,
-      tags: patch.tags
+      tags: patch.tags,
     });
-    
+
     // Simple hash function for cache key
     let hash = 0;
     for (let i = 0; i < content.length; i++) {
       const char = content.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash; // Convert to 32-bit integer
     }
     return hash.toString(36);
@@ -486,9 +497,16 @@ export class MergeAnalysisCacheManager {
   /**
    * Get cached merge analysis result
    */
-  async get(patch: PatchEvent, targetBranch: string, repoId: string): Promise<MergeAnalysisResult | null> {
-    const cacheEntry = await this.cacheManager.get<MergeAnalysisCacheEntry>(this.CACHE_NAME, patch.id);
-    
+  async get(
+    patch: PatchEvent,
+    targetBranch: string,
+    repoId: string
+  ): Promise<MergeAnalysisResult | null> {
+    const cacheEntry = await this.cacheManager.get<MergeAnalysisCacheEntry>(
+      this.CACHE_NAME,
+      patch.id
+    );
+
     if (!cacheEntry) return null;
 
     // Validate cache entry
@@ -503,24 +521,27 @@ export class MergeAnalysisCacheManager {
       return null;
     }
 
-  
     return cacheEntry.result;
   }
 
   /**
    * Cache merge analysis result
    */
-  async set(patch: PatchEvent, targetBranch: string, repoId: string, result: MergeAnalysisResult): Promise<void> {
+  async set(
+    patch: PatchEvent,
+    targetBranch: string,
+    repoId: string,
+    result: MergeAnalysisResult
+  ): Promise<void> {
     const cacheEntry: MergeAnalysisCacheEntry = {
       result,
       timestamp: Date.now(),
       patchHash: this.generatePatchHash(patch),
       targetBranch,
-      repoId
+      repoId,
     };
 
     await this.cacheManager.set(this.CACHE_NAME, patch.id, cacheEntry);
-  
   }
 
   /**

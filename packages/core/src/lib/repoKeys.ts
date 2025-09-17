@@ -26,13 +26,22 @@ export type RepoKeyResolvers = {
   nip05ToPubkey?: (nip05: string) => Promise<string | null>;
   pubkeyToNip05?: (pubkey: string) => Promise<string | null>;
   encodeNaddr?: (pubkey: string, identifier: string, kind?: number, relays?: string[]) => string;
-  decodeNaddr?: (naddr: string) => { pubkey: string; identifier: string; kind?: number; relays?: string[] } | null;
+  decodeNaddr?: (
+    naddr: string
+  ) => { pubkey: string; identifier: string; kind?: number; relays?: string[] } | null;
 };
 
 export type ParsedRepoKey =
   | { type: 'npub'; npub: string; name?: string }
   | { type: 'nip05'; nip05: string; name?: string }
-  | { type: 'naddr'; naddr: string; pubkey: string; identifier: string; kind?: number; relays?: string[] };
+  | {
+      type: 'naddr';
+      naddr: string;
+      pubkey: string;
+      identifier: string;
+      kind?: number;
+      relays?: string[];
+    };
 
 function isNpub(s: string): boolean {
   return s.startsWith('npub1');
@@ -44,7 +53,14 @@ function parseInput(input: string, io: RepoKeyResolvers): ParsedRepoKey | null {
   if (s.startsWith('naddr1')) {
     const dec = io.decodeNaddr?.(s);
     if (!dec) return null;
-    return { type: 'naddr', naddr: s, pubkey: dec.pubkey, identifier: dec.identifier, kind: dec.kind, relays: dec.relays };
+    return {
+      type: 'naddr',
+      naddr: s,
+      pubkey: dec.pubkey,
+      identifier: dec.identifier,
+      kind: dec.kind,
+      relays: dec.relays
+    };
   }
   // split paths: something/name
   const parts = s.split('/');
@@ -68,12 +84,13 @@ function parseInput(input: string, io: RepoKeyResolvers): ParsedRepoKey | null {
 export async function normalizeRepoKeyFlexible(
   input: string,
   pref: RepoKeyPreference,
-  io: RepoKeyResolvers,
+  io: RepoKeyResolvers
 ): Promise<string> {
   const parsed = parseInput(input, io);
   if (!parsed) return input;
 
-  let npub = parsed.type === 'npub' ? parsed.npub : parsed.type === 'naddr' ? parsed.pubkey : undefined;
+  let npub =
+    parsed.type === 'npub' ? parsed.npub : parsed.type === 'naddr' ? parsed.pubkey : undefined;
   let name = parsed.type === 'naddr' ? parsed.identifier : parsed.name;
   let nip05 = parsed.type === 'nip05' ? parsed.nip05 : undefined;
 

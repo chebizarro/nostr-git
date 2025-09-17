@@ -1,5 +1,11 @@
 import { getGitProvider } from './git-provider.js';
-import { ensureRepo, ensureRepoFromEvent, rootDir, getDefaultBranch, resolveRobustBranch } from './git.js';
+import {
+  ensureRepo,
+  ensureRepoFromEvent,
+  rootDir,
+  getDefaultBranch,
+  resolveRobustBranch
+} from './git.js';
 import { canonicalRepoKey } from './utils/canonicalRepoKey.js';
 import { parseRepoAnnouncementEvent, type RepoAnnouncementEvent } from '@nostr-git/shared-types';
 import { Buffer } from 'buffer';
@@ -59,7 +65,7 @@ export async function listRepoFilesFromEvent(opts: {
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main'; // Will be resolved robustly later
   const dir = `${rootDir}/${opts.repoKey || canonicalRepoKey(event.repoId)}`;
-  
+
   // Ensure adequate repository depth for file operations
   // If accessing a specific commit, we need more than shallow clone
   const requiredDepth = opts.commit ? 100 : 10; // More depth if accessing specific commit
@@ -67,7 +73,7 @@ export async function listRepoFilesFromEvent(opts: {
 
   const git = getGitProvider();
   let oid: string;
-  
+
   if (opts.commit) {
     oid = opts.commit;
     try {
@@ -86,9 +92,13 @@ export async function listRepoFilesFromEvent(opts: {
           try {
             const commits = await git.log({ dir, depth: 10 });
             const availableCommits = commits.map((c: any) => c.oid.substring(0, 8)).join(', ');
-            throw new Error(`Commit ${opts.commit} not found in repository. Available recent commits: ${availableCommits}`);
+            throw new Error(
+              `Commit ${opts.commit} not found in repository. Available recent commits: ${availableCommits}`
+            );
           } catch (logError) {
-            throw new Error(`Commit ${opts.commit} not found in repository. Unable to list available commits.`);
+            throw new Error(
+              `Commit ${opts.commit} not found in repository. Unable to list available commits.`
+            );
           }
         }
       } else {
@@ -104,19 +114,26 @@ export async function listRepoFilesFromEvent(opts: {
       }
     });
   }
-  
+
   // Normalize file path - remove leading/trailing directory separators
   const rawPath = opts.path || '';
   const treePath = rawPath.replace(/^\/+|\/+$/g, ''); // Remove leading/trailing slashes
-  
+
   try {
     const fp: any = treePath ? treePath : undefined;
     const { tree } = await git.readTree({ dir, oid, filepath: fp });
     return tree.map((entry: any) => ({
       name: entry.path,
       path: treePath ? `${treePath}/${entry.path}` : entry.path,
-      type: entry.type === 'blob' ? 'file' : entry.type === 'tree' ? 'directory' : entry.type === 'commit' ? 'submodule' : 'file',
-      oid: entry.oid,
+      type:
+        entry.type === 'blob'
+          ? 'file'
+          : entry.type === 'tree'
+            ? 'directory'
+            : entry.type === 'commit'
+              ? 'submodule'
+              : 'file',
+      oid: entry.oid
     }));
   } catch (error: any) {
     if (error.name === 'NotFoundError') {
@@ -129,11 +146,20 @@ export async function listRepoFilesFromEvent(opts: {
         return tree.map((entry: any) => ({
           name: entry.path,
           path: treePath ? `${treePath}/${entry.path}` : entry.path,
-          type: entry.type === 'blob' ? 'file' : entry.type === 'tree' ? 'directory' : entry.type === 'commit' ? 'submodule' : 'file',
-          oid: entry.oid,
+          type:
+            entry.type === 'blob'
+              ? 'file'
+              : entry.type === 'tree'
+                ? 'directory'
+                : entry.type === 'commit'
+                  ? 'submodule'
+                  : 'file',
+          oid: entry.oid
         }));
       } catch (retryError) {
-        throw new Error(`Unable to access file tree at ${treePath}. Repository may be incomplete or corrupted.`);
+        throw new Error(
+          `Unable to access file tree at ${treePath}. Repository may be incomplete or corrupted.`
+        );
       }
     }
     throw error;
@@ -159,7 +185,7 @@ export async function getRepoFileContentFromEvent(opts: {
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main'; // Will be resolved robustly in git operations
   const dir = `${rootDir}/${opts.repoKey || canonicalRepoKey(event.repoId)}`;
-  
+
   // Ensure adequate repository depth for file operations
   // If accessing a specific commit, we need more than shallow clone
   const requiredDepth = opts.commit ? 100 : 10; // More depth if accessing specific commit
@@ -167,7 +193,7 @@ export async function getRepoFileContentFromEvent(opts: {
 
   const git = getGitProvider();
   let oid: string;
-  
+
   if (opts.commit) {
     oid = opts.commit;
     try {
@@ -186,9 +212,13 @@ export async function getRepoFileContentFromEvent(opts: {
           try {
             const commits = await git.log({ dir, depth: 10 });
             const availableCommits = commits.map((c: any) => c.oid.substring(0, 8)).join(', ');
-            throw new Error(`Commit ${opts.commit} not found in repository. Available recent commits: ${availableCommits}`);
+            throw new Error(
+              `Commit ${opts.commit} not found in repository. Available recent commits: ${availableCommits}`
+            );
           } catch (logError) {
-            throw new Error(`Commit ${opts.commit} not found in repository. Unable to list available commits.`);
+            throw new Error(
+              `Commit ${opts.commit} not found in repository. Unable to list available commits.`
+            );
           }
         }
       } else {
@@ -199,28 +229,40 @@ export async function getRepoFileContentFromEvent(opts: {
     oid = await resolveRobustBranch(git, dir, branch, {
       onBranchNotFound: (branchName, error) => {
         // This will be handled by the UI layer if they provide a callback
-        console.warn(`Branch '${branchName}' from repository state not found in local git:`, error.message);
+        console.warn(
+          `Branch '${branchName}' from repository state not found in local git:`,
+          error.message
+        );
       }
     });
   }
-  
+
   try {
     const { blob } = await git.readBlob({ dir, oid, filepath: opts.path });
     // Return raw binary data as string to preserve binary files (images, PDFs, etc.)
     // The UI layer will handle text vs binary detection and appropriate decoding
-    return Array.from(new Uint8Array(blob)).map(byte => String.fromCharCode(byte)).join('');
+    return Array.from(new Uint8Array(blob))
+      .map((byte) => String.fromCharCode(byte))
+      .join('');
   } catch (error: any) {
     if (error.name === 'NotFoundError') {
       // If file not found, try to deepen repository and retry
       console.warn(`File '${opts.path}' not found, attempting to deepen repository...`);
       try {
-        await ensureRepoFromEvent({ repoEvent: event, branch: opts.branch, repoKey: opts.repoKey }, 1000);
+        await ensureRepoFromEvent(
+          { repoEvent: event, branch: opts.branch, repoKey: opts.repoKey },
+          1000
+        );
         const { blob } = await git.readBlob({ dir, oid, filepath: opts.path });
         // Return raw binary data as string to preserve binary files
-        return Array.from(new Uint8Array(blob)).map(byte => String.fromCharCode(byte)).join('');
+        return Array.from(new Uint8Array(blob))
+          .map((byte) => String.fromCharCode(byte))
+          .join('');
       } catch (retryError: any) {
         if (retryError.name === 'NotFoundError') {
-          throw new Error(`File '${opts.path}' not found at ${opts.commit ? `commit ${opts.commit}` : `branch ${branch}`}`);
+          throw new Error(
+            `File '${opts.path}' not found at ${opts.commit ? `commit ${opts.commit}` : `branch ${branch}`}`
+          );
         }
         throw retryError;
       }
@@ -276,8 +318,15 @@ export async function listRepoFiles(opts: {
   return tree.map((entry: any) => ({
     name: entry.path,
     path: treePath ? `${treePath}/${entry.path}` : entry.path,
-    type: entry.type === 'blob' ? 'file' : entry.type === 'tree' ? 'dir' : entry.type === 'commit' ? 'submodule' : 'file',
-    oid: entry.oid,
+    type:
+      entry.type === 'blob'
+        ? 'file'
+        : entry.type === 'tree'
+          ? 'dir'
+          : entry.type === 'commit'
+            ? 'submodule'
+            : 'file',
+    oid: entry.oid
     // size can be fetched with readBlob if needed
   }));
 }
@@ -325,16 +374,16 @@ export async function getCommitInfo(opts: {
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const dir = `${rootDir}/${canonicalRepoKey(event.repoId)}`;
   await ensureRepoFromEvent({ repoEvent: event });
-  
+
   const git = getGitProvider();
   const commit = await git.readCommit({ dir, oid: opts.commit });
-  
+
   return {
     oid: commit.oid,
     message: commit.commit.message,
     author: commit.commit.author,
     committer: commit.commit.committer,
-    parent: commit.commit.parent,
+    parent: commit.commit.parent
   };
 }
 
@@ -352,31 +401,33 @@ export async function getFileHistory(opts: {
   branch?: string;
   maxCount?: number;
   repoKey?: string;
-}): Promise<Array<{
-  oid: string;
-  message: string;
-  author: { name: string; email: string; timestamp: number };
-  committer: { name: string; email: string; timestamp: number };
-}>> {
+}): Promise<
+  Array<{
+    oid: string;
+    message: string;
+    author: { name: string; email: string; timestamp: number };
+    committer: { name: string; email: string; timestamp: number };
+  }>
+> {
   assertRepoAnnouncementEvent(opts.repoEvent);
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main'; // Will be resolved robustly in git operations
   const dir = `${rootDir}/${opts.repoKey || canonicalRepoKey(event.repoId)}`;
   await ensureRepoFromEvent({ repoEvent: event, branch: opts.branch, repoKey: opts.repoKey });
-  
+
   const git = getGitProvider();
   const commits = await git.log({
     dir,
     ref: branch,
     filepath: opts.path,
-    depth: opts.maxCount || 50,
+    depth: opts.maxCount || 50
   });
-  
+
   return commits.map((commit: any) => ({
     oid: commit.oid,
     message: commit.commit.message,
     author: commit.commit.author,
-    committer: commit.commit.committer,
+    committer: commit.commit.committer
   }));
 }
 
@@ -391,21 +442,23 @@ export async function getCommitHistory(opts: {
   repoEvent: RepoAnnouncementEvent;
   branch?: string;
   depth?: number;
-}): Promise<Array<{
-  oid: string;
-  commit: {
-    message: string;
-    author: { name: string; email: string; timestamp: number };
-    committer: { name: string; email: string; timestamp: number };
-    parent: string[];
-  };
-}>> {
+}): Promise<
+  Array<{
+    oid: string;
+    commit: {
+      message: string;
+      author: { name: string; email: string; timestamp: number };
+      committer: { name: string; email: string; timestamp: number };
+      parent: string[];
+    };
+  }>
+> {
   assertRepoAnnouncementEvent(opts.repoEvent);
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main'; // Will be resolved robustly in git operations
   const dir = `${rootDir}/${canonicalRepoKey(event.repoId)}`;
   const depth = opts.depth || 50;
-  
+
   console.log(`getCommitHistory: requesting ${depth} commits for branch ${branch}`);
   await ensureRepoFromEvent({ repoEvent: event, branch }, depth);
 
@@ -413,7 +466,7 @@ export async function getCommitHistory(opts: {
   const commits = await git.log({
     dir,
     ref: branch,
-    depth,
+    depth
   });
   console.log(`getCommitHistory: got ${commits.length} commits from git.log`);
   return commits.map((commit: any) => ({
@@ -422,7 +475,7 @@ export async function getCommitHistory(opts: {
       message: commit.commit.message,
       author: commit.commit.author,
       committer: commit.commit.committer,
-      parent: commit.commit.parent,
-    },
+      parent: commit.commit.parent
+    }
   }));
 }

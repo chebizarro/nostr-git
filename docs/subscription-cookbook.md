@@ -21,9 +21,9 @@ This doc outlines practical subscription patterns for Git flows implemented in `
 ## Helper
 
 ```ts
-import { buildRepoSubscriptions } from '@nostr-git/core'
-import { load } from '@welshman/net'
-import { normalizeRelayUrl } from '@welshman/util'
+import {buildRepoSubscriptions} from "@nostr-git/core"
+import {load} from "@welshman/net"
+import {normalizeRelayUrl} from "@welshman/util"
 
 export async function loadRepoContext(io: {
   relays: string[]
@@ -31,13 +31,13 @@ export async function loadRepoContext(io: {
   rootId?: string
   euc?: string
 }) {
-  const { filters } = buildRepoSubscriptions({
+  const {filters} = buildRepoSubscriptions({
     addressA: io.addressA,
     rootEventId: io.rootId,
     euc: io.euc,
   })
   const relays = io.relays.map(normalizeRelayUrl).filter(Boolean) as string[]
-  await load({ relays, filters })
+  await load({relays, filters})
 }
 ```
 

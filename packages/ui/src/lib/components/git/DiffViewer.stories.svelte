@@ -4,8 +4,7 @@
   import parseGitDiff from "parse-git-diff";
   import { parseGitPatch } from "parse-patch";
 
-  const patch =
-`diff --git a/newfile.md b/newfile.md
+  const patch = `diff --git a/newfile.md b/newfile.md
 deleted file mode 100644
 index aa39060..0000000
 --- a/newfile.md

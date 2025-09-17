@@ -1,16 +1,16 @@
 <script lang="ts">
-  import ForkRepoDialog from '../components/git/ForkRepoDialog.svelte';
-  import { useForkRepo } from '../hooks/useForkRepo.svelte';
-  import type { Event } from 'nostr-tools';
+  import ForkRepoDialog from "../components/git/ForkRepoDialog.svelte";
+  import { useForkRepo } from "../hooks/useForkRepo.svelte";
+  import type { Event } from "nostr-tools";
 
   // Example of how to integrate the Fork Repository feature
   let showForkDialog = $state(false);
 
   // Example original repository data
   const originalRepo = {
-    owner: 'octocat',
-    name: 'Hello-World',
-    description: 'This your first repo!'
+    owner: "octocat",
+    name: "Hello-World",
+    description: "This your first repo!",
   };
 
   // Initialize the fork repository hook
@@ -19,14 +19,14 @@
   // Example event signing closure (would be provided by parent app)
   const signEvent = async (event: Partial<Event>): Promise<Event> => {
     // This would use the app's signer (NIP-07, NIP-46, etc.)
-    console.log('Signing fork announcement event:', event);
-    
+    console.log("Signing fork announcement event:", event);
+
     // Mock implementation - replace with actual signing logic
     return {
       ...event,
-      id: 'mock-fork-event-id',
-      pubkey: 'mock-user-pubkey',
-      sig: 'mock-signature',
+      id: "mock-fork-event-id",
+      pubkey: "mock-user-pubkey",
+      sig: "mock-signature",
       created_at: Math.floor(Date.now() / 1000),
     } as Event;
   };
@@ -34,8 +34,8 @@
   // Example event publishing closure (would be provided by parent app)
   const publishEvent = async (event: Event): Promise<void> => {
     // This would publish to the app's configured relays
-    console.log('Publishing fork announcement event:', event);
-    
+    console.log("Publishing fork announcement event:", event);
+
     // Mock implementation - replace with actual publishing logic
     // await pool.publish(relays, event);
   };
@@ -43,8 +43,8 @@
   // Example repository registration closure (would be provided by parent app)
   const registerRepo = async (repoId: string, forkUrl: string): Promise<void> => {
     // This would add the forked repo to the app's global store/state
-    console.log('Registering forked repository:', { repoId, forkUrl });
-    
+    console.log("Registering forked repository:", { repoId, forkUrl });
+
     // Mock implementation - replace with actual store integration
     // await repoStore.addRepository({ id: repoId, forkUrl, type: 'fork', ... });
   };
@@ -60,18 +60,14 @@
 
   async function handleForkRepo(config: any) {
     try {
-      await forkRepo.forkRepository(
-        originalRepo,
-        config,
-        {
-          token: 'ghp_example_token_here', // Would come from token store
-          currentUser: 'current-user', // Would come from user profile
-          onSignEvent: signEvent,
-          onPublishEvent: publishEvent,
-          onRegisterRepo: registerRepo
-        }
-      );
-      
+      await forkRepo.forkRepository(originalRepo, config, {
+        token: "ghp_example_token_here", // Would come from token store
+        currentUser: "current-user", // Would come from user profile
+        onSignEvent: signEvent,
+        onPublishEvent: publishEvent,
+        onRegisterRepo: registerRepo,
+      });
+
       // Dialog will close automatically on success via progress.isComplete
       if (forkRepo.progress?.isComplete) {
         setTimeout(() => {
@@ -79,7 +75,7 @@
         }, 2000); // Show success for 2 seconds
       }
     } catch (error) {
-      console.error('Fork failed:', error);
+      console.error("Fork failed:", error);
       // Error is handled by the dialog component
     }
   }
@@ -88,10 +84,10 @@
 <!-- Example usage of Fork Repository feature -->
 <div class="p-6 space-y-4">
   <h2 class="text-2xl font-bold text-white">Fork Repository Example</h2>
-  
+
   <p class="text-gray-300">
-    This example demonstrates how to integrate the Fork Repository feature
-    with your application's event signing, publishing, and repository management.
+    This example demonstrates how to integrate the Fork Repository feature with your application's
+    event signing, publishing, and repository management.
   </p>
 
   <!-- Original Repository Display -->
@@ -113,7 +109,12 @@
     class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center space-x-2"
   >
     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+      ></path>
     </svg>
     <span>Fork Repository</span>
   </button>
@@ -122,7 +123,7 @@
   {#if showForkDialog}
     <ForkRepoDialog
       isOpen={showForkDialog}
-      {originalRepo}
+      originalRepo={originalRepo}
       defaultForkName={originalRepo.name}
       onClose={handleCloseForkDialog}
       onFork={handleForkRepo}
@@ -140,7 +141,7 @@
       <h3 class="text-lg font-semibold text-white mb-2">Fork Status</h3>
       <p class="text-gray-300">{forkRepo.progress.stage}</p>
       <div class="w-full bg-gray-700 rounded-full h-2 mt-2">
-        <div 
+        <div
           class="bg-blue-600 h-2 rounded-full transition-all duration-300"
           style="width: {forkRepo.progress.percentage}%"
         ></div>

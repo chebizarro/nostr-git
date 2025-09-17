@@ -49,7 +49,7 @@
   }
 
   function handleKeyDown(event: KeyboardEvent) {
-    if (event.key === 'Enter') {
+    if (event.key === "Enter") {
       event.preventDefault();
       handleAddCustomLabel();
     }
@@ -89,10 +89,9 @@
         subject,
         labels,
       });
-      await onIssueCreated(issueEvent)
+      await onIssueCreated(issueEvent);
 
-      back()
-
+      back();
     } catch (error) {
       console.error(error);
     } finally {
@@ -162,10 +161,10 @@
         </label>
       {/each}
       <div class="flex gap-2">
-        <Input 
+        <Input
           placeholder="Add custom label"
           bind:value={newLabel}
-          class="flex-1" 
+          class="flex-1"
           onkeydown={handleKeyDown}
         />
         <Button type="button" variant="outline" onclick={handleAddCustomLabel}

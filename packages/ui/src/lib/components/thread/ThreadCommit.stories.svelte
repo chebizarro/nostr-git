@@ -15,7 +15,12 @@
     },
     args: {
       content: "Initial commit",
-      author: { name: "Alice", picture: "https://i.pravatar.cc/40?u=alice", display_name: "Alice Cooper", nip05: "alice@example.com" },
+      author: {
+        name: "Alice",
+        picture: "https://i.pravatar.cc/40?u=alice",
+        display_name: "Alice Cooper",
+        nip05: "alice@example.com",
+      },
       createdAt: new Date().toISOString(),
       metadata: { hash: "abc123" },
     },
@@ -31,7 +36,15 @@
 <Story name="Full Profile Author">
   <ThreadCommit
     content="Commit by Grace Hopper"
-    author={{ name: "Grace", picture: "https://i.pravatar.cc/40?u=grace", display_name: "Grace Hopper", nip05: "grace@nostr.com", lud16: "grace@getalby.com", about: "Pioneer of computing.", website: "https://gracehopper.com" }}
+    author={{
+      name: "Grace",
+      picture: "https://i.pravatar.cc/40?u=grace",
+      display_name: "Grace Hopper",
+      nip05: "grace@nostr.com",
+      lud16: "grace@getalby.com",
+      about: "Pioneer of computing.",
+      website: "https://gracehopper.com",
+    }}
     createdAt={new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString()}
     metadata={{ hash: "grace123" }}
   />
@@ -40,7 +53,12 @@
 <Story name="With Custom Hash">
   <ThreadCommit
     content="Refactor codebase"
-    author={{ name: "Bob", picture: "https://i.pravatar.cc/40?u=bob", display_name: "Bob Marley", nip05: "bob@example.com" }}
+    author={{
+      name: "Bob",
+      picture: "https://i.pravatar.cc/40?u=bob",
+      display_name: "Bob Marley",
+      nip05: "bob@example.com",
+    }}
     createdAt={new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString()}
     metadata={{ hash: "def456" }}
   />

@@ -24,9 +24,9 @@
     "ring-offset-background focus-visible:ring-ring data-[state=active]:bg-background data-[state=active]:text-foreground inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:shadow-sm",
     isActive ? "bg-background text-foreground" : "text-muted-foreground"
   )}
-  data-state={isActive ? 'active' : undefined}
+  data-state={isActive ? "active" : undefined}
   data-sveltekit-noscroll
-  aria-current={isActive ? 'page' : undefined}
+  aria-current={isActive ? "page" : undefined}
   tabindex="0"
 >
   <span class="flex items-center gap-1">

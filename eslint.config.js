@@ -1,66 +1,64 @@
-import ts from 'typescript-eslint';
+import ts from "typescript-eslint"
 
 export default [
   // Base config: TypeScript parser and global ignores
   {
     ignores: [
-      '**/dist/**',
-      '**/out/**',
-      '**/.svelte-kit/**',
-      '**/tools/**',
-      'packages/storybook/**',
-      'packages/actions/**'
+      "**/dist/**",
+      "**/out/**",
+      "**/.svelte-kit/**",
+      "**/tools/**",
+      "packages/storybook/**",
+      "packages/actions/**",
     ],
     languageOptions: {
-      parser: ts.parser
+      parser: ts.parser,
     },
     rules: {
       // Enforce canonical tag helpers instead of direct event.tags find/filter
-      'no-restricted-syntax': [
-        'error',
+      "no-restricted-syntax": [
+        "error",
         {
           selector:
             "CallExpression[callee.type='MemberExpression'][callee.property.name=/^(find|filter)$/] > *.object[type='MemberExpression'][property.name='tags']",
           message:
-            'Do not use event.tags.find/filter directly. Use getTag/getTags/getTagValue from @nostr-git/shared-types.'
+            "Do not use event.tags.find/filter directly. Use getTag/getTags/getTagValue from @nostr-git/shared-types.",
         },
         {
           selector:
             "CallExpression[callee.type='MemberExpression'][callee.property.name=/^(map|some|every|forEach|reduce)$/] > *.object[type='MemberExpression'][property.name='tags']",
           message:
-            'Do not iterate event.tags directly (map/some/every/forEach/reduce). Use canonical tag helpers.'
+            "Do not iterate event.tags directly (map/some/every/forEach/reduce). Use canonical tag helpers.",
         },
         {
           selector:
             "MemberExpression[object.type='MemberExpression'][object.property.name='tags'][computed=true]",
-          message:
-            'Do not access event.tags by index. Use canonical tag helpers.'
+          message: "Do not access event.tags by index. Use canonical tag helpers.",
         },
         {
           selector:
             "ForOfStatement > *.right[type='MemberExpression'][property.name='tags'], ForInStatement > *.right[type='MemberExpression'][property.name='tags']",
-          message:
-            'Do not iterate over event.tags. Use canonical tag helpers.'
-        }
-      ]
-    }
+          message: "Do not iterate over event.tags. Use canonical tag helpers.",
+        },
+      ],
+    },
   },
   // Do not enforce or parse codemods/tools with TS parser
   {
-    files: ['tools/**'],
+    files: ["tools/**"],
     languageOptions: {
       // Use default Espree parser
-      sourceType: 'script'
+      sourceType: "script",
     },
     rules: {
-      'no-restricted-syntax': 'off'
-    }
+      "no-restricted-syntax": "off",
+    },
   },
   // Allow helper implementation code to access tags directly
   {
-    files: ['packages/shared-types/src/**/*.*'],
+    files: ["packages/shared-types/src/**/*.*"],
     rules: {
-      'no-restricted-syntax': 'off'
-    }
-  }
-];
+      "no-restricted-syntax": "off",
+    },
+  },
+]

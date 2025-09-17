@@ -1,7 +1,6 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived } from "svelte/store";
 
-import type { CommitDiff } from '@nostr-git/shared-types';
-
+import type { CommitDiff } from "@nostr-git/shared-types";
 
 export interface DiffStoreState {
   commitDiffs: Map<string, CommitDiff>;
@@ -19,7 +18,7 @@ const diffStoreState = writable<DiffStoreState>({
   expandedCommits: new Set(),
   expandedFiles: new Map(),
   highlightedFiles: [],
-  errors: new Map()
+  errors: new Map(),
 });
 
 export function createDiffStore() {
@@ -27,10 +26,10 @@ export function createDiffStore() {
 
   return {
     subscribe,
-    
+
     // Commit management
     setCommitDiff: (commitSha: string, diff: CommitDiff) => {
-      update(state => {
+      update((state) => {
         state.commitDiffs.set(commitSha, diff);
         state.loadingCommits.delete(commitSha);
         state.errors.delete(commitSha);
@@ -39,7 +38,7 @@ export function createDiffStore() {
     },
 
     setCommitLoading: (commitSha: string, loading: boolean) => {
-      update(state => {
+      update((state) => {
         if (loading) {
           state.loadingCommits.add(commitSha);
         } else {
@@ -50,7 +49,7 @@ export function createDiffStore() {
     },
 
     setCommitError: (commitSha: string, error: string) => {
-      update(state => {
+      update((state) => {
         state.errors.set(commitSha, error);
         state.loadingCommits.delete(commitSha);
         return state;
@@ -59,7 +58,7 @@ export function createDiffStore() {
 
     // Expansion management
     toggleCommitExpansion: (commitSha: string) => {
-      update(state => {
+      update((state) => {
         if (state.expandedCommits.has(commitSha)) {
           state.expandedCommits.delete(commitSha);
         } else {
@@ -70,21 +69,21 @@ export function createDiffStore() {
     },
 
     expandCommit: (commitSha: string) => {
-      update(state => {
+      update((state) => {
         state.expandedCommits.add(commitSha);
         return state;
       });
     },
 
     collapseCommit: (commitSha: string) => {
-      update(state => {
+      update((state) => {
         state.expandedCommits.delete(commitSha);
         return state;
       });
     },
 
     toggleFileExpansion: (commitSha: string, filePath: string) => {
-      update(state => {
+      update((state) => {
         if (!state.expandedFiles.has(commitSha)) {
           state.expandedFiles.set(commitSha, new Set());
         }
@@ -99,7 +98,7 @@ export function createDiffStore() {
     },
 
     expandFile: (commitSha: string, filePath: string) => {
-      update(state => {
+      update((state) => {
         if (!state.expandedFiles.has(commitSha)) {
           state.expandedFiles.set(commitSha, new Set());
         }
@@ -110,7 +109,7 @@ export function createDiffStore() {
 
     // Highlighting
     setHighlightedFiles: (files: string[]) => {
-      update(state => {
+      update((state) => {
         state.highlightedFiles = files;
         return state;
       });
@@ -118,17 +117,17 @@ export function createDiffStore() {
 
     // Auto-expand highlighted files
     autoExpandHighlightedFiles: () => {
-      update(state => {
+      update((state) => {
         for (const [commitSha, diff] of state.commitDiffs) {
           const commitFileSet = state.expandedFiles.get(commitSha) || new Set();
-          
+
           for (const file of diff.changes) {
             if (state.highlightedFiles.includes(file.path)) {
               commitFileSet.add(file.path);
               state.expandedCommits.add(commitSha);
             }
           }
-          
+
           if (commitFileSet.size > 0) {
             state.expandedFiles.set(commitSha, commitFileSet);
           }
@@ -140,7 +139,7 @@ export function createDiffStore() {
     // Utilities
     getCommitDiff: (commitSha: string): CommitDiff | undefined => {
       let result: CommitDiff | undefined;
-      update(state => {
+      update((state) => {
         result = state.commitDiffs.get(commitSha);
         return state;
       });
@@ -149,7 +148,7 @@ export function createDiffStore() {
 
     isCommitLoading: (commitSha: string): boolean => {
       let result = false;
-      update(state => {
+      update((state) => {
         result = state.loadingCommits.has(commitSha);
         return state;
       });
@@ -158,7 +157,7 @@ export function createDiffStore() {
 
     isCommitExpanded: (commitSha: string): boolean => {
       let result = false;
-      update(state => {
+      update((state) => {
         result = state.expandedCommits.has(commitSha);
         return state;
       });
@@ -167,7 +166,7 @@ export function createDiffStore() {
 
     isFileExpanded: (commitSha: string, filePath: string): boolean => {
       let result = false;
-      update(state => {
+      update((state) => {
         const fileSet = state.expandedFiles.get(commitSha);
         result = fileSet ? fileSet.has(filePath) : false;
         return state;
@@ -177,15 +176,15 @@ export function createDiffStore() {
 
     // Clear cache
     clear: () => {
-      update(state => ({
+      update((state) => ({
         commitDiffs: new Map(),
         loadingCommits: new Set(),
         expandedCommits: new Set(),
         expandedFiles: new Map(),
         highlightedFiles: [],
-        errors: new Map()
+        errors: new Map(),
       }));
-    }
+    },
   };
 }
 
@@ -193,17 +192,11 @@ export function createDiffStore() {
 export const diffStore = createDiffStore();
 
 // Derived stores for common queries
-export const loadingCommitsCount = derived(
-  diffStoreState,
-  $state => $state.loadingCommits.size
-);
+export const loadingCommitsCount = derived(diffStoreState, ($state) => $state.loadingCommits.size);
 
 export const expandedCommitsCount = derived(
   diffStoreState,
-  $state => $state.expandedCommits.size
+  ($state) => $state.expandedCommits.size
 );
 
-export const totalCommitsLoaded = derived(
-  diffStoreState,
-  $state => $state.commitDiffs.size
-);
+export const totalCommitsLoaded = derived(diffStoreState, ($state) => $state.commitDiffs.size);

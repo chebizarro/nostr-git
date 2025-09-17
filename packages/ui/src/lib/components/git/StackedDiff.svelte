@@ -89,10 +89,10 @@
     diffStore.setCommitLoading(commitSha, true);
 
     try {
-      const result = await repo.workerManager.execute('getCommitDetails', {
+      const result = (await repo.workerManager.execute("getCommitDetails", {
         repoId: repo.canonicalKey,
         commitId: commitSha,
-      }) as { success: boolean; meta?: any; changes?: any; error?: string };
+      })) as { success: boolean; meta?: any; changes?: any; error?: string };
 
       if (result.success && result.meta && result.changes) {
         const commitDiff: CommitDiffType = {

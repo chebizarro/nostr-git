@@ -1,6 +1,6 @@
-import { getContext } from 'svelte';
-import { SIGNER_CONTEXT } from '../internal/signer-context';
-import { type SignerContext, defaultSignerContext } from '../types/signer';
+import { getContext } from "svelte";
+import { SIGNER_CONTEXT } from "../internal/signer-context";
+import { type SignerContext, defaultSignerContext } from "../types/signer";
 
 /**
  * Get the signer context from Svelte context

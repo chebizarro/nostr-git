@@ -1,8 +1,14 @@
 // Branch resolution helpers extracted from git-worker
 import type { GitProvider } from '@nostr-git/git-wrapper';
 
-export async function resolveRobustBranch(git: GitProvider, dir: string, requestedBranch?: string): Promise<string> {
-  const branchesToTry = [requestedBranch, 'main', 'master', 'develop', 'dev'].filter(Boolean) as string[];
+export async function resolveRobustBranch(
+  git: GitProvider,
+  dir: string,
+  requestedBranch?: string
+): Promise<string> {
+  const branchesToTry = [requestedBranch, 'main', 'master', 'develop', 'dev'].filter(
+    Boolean
+  ) as string[];
   for (const branchName of branchesToTry) {
     try {
       await git.resolveRef({ dir, ref: branchName });
@@ -15,7 +21,9 @@ export async function resolveRobustBranch(git: GitProvider, dir: string, request
     const branches = await git.listBranches({ dir });
     if (branches.length > 0) {
       const firstBranch = branches[0];
-      console.warn(`All specific branch resolution attempts failed, using first available branch: ${firstBranch}`);
+      console.warn(
+        `All specific branch resolution attempts failed, using first available branch: ${firstBranch}`
+      );
       return firstBranch;
     }
   } catch (error) {

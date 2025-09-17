@@ -9,6 +9,7 @@ Provides a comprehensive set of reusable Svelte components for building Git-awar
 ## ✨ Features
 
 ### Git Components
+
 - **Repository Cards**: Display repository information with metadata and actions
 - **Commit Viewers**: Render commit details with diff visualization
 - **Branch Selectors**: Interactive branch switching and management
@@ -16,18 +17,21 @@ Provides a comprehensive set of reusable Svelte components for building Git-awar
 - **Issue Trackers**: Show and manage Git issues as Nostr events
 
 ### Nostr Components
+
 - **Event Cards**: Render various Nostr event types with proper formatting
 - **Publish Buttons**: One-click publishing to Nostr relays
 - **Relay Status**: Show connection status and relay health
 - **Key Management**: Secure private key input and management
 
 ### UI Primitives
+
 - **Form Controls**: Accessible input components with validation
 - **Navigation**: Breadcrumbs, tabs, and routing components
 - **Feedback**: Toast notifications, loading states, and error displays
 - **Layout**: Responsive grid and container components
 
 ### Styling Features
+
 - **TailwindCSS Integration**: Custom preset with Git/Nostr design tokens
 - **Dark Mode Support**: Automatic theme switching
 - **Responsive Design**: Mobile-first responsive components
@@ -59,9 +63,9 @@ pnpm add svelte@^5.28.2
 
 ```svelte
 <script lang="ts">
-  import { RepoCard, PatchViewer } from '@nostr-git/ui';
-  import type { NostrEvent } from '@nostr-git/shared-types';
-  
+  import { RepoCard, PatchViewer } from "@nostr-git/ui";
+  import type { NostrEvent } from "@nostr-git/shared-types";
+
   let repoEvent: NostrEvent;
   let patchEvent: NostrEvent;
 </script>
@@ -76,14 +80,11 @@ Add the UI preset to your `tailwind.config.js`:
 
 ```javascript
 // tailwind.config.js
-import { preset } from '@nostr-git/ui/tailwind.preset.js';
+import { preset } from "@nostr-git/ui/tailwind.preset.js";
 
 export default {
   presets: [preset],
-  content: [
-    './src/**/*.{html,js,svelte,ts}',
-    './node_modules/@nostr-git/ui/**/*.{js,svelte,ts}'
-  ]
+  content: ["./src/**/*.{html,js,svelte,ts}", "./node_modules/@nostr-git/ui/**/*.{js,svelte,ts}"],
 };
 ```
 
@@ -91,30 +92,30 @@ export default {
 
 ```css
 /* app.css */
-@import '@nostr-git/ui/index.css';
+@import "@nostr-git/ui/index.css";
 ```
 
 ### Advanced Usage with Runes
 
 ```svelte
 <script lang="ts">
-  import { EventPublisher, RepoSelector } from '@nostr-git/ui';
-  import type { GitRepository } from '@nostr-git/shared-types';
-  
+  import { EventPublisher, RepoSelector } from "@nostr-git/ui";
+  import type { GitRepository } from "@nostr-git/shared-types";
+
   // Svelte 5 runes for reactive state
   let selectedRepo = $state<GitRepository | null>(null);
   let isPublishing = $state(false);
-  
+
   // Derived state
   const canPublish = $derived(selectedRepo && !isPublishing);
-  
+
   function handleRepoSelect(repo: GitRepository) {
     selectedRepo = repo;
   }
-  
+
   async function handlePublish() {
     if (!selectedRepo) return;
-    
+
     isPublishing = true;
     try {
       await publishRepoEvent(selectedRepo);
@@ -127,17 +128,14 @@ export default {
 <RepoSelector onselect={handleRepoSelect} />
 
 {#if selectedRepo}
-  <EventPublisher 
-    repo={selectedRepo} 
-    disabled={!canPublish}
-    onpublish={handlePublish}
-  />
+  <EventPublisher repo={selectedRepo} disabled={!canPublish} onpublish={handlePublish} />
 {/if}
 ```
 
 ## 📚 Component Reference
 
 For detailed component documentation, see:
+
 - [API Reference](API_REFERENCE.md) - Complete component API
 - [Architecture Guide](ARCHITECTURE.md) - Component design patterns
 - [Storybook](../storybook/) - Interactive component examples
@@ -145,18 +143,21 @@ For detailed component documentation, see:
 ### Key Components
 
 #### Repository Components
+
 - `RepoCard` - Repository information display
 - `RepoSelector` - Repository picker with search
 - `CloneRepository` - Repository cloning interface
 - `ForkRepository` - Repository forking workflow
 
 #### Git Components
+
 - `CommitViewer` - Commit details and diff display
 - `PatchViewer` - Git patch visualization
 - `BranchSelector` - Branch switching interface
 - `MergeConflictResolver` - Conflict resolution UI
 
 #### Nostr Components
+
 - `EventCard` - Generic Nostr event display
 - `PublishButton` - Event publishing interface
 - `RelayStatus` - Relay connection indicator
@@ -181,7 +182,7 @@ For detailed component documentation, see:
 
 ```svelte
 <script>
-  import { ThemeProvider } from '@nostr-git/ui';
+  import { ThemeProvider } from "@nostr-git/ui";
 </script>
 
 <ThemeProvider theme="dark">
@@ -296,16 +297,16 @@ The package uses `@sveltejs/package` for building:
 
 ```javascript
 // svelte.config.js
-import { sveltekit } from '@sveltejs/kit/vite';
+import { sveltekit } from "@sveltejs/kit/vite";
 
 export default {
   kit: {
     package: {
       exports: (filepath) => {
-        return filepath.endsWith('.svelte') || filepath.endsWith('.js');
-      }
-    }
-  }
+        return filepath.endsWith(".svelte") || filepath.endsWith(".js");
+      },
+    },
+  },
 };
 ```
 

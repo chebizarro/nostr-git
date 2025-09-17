@@ -44,7 +44,14 @@ export async function smartInitializeRepoUtil(
   sendProgress: (phase: string, loaded?: number, total?: number) => void
 ) {
   const { repoId, cloneUrls, forceUpdate = false } = opts;
-  const { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos, isRepoCloned, resolveRobustBranch } = deps;
+  const {
+    rootDir,
+    canonicalRepoKey,
+    repoDataLevels,
+    clonedRepos,
+    isRepoCloned,
+    resolveRobustBranch
+  } = deps;
 
   try {
     const key = canonicalRepoKey(repoId);
@@ -59,7 +66,7 @@ export async function smartInitializeRepoUtil(
         fromCache: true,
         dataLevel: cache.dataLevel,
         branches: cache.branches,
-        headCommit: cache.headCommit,
+        headCommit: cache.headCommit
       };
     }
 
@@ -77,7 +84,7 @@ export async function smartInitializeRepoUtil(
             url: cloneUrl,
             ref: await resolveRobustBranch(git, dir),
             singleBranch: false,
-            depth: repoDataLevels.get(key) === 'full' ? undefined : 50,
+            depth: repoDataLevels.get(key) === 'full' ? undefined : 50
           });
         }
         const mainBranch = await resolveRobustBranch(git, dir);
@@ -86,7 +93,12 @@ export async function smartInitializeRepoUtil(
         try {
           remoteCommit = await git.resolveRef({ dir, ref: remoteRef });
           await git.writeRef({ dir, ref: `refs/heads/${mainBranch}`, value: remoteCommit });
-          await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${mainBranch}`, symbolic: true });
+          await git.writeRef({
+            dir,
+            ref: 'HEAD',
+            value: `ref: refs/heads/${mainBranch}`,
+            symbolic: true
+          });
           sendProgress('Local repository synced with remote');
         } catch (e) {
           remoteCommit = await git.resolveRef({ dir, ref: 'HEAD' });
@@ -98,21 +110,40 @@ export async function smartInitializeRepoUtil(
           headCommit: remoteCommit,
           dataLevel: (repoDataLevels.get(key) || 'shallow') as DataLevel,
           branches: branches.map((name: string) => ({ name, commit: remoteCommit })),
-          cloneUrls,
+          cloneUrls
         };
         await cacheManager.setRepoCache(newCache);
         repoDataLevels.set(key, newCache.dataLevel);
         clonedRepos.add(key);
         sendProgress('Repository ready');
-        return { success: true, repoId, fromCache: false, dataLevel: newCache.dataLevel, branches: newCache.branches, headCommit: newCache.headCommit, synced: true };
+        return {
+          success: true,
+          repoId,
+          fromCache: false,
+          dataLevel: newCache.dataLevel,
+          branches: newCache.branches,
+          headCommit: newCache.headCommit,
+          synced: true
+        };
       } catch (e) {
         // fall through to re-init
       }
     }
 
-    return await initializeRepoUtil(git, cacheManager, { repoId, cloneUrls }, { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos }, sendProgress);
+    return await initializeRepoUtil(
+      git,
+      cacheManager,
+      { repoId, cloneUrls },
+      { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos },
+      sendProgress
+    );
   } catch (error: any) {
-    return { success: false, repoId: opts.repoId, error: error?.message || String(error), fromCache: false };
+    return {
+      success: false,
+      repoId: opts.repoId,
+      error: error?.message || String(error),
+      fromCache: false
+    };
   }
 }
 
@@ -139,12 +170,23 @@ export async function initializeRepoUtil(
     let succeeded = false;
     for (const cloneUrl of cloneUrls) {
       sendProgress('Fetching repository metadata', 0, 1);
-      const onProgress = (progress: { phase: string; loaded?: number; total?: number }) => sendProgress(progress.phase, progress.loaded, progress.total);
+      const onProgress = (progress: { phase: string; loaded?: number; total?: number }) =>
+        sendProgress(progress.phase, progress.loaded, progress.total);
       const authCallback = getAuthCallback(cloneUrl);
       const refCandidates = ['HEAD', 'main', 'master', 'develop', 'dev'];
       for (const refCandidate of refCandidates) {
         try {
-          await git.clone({ dir, url: cloneUrl, ref: refCandidate, singleBranch: true, depth: 1, noCheckout: true, noTags: true, onProgress, ...(authCallback && { onAuth: authCallback }) });
+          await git.clone({
+            dir,
+            url: cloneUrl,
+            ref: refCandidate,
+            singleBranch: true,
+            depth: 1,
+            noCheckout: true,
+            noTags: true,
+            onProgress,
+            ...(authCallback && { onAuth: authCallback })
+          });
           succeeded = true;
           break;
         } catch (e: any) {
@@ -160,10 +202,24 @@ export async function initializeRepoUtil(
     const headCommit = await git.resolveRef({ dir, ref: 'HEAD' });
     repoDataLevels.set(key, 'refs');
     clonedRepos.add(key);
-    const cache: RepoCache = { repoId: key, lastUpdated: Date.now(), headCommit, dataLevel: 'refs', branches: branches.map((name: string) => ({ name, commit: headCommit })), cloneUrls };
+    const cache: RepoCache = {
+      repoId: key,
+      lastUpdated: Date.now(),
+      headCommit,
+      dataLevel: 'refs',
+      branches: branches.map((name: string) => ({ name, commit: headCommit })),
+      cloneUrls
+    };
     await cacheManager.setRepoCache(cache);
     sendProgress('Repository initialized');
-    return { success: true, repoId, dataLevel: 'refs' as const, branches: cache.branches, headCommit, fromCache: false };
+    return {
+      success: true,
+      repoId,
+      dataLevel: 'refs' as const,
+      branches: cache.branches,
+      headCommit,
+      fromCache: false
+    };
   } catch (error: any) {
     return { success: false, repoId, error: error?.message || String(error), fromCache: false };
   }
@@ -183,7 +239,14 @@ export async function ensureShallowCloneUtil(
   sendProgress: (phase: string, loaded?: number, total?: number) => void
 ) {
   const { repoId, branch } = opts;
-  const { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos, isRepoCloned, resolveRobustBranch } = deps;
+  const {
+    rootDir,
+    canonicalRepoKey,
+    repoDataLevels,
+    clonedRepos,
+    isRepoCloned,
+    resolveRobustBranch
+  } = deps;
   const key = canonicalRepoKey(repoId);
   const dir = `${rootDir}/${key}`;
   let targetBranch: string = branch || 'main';
@@ -196,7 +259,11 @@ export async function ensureShallowCloneUtil(
     }
     if (!clonedRepos.has(key)) {
       if (!(await isRepoCloned(git, dir))) {
-        return { success: false, repoId, error: 'Repository not initialized. Call initializeRepo first.' };
+        return {
+          success: false,
+          repoId,
+          error: 'Repository not initialized. Call initializeRepo first.'
+        };
       }
     }
     sendProgress('Fetching branch content', 0, 1);
@@ -204,10 +271,24 @@ export async function ensureShallowCloneUtil(
     const originRemote = remotes.find((r: any) => r.remote === 'origin');
     if (!originRemote?.url) throw new Error('Origin remote not found or has no URL configured');
     const authCallback = getAuthCallback(originRemote.url);
-    await git.fetch({ dir, url: originRemote.url, ref: targetBranch, depth: 1, singleBranch: true, onProgress: (p: any) => sendProgress(p.phase, p.loaded, p.total), ...(authCallback && { onAuth: authCallback }) });
+    await git.fetch({
+      dir,
+      url: originRemote.url,
+      ref: targetBranch,
+      depth: 1,
+      singleBranch: true,
+      onProgress: (p: any) => sendProgress(p.phase, p.loaded, p.total),
+      ...(authCallback && { onAuth: authCallback })
+    });
     await git.checkout({ dir, ref: targetBranch });
     repoDataLevels.set(key, 'shallow');
-    return { success: true, repoId, branch: targetBranch, dataLevel: 'shallow' as const, fromCache: false };
+    return {
+      success: true,
+      repoId,
+      branch: targetBranch,
+      dataLevel: 'shallow' as const,
+      fromCache: false
+    };
   } catch (error: any) {
     return { success: false, repoId, branch: targetBranch, error: error?.message || String(error) };
   }
@@ -227,14 +308,26 @@ export async function ensureFullCloneUtil(
   sendProgress: (phase: string, loaded?: number, total?: number) => void
 ) {
   const { repoId, branch, depth = 50 } = opts;
-  const { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos, isRepoCloned, resolveRobustBranch } = deps;
+  const {
+    rootDir,
+    canonicalRepoKey,
+    repoDataLevels,
+    clonedRepos,
+    isRepoCloned,
+    resolveRobustBranch
+  } = deps;
   const key = canonicalRepoKey(repoId);
   const dir = `${rootDir}/${key}`;
   const targetBranch = await resolveRobustBranch(git, dir, branch);
   const currentLevel = repoDataLevels.get(key);
   if (currentLevel === 'full') return { success: true, repoId, cached: true, level: currentLevel };
   if (!clonedRepos.has(key)) {
-    if (!(await isRepoCloned(git, dir))) return { success: false, repoId, error: 'Repository not initialized. Call initializeRepo first.' };
+    if (!(await isRepoCloned(git, dir)))
+      return {
+        success: false,
+        repoId,
+        error: 'Repository not initialized. Call initializeRepo first.'
+      };
   }
   sendProgress(`Fetching commit history (depth: ${depth})...`);
   try {
@@ -250,7 +343,7 @@ export async function ensureFullCloneUtil(
       singleBranch: true,
       tags: false,
       onProgress: (p: any) => sendProgress(`Full clone: ${p.phase}`, p.loaded, p.total),
-      ...(authCallback && { onAuth: authCallback }),
+      ...(authCallback && { onAuth: authCallback })
     });
     repoDataLevels.set(key, 'full');
     return { success: true, repoId, cached: false, level: 'full' as const };

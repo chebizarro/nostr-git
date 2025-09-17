@@ -33,8 +33,8 @@ export function md5(str: string): string {
     }
     s = s.substring(i - 64);
     const tail = new Array(16).fill(0);
-    for (i = 0; i < s.length; i++) tail[i >> 2] |= s.charCodeAt(i) << ((i % 4) << 3);
-    tail[i >> 2] |= 0x80 << ((i % 4) << 3);
+    for (i = 0; i < s.length; i++) tail[i >> 2] |= s.charCodeAt(i) << (i % 4 << 3);
+    tail[i >> 2] |= 0x80 << (i % 4 << 3);
     if (i > 55) {
       md5cycle(state, tail);
       for (i = 0; i < 16; i++) tail[i] = 0;
@@ -130,13 +130,14 @@ export function md5(str: string): string {
   }
 
   function rhex(n: number) {
-    let s = '', j = 0;
-    for (; j < 4; j++) s += ('0' + ((n >> (j * 8)) & 255).toString(16)).slice(-2);
+    let s = "",
+      j = 0;
+    for (; j < 4; j++) s += ("0" + ((n >> (j * 8)) & 255).toString(16)).slice(-2);
     return s;
   }
   function hex(x: number[]) {
     for (let i = 0; i < x.length; i++) x[i] = rhex(x[i]) as any;
-    return (x as any).join('');
+    return (x as any).join("");
   }
 
   // Convert string to UTF-8
@@ -155,7 +156,7 @@ export function sha256(ascii: string): string {
 
   const mathPow = Math.pow;
   const maxWord = mathPow(2, 32);
-  let result = '';
+  let result = "";
 
   const words: number[] = [];
   const asciiBitLength = ascii.length * 8;
@@ -177,8 +178,8 @@ export function sha256(ascii: string): string {
     }
   }
 
-  ascii += '\x80'; // Append '1' bit (plus zero padding)
-  while ((ascii.length % 64) - 56) ascii += '\x00'; // More zero padding
+  ascii += "\x80"; // Append '1' bit (plus zero padding)
+  while ((ascii.length % 64) - 56) ascii += "\x00"; // More zero padding
   for (let i = 0; i < ascii.length; i++) {
     const j = (i / 4) | 0;
     words[j] = (words[j] || 0) | (ascii.charCodeAt(i) << (24 - (i % 4) * 8));
@@ -186,21 +187,31 @@ export function sha256(ascii: string): string {
   words[words.length] = (asciiBitLength / maxWord) | 0;
   words[words.length] = asciiBitLength;
 
-  for (let j = 0; j < words.length;) {
+  for (let j = 0; j < words.length; ) {
     const w = words.slice(j, (j += 16));
     const oldHash = hash.slice(0);
 
     for (let i = 0; i < 64; i++) {
-      const w15 = w[i - 15], w2 = w[i - 2];
-      const s0 = i < 16 ? w[i] : (w[i] = (
-        (w[i - 16] +
-          (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3)) +
-          w[i - 7] +
-          (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10)))
-      ) | 0);
+      const w15 = w[i - 15],
+        w2 = w[i - 2];
+      const s0 =
+        i < 16
+          ? w[i]
+          : (w[i] =
+              (w[i - 16] +
+                (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3)) +
+                w[i - 7] +
+                (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))) |
+              0);
 
-      const a = hash[0], b = hash[1], c = hash[2], d = hash[3];
-      const e = hash[4], f = hash[5], g = hash[6], h = hash[7];
+      const a = hash[0],
+        b = hash[1],
+        c = hash[2],
+        d = hash[3];
+      const e = hash[4],
+        f = hash[5],
+        g = hash[6],
+        h = hash[7];
 
       const s1 = rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25);
       const ch = (e & f) ^ (~e & g);
@@ -225,13 +236,18 @@ export function sha256(ascii: string): string {
   for (let i = 0; i < 8; i++) {
     for (let j = 3; j + 1; j--) {
       const b = (hash[i] >> (j * 8)) & 255;
-      result += (b < 16 ? 0 : '') + b.toString(16);
+      result += (b < 16 ? 0 : "") + b.toString(16);
     }
   }
   return result;
 }
 
-export function gravatarUrl(identifier: string, size = 80, def = 'identicon', algo: 'md5' | 'sha256' = 'sha256'): string {
+export function gravatarUrl(
+  identifier: string,
+  size = 80,
+  def = "identicon",
+  algo: "md5" | "sha256" = "sha256"
+): string {
   const trimmed = identifier.trim().toLowerCase();
   // Force SHA-256 for Gravatar hashing to standardize across identifier types
   // The algo parameter is preserved for API compatibility but ignored here

@@ -1,8 +1,8 @@
-import { writable } from 'svelte/store';
+import { writable } from "svelte/store";
 
 export type ContextMessage = {
   id: string;
-  type: 'loading' | 'info' | 'success' | 'error' | 'warning';
+  type: "loading" | "info" | "success" | "error" | "warning";
   message: string;
   details?: any;
   timestamp: number;
@@ -12,13 +12,13 @@ export type ContextMessage = {
 function createContextStore() {
   const { subscribe, update, set } = writable<Record<string, ContextMessage>>({});
 
-  function add(message: Omit<ContextMessage, 'id' | 'timestamp'>) {
+  function add(message: Omit<ContextMessage, "id" | "timestamp">) {
     const id = Math.random().toString(36).substring(2, 11);
     const timestamp = Date.now();
-    
-    update(messages => ({
+
+    update((messages) => ({
       ...messages,
-      [id]: { ...message, id, timestamp }
+      [id]: { ...message, id, timestamp },
     }));
 
     // Auto-remove after duration if specified
@@ -31,12 +31,12 @@ function createContextStore() {
     return id;
   }
 
-  function updateMessage(id: string, updates: Partial<Omit<ContextMessage, 'id' | 'timestamp'>>) {
-    update(messages => {
+  function updateMessage(id: string, updates: Partial<Omit<ContextMessage, "id" | "timestamp">>) {
+    update((messages) => {
       if (messages[id]) {
         return {
           ...messages,
-          [id]: { ...messages[id], ...updates }
+          [id]: { ...messages[id], ...updates },
         };
       }
       return messages;
@@ -44,7 +44,7 @@ function createContextStore() {
   }
 
   function remove(id: string) {
-    update(messages => {
+    update((messages) => {
       const newMessages = { ...messages };
       delete newMessages[id];
       return newMessages;
@@ -59,47 +59,47 @@ function createContextStore() {
   function loading(message: string, details?: any, id?: string) {
     const messageId = id || `loading-${Date.now()}`;
     add({
-      type: 'loading',
+      type: "loading",
       message,
       details,
-      duration: 0 // No auto-remove for loading messages
+      duration: 0, // No auto-remove for loading messages
     });
     return messageId;
   }
 
   function info(message: string, details?: any, duration = 5000) {
     return add({
-      type: 'info',
+      type: "info",
       message,
       details,
-      duration
+      duration,
     });
   }
 
   function success(message: string, details?: any, duration = 5000) {
     return add({
-      type: 'success',
+      type: "success",
       message,
       details,
-      duration
+      duration,
     });
   }
 
   function error(message: string, details?: any, duration = 10000) {
     return add({
-      type: 'error',
+      type: "error",
       message,
       details,
-      duration
+      duration,
     });
   }
 
   function warning(message: string, details?: any, duration = 8000) {
     return add({
-      type: 'warning',
+      type: "warning",
       message,
       details,
-      duration
+      duration,
     });
   }
 
@@ -113,7 +113,7 @@ function createContextStore() {
     info,
     success,
     error,
-    warning
+    warning,
   };
 }
 

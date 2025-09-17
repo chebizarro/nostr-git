@@ -9,24 +9,28 @@ This package provides the foundational functionality for integrating Git workflo
 ## ✨ Features
 
 ### Event Creation
+
 - **Repository Events**: Create NIP-34 repository announcements (kind 30617) and state events (kind 30618)
 - **Patch Events**: Generate patch events (kind 1617) from Git diffs and commits
 - **Issue Events**: Create issue tracking events (kind 1621) for decentralized bug reporting
 - **Code Snippets**: Generate NIP-95 code snippet events with syntax highlighting
 
 ### Git Operations
+
 - **Repository Management**: Clone, fork, and manage Git repositories
 - **Patch Processing**: Create, parse, and apply Git patches
 - **Merge Analysis**: Analyze merge conflicts and compatibility
 - **Branch Operations**: List, create, and manage repository branches
 
 ### Nostr Integration
+
 - **Event Publishing**: Publish events to multiple Nostr relays
 - **Event Parsing**: Parse and validate incoming Git-related events
 - **Relay Management**: Handle relay connections and subscriptions
 - **Permalink Encoding**: Convert GitHub/GitLab URLs to Nostr-compatible permalinks
 
 ### Performance Features
+
 - **Web Workers**: Background processing for heavy Git operations
 - **Caching**: IndexedDB-based caching for repository data
 - **Streaming**: Efficient handling of large repositories and patches

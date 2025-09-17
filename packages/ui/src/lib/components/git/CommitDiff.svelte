@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { GitCommit, User, Calendar, ChevronDown, ChevronRight, Loader2 } from '@lucide/svelte';
-  import { formatDistanceToNow } from 'date-fns';
-  import FileDiff from './FileDiff.svelte';
-  import type { CommitDiff } from '@nostr-git/shared-types';
+  import { GitCommit, User, Calendar, ChevronDown, ChevronRight, Loader2 } from "@lucide/svelte";
+  import { formatDistanceToNow } from "date-fns";
+  import FileDiff from "./FileDiff.svelte";
+  import type { CommitDiff } from "@nostr-git/shared-types";
 
   interface Props {
     commitSha: string;
@@ -29,7 +29,7 @@
     onToggleExpansion,
     onToggleFileExpansion,
     onSelectFile,
-    onLoadCommit
+    onLoadCommit,
   }: Props = $props();
 
   // Trigger loading if commit diff is not available
@@ -41,9 +41,9 @@
 
   // Format commit message (first line as title, rest as body)
   const formatCommitMessage = (message: string) => {
-    const lines = message.trim().split('\n');
-    const title = lines[0] || '';
-    const body = lines.slice(1).join('\n').trim();
+    const lines = message.trim().split("\n");
+    const title = lines[0] || "";
+    const body = lines.slice(1).join("\n").trim();
     return { title, body };
   };
 
@@ -51,27 +51,32 @@
   const shortSha = $derived(commitSha.substring(0, 7));
 
   // Calculate file stats
-  const fileStats = $derived((() => {
-    if (!commitDiff) return { added: 0, modified: 0, deleted: 0, renamed: 0 };
-    
-    return commitDiff.changes.reduce((stats, file) => {
-      switch (file.status) {
-        case 'added':
-          stats.added++;
-          break;
-        case 'modified':
-          stats.modified++;
-          break;
-        case 'deleted':
-          stats.deleted++;
-          break;
-        case 'renamed':
-          stats.renamed++;
-          break;
-      }
-      return stats;
-    }, { added: 0, modified: 0, deleted: 0, renamed: 0 });
-  })());
+  const fileStats = $derived(
+    (() => {
+      if (!commitDiff) return { added: 0, modified: 0, deleted: 0, renamed: 0 };
+
+      return commitDiff.changes.reduce(
+        (stats, file) => {
+          switch (file.status) {
+            case "added":
+              stats.added++;
+              break;
+            case "modified":
+              stats.modified++;
+              break;
+            case "deleted":
+              stats.deleted++;
+              break;
+            case "renamed":
+              stats.renamed++;
+              break;
+          }
+          return stats;
+        },
+        { added: 0, modified: 0, deleted: 0, renamed: 0 }
+      );
+    })()
+  );
 
   // Check if file should be highlighted
   const isFileHighlighted = (filePath: string) => {
@@ -113,7 +118,7 @@
         <div class="flex-1 min-w-0">
           {#if commitDiff}
             {@const { title, body } = formatCommitMessage(commitDiff.meta.message)}
-            
+
             <!-- Commit Title -->
             <div class="flex items-start gap-3 mb-2">
               <GitCommit class="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
@@ -137,7 +142,9 @@
               </div>
               <div class="flex items-center gap-1.5">
                 <Calendar class="h-4 w-4" />
-                <span>{formatDistanceToNow(new Date(commitDiff.meta.date), { addSuffix: true })}</span>
+                <span
+                  >{formatDistanceToNow(new Date(commitDiff.meta.date), { addSuffix: true })}</span
+                >
               </div>
               <div class="font-mono text-xs bg-muted px-2 py-1 rounded">
                 {shortSha}
@@ -148,7 +155,7 @@
             {#if commitDiff.changes.length > 0}
               <div class="flex items-center gap-3 mt-3 text-sm">
                 <span class="text-muted-foreground">
-                  {commitDiff.changes.length} file{commitDiff.changes.length !== 1 ? 's' : ''} changed
+                  {commitDiff.changes.length} file{commitDiff.changes.length !== 1 ? "s" : ""} changed
                 </span>
                 {#if fileStats.added > 0}
                   <span class="text-green-600">+{fileStats.added} added</span>
@@ -201,18 +208,21 @@
   {#if expanded && commitDiff}
     <div class="p-4">
       {#if commitDiff.changes.length === 0}
-        <div class="text-center text-muted-foreground py-8">
-          No file changes in this commit
-        </div>
+        <div class="text-center text-muted-foreground py-8">No file changes in this commit</div>
       {:else}
         <div class="space-y-0">
           {#each commitDiff.changes as fileDiff}
             {@const isExpanded = expandedFiles.has(fileDiff.path)}
             {@const isHighlighted = isFileHighlighted(fileDiff.path)}
-            
-            <div class:ring-2={isHighlighted} class:ring-primary={isHighlighted} class:ring-offset-2={isHighlighted} class="transition-all">
+
+            <div
+              class:ring-2={isHighlighted}
+              class:ring-primary={isHighlighted}
+              class:ring-offset-2={isHighlighted}
+              class="transition-all"
+            >
               <FileDiff
-                {fileDiff}
+                fileDiff={fileDiff}
                 expanded={isExpanded}
                 onToggleExpansion={() => onToggleFileExpansion?.(fileDiff.path)}
                 onSelectFile={onSelectFile}

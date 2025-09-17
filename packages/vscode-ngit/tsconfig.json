@@ -1,19 +1,15 @@
 {
-	"compilerOptions": {
-	  "target": "ES2022",
-	  "module": "NodeNext",
-	  "moduleResolution": "node16",
-	  "outDir": "out",
-	  "rootDir": "src",
-	  "lib": ["ES2022"],
-	  "strict": true,
-	  "esModuleInterop": true,
-	  "skipLibCheck": true,
-	  "sourceMap": true
-	},
-	"exclude": [
-	  "node_modules",
-	  ".vscode-test"
-	]
-  }
-  
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "node16",
+    "outDir": "out",
+    "rootDir": "src",
+    "lib": ["ES2022"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "sourceMap": true
+  },
+  "exclude": ["node_modules", ".vscode-test"]
+}

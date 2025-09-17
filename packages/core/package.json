@@ -1,67 +1,67 @@
 {
-	"name": "@nostr-git/core",
-	"version": "0.0.1",
-	"scripts": {
-		"build": "tsc --project tsconfig.json",
-		"typecheck": "tsc --noEmit --project tsconfig.json",
-		"format": "prettier --write .",
-		"lint": "eslint . && prettier --check .",
-		"lint:eslint": "eslint .",
-		"lint:prettier": "prettier --check .",
-		"prepare": "npm run build",
-		"watch": "tsc --project tsconfig.json --watch",
-		"test": "vitest run"
-	},
-	"files": [
-		"dist",
-		"!dist/**/*.test.*",
-		"!dist/**/*.spec.*"
-	],
-	"sideEffects": [
-		"**/*.css"
-	],
-	"main": "./dist/index.js",
-	"module": "./dist/index.js",
-	"exports": {
-		".": {
-			"import": "./dist/index.js",
-			"require": "./dist/index.js"
-		}
-	},
-	"types": "./dist/index.d.ts",
-	"type": "module",
-	"devDependencies": {
-		"@eslint/compat": "^1.2.5",
-		"@eslint/js": "^9.18.0",
-		"@types/diff": "^7.0.2",
-		"@types/mime-types": "^2.1.4",
-		"eslint": "^9.18.0",
-		"eslint-config-prettier": "^10.0.1",
-		"globals": "^16.0.0",
-		"jsdom": "^26.0.0",
-		"prettier": "^3.4.2",
-		"publint": "^0.3.2",
-		"typescript": "^5.0.0",
-		"typescript-eslint": "^8.20.0",
-		"vitest": "^2.1.9"
-	},
-	"keywords": [
-		"typescript",
-		"git",
-		"nostr"
-	],
-	"dependencies": {
-		"@nostr-git/git-wrapper": "workspace:*",
-		"@nostr-git/shared-types": "workspace:*",
-		"axios": "^1.9.0",
-		"buffer": "^6.0.3",
-		"comlink": "^4.4.2",
-		"diff": "^7.0.0",
-		"file-type": "^20.4.1",
-		"mime-types": "^3.0.1",
-		"nostr-tools": "^2.11.0",
-		"parse-diff": "^0.11.1",
-		"parse-git-diff": "^0.0.19",
-		"parse-patch": "^0.1.4"
-	}
+  "name": "@nostr-git/core",
+  "version": "0.0.1",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "format": "prettier --write .",
+    "lint": "eslint . && prettier --check .",
+    "lint:eslint": "eslint .",
+    "lint:prettier": "prettier --check .",
+    "prepare": "npm run build",
+    "watch": "tsc --project tsconfig.json --watch",
+    "test": "vitest run"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.test.*",
+    "!dist/**/*.spec.*"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "devDependencies": {
+    "@eslint/compat": "^1.2.5",
+    "@eslint/js": "^9.18.0",
+    "@types/diff": "^7.0.2",
+    "@types/mime-types": "^2.1.4",
+    "eslint": "^9.18.0",
+    "eslint-config-prettier": "^10.0.1",
+    "globals": "^16.0.0",
+    "jsdom": "^26.0.0",
+    "prettier": "^3.4.2",
+    "publint": "^0.3.2",
+    "typescript": "^5.0.0",
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^2.1.9"
+  },
+  "keywords": [
+    "typescript",
+    "git",
+    "nostr"
+  ],
+  "dependencies": {
+    "@nostr-git/git-wrapper": "workspace:*",
+    "@nostr-git/shared-types": "workspace:*",
+    "axios": "^1.9.0",
+    "buffer": "^6.0.3",
+    "comlink": "^4.4.2",
+    "diff": "^7.0.0",
+    "file-type": "^20.4.1",
+    "mime-types": "^3.0.1",
+    "nostr-tools": "^2.11.0",
+    "parse-diff": "^0.11.1",
+    "parse-git-diff": "^0.0.19",
+    "parse-patch": "^0.1.4"
+  }
 }

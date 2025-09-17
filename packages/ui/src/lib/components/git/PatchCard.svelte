@@ -41,7 +41,15 @@
     extraLabels?: string[];
   }
 
-  const { event, status, patches, comments, currentCommenter, onCommentCreated, extraLabels = [] }: Props = $props();
+  const {
+    event,
+    status,
+    patches,
+    comments,
+    currentCommenter,
+    onCommentCreated,
+    extraLabels = [],
+  }: Props = $props();
 
   const parsed = parseGitPatchFromEvent(event);
 
@@ -57,20 +65,20 @@
   // Copy to clipboard function
   const copyToClipboard = async (text: string, label: string) => {
     try {
-      await navigator.clipboard.writeText(text)
+      await navigator.clipboard.writeText(text);
       toast.push({
         message: `${label} copied to clipboard`,
-        timeout: 2000
-      })
+        timeout: 2000,
+      });
     } catch (error) {
-      console.error('Failed to copy to clipboard:', error)
+      console.error("Failed to copy to clipboard:", error);
       toast.push({
         message: `Failed to copy ${label}`,
         timeout: 3000,
-        theme: 'error'
-      })
+        theme: "error",
+      });
     }
-  }
+  };
 
   const statusIcon = $derived(() => getStatusIcon(status?.kind));
 
@@ -165,13 +173,13 @@
             <code class="text-xs font-mono">{parsed.commitHash.substring(0, 7)}</code>
             <button
               class="hover:text-foreground transition-colors"
-              onclick={() => copyToClipboard(parsed.commitHash, 'Commit hash')}
+              onclick={() => copyToClipboard(parsed.commitHash, "Commit hash")}
             >
               <Copy class="h-3 w-3" />
             </button>
           </div>
         {/if}
-        {#if getTagValue(event as any, 'commit-pgp-sig')}
+        {#if getTagValue(event as any, "commit-pgp-sig")}
           <span>•</span>
           <div class="flex items-center gap-1 text-green-600">
             <Shield class="h-3 w-3" />
@@ -182,7 +190,7 @@
 
       {#if isExpanded}
         <p class="text-sm text-muted-foreground mt-3">{description}</p>
-        
+
         <!-- Enhanced metadata when expanded -->
         <div class="mt-3 p-3 bg-muted/30 rounded border text-xs">
           <div class="grid grid-cols-2 gap-2">
@@ -190,19 +198,21 @@
               <div class="flex items-center justify-between">
                 <span class="text-muted-foreground">Commit:</span>
                 <div class="flex items-center gap-1">
-                  <code class="bg-background px-1 rounded font-mono">{parsed.commitHash.substring(0, 8)}</code>
+                  <code class="bg-background px-1 rounded font-mono"
+                    >{parsed.commitHash.substring(0, 8)}</code
+                  >
                   <button
                     class="hover:text-foreground transition-colors"
-                    onclick={() => copyToClipboard(parsed.commitHash, 'Commit hash')}
+                    onclick={() => copyToClipboard(parsed.commitHash, "Commit hash")}
                   >
                     <Copy class="h-3 w-3" />
                   </button>
                 </div>
               </div>
             {/if}
-            
+
             {#if event.tags}
-              {@const committerName = getTagValue(event as any, 'committer')}
+              {@const committerName = getTagValue(event as any, "committer")}
               {#if committerName && committerName !== parsed.author.name}
                 <div class="flex items-center justify-between">
                   <span class="text-muted-foreground">Committer:</span>
@@ -212,8 +222,8 @@
                   </div>
                 </div>
               {/if}
-              
-              {@const recipients = getTags(event as any, 'p')}
+
+              {@const recipients = getTags(event as any, "p")}
               {#if recipients.length > 0}
                 <div class="col-span-2 flex items-center justify-between">
                   <span class="text-muted-foreground">Reviewers:</span>
@@ -221,16 +231,19 @@
                 </div>
               {/if}
             {/if}
-            
+
             <!-- File statistics if available -->
             {#if parsed.diff && parsed.diff.length > 0}
-              {@const lineStats = parsed.diff.reduce((acc, file) => {
-                const content = file.content || ''
-                const added = (content.match(/^\+/gm) || []).length
-                const removed = (content.match(/^-/gm) || []).length
-                return { added: acc.added + added, removed: acc.removed + removed }
-              }, { added: 0, removed: 0 })}
-              
+              {@const lineStats = parsed.diff.reduce(
+                (acc, file) => {
+                  const content = file.content || "";
+                  const added = (content.match(/^\+/gm) || []).length;
+                  const removed = (content.match(/^-/gm) || []).length;
+                  return { added: acc.added + added, removed: acc.removed + removed };
+                },
+                { added: 0, removed: 0 }
+              )}
+
               <div class="col-span-2 pt-2 border-t">
                 <div class="flex items-center justify-between text-xs">
                   <span class="text-muted-foreground">Files:</span>
@@ -251,7 +264,7 @@
             {/if}
           </div>
         </div>
-        
+
         {#if displayLabels && displayLabels.length}
           <div class="mt-3 inline-flex gap-1">
             {#each displayLabels as label}
@@ -264,7 +277,15 @@
             <a href={`patches/${id}`}>View Diff</a>
           </Button>
           <div class="flex items-center gap-1">
-            <ReactionSummary event={event} url={url} reactionClass="tooltip-left" deleteReaction={() => {}} createReaction={() => {}} noTooltip={false} children={() => {}} />
+            <ReactionSummary
+              event={event}
+              url={url}
+              reactionClass="tooltip-left"
+              deleteReaction={() => {}}
+              createReaction={() => {}}
+              noTooltip={false}
+              children={() => {}}
+            />
             <EventActions event={event} url={url} noun={noun} customActions={undefined} />
             <MessageSquare class="h-4 w-4 text-muted-foreground" />
             <span class="text-sm text-muted-foreground">{comments?.length ?? 0}</span>
@@ -279,14 +300,22 @@
             <a href={`patches/${id}`}>View Diff</a>
           </Button>
           <div class="flex items-center gap-3">
-            {#if getTagValue(event as any, 'commit-pgp-sig')}
+            {#if getTagValue(event as any, "commit-pgp-sig")}
               <div class="flex items-center gap-1 text-green-600">
                 <Shield class="h-3 w-3" />
                 <span class="text-xs">Signed</span>
               </div>
             {/if}
             <div class="flex items-center gap-1">
-              <ReactionSummary event={event} url={url} reactionClass="tooltip-left" deleteReaction={() => {}} createReaction={() => {}} noTooltip={false} children={() => {}} />
+              <ReactionSummary
+                event={event}
+                url={url}
+                reactionClass="tooltip-left"
+                deleteReaction={() => {}}
+                createReaction={() => {}}
+                noTooltip={false}
+                children={() => {}}
+              />
               <EventActions event={event} url={url} noun={noun} customActions={undefined} />
               <MessageSquare class="h-4 w-4 text-muted-foreground" />
               <span class="text-sm text-muted-foreground">{comments?.length ?? 0}</span>
@@ -300,8 +329,8 @@
 </Card>
 
 {#if isExpanded}
-<Card class="git-card transition-colors">
-  <IssueThread
+  <Card class="git-card transition-colors">
+    <IssueThread
       issueId={id}
       issueKind={"1617"}
       comments={comments}

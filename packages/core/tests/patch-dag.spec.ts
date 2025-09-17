@@ -1,17 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import { buildPatchGraph } from '../src/lib/patchGraph.js';
 
-function mkPatch(id: string, created_at: number, commit: string, parents: string[] = [], tags: string[][] = []): any {
+function mkPatch(
+  id: string,
+  created_at: number,
+  commit: string,
+  parents: string[] = [],
+  tags: string[][] = []
+): any {
   return {
     id,
     kind: 1617,
     created_at,
     pubkey: 'npub1x',
-    tags: [
-      ...parents.map((p) => ['parent-commit', p]),
-      ['commit', commit],
-      ...tags,
-    ],
+    tags: [...parents.map((p) => ['parent-commit', p]), ['commit', commit], ...tags]
   };
 }
 

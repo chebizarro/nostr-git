@@ -1,14 +1,8 @@
 <script lang="ts">
   import TimeAgo from "../../TimeAgo.svelte";
   import { MessageSquare } from "@lucide/svelte";
-  import {
-    createCommentEvent,
-    parseCommentEvent,
-  } from "@nostr-git/shared-types";
-  import type {
-    CommentEvent,
-    Profile,
-  } from "@nostr-git/shared-types";
+  import { createCommentEvent, parseCommentEvent } from "@nostr-git/shared-types";
+  import type { CommentEvent, Profile } from "@nostr-git/shared-types";
 
   import { useRegistry } from "../../useRegistry";
   import { slide } from "svelte/transition";
@@ -79,7 +73,7 @@
       <form onsubmit={submit} class="flex flex-col gap-3 pt-4 border-t">
         <div class="flex gap-3">
           <div class="flex-shrink-0">
-            <ProfileComponent pubkey={currentCommenter} hideDetails={true}/>
+            <ProfileComponent pubkey={currentCommenter} hideDetails={true} />
           </div>
           <div class="flex-1">
             <Textarea

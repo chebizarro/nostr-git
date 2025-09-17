@@ -6,7 +6,12 @@ import type { Commit } from '@nostr-git/shared-types';
 /**
  * Get commit log for a repo/branch.
  */
-export async function logCommits(opts: { owner: string; repo: string; branch?: string; depth?: number }): Promise<Commit[]> {
+export async function logCommits(opts: {
+  owner: string;
+  repo: string;
+  branch?: string;
+  depth?: number;
+}): Promise<Commit[]> {
   const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
   const git = getGitProvider();
   const ref = opts.branch || 'HEAD';
@@ -18,14 +23,18 @@ export async function logCommits(opts: { owner: string; repo: string; branch?: s
     committer: entry.commit.committer,
     parent: entry.commit.parent,
     tree: entry.commit.tree,
-    date: entry.commit.committer?.timestamp,
+    date: entry.commit.committer?.timestamp
   }));
 }
 
 /**
  * Read a single commit by oid.
  */
-export async function readCommit(opts: { owner: string; repo: string; oid: string }): Promise<Commit> {
+export async function readCommit(opts: {
+  owner: string;
+  repo: string;
+  oid: string;
+}): Promise<Commit> {
   const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
   const git = getGitProvider();
   const { commit } = await git.readCommit({ dir, oid: opts.oid });
@@ -36,14 +45,22 @@ export async function readCommit(opts: { owner: string; repo: string; oid: strin
     committer: commit.committer,
     parent: commit.parent,
     tree: commit.tree,
-    date: commit.committer?.timestamp,
+    date: commit.committer?.timestamp
   };
 }
 
 /**
  * Create a new commit.
  */
-export async function createCommit(opts: { owner: string; repo: string; message: string; author: { name: string; email: string }; committer?: { name: string; email: string }; tree: string; parent: string[] }): Promise<string> {
+export async function createCommit(opts: {
+  owner: string;
+  repo: string;
+  message: string;
+  author: { name: string; email: string };
+  committer?: { name: string; email: string };
+  tree: string;
+  parent: string[];
+}): Promise<string> {
   const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
   const git = getGitProvider();
   const oid = await git.commit({
@@ -52,7 +69,7 @@ export async function createCommit(opts: { owner: string; repo: string; message:
     author: opts.author,
     committer: opts.committer,
     tree: opts.tree,
-    parent: opts.parent,
+    parent: opts.parent
   });
   return oid;
 }

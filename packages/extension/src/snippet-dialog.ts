@@ -1,26 +1,25 @@
 export interface SnipptDescription {
-  description: string;
-  runtime: string;
+  description: string
+  runtime: string
 }
 
 export function promptForSnippetDescription(): Promise<SnipptDescription | null> {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     if (document.getElementById("nostr-snippet-dialog")) {
-      resolve(null);
-      return;
+      resolve(null)
+      return
     }
 
-    const dialog = document.createElement("dialog");
-    dialog.id = "nostr-snippet-dialog";
-    dialog.style.padding = "0";
-    dialog.style.border = "none";
-    dialog.style.borderRadius = "6px";
-    dialog.style.maxWidth = "500px";
-    dialog.style.width = "90%";
-    dialog.style.zIndex = "1000";
-    dialog.style.boxShadow =
-      "0 0 0 1px rgba(27,31,36,0.15), 0 3px 6px rgba(140,149,159,0.15)";
-    dialog.style.fontFamily = `"Segoe UI", Tahoma, Geneva, Verdana, sans-serif`;
+    const dialog = document.createElement("dialog")
+    dialog.id = "nostr-snippet-dialog"
+    dialog.style.padding = "0"
+    dialog.style.border = "none"
+    dialog.style.borderRadius = "6px"
+    dialog.style.maxWidth = "500px"
+    dialog.style.width = "90%"
+    dialog.style.zIndex = "1000"
+    dialog.style.boxShadow = "0 0 0 1px rgba(27,31,36,0.15), 0 3px 6px rgba(140,149,159,0.15)"
+    dialog.style.fontFamily = `"Segoe UI", Tahoma, Geneva, Verdana, sans-serif`
 
     dialog.innerHTML = `
 		<form method="dialog" style="padding: 16px;">
@@ -33,37 +32,31 @@ export function promptForSnippetDescription(): Promise<SnipptDescription | null>
 			<button type="submit" id="submit-snippet" class="btn-primary">Create</button>
 		  </div>
 		</form>
-	  `;
+	  `
 
-    document.body.appendChild(dialog);
-    dialog.showModal();
+    document.body.appendChild(dialog)
+    dialog.showModal()
 
-    const textarea = dialog.querySelector<HTMLTextAreaElement>(
-      "#nostr-snippet-desc"
-    )!;
-    const cancelBtn =
-      dialog.querySelector<HTMLButtonElement>("#cancel-snippet")!;
-    const submitBtn =
-      dialog.querySelector<HTMLButtonElement>("#submit-snippet")!;
-    const input = dialog.querySelector<HTMLInputElement>(
-      "#nostr-snippet-runtime"
-    )!;
+    const textarea = dialog.querySelector<HTMLTextAreaElement>("#nostr-snippet-desc")!
+    const cancelBtn = dialog.querySelector<HTMLButtonElement>("#cancel-snippet")!
+    const submitBtn = dialog.querySelector<HTMLButtonElement>("#submit-snippet")!
+    const input = dialog.querySelector<HTMLInputElement>("#nostr-snippet-runtime")!
 
     cancelBtn.addEventListener("click", () => {
-      dialog.close();
-      dialog.remove();
-      resolve(null);
-    });
+      dialog.close()
+      dialog.remove()
+      resolve(null)
+    })
 
-    submitBtn.addEventListener("click", (e) => {
-      e.preventDefault();
+    submitBtn.addEventListener("click", e => {
+      e.preventDefault()
       const result = {
         description: textarea.value.trim(),
         runtime: input.value.trim(),
-      };
-      dialog.close();
-      dialog.remove();
-      resolve(result);
-    });
-  });
+      }
+      dialog.close()
+      dialog.remove()
+      resolve(result)
+    })
+  })
 }

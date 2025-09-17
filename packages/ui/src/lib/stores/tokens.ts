@@ -6,7 +6,7 @@ export interface Token {
 }
 
 // Browser detection that works in all environments
-const isBrowser = typeof window !== 'undefined' && typeof localStorage !== 'undefined';
+const isBrowser = typeof window !== "undefined" && typeof localStorage !== "undefined";
 
 function createTokenStore() {
   const { subscribe, update, set } = writable<Token[]>([]);
@@ -16,7 +16,7 @@ function createTokenStore() {
   // Set the token loading function (to be called from the app layer)
   function setTokenLoader(loader: () => Promise<Token[]>) {
     loadTokensFunction = loader;
-    console.log('🔐 Token loader set, ready for lazy initialization');
+    console.log("🔐 Token loader set, ready for lazy initialization");
   }
 
   // Initialize tokens from localStorage when explicitly called
@@ -26,20 +26,20 @@ function createTokenStore() {
     }
 
     try {
-      console.log('🔐 Token store initializing, attempting to load tokens...');
+      console.log("🔐 Token store initializing, attempting to load tokens...");
       const loadedTokens = await loadTokensFunction();
-      
+
       if (loadedTokens.length > 0) {
         console.log(`🔐 Loaded ${loadedTokens.length} tokens from localStorage`);
         set(loadedTokens);
       } else {
-        console.log('🔐 No tokens found or signer not ready, setting empty array');
+        console.log("🔐 No tokens found or signer not ready, setting empty array");
         set([]);
       }
-      
+
       isInitialized = true;
     } catch (error) {
-      console.warn('🔐 Failed to load tokens from localStorage:', error);
+      console.warn("🔐 Failed to load tokens from localStorage:", error);
       // Set empty array as fallback
       set([]);
       isInitialized = true;
@@ -60,10 +60,10 @@ function createTokenStore() {
     if (!isInitialized) {
       await initialize();
     }
-    
+
     return new Promise((resolve) => {
       let cleanup: (() => void) | null = null;
-      
+
       cleanup = subscribe((tokens) => {
         if (cleanup) {
           cleanup();
@@ -81,18 +81,18 @@ function createTokenStore() {
     }
 
     try {
-      console.log('🔐 Manually refreshing token store...');
+      console.log("🔐 Manually refreshing token store...");
       const loadedTokens = await loadTokensFunction();
-      
+
       if (loadedTokens.length > 0) {
         console.log(`🔐 Refreshed with ${loadedTokens.length} tokens from localStorage`);
         set(loadedTokens);
       } else {
-        console.log('🔐 No tokens found during refresh');
+        console.log("🔐 No tokens found during refresh");
         set([]);
       }
     } catch (error) {
-      console.warn('🔐 Failed to refresh tokens:', error);
+      console.warn("🔐 Failed to refresh tokens:", error);
       set([]);
     }
   }

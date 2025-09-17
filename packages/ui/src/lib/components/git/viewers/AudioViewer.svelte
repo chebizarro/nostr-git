@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { createDataUrl, createBlob } from '@nostr-git/core';
-  
+  import { createDataUrl, createBlob } from "@nostr-git/core";
+
   const {
     content,
     filename,
-    mimeType
+    mimeType,
   }: {
     content: string;
     filename: string;
@@ -12,7 +12,7 @@
   } = $props();
 
   // Convert content to data URL for audio display
-  let dataUrl = $state('');
+  let dataUrl = $state("");
   let audioError = $state(false);
   let audioElement = $state<HTMLAudioElement>();
 
@@ -20,7 +20,7 @@
     try {
       dataUrl = createDataUrl(content, mimeType);
     } catch (error) {
-      console.error('Failed to create data URL for audio:', error);
+      console.error("Failed to create data URL for audio:", error);
       audioError = true;
     }
   });
@@ -33,7 +33,7 @@
     try {
       const blob = createBlob(content, mimeType);
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = filename;
       document.body.appendChild(a);
@@ -41,7 +41,7 @@
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Failed to download audio:', error);
+      console.error("Failed to download audio:", error);
     }
   }
 </script>
@@ -73,7 +73,7 @@
           Your browser does not support the audio tag.
         </audio>
       </div>
-      
+
       <div class="mt-3">
         <button
           onclick={downloadAudio}

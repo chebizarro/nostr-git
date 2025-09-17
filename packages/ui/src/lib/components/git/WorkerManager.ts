@@ -1,5 +1,5 @@
 import { getGitWorker, registerEventSigner } from "@nostr-git/core";
-import { 
+import {
   listBranchesFromEvent,
   listRepoFilesFromEvent,
   getRepoFileContentFromEvent,
@@ -47,15 +47,17 @@ export class WorkerManager {
   private progressCallback?: WorkerProgressCallback;
   private authConfig: AuthConfig = { tokens: [] };
   private currentSigner: Signer | null = null;
-  
+
   constructor(progressCallback?: WorkerProgressCallback) {
     this.progressCallback = progressCallback;
     // Track latest signer from the store
     try {
-      signerStore.subscribe((s) => { this.currentSigner = s; });
+      signerStore.subscribe((s) => {
+        this.currentSigner = s;
+      });
     } catch (e) {
       // Non-fatal if store subscription fails in non-Svelte contexts
-      console.warn('WorkerManager: signer store subscription failed', e);
+      console.warn("WorkerManager: signer store subscription failed", e);
     }
   }
 
@@ -65,7 +67,11 @@ export class WorkerManager {
   async initialize(): Promise<void> {
     // Always recreate worker to avoid stale instances across HMR/dev
     if (this.worker) {
-      try { this.worker.terminate(); } catch (e) { /* ignore terminate errors */ }
+      try {
+        this.worker.terminate();
+      } catch (e) {
+        /* ignore terminate errors */
+      }
       this.worker = null;
       this.api = null as any;
       this.isInitialized = false;
@@ -80,8 +86,8 @@ export class WorkerManager {
       if (this.worker) {
         registerEventSigner(this.worker, async (event: any) => {
           const s = this.currentSigner;
-          if (!s || typeof s.sign !== 'function') {
-            throw new Error('No signer available');
+          if (!s || typeof s.sign !== "function") {
+            throw new Error("No signer available");
           }
           const signed = await s.sign(event);
           return signed;
@@ -93,8 +99,10 @@ export class WorkerManager {
         await this.api.setAuthConfig(this.authConfig);
       }
     } catch (error) {
-      console.error('Failed to initialize git worker:', error);
-      throw new Error(`Worker initialization failed: ${error instanceof Error ? error.message : String(error)}`);
+      console.error("Failed to initialize git worker:", error);
+      throw new Error(
+        `Worker initialization failed: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -103,33 +111,47 @@ export class WorkerManager {
    */
   async execute<T>(operation: string, params: any): Promise<T> {
     if (!this.isInitialized || !this.api) {
-      throw new Error('WorkerManager not initialized. Call initialize() first.');
+      throw new Error("WorkerManager not initialized. Call initialize() first.");
     }
 
     try {
       // Bypass Comlink for syncWithRemote due to clone issues; use raw RPC channel
-      if (operation === 'syncWithRemote' && this.worker) {
+      if (operation === "syncWithRemote" && this.worker) {
         const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        const safeArgs = (() => { try { return JSON.parse(JSON.stringify(params)); } catch { return params; } })();
+        const safeArgs = (() => {
+          try {
+            return JSON.parse(JSON.stringify(params));
+          } catch {
+            return params;
+          }
+        })();
         const worker = this.worker;
         return await new Promise<T>((resolve, reject) => {
           const onMessage = (ev: MessageEvent) => {
             const msg: any = ev.data;
-            if (!msg || msg.type !== 'rpc:syncWithRemote:result' || msg.id !== id) return;
-            worker.removeEventListener('message', onMessage);
+            if (!msg || msg.type !== "rpc:syncWithRemote:result" || msg.id !== id) return;
+            worker.removeEventListener("message", onMessage);
             if (msg.ok) {
-              try { resolve(JSON.parse(JSON.stringify(msg.result)) as T); } catch { resolve(msg.result as T); }
+              try {
+                resolve(JSON.parse(JSON.stringify(msg.result)) as T);
+              } catch {
+                resolve(msg.result as T);
+              }
             } else {
-              reject(new Error(msg.error || 'syncWithRemote failed'));
+              reject(new Error(msg.error || "syncWithRemote failed"));
             }
           };
-          worker.addEventListener('message', onMessage);
-          worker.postMessage({ type: 'rpc:syncWithRemote', id, args: safeArgs });
+          worker.addEventListener("message", onMessage);
+          worker.postMessage({ type: "rpc:syncWithRemote", id, args: safeArgs });
         });
       }
       // Ensure params are structured-cloneable before crossing into Comlink
       let safeParams = params;
-      try { safeParams = JSON.parse(JSON.stringify(params)); } catch { /* fall back to original */ }
+      try {
+        safeParams = JSON.parse(JSON.stringify(params));
+      } catch {
+        /* fall back to original */
+      }
       const result = await (this.api as any)[operation](safeParams);
       // Ensure result is structured-cloneable; drop functions/proxies
       try {
@@ -139,7 +161,7 @@ export class WorkerManager {
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      if (msg && msg.includes('Proxy object could not be cloned')) {
+      if (msg && msg.includes("Proxy object could not be cloned")) {
         // Normalize the error so upstream can handle gracefully
         throw new Error(`Worker returned a non-transferable value for '${operation}'.`);
       }
@@ -157,7 +179,7 @@ export class WorkerManager {
     branch?: string;
     forceUpdate?: boolean;
   }): Promise<any> {
-    return this.execute('smartInitializeRepo', params);
+    return this.execute("smartInitializeRepo", params);
   }
 
   /**
@@ -169,7 +191,7 @@ export class WorkerManager {
     cloneUrls: string[];
     branch?: string;
   }): Promise<any> {
-    return this.execute('syncWithRemote', params);
+    return this.execute("syncWithRemote", params);
   }
 
   /**
@@ -182,7 +204,7 @@ export class WorkerManager {
     token?: string;
     provider?: string;
   }): Promise<any> {
-    return this.execute('pushToRemote', params);
+    return this.execute("pushToRemote", params);
   }
 
   /**
@@ -202,25 +224,21 @@ export class WorkerManager {
       blockIfShallow?: boolean;
     };
   }): Promise<any> {
-    return this.execute('safePushToRemote', params);
+    return this.execute("safePushToRemote", params);
   }
 
   /**
    * Get repository data level (refs, shallow, full)
    */
   async getRepoDataLevel(repoId: string): Promise<string> {
-    return this.execute('getRepoDataLevel', repoId);
+    return this.execute("getRepoDataLevel", repoId);
   }
 
   /**
    * Ensure full clone of repository
    */
-  async ensureFullClone(params: {
-    repoId: string;
-    branch: string;
-    depth?: number;
-  }): Promise<any> {
-    return this.execute('ensureFullClone', params);
+  async ensureFullClone(params: { repoId: string; branch: string; depth?: number }): Promise<any> {
+    return this.execute("ensureFullClone", params);
   }
 
   /**
@@ -232,7 +250,7 @@ export class WorkerManager {
     depth: number;
     offset?: number;
   }): Promise<any> {
-    return this.execute('getCommitHistory', params);
+    return this.execute("getCommitHistory", params);
   }
 
   /**
@@ -243,34 +261,28 @@ export class WorkerManager {
     commitId: string;
     branch?: string;
   }): Promise<any> {
-    return this.execute('getCommitDetails', params);
+    return this.execute("getCommitDetails", params);
   }
 
   /**
    * Get commit count
    */
-  async getCommitCount(params: {
-    repoId: string;
-    branch: string;
-  }): Promise<any> {
-    return this.execute('getCommitCount', params);
+  async getCommitCount(params: { repoId: string; branch: string }): Promise<any> {
+    return this.execute("getCommitCount", params);
   }
 
   /**
    * Get working tree status using worker's getStatus()
    */
-  async getStatus(params: {
-    repoId: string;
-    branch?: string;
-  }): Promise<any> {
-    return this.execute('getStatus', params);
+  async getStatus(params: { repoId: string; branch?: string }): Promise<any> {
+    return this.execute("getStatus", params);
   }
 
   /**
    * Delete repository
    */
   async deleteRepo(params: { repoId: string }): Promise<any> {
-    return this.execute('deleteRepo', params);
+    return this.execute("deleteRepo", params);
   }
 
   /**
@@ -281,7 +293,7 @@ export class WorkerManager {
     patchData: any;
     targetBranch: string;
   }): Promise<any> {
-    return this.execute('analyzePatchMerge', params);
+    return this.execute("analyzePatchMerge", params);
   }
 
   /**
@@ -293,7 +305,7 @@ export class WorkerManager {
      * UI thread by calling the core function directly. It does NOT interpret NIP-34
      * RepoState refs or HEAD and therefore must not be used to determine a default
      * branch or to render the final branch selector on its own.
-     * 
+     *
      * For authoritative branch handling, including mapping of NIP-34 refs (refs/heads/*, refs/tags/*)
      * and HEAD resolution with multi-fallback defaults, use BranchManager:
      *   packages/nostr-git/packages/ui/src/lib/components/git/BranchManager.ts
@@ -345,10 +357,7 @@ export class WorkerManager {
   /**
    * Get commit information
    */
-  async getCommitInfo(params: {
-    repoEvent: RepoAnnouncementEvent;
-    commit: string;
-  }): Promise<any> {
+  async getCommitInfo(params: { repoEvent: RepoAnnouncementEvent; commit: string }): Promise<any> {
     return await getCommitInfo(params);
   }
 
@@ -396,9 +405,9 @@ export class WorkerManager {
     pushErrors?: Array<{ remote: string; url: string; error: string; code: string; stack: string }>;
   }> {
     await this.initialize();
-    
+
     // Debug patch data in WorkerManager
-    console.log('🔧 WorkerManager - Patch data received:', {
+    console.log("🔧 WorkerManager - Patch data received:", {
       repoId: params.repoId,
       patchDataId: params.patchData?.id,
       hasRawContent: !!params.patchData?.rawContent,
@@ -406,9 +415,9 @@ export class WorkerManager {
       rawContentLength: params.patchData?.rawContent?.length,
       targetBranch: params.targetBranch,
       authorName: params.authorName,
-      authorEmail: params.authorEmail
+      authorEmail: params.authorEmail,
     });
-    
+
     const result = await this.api.applyPatchAndPush(params);
     return result;
   }
@@ -439,14 +448,14 @@ export class WorkerManager {
    */
   async setAuthConfig(config: AuthConfig): Promise<void> {
     this.authConfig = config;
-    
+
     // If worker is already initialized, update the configuration
     if (this.isInitialized && this.api) {
       try {
         await this.api.setAuthConfig(config);
-        console.log('Authentication configuration updated for', config.tokens.length, 'hosts');
+        console.log("Authentication configuration updated for", config.tokens.length, "hosts");
       } catch (error) {
-        console.error('Failed to update authentication configuration:', error);
+        console.error("Failed to update authentication configuration:", error);
       }
     }
   }
@@ -456,10 +465,10 @@ export class WorkerManager {
    */
   async addAuthToken(token: AuthToken): Promise<void> {
     // Remove existing token for the same host
-    this.authConfig.tokens = this.authConfig.tokens.filter(t => t.host !== token.host);
+    this.authConfig.tokens = this.authConfig.tokens.filter((t) => t.host !== token.host);
     // Add the new token
     this.authConfig.tokens.push(token);
-    
+
     // Update the worker if initialized
     if (this.isInitialized && this.api) {
       await this.setAuthConfig(this.authConfig);
@@ -470,8 +479,8 @@ export class WorkerManager {
    * Remove authentication token for a specific host
    */
   async removeAuthToken(host: string): Promise<void> {
-    this.authConfig.tokens = this.authConfig.tokens.filter(t => t.host !== host);
-    
+    this.authConfig.tokens = this.authConfig.tokens.filter((t) => t.host !== host);
+
     // Update the worker if initialized
     if (this.isInitialized && this.api) {
       await this.setAuthConfig(this.authConfig);
@@ -491,16 +500,16 @@ export class WorkerManager {
    */
   async resetRepoToRemote(repoId: string, branch?: string): Promise<any> {
     if (!this.isInitialized || !this.api) {
-      throw new Error('WorkerManager not initialized');
+      throw new Error("WorkerManager not initialized");
     }
 
     try {
       const result = await this.api.resetRepoToRemote({ repoId, branch });
-      
+
       if (!result.success) {
-        throw new Error(result.error || 'Reset to remote failed');
+        throw new Error(result.error || "Reset to remote failed");
       }
-      
+
       console.log(`Repository ${repoId} reset to remote commit ${result.remoteCommit}`);
       return result;
     } catch (error) {
@@ -539,10 +548,10 @@ export class WorkerManager {
 
     try {
       // Try a simple operation to verify worker is responsive
-      await this.execute('ping', {});
+      await this.execute("ping", {});
       return true;
     } catch (error) {
-      console.warn('Worker health check failed:', error);
+      console.warn("Worker health check failed:", error);
       return false;
     }
   }
@@ -551,7 +560,7 @@ export class WorkerManager {
    * Restart the worker if it becomes unresponsive
    */
   async restart(): Promise<void> {
-    console.log('Restarting git worker...');
+    console.log("Restarting git worker...");
     this.dispose();
     await this.initialize();
   }

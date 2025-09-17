@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { assertRepoAnnouncementEvent, assertRepoStateEvent, shouldValidateEvents } from '../src/lib/validation.js';
+import {
+  assertRepoAnnouncementEvent,
+  assertRepoStateEvent,
+  shouldValidateEvents
+} from '../src/lib/validation.js';
 
 // Helper to stub env and global flags deterministically
 function withEnv<K extends string>(vars: Partial<Record<K, string>>, fn: () => void) {
@@ -9,7 +13,9 @@ function withEnv<K extends string>(vars: Partial<Record<K, string>>, fn: () => v
     if (typeof v === 'undefined') delete (process as any).env[k];
     else (process as any).env[k] = v;
   }
-  try { fn(); } finally {
+  try {
+    fn();
+  } finally {
     for (const [k, v] of Object.entries(prev)) {
       if (typeof v === 'undefined') delete (process as any).env[k];
       else (process as any).env[k] = v as string;
@@ -43,7 +49,7 @@ describe('core validation guards', () => {
   it('assertRepoAnnouncementEvent passes for valid event when enabled', () => {
     withEnv({ NOSTR_GIT_VALIDATE_EVENTS: 'true' }, () => {
       expect(() =>
-        assertRepoAnnouncementEvent({ kind: 30617, tags: [["d", "repo-1"]] })
+        assertRepoAnnouncementEvent({ kind: 30617, tags: [['d', 'repo-1']] })
       ).not.toThrow();
     });
   });
@@ -62,9 +68,7 @@ describe('core validation guards', () => {
 
   it('assertRepoStateEvent passes for valid event when enabled', () => {
     withEnv({ NOSTR_GIT_VALIDATE_EVENTS: 'true' }, () => {
-      expect(() =>
-        assertRepoStateEvent({ kind: 30618, tags: [["d", "repo-1"]] })
-      ).not.toThrow();
+      expect(() => assertRepoStateEvent({ kind: 30618, tags: [['d', 'repo-1']] })).not.toThrow();
     });
   });
 

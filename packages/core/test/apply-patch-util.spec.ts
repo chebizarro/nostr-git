@@ -12,7 +12,7 @@ function makeMemFs() {
     },
     writeFile: async (p: string, data: string, enc: string) => {
       files.set(p, data);
-    },
+    }
   } as any;
   return { files, fs: { promises } };
 }
@@ -24,7 +24,7 @@ function makeGit(overrides: Partial<GitProvider> = {}): GitProvider {
     remove: vi.fn(async () => {}),
     commit: vi.fn(async () => 'abcd1234'),
     listRemotes: vi.fn(async () => []),
-    push: vi.fn(async () => {}),
+    push: vi.fn(async () => {})
   };
   return Object.assign(base, overrides) as any;
 }
@@ -46,7 +46,7 @@ describe('applyPatchAndPushUtil', () => {
         repoId: 'Org/Repo',
         patchData: { id: 'p1', commits: [], baseBranch: 'main', rawContent: patchAddReadme },
         authorName: 'A',
-        authorEmail: 'a@example.com',
+        authorEmail: 'a@example.com'
       },
       {
         rootDir: '/tmp',
@@ -55,7 +55,7 @@ describe('applyPatchAndPushUtil', () => {
         ensureFullClone: async () => ({}),
         getAuthCallback: (_url) => undefined,
         getConfiguredAuthHosts: () => [],
-        getProviderFs: () => mem.fs,
+        getProviderFs: () => mem.fs
       }
     );
 
@@ -65,7 +65,9 @@ describe('applyPatchAndPushUtil', () => {
   });
 
   it('pushes to remotes successfully', async () => {
-    const git = makeGit({ listRemotes: vi.fn(async () => [{ remote: 'origin', url: 'https://example.com/repo.git' }]) });
+    const git = makeGit({
+      listRemotes: vi.fn(async () => [{ remote: 'origin', url: 'https://example.com/repo.git' }])
+    });
     const mem = makeMemFs();
 
     const res = await applyPatchAndPushUtil(
@@ -74,7 +76,7 @@ describe('applyPatchAndPushUtil', () => {
         repoId: 'Org/Repo',
         patchData: { id: 'p2', commits: [], baseBranch: 'main', rawContent: patchAddReadme },
         authorName: 'B',
-        authorEmail: 'b@example.com',
+        authorEmail: 'b@example.com'
       },
       {
         rootDir: '/tmp',
@@ -83,7 +85,7 @@ describe('applyPatchAndPushUtil', () => {
         ensureFullClone: async () => ({}),
         getAuthCallback: (_url) => undefined,
         getConfiguredAuthHosts: () => [],
-        getProviderFs: () => mem.fs,
+        getProviderFs: () => mem.fs
       }
     );
 
@@ -103,16 +105,21 @@ describe('applyPatchAndPushUtil', () => {
 
     const git = makeGit({
       listRemotes: vi.fn(async () => []),
-      statusMatrix: vi.fn(async () => [[ 'src/app.txt', 0, 2, 2 ]]),
+      statusMatrix: vi.fn(async () => [['src/app.txt', 0, 2, 2]])
     });
 
     const res = await applyPatchAndPushUtil(
       git,
       {
         repoId,
-        patchData: { id: 'p3', commits: [], baseBranch: 'main', rawContent: patchModifyFile('src/app.txt') },
+        patchData: {
+          id: 'p3',
+          commits: [],
+          baseBranch: 'main',
+          rawContent: patchModifyFile('src/app.txt')
+        },
         authorName: 'C',
-        authorEmail: 'c@example.com',
+        authorEmail: 'c@example.com'
       },
       {
         rootDir,
@@ -121,7 +128,7 @@ describe('applyPatchAndPushUtil', () => {
         ensureFullClone: async () => ({}),
         getAuthCallback: (_url) => undefined,
         getConfiguredAuthHosts: () => [],
-        getProviderFs: () => mem.fs,
+        getProviderFs: () => mem.fs
       }
     );
 
@@ -141,17 +148,22 @@ describe('applyPatchAndPushUtil', () => {
 
     const git = makeGit({
       listRemotes: vi.fn(async () => []),
-      statusMatrix: vi.fn(async () => [[ 'docs/old.txt', 1, 0, 0 ]]),
-      remove: vi.fn(async () => {}),
+      statusMatrix: vi.fn(async () => [['docs/old.txt', 1, 0, 0]]),
+      remove: vi.fn(async () => {})
     });
 
     const res = await applyPatchAndPushUtil(
       git,
       {
         repoId,
-        patchData: { id: 'p4', commits: [], baseBranch: 'main', rawContent: patchDeleteFile('docs/old.txt') },
+        patchData: {
+          id: 'p4',
+          commits: [],
+          baseBranch: 'main',
+          rawContent: patchDeleteFile('docs/old.txt')
+        },
         authorName: 'D',
-        authorEmail: 'd@example.com',
+        authorEmail: 'd@example.com'
       },
       {
         rootDir,
@@ -160,7 +172,7 @@ describe('applyPatchAndPushUtil', () => {
         ensureFullClone: async () => ({}),
         getAuthCallback: (_url) => undefined,
         getConfiguredAuthHosts: () => [],
-        getProviderFs: () => mem.fs,
+        getProviderFs: () => mem.fs
       }
     );
 
@@ -169,7 +181,10 @@ describe('applyPatchAndPushUtil', () => {
   });
 
   it('returns error for no-op patch (status shows no changes)', async () => {
-    const git = makeGit({ listRemotes: vi.fn(async () => []), statusMatrix: vi.fn(async () => []) });
+    const git = makeGit({
+      listRemotes: vi.fn(async () => []),
+      statusMatrix: vi.fn(async () => [])
+    });
     const mem = makeMemFs();
 
     const res = await applyPatchAndPushUtil(
@@ -178,7 +193,7 @@ describe('applyPatchAndPushUtil', () => {
         repoId: 'Org/Repo',
         patchData: { id: 'p5', commits: [], baseBranch: 'main', rawContent: patchAddReadme },
         authorName: 'E',
-        authorEmail: 'e@example.com',
+        authorEmail: 'e@example.com'
       },
       {
         rootDir: '/tmp',
@@ -187,7 +202,7 @@ describe('applyPatchAndPushUtil', () => {
         ensureFullClone: async () => ({}),
         getAuthCallback: (_url) => undefined,
         getConfiguredAuthHosts: () => [],
-        getProviderFs: () => mem.fs,
+        getProviderFs: () => mem.fs
       }
     );
 
@@ -199,11 +214,12 @@ describe('applyPatchAndPushUtil', () => {
     const git = makeGit({
       listRemotes: vi.fn(async () => [
         { remote: 'origin', url: 'https://example.com/repo.git' },
-        { remote: 'backup', url: 'https://example.com/backup.git' },
+        { remote: 'backup', url: 'https://example.com/backup.git' }
       ]),
       push: vi.fn(async (args: any) => {
-        if (args.url.includes('backup')) throw Object.assign(new Error('denied'), { code: 'DENIED' });
-      }),
+        if (args.url.includes('backup'))
+          throw Object.assign(new Error('denied'), { code: 'DENIED' });
+      })
     });
     const mem = makeMemFs();
 
@@ -213,7 +229,7 @@ describe('applyPatchAndPushUtil', () => {
         repoId: 'Org/Repo',
         patchData: { id: 'p6', commits: [], baseBranch: 'main', rawContent: patchAddReadme },
         authorName: 'F',
-        authorEmail: 'f@example.com',
+        authorEmail: 'f@example.com'
       },
       {
         rootDir: '/tmp',
@@ -222,7 +238,7 @@ describe('applyPatchAndPushUtil', () => {
         ensureFullClone: async () => ({}),
         getAuthCallback: (_url) => undefined,
         getConfiguredAuthHosts: () => [],
-        getProviderFs: () => mem.fs,
+        getProviderFs: () => mem.fs
       }
     );
 
@@ -243,7 +259,7 @@ describe('applyPatchAndPushUtil', () => {
         repoId: 'Org/Repo',
         patchData: { id: 'rn1', commits: [], baseBranch: 'main', rawContent: renamePatch },
         authorName: 'G',
-        authorEmail: 'g@example.com',
+        authorEmail: 'g@example.com'
       },
       {
         rootDir: '/tmp',
@@ -252,7 +268,7 @@ describe('applyPatchAndPushUtil', () => {
         ensureFullClone: async () => ({}),
         getAuthCallback: (_url) => undefined,
         getConfiguredAuthHosts: () => [],
-        getProviderFs: () => mem.fs,
+        getProviderFs: () => mem.fs
       }
     );
 
@@ -271,7 +287,7 @@ describe('applyPatchAndPushUtil', () => {
         repoId: 'Org/Repo',
         patchData: { id: 'bn1', commits: [], baseBranch: 'main', rawContent: binaryPatch },
         authorName: 'H',
-        authorEmail: 'h@example.com',
+        authorEmail: 'h@example.com'
       },
       {
         rootDir: '/tmp',
@@ -280,7 +296,7 @@ describe('applyPatchAndPushUtil', () => {
         ensureFullClone: async () => ({}),
         getAuthCallback: (_url) => undefined,
         getConfiguredAuthHosts: () => [],
-        getProviderFs: () => ({ promises: mem.fs.promises } as any),
+        getProviderFs: () => ({ promises: mem.fs.promises }) as any
       }
     );
 

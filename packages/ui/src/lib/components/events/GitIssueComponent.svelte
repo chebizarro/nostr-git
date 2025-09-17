@@ -3,11 +3,18 @@
   Compact feed-style component for Git Issue events (kind 1621)
 -->
 <script lang="ts">
-  import { nip19, type NostrEvent } from 'nostr-tools';
-  import { onMount } from 'svelte';
-  import { CircleDot, Copy, ChevronDown, ChevronUp, BookmarkPlus, BookmarkCheck } from '@lucide/svelte';
-  import { useRegistry } from '../../useRegistry';
-  
+  import { nip19, type NostrEvent } from "nostr-tools";
+  import { onMount } from "svelte";
+  import {
+    CircleDot,
+    Copy,
+    ChevronDown,
+    ChevronUp,
+    BookmarkPlus,
+    BookmarkCheck,
+  } from "@lucide/svelte";
+  import { useRegistry } from "../../useRegistry";
+
   const { Card, Button, ProfileLink, Badge } = useRegistry();
 
   interface Props {
@@ -17,62 +24,62 @@
   let { event }: Props = $props();
 
   // Reactive state using Svelte 5 runes
-  let issueTitle = $state('');
-  let issueSubject = $state('');
-  let authorNpub = $state('');
-  let repoAddress = $state('');
+  let issueTitle = $state("");
+  let issueSubject = $state("");
+  let authorNpub = $state("");
+  let repoAddress = $state("");
   let labels = $state<string[]>([]);
   let assignees = $state<string[]>([]);
-  let status = $state('open');
+  let status = $state("open");
   let isExpanded = $state(false);
   let isBookmarked = $state(false);
 
   // Derived computed values
-  const displayTitle = $derived(issueTitle || issueSubject || 'Untitled Issue');
-  const issueContent = $derived(event.content || '');
+  const displayTitle = $derived(issueTitle || issueSubject || "Untitled Issue");
+  const issueContent = $derived(event.content || "");
   const createdDate = $derived(new Date(event.created_at * 1000));
 
   // Status color mapping
   const statusInfo = $derived.by(() => {
     switch (status.toLowerCase()) {
-      case 'open':
-        return { icon: CircleDot, color: 'text-amber-500' };
-      case 'closed':
-        return { icon: CircleDot, color: 'text-red-500' };
-      case 'draft':
-        return { icon: CircleDot, color: 'text-gray-500' };
+      case "open":
+        return { icon: CircleDot, color: "text-amber-500" };
+      case "closed":
+        return { icon: CircleDot, color: "text-red-500" };
+      case "draft":
+        return { icon: CircleDot, color: "text-gray-500" };
       default:
-        return { icon: CircleDot, color: 'text-blue-500' };
+        return { icon: CircleDot, color: "text-blue-500" };
     }
   });
 
   // Parse event tags to extract issue information
   const parseEventData = () => {
     const tags = event.tags || [];
-    
+
     for (const tag of tags) {
       switch (tag[0]) {
-        case 'title':
-          issueTitle = tag[1] || '';
+        case "title":
+          issueTitle = tag[1] || "";
           break;
-        case 'subject':
-          issueSubject = tag[1] || '';
+        case "subject":
+          issueSubject = tag[1] || "";
           break;
-        case 'a':
-          repoAddress = tag[1] || '';
+        case "a":
+          repoAddress = tag[1] || "";
           break;
-        case 'l':
+        case "l":
           if (tag[1] && !labels.includes(tag[1])) {
             labels = [...labels, tag[1]];
           }
           break;
-        case 'p':
+        case "p":
           if (tag[1] && !assignees.includes(tag[1])) {
             assignees = [...assignees, tag[1]];
           }
           break;
-        case 'status':
-          status = tag[1] || 'open';
+        case "status":
+          status = tag[1] || "open";
           break;
       }
     }
@@ -82,8 +89,8 @@
       try {
         authorNpub = nip19.npubEncode(event.pubkey);
       } catch (error) {
-        console.warn('Failed to encode npub:', error);
-        authorNpub = event.pubkey.slice(0, 16) + '...';
+        console.warn("Failed to encode npub:", error);
+        authorNpub = event.pubkey.slice(0, 16) + "...";
       }
     }
   };
@@ -100,7 +107,7 @@
     try {
       await navigator.clipboard.writeText(text);
     } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
+      console.error("Failed to copy to clipboard:", error);
     }
   };
 
@@ -120,17 +127,20 @@
 <Card class="git-card hover:bg-accent/50 transition-colors">
   <div class="flex items-start gap-3">
     <statusInfo.icon class={`h-6 w-6 mt-1 ${statusInfo.color}`} />
-    
+
     <div class="flex-1">
       <div class="flex items-center justify-between">
         <div class="flex-1">
           <a href={`issues/${event.id}`} class="block">
-            <h3 class="text-base font-semibold mb-0.5 leading-tight hover:text-accent transition-colors" title={displayTitle}>
+            <h3
+              class="text-base font-semibold mb-0.5 leading-tight hover:text-accent transition-colors"
+              title={displayTitle}
+            >
               {displayTitle}
             </h3>
           </a>
         </div>
-        
+
         <div class="flex items-center gap-2">
           <Button
             variant="ghost"
@@ -159,7 +169,7 @@
           </Button>
         </div>
       </div>
-      
+
       <div class="flex items-center gap-2 text-xs text-muted-foreground mb-1">
         <span>Opened by <ProfileLink pubkey={event.pubkey} /></span>
         <span>•</span>
@@ -176,16 +186,16 @@
         <p class="text-sm text-muted-foreground mb-3">
           {issueContent}
         </p>
-        
+
         {#if repoAddress}
           <div class="flex items-center gap-2 mb-2">
             <span class="text-xs text-muted-foreground">Repository:</span>
             <code class="bg-muted px-2 py-1 rounded text-xs font-mono">
               {repoAddress}
             </code>
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               class="h-6 px-1 text-xs"
               onclick={() => copyToClipboard(repoAddress)}
               title="Copy repository address"

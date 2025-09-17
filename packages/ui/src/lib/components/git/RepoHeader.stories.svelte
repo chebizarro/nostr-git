@@ -99,22 +99,22 @@
     activeTab="overview"
   >
     {#snippet children(activeTab)}
-      <RepoTab tabValue="overview" label="Overview" href="/repo/overview" {activeTab}>
+      <RepoTab tabValue="overview" label="Overview" href="/repo/overview" activeTab={activeTab}>
         {#snippet icon()}
           <FileCode class="h-4 w-4" />
         {/snippet}
       </RepoTab>
-      <RepoTab tabValue="code" label="Code" href="/repo/code" {activeTab}>
+      <RepoTab tabValue="code" label="Code" href="/repo/code" activeTab={activeTab}>
         {#snippet icon()}
           <GitBranch class="h-4 w-4" />
         {/snippet}
       </RepoTab>
-      <RepoTab tabValue="issues" label="Issues" href="/repo/issues" {activeTab}>
+      <RepoTab tabValue="issues" label="Issues" href="/repo/issues" activeTab={activeTab}>
         {#snippet icon()}
           <CircleAlert class="h-4 w-4" />
         {/snippet}
       </RepoTab>
-      <RepoTab tabValue="patches" label="Patches" href="/repo/patches" {activeTab}>
+      <RepoTab tabValue="patches" label="Patches" href="/repo/patches" activeTab={activeTab}>
         {#snippet icon()}
           <GitPullRequest class="h-4 w-4" />
         {/snippet}

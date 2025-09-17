@@ -1,4 +1,4 @@
-declare module '@xterm/addon-fit' {
+declare module "@xterm/addon-fit" {
   export class FitAddon {
     activate(terminal: any): void;
     fit(): void;

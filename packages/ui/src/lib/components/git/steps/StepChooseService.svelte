@@ -1,13 +1,13 @@
 <script lang="ts">
-  import ProviderSelectionStep from '../ProviderSelectionStep.svelte';
-  import type { Token } from '$lib/stores/tokens.js';
+  import ProviderSelectionStep from "../ProviderSelectionStep.svelte";
+  import type { Token } from "$lib/stores/tokens.js";
 
   interface Props {
     tokens: Token[];
-    selectedProvider: 'github'|'gitlab'|'gitea'|'bitbucket'|'grasp' | null;
+    selectedProvider: "github" | "gitlab" | "gitea" | "bitbucket" | "grasp" | null;
     relayUrl?: string;
     disabledProviders?: string[];
-    onProviderChange: (p: 'github'|'gitlab'|'gitea'|'bitbucket'|'grasp') => void;
+    onProviderChange: (p: "github" | "gitlab" | "gitea" | "bitbucket" | "grasp") => void;
     onRelayUrlChange?: (url: string) => void;
     graspServerOptions?: string[];
   }
@@ -28,7 +28,7 @@
     selectedProvider={selectedProvider || undefined}
     onProviderChange={onProviderChange as any}
     disabledProviders={disabledProviders}
-    relayUrl={relayUrl || ''}
+    relayUrl={relayUrl || ""}
     onRelayUrlChange={onRelayUrlChange as any}
     graspServerOptions={graspServerOptions}
   />

@@ -1,1 +1,1 @@
-export { PermalinkExtension, type PermalinkExtensionOptions } from './PermalinkExtension.js';
+export { PermalinkExtension, type PermalinkExtensionOptions } from "./PermalinkExtension.js";

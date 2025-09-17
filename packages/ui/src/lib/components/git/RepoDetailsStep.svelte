@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { tokens as tokensStore, type Token } from '../../stores/tokens.js';
-  
+  import { tokens as tokensStore, type Token } from "../../stores/tokens.js";
+
   interface Props {
     repoName: string;
     description: string;
@@ -49,30 +49,30 @@
     onLicenseChange,
     validationErrors = {},
     nameAvailabilityResults = null,
-    isCheckingAvailability = false
+    isCheckingAvailability = false,
   }: Props = $props();
-  
+
   // State for real-time repository name validation
-  let lastCheckedName = $state<string>('');
+  let lastCheckedName = $state<string>("");
   let tokens = $state<Token[]>([]);
-  
+
   // Subscribe to token store
   tokensStore.subscribe((t) => {
     tokens = t;
   });
 
   const gitignoreOptions = [
-    { value: '', label: 'None' },
-    { value: 'node', label: 'Node.js' },
-    { value: 'python', label: 'Python' },
-    { value: 'web', label: 'Web Development' },
-    { value: 'svelte', label: 'Svelte' }
+    { value: "", label: "None" },
+    { value: "node", label: "Node.js" },
+    { value: "python", label: "Python" },
+    { value: "web", label: "Web Development" },
+    { value: "svelte", label: "Svelte" },
   ];
 
   const licenseOptions = [
-    { value: '', label: 'None' },
-    { value: 'mit', label: 'MIT License' },
-    { value: 'apache-2.0', label: 'Apache License 2.0' }
+    { value: "", label: "None" },
+    { value: "mit", label: "MIT License" },
+    { value: "apache-2.0", label: "Apache License 2.0" },
   ];
 
   function handleGitignoreChange(event: Event) {
@@ -92,23 +92,23 @@
 
   function validateRepoName(name: string): string | undefined {
     if (!name.trim()) {
-      return 'Repository name is required';
+      return "Repository name is required";
     }
     if (name.length < 3) {
-      return 'Repository name must be at least 3 characters';
+      return "Repository name must be at least 3 characters";
     }
     if (name.length > 100) {
-      return 'Repository name must be 100 characters or less';
+      return "Repository name must be 100 characters or less";
     }
     if (!/^[a-zA-Z0-9._-]+$/.test(name)) {
-      return 'Repository name can only contain letters, numbers, dots, hyphens, and underscores';
+      return "Repository name can only contain letters, numbers, dots, hyphens, and underscores";
     }
     return undefined;
   }
 
   function validateDescription(desc: string): string | undefined {
     if (desc.length > 350) {
-      return 'Description must be 350 characters or less';
+      return "Description must be 350 characters or less";
     }
     return undefined;
   }
@@ -136,12 +136,8 @@
 
 <div class="space-y-6">
   <div class="space-y-4">
-    <h2 class="text-xl font-semibold text-gray-100">
-      Repository Details
-    </h2>
-    <p class="text-sm text-gray-300">
-      Set up the basic information for your new repository.
-    </p>
+    <h2 class="text-xl font-semibold text-gray-100">Repository Details</h2>
+    <p class="text-sm text-gray-300">Set up the basic information for your new repository.</p>
   </div>
 
   <div class="space-y-4">
@@ -160,13 +156,16 @@
           placeholder="my-awesome-project"
           class="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
           class:border-red-500={validationErrors.name}
-          class:border-green-500={nameAvailabilityResults && nameAvailabilityResults.availableProviders.length > 0}
+          class:border-green-500={nameAvailabilityResults &&
+            nameAvailabilityResults.availableProviders.length > 0}
           class:focus:ring-red-500={validationErrors.name}
-          class:focus:ring-green-500={nameAvailabilityResults && nameAvailabilityResults.availableProviders.length > 0}
+          class:focus:ring-green-500={nameAvailabilityResults &&
+            nameAvailabilityResults.availableProviders.length > 0}
           class:focus:border-red-500={validationErrors.name}
-          class:focus:border-green-500={nameAvailabilityResults && nameAvailabilityResults.availableProviders.length > 0}
+          class:focus:border-green-500={nameAvailabilityResults &&
+            nameAvailabilityResults.availableProviders.length > 0}
         />
-        
+
         <!-- Loading/Status Indicator -->
         <div class="absolute inset-y-0 right-0 flex items-center pr-3">
           {#if isCheckingAvailability}
@@ -174,22 +173,28 @@
           {/if}
         </div>
       </div>
-      
+
       <!-- Error Messages -->
       {#if validationErrors.name}
         <p class="mt-1 text-sm text-red-400">
           {validationErrors.name}
         </p>
       {/if}
-      
+
       <!-- Repository Name Availability Status -->
       {#if repoName.trim() && tokens.length > 0}
-        <div class="mt-2 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-          <h4 class="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Repository Name Availability</h4>
-          
+        <div
+          class="mt-2 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
+        >
+          <h4 class="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+            Repository Name Availability
+          </h4>
+
           {#if isCheckingAvailability}
             <div class="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
-              <div class="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+              <div
+                class="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"
+              ></div>
               <span>Checking availability on selected provider...</span>
             </div>
           {:else if nameAvailabilityResults}
@@ -209,19 +214,28 @@
                       <span class="text-red-600 dark:text-red-400">✗ Taken</span>
                     {/if}
                     {#if result.error}
-                      <span class="text-yellow-600 dark:text-yellow-400" title={result.error}>⚠</span>
+                      <span class="text-yellow-600 dark:text-yellow-400" title={result.error}
+                        >⚠</span
+                      >
                     {/if}
                   </div>
                 </div>
               {/each}
-              
+
               {#if nameAvailabilityResults.hasConflicts}
-                <div class="mt-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-700 dark:text-red-400">
-                  <strong>Warning:</strong> This repository name is already taken on the selected provider{#if nameAvailabilityResults.conflictProviders[0]} ({nameAvailabilityResults.conflictProviders[0]}){/if}.
+                <div
+                  class="mt-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-700 dark:text-red-400"
+                >
+                  <strong>Warning:</strong> This repository name is already taken on the selected
+                  provider{#if nameAvailabilityResults.conflictProviders[0]}
+                    ({nameAvailabilityResults.conflictProviders[0]}){/if}.
                 </div>
               {:else if nameAvailabilityResults.availableProviders.length > 0}
-                <div class="mt-2 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded text-sm text-green-700 dark:text-green-400">
-                  <strong>Good news!</strong> Repository name is available on the selected provider{#if nameAvailabilityResults.availableProviders[0]} ({nameAvailabilityResults.availableProviders[0]}){/if}.
+                <div
+                  class="mt-2 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded text-sm text-green-700 dark:text-green-400"
+                >
+                  <strong>Good news!</strong> Repository name is available on the selected provider{#if nameAvailabilityResults.availableProviders[0]}
+                    ({nameAvailabilityResults.availableProviders[0]}){/if}.
                 </div>
               {/if}
             </div>
@@ -262,9 +276,7 @@
     <!-- Initialize with README -->
     <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
       <div class="space-y-3">
-        <h3 class="text-sm font-medium text-gray-300">
-          Initialize repository
-        </h3>
+        <h3 class="text-sm font-medium text-gray-300">Initialize repository</h3>
         <label class="flex items-center space-x-3 cursor-pointer">
           <input
             type="checkbox"
@@ -273,9 +285,7 @@
             class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
           />
           <div>
-            <div class="text-sm font-medium text-gray-100">
-              Add a README file
-            </div>
+            <div class="text-sm font-medium text-gray-100">Add a README file</div>
             <div class="text-sm text-gray-400">
               This is where you can write a long description for your project
             </div>

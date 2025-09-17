@@ -1,11 +1,10 @@
-import { Extension } from '@tiptap/core';
-import { Plugin, PluginKey } from '@tiptap/pm/state';
-import { type EventTemplate, type NostrEvent } from 'nostr-tools';
-import { PermalinkNode } from './PermalinkNodeView.svelte';
-import type { Component } from 'svelte';
-import { isPermalink } from '@nostr-git/core';
-import Spinner from './Spinner.svelte';
-
+import { Extension } from "@tiptap/core";
+import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { type EventTemplate, type NostrEvent } from "nostr-tools";
+import { PermalinkNode } from "./PermalinkNodeView.svelte";
+import type { Component } from "svelte";
+import { isPermalink } from "@nostr-git/core";
+import Spinner from "./Spinner.svelte";
 
 export interface PermalinkExtensionOptions {
   signer: (event: EventTemplate) => Promise<NostrEvent>;
@@ -14,14 +13,14 @@ export interface PermalinkExtensionOptions {
 }
 
 export const PermalinkExtension = Extension.create<PermalinkExtensionOptions>({
-  name: 'permalinkExtension',
+  name: "permalinkExtension",
 
   addOptions() {
     return {
-      signer: (() => {
-        throw new Error('nostr.signEvent is not available');
-      }),
-      relays: ['wss://relay.damus.io'],
+      signer: () => {
+        throw new Error("nostr.signEvent is not available");
+      },
+      relays: ["wss://relay.damus.io"],
       spinnerComponent: Spinner,
     };
   },
@@ -32,17 +31,17 @@ export const PermalinkExtension = Extension.create<PermalinkExtensionOptions>({
         signer: this.options.signer,
         relays: this.options.relays,
         spinnerComponent: this.options.spinnerComponent,
-      })
+      }),
     ];
   },
 
   addProseMirrorPlugins() {
     return [
       new Plugin({
-        key: new PluginKey('permalinkHandler'),
+        key: new PluginKey("permalinkHandler"),
         props: {
           handlePaste: (view, event) => {
-            const pastedText = event.clipboardData?.getData('text/plain');
+            const pastedText = event.clipboardData?.getData("text/plain");
             if (!pastedText) {
               return false;
             }
@@ -53,13 +52,13 @@ export const PermalinkExtension = Extension.create<PermalinkExtensionOptions>({
               const { state, dispatch } = view;
               const permalinkNodeType = state.schema.nodes.permalinkNode;
               if (!permalinkNodeType) {
-                console.warn('PermalinkNode type not found in schema.');
+                console.warn("PermalinkNode type not found in schema.");
                 return false;
               }
 
               const node = permalinkNodeType.create({
                 permalink: pastedText,
-                isLoading: true
+                isLoading: true,
               });
 
               dispatch(state.tr.replaceSelectionWith(node));
@@ -67,9 +66,9 @@ export const PermalinkExtension = Extension.create<PermalinkExtensionOptions>({
             } else {
               return false;
             }
-          }
-        }
-      })
+          },
+        },
+      }),
     ];
-  }
+  },
 });

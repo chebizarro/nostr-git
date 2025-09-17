@@ -2,37 +2,37 @@
   "compilerOptions": {
     // Target ES2020 for modern JavaScript features while maintaining broad compatibility
     "target": "ES2020",
-    
+
     // Use ESNext modules for tree-shaking and modern import/export syntax
     "module": "ESNext",
-    
+
     // Node.js module resolution for proper package resolution in monorepo
     "moduleResolution": "Node",
-    
+
     // Enable interoperability between CommonJS and ES modules
     "esModuleInterop": true,
-    
+
     // Enforce consistent file name casing across different file systems
     "forceConsistentCasingInFileNames": true,
-    
+
     // Enable all strict type checking options for better code quality
     "strict": true,
-    
+
     // Skip type checking of declaration files to improve compilation speed
     "skipLibCheck": true,
-    
+
     // Allow importing JSON files as modules (useful for package.json imports)
     "resolveJsonModule": true,
-    
+
     // Generate .d.ts declaration files for TypeScript consumers
     "declaration": true,
-    
+
     // Output directory for compiled files (each package overrides this)
     "outDir": "dist",
-    
+
     // Base URL for relative path resolution
     "baseUrl": ".",
-    
+
     // Path mapping for workspace packages to enable cross-package imports
     "paths": {
       "@nostr-git/core": ["packages/core/src"],

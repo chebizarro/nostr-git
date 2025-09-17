@@ -18,13 +18,17 @@ function createToastStore() {
   function push(toast: Toast) {
     // Normalize toast format - convert legacy format to new format
     const normalizedToast: Toast = {
-      message: toast.message || (toast.title && toast.description ? `${toast.title}: ${toast.description}` : toast.title || toast.description || ''),
+      message:
+        toast.message ||
+        (toast.title && toast.description
+          ? `${toast.title}: ${toast.description}`
+          : toast.title || toast.description || ""),
       timeout: toast.timeout || toast.duration,
-      theme: toast.theme || (toast.variant === 'destructive' ? 'error' : undefined),
+      theme: toast.theme || (toast.variant === "destructive" ? "error" : undefined),
       // Keep legacy fields for backward compatibility
-      ...toast
+      ...toast,
     };
-    
+
     update((toasts) => [...toasts, normalizedToast]);
     // Optionally auto-remove after timeout/duration
     const timeout = normalizedToast.timeout || normalizedToast.duration;

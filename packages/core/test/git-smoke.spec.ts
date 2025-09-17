@@ -8,7 +8,8 @@ describe('git provider smoke', () => {
   it('init + version + statusMatrix should work', async () => {
     const { getGitProvider } = await import('../src/lib/git-provider.js');
     const git = getGitProvider();
-    const isBrowserLike = typeof window !== 'undefined' && typeof (globalThis as any).indexedDB !== 'undefined';
+    const isBrowserLike =
+      typeof window !== 'undefined' && typeof (globalThis as any).indexedDB !== 'undefined';
     const dir = isBrowserLike ? '/smoke-repo' : mkdtempSync(join(tmpdir(), 'nostr-git-smoke-'));
 
     await git.init({ dir });

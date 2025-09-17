@@ -59,7 +59,7 @@ export function buildPatchGraph(patches: PatchEvent[]): Map<string, PatchNode> {
       isRevisionRoot: anyRootRevision,
       commit,
       allEventIds,
-      supersededEventIds,
+      supersededEventIds
     });
   }
 

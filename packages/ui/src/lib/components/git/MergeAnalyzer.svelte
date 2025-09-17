@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { FileText, TrendingUp, AlertTriangle, CheckCircle, GitMerge } from '@lucide/svelte';
+  import { FileText, TrendingUp, AlertTriangle, CheckCircle, GitMerge } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
   const { Card, CardContent, CardHeader, CardTitle, Progress, Badge } = useRegistry();
-  import DiffViewer from './DiffViewer.svelte';
+  import DiffViewer from "./DiffViewer.svelte";
 
   interface Props {
     analysis: {
@@ -24,8 +24,7 @@
   }
 
   // Normalize diff input for DiffViewer
-  const normalizedDiff = $derived(() => Array.isArray(patch) ? patch : (patch?.diff ?? []));
-
+  const normalizedDiff = $derived(() => (Array.isArray(patch) ? patch : (patch?.diff ?? [])));
 </script>
 
 <div class="space-y-6">
@@ -37,9 +36,12 @@
           <TrendingUp class="h-5 w-5" />
           Compatibility Analysis
         </CardTitle>
-        <button class="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded border hover:bg-accent transition-colors disabled:opacity-50"
-                disabled={!!analyzing}
-                onclick={handleAnalyze} aria-label="Analyze patch">
+        <button
+          class="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded border hover:bg-accent transition-colors disabled:opacity-50"
+          disabled={!!analyzing}
+          onclick={handleAnalyze}
+          aria-label="Analyze patch"
+        >
           <GitMerge class="h-4 w-4" />
           Analyze
         </button>
@@ -56,7 +58,7 @@
           </div>
           <Progress value={analysis.similarity * 100} class="h-2" />
         </div>
-        
+
         <div class="grid grid-cols-3 gap-4 pt-2">
           <div class="text-center">
             <div class="flex items-center justify-center gap-1 mb-1">
@@ -68,17 +70,17 @@
               <span class="text-sm font-medium">Merge Status</span>
             </div>
             <Badge variant={analysis.autoMergeable ? "default" : "destructive"}>
-              {analysis.autoMergeable ? 'Auto-mergeable' : 'Manual required'}
+              {analysis.autoMergeable ? "Auto-mergeable" : "Manual required"}
             </Badge>
           </div>
-          
+
           <div class="text-center">
             <div class="text-lg font-bold text-purple-600">
               {analysis.affectedFiles.length}
             </div>
             <div class="text-xs text-muted-foreground">Files affected</div>
           </div>
-          
+
           <div class="text-center">
             <div class="text-lg font-bold text-orange-600">
               {analysis.conflictCount}

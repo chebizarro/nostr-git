@@ -1,26 +1,26 @@
 /**
  * Bitbucket REST API Implementation
- * 
+ *
  * Implements the GitServiceApi interface for Bitbucket's REST API v2.0.
  * Supports Bitbucket Cloud (bitbucket.org).
- * 
+ *
  * API Documentation: https://developer.atlassian.com/bitbucket/api/2/reference/
  */
 
-import type { 
-  GitServiceApi, 
-  RepoMetadata, 
-  Commit, 
-  Issue, 
-  PullRequest, 
-  Patch, 
-  NewIssue, 
-  NewPullRequest, 
-  ListCommitsOptions, 
-  ListIssuesOptions, 
-  ListPullRequestsOptions, 
-  User, 
-  GitForkOptions 
+import type {
+  GitServiceApi,
+  RepoMetadata,
+  Commit,
+  Issue,
+  PullRequest,
+  Patch,
+  NewIssue,
+  NewPullRequest,
+  ListCommitsOptions,
+  ListIssuesOptions,
+  ListPullRequestsOptions,
+  User,
+  GitForkOptions
 } from '../api.js';
 
 /**
@@ -40,14 +40,14 @@ export class BitbucketApi implements GitServiceApi {
    */
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    
+
     const response = await fetch(url, {
       ...options,
       headers: {
-        'Authorization': `Bearer ${this.token}`,
+        Authorization: `Bearer ${this.token}`,
         'Content-Type': 'application/json',
-        ...options.headers,
-      },
+        ...options.headers
+      }
     });
 
     if (!response.ok) {
@@ -63,7 +63,7 @@ export class BitbucketApi implements GitServiceApi {
    */
   async getRepo(owner: string, repo: string): Promise<RepoMetadata> {
     const data = await this.request<any>(`/repositories/${owner}/${repo}`);
-    
+
     return {
       id: data.uuid,
       name: data.name,
@@ -75,15 +75,20 @@ export class BitbucketApi implements GitServiceApi {
       htmlUrl: data.links.html.href,
       owner: {
         login: data.owner.username,
-        type: data.owner.type === 'team' ? 'Organization' : 'User',
-      },
+        type: data.owner.type === 'team' ? 'Organization' : 'User'
+      }
     };
   }
 
-  async createRepo(options: { name: string; description?: string; private?: boolean; autoInit?: boolean }): Promise<RepoMetadata> {
+  async createRepo(options: {
+    name: string;
+    description?: string;
+    private?: boolean;
+    autoInit?: boolean;
+  }): Promise<RepoMetadata> {
     // Get current user to determine workspace
     const currentUser = await this.getCurrentUser();
-    
+
     const data = await this.request<any>(`/repositories/${currentUser.login}/${options.name}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -92,8 +97,8 @@ export class BitbucketApi implements GitServiceApi {
         description: options.description,
         is_private: options.private || false,
         has_wiki: false,
-        has_issues: true,
-      }),
+        has_issues: true
+      })
     });
 
     return {
@@ -107,20 +112,24 @@ export class BitbucketApi implements GitServiceApi {
       htmlUrl: data.links.html.href,
       owner: {
         login: data.owner.username,
-        type: data.owner.type === 'team' ? 'Organization' : 'User',
-      },
+        type: data.owner.type === 'team' ? 'Organization' : 'User'
+      }
     };
   }
 
-  async updateRepo(owner: string, repo: string, updates: { name?: string; description?: string; private?: boolean }): Promise<RepoMetadata> {
+  async updateRepo(
+    owner: string,
+    repo: string,
+    updates: { name?: string; description?: string; private?: boolean }
+  ): Promise<RepoMetadata> {
     const data = await this.request<any>(`/repositories/${owner}/${repo}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: updates.name,
         description: updates.description,
-        is_private: updates.private,
-      }),
+        is_private: updates.private
+      })
     });
 
     return {
@@ -134,8 +143,8 @@ export class BitbucketApi implements GitServiceApi {
       htmlUrl: data.links.html.href,
       owner: {
         login: data.owner.username,
-        type: data.owner.type === 'team' ? 'Organization' : 'User',
-      },
+        type: data.owner.type === 'team' ? 'Organization' : 'User'
+      }
     };
   }
 
@@ -148,7 +157,7 @@ export class BitbucketApi implements GitServiceApi {
     const data = await this.request<any>(`/repositories/${owner}/${repo}/forks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(body)
     });
 
     return {
@@ -162,8 +171,8 @@ export class BitbucketApi implements GitServiceApi {
       htmlUrl: data.links.html.href,
       owner: {
         login: data.owner.username,
-        type: data.owner.type === 'team' ? 'Organization' : 'User',
-      },
+        type: data.owner.type === 'team' ? 'Organization' : 'User'
+      }
     };
   }
 
@@ -178,53 +187,55 @@ export class BitbucketApi implements GitServiceApi {
 
     const queryString = params.toString();
     const endpoint = `/repositories/${owner}/${repo}/commits${queryString ? `?${queryString}` : ''}`;
-    
+
     const data = await this.request<any>(endpoint);
-    
+
     return data.values.map((commit: any) => ({
       sha: commit.hash,
       message: commit.message,
       author: {
         name: commit.author.user?.display_name || commit.author.raw,
         email: commit.author.user?.email || '',
-        date: commit.date,
+        date: commit.date
       },
       committer: {
         name: commit.author.user?.display_name || commit.author.raw,
         email: commit.author.user?.email || '',
-        date: commit.date,
+        date: commit.date
       },
       url: commit.links.self.href,
       htmlUrl: commit.links.html.href,
-      parents: commit.parents?.map((parent: any) => ({
-        sha: parent.hash,
-        url: parent.links.self.href,
-      })) || [],
+      parents:
+        commit.parents?.map((parent: any) => ({
+          sha: parent.hash,
+          url: parent.links.self.href
+        })) || []
     }));
   }
 
   async getCommit(owner: string, repo: string, sha: string): Promise<Commit> {
     const data = await this.request<any>(`/repositories/${owner}/${repo}/commit/${sha}`);
-    
+
     return {
       sha: data.hash,
       message: data.message,
       author: {
         name: data.author.user?.display_name || data.author.raw,
         email: data.author.user?.email || '',
-        date: data.date,
+        date: data.date
       },
       committer: {
         name: data.author.user?.display_name || data.author.raw,
         email: data.author.user?.email || '',
-        date: data.date,
+        date: data.date
       },
       url: data.links.self.href,
       htmlUrl: data.links.html.href,
-      parents: data.parents?.map((parent: any) => ({
-        sha: parent.hash,
-        url: parent.links.self.href,
-      })) || [],
+      parents:
+        data.parents?.map((parent: any) => ({
+          sha: parent.hash,
+          url: parent.links.self.href
+        })) || []
     };
   }
 
@@ -241,9 +252,9 @@ export class BitbucketApi implements GitServiceApi {
 
     const queryString = params.toString();
     const endpoint = `/repositories/${owner}/${repo}/issues${queryString ? `?${queryString}` : ''}`;
-    
+
     const data = await this.request<any>(endpoint);
-    
+
     return data.values.map((issue: any) => ({
       id: issue.id,
       number: issue.id,
@@ -252,24 +263,28 @@ export class BitbucketApi implements GitServiceApi {
       state: issue.state === 'closed' ? 'closed' : 'open',
       author: {
         login: issue.reporter.username,
-        avatarUrl: issue.reporter.links.avatar.href,
+        avatarUrl: issue.reporter.links.avatar.href
       },
-      assignees: issue.assignee ? [{
-        login: issue.assignee.username,
-        avatarUrl: issue.assignee.links.avatar.href,
-      }] : [],
+      assignees: issue.assignee
+        ? [
+            {
+              login: issue.assignee.username,
+              avatarUrl: issue.assignee.links.avatar.href
+            }
+          ]
+        : [],
       labels: [], // Bitbucket doesn't have labels in the same way
       createdAt: issue.created_on,
       updatedAt: issue.updated_on,
       closedAt: issue.state === 'closed' ? issue.updated_on : undefined,
       url: issue.links.self.href,
-      htmlUrl: issue.links.html.href,
+      htmlUrl: issue.links.html.href
     }));
   }
 
   async getIssue(owner: string, repo: string, issueNumber: number): Promise<Issue> {
     const data = await this.request<any>(`/repositories/${owner}/${repo}/issues/${issueNumber}`);
-    
+
     return {
       id: data.id,
       number: data.id,
@@ -278,18 +293,22 @@ export class BitbucketApi implements GitServiceApi {
       state: data.state === 'closed' ? 'closed' : 'open',
       author: {
         login: data.reporter.username,
-        avatarUrl: data.reporter.links.avatar.href,
+        avatarUrl: data.reporter.links.avatar.href
       },
-      assignees: data.assignee ? [{
-        login: data.assignee.username,
-        avatarUrl: data.assignee.links.avatar.href,
-      }] : [],
+      assignees: data.assignee
+        ? [
+            {
+              login: data.assignee.username,
+              avatarUrl: data.assignee.links.avatar.href
+            }
+          ]
+        : [],
       labels: [],
       createdAt: data.created_on,
       updatedAt: data.updated_on,
       closedAt: data.state === 'closed' ? data.updated_on : undefined,
       url: data.links.self.href,
-      htmlUrl: data.links.html.href,
+      htmlUrl: data.links.html.href
     };
   }
 
@@ -301,10 +320,10 @@ export class BitbucketApi implements GitServiceApi {
         title: issue.title,
         content: {
           raw: issue.body,
-          markup: 'markdown',
+          markup: 'markdown'
         },
-        kind: 'bug', // Bitbucket requires a kind
-      }),
+        kind: 'bug' // Bitbucket requires a kind
+      })
     });
 
     return {
@@ -315,22 +334,31 @@ export class BitbucketApi implements GitServiceApi {
       state: data.state === 'closed' ? 'closed' : 'open',
       author: {
         login: data.reporter.username,
-        avatarUrl: data.reporter.links.avatar.href,
+        avatarUrl: data.reporter.links.avatar.href
       },
-      assignees: data.assignee ? [{
-        login: data.assignee.username,
-        avatarUrl: data.assignee.links.avatar.href,
-      }] : [],
+      assignees: data.assignee
+        ? [
+            {
+              login: data.assignee.username,
+              avatarUrl: data.assignee.links.avatar.href
+            }
+          ]
+        : [],
       labels: [],
       createdAt: data.created_on,
       updatedAt: data.updated_on,
       closedAt: data.state === 'closed' ? data.updated_on : undefined,
       url: data.links.self.href,
-      htmlUrl: data.links.html.href,
+      htmlUrl: data.links.html.href
     };
   }
 
-  async updateIssue(owner: string, repo: string, issueNumber: number, updates: Partial<NewIssue>): Promise<Issue> {
+  async updateIssue(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    updates: Partial<NewIssue>
+  ): Promise<Issue> {
     const body: any = {};
     if (updates.title) body.title = updates.title;
     if (updates.body) body.content = { raw: updates.body, markup: 'markdown' };
@@ -338,7 +366,7 @@ export class BitbucketApi implements GitServiceApi {
     const data = await this.request<any>(`/repositories/${owner}/${repo}/issues/${issueNumber}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(body)
     });
 
     return {
@@ -349,18 +377,22 @@ export class BitbucketApi implements GitServiceApi {
       state: data.state === 'closed' ? 'closed' : 'open',
       author: {
         login: data.reporter.username,
-        avatarUrl: data.reporter.links.avatar.href,
+        avatarUrl: data.reporter.links.avatar.href
       },
-      assignees: data.assignee ? [{
-        login: data.assignee.username,
-        avatarUrl: data.assignee.links.avatar.href,
-      }] : [],
+      assignees: data.assignee
+        ? [
+            {
+              login: data.assignee.username,
+              avatarUrl: data.assignee.links.avatar.href
+            }
+          ]
+        : [],
       labels: [],
       createdAt: data.created_on,
       updatedAt: data.updated_on,
       closedAt: data.state === 'closed' ? data.updated_on : undefined,
       url: data.links.self.href,
-      htmlUrl: data.links.html.href,
+      htmlUrl: data.links.html.href
     };
   }
 
@@ -368,7 +400,7 @@ export class BitbucketApi implements GitServiceApi {
     const data = await this.request<any>(`/repositories/${owner}/${repo}/issues/${issueNumber}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ state: 'closed' }),
+      body: JSON.stringify({ state: 'closed' })
     });
 
     return {
@@ -379,59 +411,67 @@ export class BitbucketApi implements GitServiceApi {
       state: 'closed',
       author: {
         login: data.reporter.username,
-        avatarUrl: data.reporter.links.avatar.href,
+        avatarUrl: data.reporter.links.avatar.href
       },
-      assignees: data.assignee ? [{
-        login: data.assignee.username,
-        avatarUrl: data.assignee.links.avatar.href,
-      }] : [],
+      assignees: data.assignee
+        ? [
+            {
+              login: data.assignee.username,
+              avatarUrl: data.assignee.links.avatar.href
+            }
+          ]
+        : [],
       labels: [],
       createdAt: data.created_on,
       updatedAt: data.updated_on,
       closedAt: data.updated_on,
       url: data.links.self.href,
-      htmlUrl: data.links.html.href,
+      htmlUrl: data.links.html.href
     };
   }
 
   /**
    * Pull Request Operations
    */
-  async listPullRequests(owner: string, repo: string, options?: ListPullRequestsOptions): Promise<PullRequest[]> {
+  async listPullRequests(
+    owner: string,
+    repo: string,
+    options?: ListPullRequestsOptions
+  ): Promise<PullRequest[]> {
     const params = new URLSearchParams();
     if (options?.state) params.append('state', options.state.toUpperCase());
     if (options?.per_page) params.append('pagelen', options.per_page.toString());
 
     const queryString = params.toString();
     const endpoint = `/repositories/${owner}/${repo}/pullrequests${queryString ? `?${queryString}` : ''}`;
-    
+
     const data = await this.request<any>(endpoint);
-    
+
     return data.values.map((pr: any) => ({
       id: pr.id,
       number: pr.id,
       title: pr.title,
       body: pr.description || '',
-      state: pr.state === 'MERGED' ? 'merged' : (pr.state === 'DECLINED' ? 'closed' : 'open'),
+      state: pr.state === 'MERGED' ? 'merged' : pr.state === 'DECLINED' ? 'closed' : 'open',
       author: {
         login: pr.author.username,
-        avatarUrl: pr.author.links.avatar.href,
+        avatarUrl: pr.author.links.avatar.href
       },
       head: {
         ref: pr.source.branch.name,
         sha: pr.source.commit.hash,
         repo: {
           name: pr.source.repository.name,
-          owner: pr.source.repository.owner.username,
-        },
+          owner: pr.source.repository.owner.username
+        }
       },
       base: {
         ref: pr.destination.branch.name,
         sha: pr.destination.commit.hash,
         repo: {
           name: pr.destination.repository.name,
-          owner: pr.destination.repository.owner.username,
-        },
+          owner: pr.destination.repository.owner.username
+        }
       },
       mergeable: pr.state === 'OPEN',
       merged: pr.state === 'MERGED',
@@ -441,38 +481,38 @@ export class BitbucketApi implements GitServiceApi {
       url: pr.links.self.href,
       htmlUrl: pr.links.html.href,
       diffUrl: pr.links.diff.href,
-      patchUrl: pr.links.diff.href, // Bitbucket uses same URL for diff and patch
+      patchUrl: pr.links.diff.href // Bitbucket uses same URL for diff and patch
     }));
   }
 
   async getPullRequest(owner: string, repo: string, prNumber: number): Promise<PullRequest> {
     const data = await this.request<any>(`/repositories/${owner}/${repo}/pullrequests/${prNumber}`);
-    
+
     return {
       id: data.id,
       number: data.id,
       title: data.title,
       body: data.description || '',
-      state: data.state === 'MERGED' ? 'merged' : (data.state === 'DECLINED' ? 'closed' : 'open'),
+      state: data.state === 'MERGED' ? 'merged' : data.state === 'DECLINED' ? 'closed' : 'open',
       author: {
         login: data.author.username,
-        avatarUrl: data.author.links.avatar.href,
+        avatarUrl: data.author.links.avatar.href
       },
       head: {
         ref: data.source.branch.name,
         sha: data.source.commit.hash,
         repo: {
           name: data.source.repository.name,
-          owner: data.source.repository.owner.username,
-        },
+          owner: data.source.repository.owner.username
+        }
       },
       base: {
         ref: data.destination.branch.name,
         sha: data.destination.commit.hash,
         repo: {
           name: data.destination.repository.name,
-          owner: data.destination.repository.owner.username,
-        },
+          owner: data.destination.repository.owner.username
+        }
       },
       mergeable: data.state === 'OPEN',
       merged: data.state === 'MERGED',
@@ -482,7 +522,7 @@ export class BitbucketApi implements GitServiceApi {
       url: data.links.self.href,
       htmlUrl: data.links.html.href,
       diffUrl: data.links.diff.href,
-      patchUrl: data.links.diff.href,
+      patchUrl: data.links.diff.href
     };
   }
 
@@ -495,15 +535,15 @@ export class BitbucketApi implements GitServiceApi {
         description: pr.body,
         source: {
           branch: {
-            name: pr.head,
-          },
+            name: pr.head
+          }
         },
         destination: {
           branch: {
-            name: pr.base,
-          },
-        },
-      }),
+            name: pr.base
+          }
+        }
+      })
     });
 
     return {
@@ -511,26 +551,26 @@ export class BitbucketApi implements GitServiceApi {
       number: data.id,
       title: data.title,
       body: data.description || '',
-      state: data.state === 'MERGED' ? 'merged' : (data.state === 'DECLINED' ? 'closed' : 'open'),
+      state: data.state === 'MERGED' ? 'merged' : data.state === 'DECLINED' ? 'closed' : 'open',
       author: {
         login: data.author.username,
-        avatarUrl: data.author.links.avatar.href,
+        avatarUrl: data.author.links.avatar.href
       },
       head: {
         ref: data.source.branch.name,
         sha: data.source.commit.hash,
         repo: {
           name: data.source.repository.name,
-          owner: data.source.repository.owner.username,
-        },
+          owner: data.source.repository.owner.username
+        }
       },
       base: {
         ref: data.destination.branch.name,
         sha: data.destination.commit.hash,
         repo: {
           name: data.destination.repository.name,
-          owner: data.destination.repository.owner.username,
-        },
+          owner: data.destination.repository.owner.username
+        }
       },
       mergeable: data.state === 'OPEN',
       merged: data.state === 'MERGED',
@@ -540,46 +580,54 @@ export class BitbucketApi implements GitServiceApi {
       url: data.links.self.href,
       htmlUrl: data.links.html.href,
       diffUrl: data.links.diff.href,
-      patchUrl: data.links.diff.href,
+      patchUrl: data.links.diff.href
     };
   }
 
-  async updatePullRequest(owner: string, repo: string, prNumber: number, updates: Partial<NewPullRequest>): Promise<PullRequest> {
+  async updatePullRequest(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    updates: Partial<NewPullRequest>
+  ): Promise<PullRequest> {
     const body: any = {};
     if (updates.title) body.title = updates.title;
     if (updates.body) body.description = updates.body;
 
-    const data = await this.request<any>(`/repositories/${owner}/${repo}/pullrequests/${prNumber}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    const data = await this.request<any>(
+      `/repositories/${owner}/${repo}/pullrequests/${prNumber}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }
+    );
 
     return {
       id: data.id,
       number: data.id,
       title: data.title,
       body: data.description || '',
-      state: data.state === 'MERGED' ? 'merged' : (data.state === 'DECLINED' ? 'closed' : 'open'),
+      state: data.state === 'MERGED' ? 'merged' : data.state === 'DECLINED' ? 'closed' : 'open',
       author: {
         login: data.author.username,
-        avatarUrl: data.author.links.avatar.href,
+        avatarUrl: data.author.links.avatar.href
       },
       head: {
         ref: data.source.branch.name,
         sha: data.source.commit.hash,
         repo: {
           name: data.source.repository.name,
-          owner: data.source.repository.owner.username,
-        },
+          owner: data.source.repository.owner.username
+        }
       },
       base: {
         ref: data.destination.branch.name,
         sha: data.destination.commit.hash,
         repo: {
           name: data.destination.repository.name,
-          owner: data.destination.repository.owner.username,
-        },
+          owner: data.destination.repository.owner.username
+        }
       },
       mergeable: data.state === 'OPEN',
       merged: data.state === 'MERGED',
@@ -589,11 +637,20 @@ export class BitbucketApi implements GitServiceApi {
       url: data.links.self.href,
       htmlUrl: data.links.html.href,
       diffUrl: data.links.diff.href,
-      patchUrl: data.links.diff.href,
+      patchUrl: data.links.diff.href
     };
   }
 
-  async mergePullRequest(owner: string, repo: string, prNumber: number, options?: { commitTitle?: string; commitMessage?: string; mergeMethod?: 'merge' | 'squash' | 'rebase' }): Promise<PullRequest> {
+  async mergePullRequest(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    options?: {
+      commitTitle?: string;
+      commitMessage?: string;
+      mergeMethod?: 'merge' | 'squash' | 'rebase';
+    }
+  ): Promise<PullRequest> {
     const body: any = {};
     if (options?.commitMessage) body.message = options.commitMessage;
     if (options?.mergeMethod === 'squash') body.merge_strategy = 'squash';
@@ -601,7 +658,7 @@ export class BitbucketApi implements GitServiceApi {
     await this.request(`/repositories/${owner}/${repo}/pullrequests/${prNumber}/merge`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(body)
     });
 
     return this.getPullRequest(owner, repo, prNumber);
@@ -612,8 +669,8 @@ export class BitbucketApi implements GitServiceApi {
    */
   async listPatches(owner: string, repo: string): Promise<Patch[]> {
     const prs = await this.listPullRequests(owner, repo);
-    
-    return prs.map(pr => ({
+
+    return prs.map((pr) => ({
       id: pr.id.toString(),
       title: pr.title,
       description: pr.body,
@@ -621,13 +678,13 @@ export class BitbucketApi implements GitServiceApi {
       commits: [],
       files: [],
       createdAt: pr.createdAt,
-      updatedAt: pr.updatedAt,
+      updatedAt: pr.updatedAt
     }));
   }
 
   async getPatch(owner: string, repo: string, patchId: string): Promise<Patch> {
     const pr = await this.getPullRequest(owner, repo, parseInt(patchId));
-    
+
     return {
       id: pr.id.toString(),
       title: pr.title,
@@ -636,7 +693,7 @@ export class BitbucketApi implements GitServiceApi {
       commits: [],
       files: [],
       createdAt: pr.createdAt,
-      updatedAt: pr.updatedAt,
+      updatedAt: pr.updatedAt
     };
   }
 
@@ -645,7 +702,7 @@ export class BitbucketApi implements GitServiceApi {
    */
   async getCurrentUser(): Promise<User> {
     const data = await this.request<any>('/user');
-    
+
     return {
       login: data.username,
       id: data.account_id,
@@ -656,13 +713,13 @@ export class BitbucketApi implements GitServiceApi {
       company: '',
       location: data.location,
       blog: data.website,
-      htmlUrl: data.links.html.href,
+      htmlUrl: data.links.html.href
     };
   }
 
   async getUser(username: string): Promise<User> {
     const data = await this.request<any>(`/users/${username}`);
-    
+
     return {
       login: data.username,
       id: data.account_id,
@@ -673,21 +730,26 @@ export class BitbucketApi implements GitServiceApi {
       company: '',
       location: data.location,
       blog: data.website,
-      htmlUrl: data.links.html.href,
+      htmlUrl: data.links.html.href
     };
   }
 
   /**
    * Repository Content Operations
    */
-  async getFileContent(owner: string, repo: string, path: string, ref?: string): Promise<{ content: string; encoding: string; sha: string }> {
+  async getFileContent(
+    owner: string,
+    repo: string,
+    path: string,
+    ref?: string
+  ): Promise<{ content: string; encoding: string; sha: string }> {
     const branch = ref || 'main';
     const endpoint = `/repositories/${owner}/${repo}/src/${branch}/${path}`;
-    
+
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       headers: {
-        'Authorization': `Bearer ${this.token}`,
-      },
+        Authorization: `Bearer ${this.token}`
+      }
     });
 
     if (!response.ok) {
@@ -695,68 +757,87 @@ export class BitbucketApi implements GitServiceApi {
     }
 
     const content = await response.text();
-    
+
     return {
       content: btoa(content), // Base64 encode to match other providers
       encoding: 'base64',
-      sha: '', // Bitbucket doesn't provide SHA for file content
+      sha: '' // Bitbucket doesn't provide SHA for file content
     };
   }
 
   /**
    * Branch Operations
    */
-  async listBranches(owner: string, repo: string): Promise<Array<{ name: string; commit: { sha: string; url: string } }>> {
+  async listBranches(
+    owner: string,
+    repo: string
+  ): Promise<Array<{ name: string; commit: { sha: string; url: string } }>> {
     const data = await this.request<any>(`/repositories/${owner}/${repo}/refs/branches`);
-    
+
     return data.values.map((branch: any) => ({
       name: branch.name,
       commit: {
         sha: branch.target.hash,
-        url: branch.target.links.self.href,
-      },
+        url: branch.target.links.self.href
+      }
     }));
   }
 
-  async getBranch(owner: string, repo: string, branch: string): Promise<{ name: string; commit: { sha: string; url: string }; protected: boolean }> {
+  async getBranch(
+    owner: string,
+    repo: string,
+    branch: string
+  ): Promise<{ name: string; commit: { sha: string; url: string }; protected: boolean }> {
     const data = await this.request<any>(`/repositories/${owner}/${repo}/refs/branches/${branch}`);
-    
+
     return {
       name: data.name,
       commit: {
         sha: data.target.hash,
-        url: data.target.links.self.href,
+        url: data.target.links.self.href
       },
-      protected: false, // Bitbucket doesn't expose branch protection in this API
+      protected: false // Bitbucket doesn't expose branch protection in this API
     };
   }
 
   /**
    * Tag Operations
    */
-  async listTags(owner: string, repo: string): Promise<Array<{ name: string; commit: { sha: string; url: string } }>> {
+  async listTags(
+    owner: string,
+    repo: string
+  ): Promise<Array<{ name: string; commit: { sha: string; url: string } }>> {
     const data = await this.request<any>(`/repositories/${owner}/${repo}/refs/tags`);
-    
+
     return data.values.map((tag: any) => ({
       name: tag.name,
       commit: {
         sha: tag.target.hash,
-        url: tag.target.links.self.href,
-      },
+        url: tag.target.links.self.href
+      }
     }));
   }
 
-  async getTag(owner: string, repo: string, tag: string): Promise<{ name: string; commit: { sha: string; url: string }; zipballUrl: string; tarballUrl: string }> {
+  async getTag(
+    owner: string,
+    repo: string,
+    tag: string
+  ): Promise<{
+    name: string;
+    commit: { sha: string; url: string };
+    zipballUrl: string;
+    tarballUrl: string;
+  }> {
     const data = await this.request<any>(`/repositories/${owner}/${repo}/refs/tags/${tag}`);
-    
+
     return {
       name: data.name,
       commit: {
         sha: data.target.hash,
-        url: data.target.links.self.href,
+        url: data.target.links.self.href
       },
       zipballUrl: `${this.baseUrl}/repositories/${owner}/${repo}/downloads/${tag}.zip`,
-      tarballUrl: `${this.baseUrl}/repositories/${owner}/${repo}/downloads/${tag}.tar.gz`,
+      tarballUrl: `${this.baseUrl}/repositories/${owner}/${repo}/downloads/${tag}.tar.gz`
     };
   }
 }

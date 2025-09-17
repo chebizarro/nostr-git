@@ -10,7 +10,7 @@ describe('buildRepoSubscriptions dedupe and ordering', () => {
     const res = buildRepoSubscriptions({
       addressA: 'git:npub1xyz:repo',
       rootEventId: 'root123',
-      euc: 'euc://relay.example/repo',
+      euc: 'euc://relay.example/repo'
     });
 
     // Expect 4 filters: ids, #e, #a, #r (stable order)

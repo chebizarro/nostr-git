@@ -6,7 +6,7 @@ export interface RepoCache {
   lastUpdated: number;
   headCommit: string;
   dataLevel: 'refs' | 'shallow' | 'full';
-  branches: Array<{ name: string; commit: string }>; 
+  branches: Array<{ name: string; commit: string }>;
   cloneUrls: string[];
   commitCount?: number;
 }

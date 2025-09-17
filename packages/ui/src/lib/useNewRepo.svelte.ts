@@ -1,9 +1,12 @@
 import { type Event as NostrEvent } from "nostr-tools";
 import { tokens as tokensStore, type Token } from "./stores/tokens.js";
-import { getGitServiceApi, canonicalRepoKey } from '@nostr-git/core';
+import { getGitServiceApi, canonicalRepoKey } from "@nostr-git/core";
 import { signer as signerStore } from "./stores/signer";
 import type { Signer as NostrGitSigner } from "./stores/signer";
-import { createRepoAnnouncementEvent as createAnnouncementEventShared, createRepoStateEvent as createStateEventShared } from '@nostr-git/shared-types';
+import {
+  createRepoAnnouncementEvent as createAnnouncementEventShared,
+  createRepoStateEvent as createStateEventShared,
+} from "@nostr-git/shared-types";
 
 /**
  * Check if a repository name is available on GitHub
@@ -11,31 +14,34 @@ import { createRepoAnnouncementEvent as createAnnouncementEventShared, createRep
  * @param token - GitHub authentication token
  * @returns Promise with availability status and reason if unavailable
  */
-export async function checkGitHubRepoAvailability(repoName: string, token: string): Promise<{
+export async function checkGitHubRepoAvailability(
+  repoName: string,
+  token: string
+): Promise<{
   available: boolean;
   reason?: string;
   username?: string;
 }> {
   try {
     // Use GitServiceApi abstraction instead of hardcoded GitHub API calls
-    const api = getGitServiceApi('github', token);
-    
+    const api = getGitServiceApi("github", token);
+
     // Get the authenticated user's information
     const currentUser = await api.getCurrentUser();
     const username = currentUser.login;
-    
+
     // Check if repository already exists by trying to fetch it
     try {
       await api.getRepo(username, repoName);
       // Repository exists
-      return { 
-        available: false, 
-        reason: 'Repository name already exists in your account',
-        username 
+      return {
+        available: false,
+        reason: "Repository name already exists in your account",
+        username,
       };
     } catch (error: any) {
       // Repository doesn't exist (good!) - API throws error for 404
-      if (error.message?.includes('404') || error.message?.includes('Not Found')) {
+      if (error.message?.includes("404") || error.message?.includes("Not Found")) {
         return { available: true, username };
       }
       // Some other error occurred
@@ -43,7 +49,7 @@ export async function checkGitHubRepoAvailability(repoName: string, token: strin
     }
   } catch (error) {
     // Network error or other issue - proceed anyway
-    console.warn('Error checking repo availability:', error);
+    console.warn("Error checking repo availability:", error);
     return { available: true };
   }
 }
@@ -74,28 +80,28 @@ export async function checkProviderRepoAvailability(
   conflictProviders: string[];
 }> {
   // Special-case GRASP: there is no conventional org/user namespace availability to check.
-  if (provider === 'grasp') {
+  if (provider === "grasp") {
     return {
       results: [
         {
           provider,
-          host: relayUrl || 'nostr-relay',
+          host: relayUrl || "nostr-relay",
           available: true,
-          reason: 'Availability not enforced for GRASP relays',
+          reason: "Availability not enforced for GRASP relays",
         },
       ],
       hasConflicts: false,
-      availableProviders: ['grasp'],
+      availableProviders: ["grasp"],
       conflictProviders: [],
     };
   }
 
   // Map provider to token host matching strategy (aligns with ProviderSelectionStep)
   const hostMatchers: Record<string, (host: string) => boolean> = {
-    github: (h) => h === 'github.com',
-    gitlab: (h) => h === 'gitlab.com' || h.endsWith('.gitlab.com'),
-    gitea: (h) => h.includes('gitea'),
-    bitbucket: (h) => h === 'bitbucket.org',
+    github: (h) => h === "github.com",
+    gitlab: (h) => h === "gitlab.com" || h.endsWith(".gitlab.com"),
+    gitea: (h) => h.includes("gitea"),
+    bitbucket: (h) => h === "bitbucket.org",
   };
 
   const match = hostMatchers[provider as keyof typeof hostMatchers];
@@ -107,9 +113,9 @@ export async function checkProviderRepoAvailability(
       results: [
         {
           provider,
-          host: 'unknown',
+          host: "unknown",
           available: true,
-          reason: 'No token configured; unable to check. Assuming available.',
+          reason: "No token configured; unable to check. Assuming available.",
         },
       ],
       hasConflicts: false,
@@ -121,7 +127,7 @@ export async function checkProviderRepoAvailability(
   try {
     const api = getGitServiceApi(provider as any, tokenEntry.token);
     const currentUser = await api.getCurrentUser();
-    const username = (currentUser as any).login || (currentUser as any).username || 'me';
+    const username = (currentUser as any).login || (currentUser as any).username || "me";
 
     try {
       await api.getRepo(username, repoName);
@@ -141,7 +147,7 @@ export async function checkProviderRepoAvailability(
         conflictProviders: [provider],
       };
     } catch (error: any) {
-      if (error?.message?.includes('404') || error?.message?.includes('Not Found')) {
+      if (error?.message?.includes("404") || error?.message?.includes("Not Found")) {
         return {
           results: [
             {
@@ -178,7 +184,7 @@ export async function checkProviderRepoAvailability(
       results: [
         {
           provider,
-          host: 'unknown',
+          host: "unknown",
           available: true,
           error: String(e?.message || e),
         },
@@ -196,7 +202,10 @@ export async function checkProviderRepoAvailability(
  * @param tokens - Array of user tokens
  * @returns Promise with availability results for each provider
  */
-export async function checkMultiProviderRepoAvailability(repoName: string, tokens: Token[]): Promise<{
+export async function checkMultiProviderRepoAvailability(
+  repoName: string,
+  tokens: Token[]
+): Promise<{
   results: Array<{
     provider: string;
     host: string;
@@ -211,10 +220,10 @@ export async function checkMultiProviderRepoAvailability(repoName: string, token
 }> {
   // Map between provider names and their API hosts
   const providerHosts: Record<string, string> = {
-    'github': 'github.com',
-    'gitlab': 'gitlab.com',
-    'gitea': 'gitea.com',
-    'bitbucket': 'bitbucket.org'
+    github: "github.com",
+    gitlab: "gitlab.com",
+    gitea: "gitea.com",
+    bitbucket: "bitbucket.org",
   };
 
   const results = [];
@@ -225,14 +234,16 @@ export async function checkMultiProviderRepoAvailability(repoName: string, token
   for (const token of tokens) {
     // Handle both standard providers and GRASP relays
     let provider;
-    
-    if (token.host === 'grasp.relay') {
-      provider = 'grasp';
+
+    if (token.host === "grasp.relay") {
+      provider = "grasp";
     } else {
       // Map host to provider name (github.com -> github)
-      provider = Object.entries(providerHosts).find(([providerName, host]) => host === token.host)?.[0];
+      provider = Object.entries(providerHosts).find(
+        ([providerName, host]) => host === token.host
+      )?.[0];
     }
-    
+
     if (!provider) {
       console.warn(`Unknown provider for host: ${token.host}`);
       // Skip unknown providers
@@ -241,11 +252,11 @@ export async function checkMultiProviderRepoAvailability(repoName: string, token
 
     try {
       const api = getGitServiceApi(provider as any, token.token);
-      
+
       // Get the authenticated user's information
       const currentUser = await api.getCurrentUser();
       const username = currentUser.login;
-      
+
       // Check if repository already exists
       try {
         await api.getRepo(username, repoName);
@@ -255,17 +266,17 @@ export async function checkMultiProviderRepoAvailability(repoName: string, token
           host: token.host,
           available: false,
           reason: `Repository name already exists in your ${provider} account`,
-          username
+          username,
         });
         conflictProviders.push(provider);
       } catch (error: any) {
         // Repository doesn't exist (good!)
-        if (error.message?.includes('404') || error.message?.includes('Not Found')) {
+        if (error.message?.includes("404") || error.message?.includes("Not Found")) {
           results.push({
             provider,
             host: token.host,
             available: true,
-            username
+            username,
           });
           availableProviders.push(provider);
         } else {
@@ -280,7 +291,7 @@ export async function checkMultiProviderRepoAvailability(repoName: string, token
         provider,
         host: token.host,
         available: true, // Assume available if we can't check
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
       availableProviders.push(provider); // Assume available
     }
@@ -290,7 +301,7 @@ export async function checkMultiProviderRepoAvailability(repoName: string, token
     results,
     hasConflicts: conflictProviders.length > 0,
     availableProviders,
-    conflictProviders
+    conflictProviders,
   };
 }
 
@@ -380,7 +391,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
   // Subscribe to token store changes and update reactive state
   tokensStore.subscribe((t) => {
     tokens = t;
-    console.log('🔐 Token store updated, now have', t.length, 'tokens');
+    console.log("🔐 Token store updated, now have", t.length, "tokens");
   });
 
   const { onProgress, onRepoCreated, onPublishEvent } = options;
@@ -406,10 +417,10 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
   // Resolve the canonical repo key for this creation flow
   async function computeCanonicalKey(config: NewRepoConfig): Promise<string> {
     let owner = "";
-    if (config.provider === 'grasp') {
+    if (config.provider === "grasp") {
       let signer: NostrGitSigner | null = null;
       signerStore.subscribe((v) => (signer = v))();
-      if (!signer) throw new Error('No Nostr signer available for GRASP provider');
+      if (!signer) throw new Error("No Nostr signer available for GRASP provider");
       const pubkey = await signer.getPubkey();
       // Use "owner:name" form which canonicalRepoKey will normalize
       return canonicalRepoKey(`${pubkey}:${config.name}`);
@@ -422,10 +433,10 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       unsub();
     }
     const providerHosts: Record<string, string> = {
-      github: 'github.com',
-      gitlab: 'gitlab.com',
-      gitea: 'gitea.com',
-      bitbucket: 'bitbucket.org',
+      github: "github.com",
+      gitlab: "gitlab.com",
+      gitea: "gitea.com",
+      bitbucket: "bitbucket.org",
     };
     const host = providerHosts[config.provider] || config.provider;
     const token = tokens.find((t: Token) => t.host === host)?.token;
@@ -466,10 +477,10 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       // Step 3: Push to remote (if remote exists)
       if (remoteRepo) {
         updateProgress("push", "Pushing to remote repository...", "running");
-        console.log('🚀 About to push with config:', {
+        console.log("🚀 About to push with config:", {
           name: config.name,
           defaultBranch: config.defaultBranch,
-          localRepo: localRepo
+          localRepo: localRepo,
         });
         await pushToRemote({ ...config }, remoteRepo, canonicalKey);
         updateProgress("push", "Successfully pushed to remote repository", "completed");
@@ -480,9 +491,9 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       // Derive clone and web URLs
       const ensureNoGitSuffix = (url: string) => url?.replace(/\.git$/, "");
       const cloneUrl = (() => {
-        const raw = (remoteRepo?.url || config.cloneUrl || '');
-        if (config.provider === 'grasp') {
-          return raw.replace(/^ws:\/\//, 'http://').replace(/^wss:\/\//, 'https://');
+        const raw = remoteRepo?.url || config.cloneUrl || "";
+        if (config.provider === "grasp") {
+          return raw.replace(/^ws:\/\//, "http://").replace(/^wss:\/\//, "https://");
         }
         return raw;
       })();
@@ -490,50 +501,75 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
 
       // Build GRASP relay aliases if applicable
       let relays: string[] | undefined = undefined;
-      if (config.provider === 'grasp') {
+      if (config.provider === "grasp") {
         const normalizeRelayWsOrigin = (u: string) => {
-          if (!u) return '';
+          if (!u) return "";
           try {
             const url = new URL(u);
             const origin = `${url.protocol}//${url.host}`;
-            return origin.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://');
+            return origin.replace(/^http:\/\//, "ws://").replace(/^https:\/\//, "wss://");
           } catch {
             return u
-              .replace(/^http:\/\//, 'ws://')
-              .replace(/^https:\/\//, 'wss://')
-              .replace(/(ws[s]?:\/\/[^/]+).*/, '$1');
+              .replace(/^http:\/\//, "ws://")
+              .replace(/^https:\/\//, "wss://")
+              .replace(/(ws[s]?:\/\/[^/]+).*/, "$1");
           }
         };
-        const baseRelay = normalizeRelayWsOrigin(config.relayUrl || '');
+        const baseRelay = normalizeRelayWsOrigin(config.relayUrl || "");
         const aliases: string[] = [];
         if (baseRelay) aliases.push(baseRelay);
-        const viteAliases = (import.meta as any)?.env?.VITE_GRASP_RELAY_ALIASES as string | undefined;
-        if (viteAliases) viteAliases.split(',').map(s => s.trim()).filter(Boolean).forEach(a => aliases.push(a));
-        const nodeAliases = (globalThis as any)?.process?.env?.VITE_GRASP_RELAY_ALIASES as string | undefined;
-        if (nodeAliases) nodeAliases.split(',').map(s => s.trim()).filter(Boolean).forEach(a => aliases.push(a));
+        const viteAliases = (import.meta as any)?.env?.VITE_GRASP_RELAY_ALIASES as
+          | string
+          | undefined;
+        if (viteAliases)
+          viteAliases
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .forEach((a) => aliases.push(a));
+        const nodeAliases = (globalThis as any)?.process?.env?.VITE_GRASP_RELAY_ALIASES as
+          | string
+          | undefined;
+        if (nodeAliases)
+          nodeAliases
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .forEach((a) => aliases.push(a));
         if (baseRelay) {
           const u = new URL(baseRelay);
-          const port = u.port ? `:${u.port}` : '';
+          const port = u.port ? `:${u.port}` : "";
           aliases.push(`${u.protocol}//ngit-relay${port}`);
         }
         const seen = new Set<string>();
-        relays = aliases.filter(a => { if (seen.has(a)) return false; seen.add(a); return true; });
+        relays = aliases.filter((a) => {
+          if (seen.has(a)) return false;
+          seen.add(a);
+          return true;
+        });
       }
 
       const announcementEvent = createAnnouncementEventShared({
         repoId: config.name,
         name: config.name,
-        description: config.description || '',
+        description: config.description || "",
         web: webUrl ? [webUrl] : undefined,
         clone: cloneUrl ? [cloneUrl] : undefined,
         relays,
-        maintainers: (config.maintainers && config.maintainers.length > 0) ? config.maintainers : undefined,
-        hashtags: (config.tags && config.tags.length > 0) ? config.tags : undefined,
+        maintainers:
+          config.maintainers && config.maintainers.length > 0 ? config.maintainers : undefined,
+        hashtags: config.tags && config.tags.length > 0 ? config.tags : undefined,
         earliestUniqueCommit: localRepo?.initialCommit || undefined,
       });
 
-      const refs = (localRepo?.initialCommit)
-        ? [{ type: 'heads' as const, name: config.defaultBranch || 'master', commit: localRepo.initialCommit }]
+      const refs = localRepo?.initialCommit
+        ? [
+            {
+              type: "heads" as const,
+              name: config.defaultBranch || "master",
+              commit: localRepo.initialCommit,
+            },
+          ]
         : undefined;
       const stateEvent = createStateEventShared({
         repoId: config.name,
@@ -608,25 +644,30 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
     try {
       // Use GitServiceApi abstraction instead of hardcoded GitHub API calls
       const api = getGitServiceApi(config.provider as any, token);
-      
+
       // Get the authenticated user's information
       const currentUser = await api.getCurrentUser();
       const username = currentUser.login;
-      
-      console.log('🚀 Checking availability for:', `${username}/${config.name}`, 'on', config.provider);
-      
+
+      console.log(
+        "🚀 Checking availability for:",
+        `${username}/${config.name}`,
+        "on",
+        config.provider
+      );
+
       // Check if repository already exists by trying to fetch it
       try {
         await api.getRepo(username, config.name);
         // Repository exists
-        return { 
-          available: false, 
+        return {
+          available: false,
           reason: `Repository name already exists in your ${config.provider} account`,
-          username 
+          username,
         };
       } catch (error: any) {
         // Repository doesn't exist (good!) - API throws error for 404
-        if (error.message?.includes('404') || error.message?.includes('Not Found')) {
+        if (error.message?.includes("404") || error.message?.includes("Not Found")) {
           return { available: true, username };
         }
         // Some other error occurred
@@ -640,42 +681,42 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
   }
 
   async function createRemoteRepo(config: NewRepoConfig) {
-    console.log('🚀 Starting createRemoteRepo function...');
+    console.log("🚀 Starting createRemoteRepo function...");
     try {
       const { getGitWorker } = await import("@nostr-git/core");
       const { api } = getGitWorker();
-      console.log('🚀 Git worker obtained successfully');
+      console.log("🚀 Git worker obtained successfully");
 
       // Get the provider-specific host for token lookup
       const providerHosts: Record<string, string> = {
-        'github': 'github.com',
-        'gitlab': 'gitlab.com',
-        'gitea': 'gitea.com',
-        'bitbucket': 'bitbucket.org',
-        'grasp': 'grasp.relay'
+        github: "github.com",
+        gitlab: "gitlab.com",
+        gitea: "gitea.com",
+        bitbucket: "bitbucket.org",
+        grasp: "grasp.relay",
       };
-      
+
       let providerHost;
       let finalToken;
       let nostrSigner: NostrGitSigner | null = null;
 
-      if (config.provider === 'grasp') {
+      if (config.provider === "grasp") {
         // For GRASP, we need to use the Nostr signer instead of a token
-        console.log('🔐 Setting up GRASP with Nostr signer');
-        
+        console.log("🔐 Setting up GRASP with Nostr signer");
+
         // Get the signer from the store
-        signerStore.subscribe(value => {
+        signerStore.subscribe((value) => {
           nostrSigner = value;
         })();
-        
+
         if (!nostrSigner) {
-          throw new Error('No Nostr signer available for GRASP provider');
+          throw new Error("No Nostr signer available for GRASP provider");
         }
-        
+
         if (!config.relayUrl) {
-          throw new Error('GRASP provider requires a relay URL');
+          throw new Error("GRASP provider requires a relay URL");
         }
-        
+
         // For GRASP, the token is actually the pubkey
         const pubkey = await nostrSigner.getPubkey();
         finalToken = pubkey;
@@ -683,125 +724,145 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       } else {
         // For standard Git providers, use the host mapping
         providerHost = providerHosts[config.provider] || config.provider;
-        
+
         // Get token for the selected provider from the reactive token store
-        console.log('🔐 Current tokens in store:', tokens.length, 'tokens');
-        console.log('🔐 Token hosts:', tokens.map(t => t.host));
-        console.log('🔐 Looking for provider:', config.provider, 'with host:', providerHost);
-        
+        console.log("🔐 Current tokens in store:", tokens.length, "tokens");
+        console.log(
+          "🔐 Token hosts:",
+          tokens.map((t) => t.host)
+        );
+        console.log("🔐 Looking for provider:", config.provider, "with host:", providerHost);
+
         finalToken = tokens.find((t: Token) => t.host === providerHost)?.token;
       }
-      
-      console.log('🔐 Provider token found:', finalToken ? 'YES (length: ' + finalToken.length + ', starts: ' + finalToken.substring(0, 8) + ', ends: ' + finalToken.substring(finalToken.length - 8) + ')' : 'NO');
 
-      if (!finalToken && config.provider !== 'grasp') {
+      console.log(
+        "🔐 Provider token found:",
+        finalToken
+          ? "YES (length: " +
+              finalToken.length +
+              ", starts: " +
+              finalToken.substring(0, 8) +
+              ", ends: " +
+              finalToken.substring(finalToken.length - 8) +
+              ")"
+          : "NO"
+      );
+
+      if (!finalToken && config.provider !== "grasp") {
         // Try to wait for tokens to load if they're not available yet
-        console.log('🔐 No token found for provider, waiting for token store initialization...');
+        console.log("🔐 No token found for provider, waiting for token store initialization...");
         await tokensStore.waitForInitialization();
-        
+
         // Refresh tokens after waiting
         await tokensStore.refresh();
-        
+
         // Try again after waiting and refreshing
         finalToken = tokens.find((t: Token) => t.host === providerHost)?.token;
-        
-        console.log('🔐 Tokens after refresh:', tokens.length, 'tokens');
-        console.log('🔐 Provider token found after retry:', finalToken ? 'YES (length: ' + finalToken.length + ')' : 'NO');
-        
+
+        console.log("🔐 Tokens after refresh:", tokens.length, "tokens");
+        console.log(
+          "🔐 Provider token found after retry:",
+          finalToken ? "YES (length: " + finalToken.length + ")" : "NO"
+        );
+
         if (!finalToken) {
           throw new Error(
             `No ${config.provider} authentication token found. Please add a ${config.provider} token in settings.`
           );
         }
       }
-      
+
       // Skip availability check for GRASP; providers with tokens are checked
-      if (config.provider !== 'grasp') {
-        console.log('🚀 Checking repository name availability...');
+      if (config.provider !== "grasp") {
+        console.log("🚀 Checking repository name availability...");
         const availability = await checkRepoAvailability(config, finalToken);
         if (!availability.available) {
-          throw new Error(availability.reason || 'Repository name is not available');
+          throw new Error(availability.reason || "Repository name is not available");
         }
       }
-      
-      console.log('🚀 Repository name is available, proceeding with creation...');
-      console.log('🚀 Calling createRemoteRepo API with:', {
+
+      console.log("🚀 Repository name is available, proceeding with creation...");
+      console.log("🚀 Calling createRemoteRepo API with:", {
         provider: config.provider,
         name: config.name,
         description: config.description,
-        tokenLength: finalToken ? finalToken.length : 'N/A',
-        tokenStart: finalToken ? finalToken.substring(0, 8) : 'N/A',
-        tokenEnd: finalToken ? finalToken.substring(finalToken.length - 8) : 'N/A'
+        tokenLength: finalToken ? finalToken.length : "N/A",
+        tokenStart: finalToken ? finalToken.substring(0, 8) : "N/A",
+        tokenEnd: finalToken ? finalToken.substring(finalToken.length - 8) : "N/A",
       });
-      
+
       let result;
-      
-      if (config.provider === 'grasp') {
-        console.log('🔐 Setting up GRASP repository creation with message-based signing');
-        
-        if (!nostrSigner) throw new Error('No Nostr signer available');
-        if (!config.relayUrl) throw new Error('GRASP provider requires a relay URL');
-        
+
+      if (config.provider === "grasp") {
+        console.log("🔐 Setting up GRASP repository creation with message-based signing");
+
+        if (!nostrSigner) throw new Error("No Nostr signer available");
+        if (!config.relayUrl) throw new Error("GRASP provider requires a relay URL");
+
         // Get the Git worker - IMPORTANT: We need to use the same worker instance for both API calls and event signing
         const { getGitWorker } = await import("@nostr-git/core");
         const { api, worker } = getGitWorker(); // Get both API and worker from the same call
-        
+
         // Register the event signing function with the worker
         // This enables the message-based signing protocol
         // We need to use a proxy approach since functions can't be cloned across worker boundaries
-        console.log('🔐 Setting up event signer proxy for worker');
-        
+        console.log("🔐 Setting up event signer proxy for worker");
+
         // We'll set up a message handler directly instead of using a separate function
-        
+
         try {
           if (!signingSetupDone) {
             // Set up a message handler for event signing requests (once)
-            console.log('🔐 Setting up event signing message handler');
-            worker.addEventListener('message', async (event) => {
-              if (event.data.type === 'request-event-signing') {
+            console.log("🔐 Setting up event signing message handler");
+            worker.addEventListener("message", async (event) => {
+              if (event.data.type === "request-event-signing") {
                 try {
-                  console.log('🔐 Received event signing request:', event.data);
+                  console.log("🔐 Received event signing request:", event.data);
                   const signedEvent = await nostrSigner.sign(event.data.event);
-                  console.log('🔐 Event signed successfully');
+                  console.log("🔐 Event signed successfully");
                   worker.postMessage({
-                    type: 'event-signed',
+                    type: "event-signed",
                     requestId: event.data.requestId,
-                    signedEvent
+                    signedEvent,
                   });
                 } catch (error) {
-                  console.error('🔐 Error signing event:', error);
+                  console.error("🔐 Error signing event:", error);
                   worker.postMessage({
-                    type: 'event-signing-error',
+                    type: "event-signing-error",
                     requestId: event.data.requestId,
-                    error: error instanceof Error ? error.message : String(error)
+                    error: error instanceof Error ? error.message : String(error),
                   });
                 }
               }
             });
             // Tell the worker that event signing is available
-            worker.postMessage({ type: 'register-event-signer' });
+            worker.postMessage({ type: "register-event-signer" });
             signingSetupDone = true;
-            console.log('🔐 Event signing setup complete');
+            console.log("🔐 Event signing setup complete");
           } else {
-            console.log('🔐 Event signing already set up; skipping duplicate registration');
+            console.log("🔐 Event signing already set up; skipping duplicate registration");
           }
         } catch (error) {
-          console.error('🔐 Error setting up event signing:', error);
-          throw new Error('Failed to set up event signing: ' + (error instanceof Error ? error.message : String(error)));
+          console.error("🔐 Error setting up event signing:", error);
+          throw new Error(
+            "Failed to set up event signing: " +
+              (error instanceof Error ? error.message : String(error))
+          );
         }
-        
+
         // Now we can use the worker API for GRASP repository creation
         // This maintains our API abstraction and keeps all Git operations in the worker
         result = await api.createRemoteRepo({
           provider: config.provider as any,
           token: finalToken, // This is the pubkey for GRASP
           name: config.name,
-          description: config.description || '',
+          description: config.description || "",
           isPrivate: false,
-          baseUrl: config.relayUrl // Pass the relay URL
+          baseUrl: config.relayUrl, // Pass the relay URL
         });
-        
-        console.log('🔐 GRASP repository created successfully:', result);
+
+        console.log("🔐 GRASP repository created successfully:", result);
       } else {
         // Standard Git providers
         result = await api.createRemoteRepo({
@@ -812,15 +873,15 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
           isPrivate: false, // Default to public for now
         });
       }
-      
-      console.log('🚀 API call completed, result:', result);
+
+      console.log("🚀 API call completed, result:", result);
 
       if (!result.success) {
         console.error("Remote repository creation failed:", result.error);
         throw new Error(`Remote repository creation failed: ${result.error}`);
       }
-      
-      console.log('🚀 Remote repository created successfully:', result);
+
+      console.log("🚀 Remote repository created successfully:", result);
       return {
         url: result.remoteUrl, // Use remoteUrl from the API response
         provider: result.provider,
@@ -833,93 +894,96 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
   }
 
   async function pushToRemote(config: NewRepoConfig, remoteRepo: any, canonicalKey?: string) {
-    console.log('🚀 Starting pushToRemote function...');
+    console.log("🚀 Starting pushToRemote function...");
     const { getGitWorker } = await import("@nostr-git/core");
     const { api, worker } = getGitWorker();
 
     // Get the provider-specific host for token lookup
     const providerHosts: Record<string, string> = {
-      'github': 'github.com',
-      'gitlab': 'gitlab.com',
-      'gitea': 'gitea.com',
-      'bitbucket': 'bitbucket.org'
-    }; 
-    
+      github: "github.com",
+      gitlab: "gitlab.com",
+      gitea: "gitea.com",
+      bitbucket: "bitbucket.org",
+    };
+
     let providerToken;
     let nostrSigner: NostrGitSigner | null = null;
 
-    if (config.provider === 'grasp') {
+    if (config.provider === "grasp") {
       // For GRASP, we need the Nostr signer
-      signerStore.subscribe(value => {
+      signerStore.subscribe((value) => {
         nostrSigner = value;
       })();
-      
+
       if (!nostrSigner) {
-        throw new Error('No Nostr signer available for GRASP provider');
+        throw new Error("No Nostr signer available for GRASP provider");
       }
-      
+
       // For GRASP, we use the pubkey as the token
       providerToken = await nostrSigner.getPubkey();
-      
+
       // Set up message-based signing for GRASP
-      console.log('🔐 Setting up event signing message handler for GRASP push');
-      
+      console.log("🔐 Setting up event signing message handler for GRASP push");
+
       // Set up a message handler for event signing requests
-      worker.addEventListener('message', async (event) => {
-        if (event.data.type === 'request-event-signing') {
+      worker.addEventListener("message", async (event) => {
+        if (event.data.type === "request-event-signing") {
           try {
-            console.log('🔐 Received event signing request for push:', event.data);
+            console.log("🔐 Received event signing request for push:", event.data);
             const signedEvent = await nostrSigner!.sign(event.data.event);
-            console.log('🔐 Event signed successfully for push');
-            
+            console.log("🔐 Event signed successfully for push");
+
             // Send the signed event back to the worker
             worker.postMessage({
-              type: 'event-signed',
+              type: "event-signed",
               requestId: event.data.requestId,
-              signedEvent
+              signedEvent,
             });
           } catch (error) {
-            console.error('🔐 Error signing event for push:', error);
-            
+            console.error("🔐 Error signing event for push:", error);
+
             // Send the error back to the worker
             worker.postMessage({
-              type: 'event-signing-error',
+              type: "event-signing-error",
               requestId: event.data.requestId,
-              error: error instanceof Error ? error.message : String(error)
+              error: error instanceof Error ? error.message : String(error),
             });
           }
         }
       });
-      
+
       // Tell the worker that event signing is available
-      worker.postMessage({ type: 'register-event-signer' });
-      
-      console.log('🔐 Event signing setup complete for GRASP push');
+      worker.postMessage({ type: "register-event-signer" });
+
+      console.log("🔐 Event signing setup complete for GRASP push");
     } else {
       const providerHost = providerHosts[config.provider] || config.provider;
       providerToken = tokens.find((t: Token) => t.host === providerHost)?.token;
     }
-    
+
     // For GRASP, ensure we never try to push over WebSocket; use HTTP(S) endpoint instead
     const toHttpFromWs = (url: string) =>
-      url.startsWith('ws://') ? 'http://' + url.slice(5) :
-      url.startsWith('wss://') ? 'https://' + url.slice(6) : url;
+      url.startsWith("ws://")
+        ? "http://" + url.slice(5)
+        : url.startsWith("wss://")
+          ? "https://" + url.slice(6)
+          : url;
 
-    const pushUrl = config.provider === 'grasp' ? toHttpFromWs(remoteRepo.url) : remoteRepo.url;
+    const pushUrl = config.provider === "grasp" ? toHttpFromWs(remoteRepo.url) : remoteRepo.url;
 
-    console.log('🚀 Pushing to remote with URL:', pushUrl);
-    console.log('🚀 Push config:', {
+    console.log("🚀 Pushing to remote with URL:", pushUrl);
+    console.log("🚀 Push config:", {
       provider: config.provider,
       repoPath: canonicalKey ?? config.name,
       defaultBranch: config.defaultBranch,
       remoteUrl: pushUrl,
-      tokenLength: providerToken ? providerToken.length : 'No token'
+      tokenLength: providerToken ? providerToken.length : "No token",
     });
 
     // Push to remote repository via safe preflight wrapper
     // Note: For GRASP, we don't pass a signer object since signing is handled via message protocol
     // Always use safePushToRemote to resolve the actual default branch and run preflight checks
-    console.log('[NEW REPO] Using safePushToRemote for provider:', config.provider);
+    console.log("[NEW REPO] Using safePushToRemote for provider:", config.provider);
     const pushResult = await api.safePushToRemote({
       repoId: canonicalKey || config.name,
       remoteUrl: pushUrl,
@@ -935,9 +999,9 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
 
     if (!pushResult?.success) {
       if (pushResult?.requiresConfirmation) {
-        throw new Error(pushResult.warning || 'Force push requires confirmation.');
+        throw new Error(pushResult.warning || "Force push requires confirmation.");
       }
-      throw new Error(pushResult?.error || 'Safe push failed');
+      throw new Error(pushResult?.error || "Safe push failed");
     }
 
     return remoteRepo;

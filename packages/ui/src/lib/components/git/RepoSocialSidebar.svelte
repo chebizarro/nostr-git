@@ -6,7 +6,7 @@
   // Accept props for sidebar data
   const props = $props();
   const watchers: number = props.watchers ?? 0;
-  import type { Profile } from '@nostr-git/shared-types';
+  import type { Profile } from "@nostr-git/shared-types";
   const contributors: Profile[] = props.contributors ?? [
     { name: "Alice" },
     { name: "Bob" },
@@ -39,8 +39,10 @@
         <div class="flex -space-x-2">
           {#each contributors.slice(0, 5) as c (c.name)}
             <Avatar class="h-8 w-8 border-2 border-background">
-              <AvatarImage src={c?.picture ?? ''} alt={c?.name ?? c?.display_name ?? ''} />
-              <AvatarFallback>{(c?.name ?? c?.display_name ?? '').slice(0, 2).toUpperCase()}</AvatarFallback>
+              <AvatarImage src={c?.picture ?? ""} alt={c?.name ?? c?.display_name ?? ""} />
+              <AvatarFallback
+                >{(c?.name ?? c?.display_name ?? "").slice(0, 2).toUpperCase()}</AvatarFallback
+              >
             </Avatar>
           {/each}
           {#if contributors.length > 5}

@@ -1,10 +1,10 @@
 /**
  * Unified Git Service REST API Abstraction Layer
- * 
+ *
  * This interface provides a unified abstraction over different Git hosting providers
  * (GitHub, GitLab, Gitea, Bitbucket) for REST API operations like issues, commits,
  * pull requests, etc.
- * 
+ *
  * This extends the existing VendorProvider system to support comprehensive
  * REST API operations beyond just repository management.
  */
@@ -218,7 +218,7 @@ export interface GitForkOptions {
 
 /**
  * Unified Git Service API Interface
- * 
+ *
  * This interface abstracts REST API operations across different Git hosting providers.
  * Each provider (GitHub, GitLab, Gitea, Bitbucket) implements this interface.
  */
@@ -227,60 +227,116 @@ export interface GitServiceApi {
    * Repository Operations
    */
   getRepo(owner: string, repo: string): Promise<RepoMetadata>;
-  createRepo(options: { name: string; description?: string; private?: boolean; autoInit?: boolean }): Promise<RepoMetadata>;
-  updateRepo(owner: string, repo: string, updates: { name?: string; description?: string; private?: boolean }): Promise<RepoMetadata>;
+  createRepo(options: {
+    name: string;
+    description?: string;
+    private?: boolean;
+    autoInit?: boolean;
+  }): Promise<RepoMetadata>;
+  updateRepo(
+    owner: string,
+    repo: string,
+    updates: { name?: string; description?: string; private?: boolean }
+  ): Promise<RepoMetadata>;
   forkRepo(owner: string, repo: string, options?: GitForkOptions): Promise<RepoMetadata>;
-  
+
   /**
    * Commit Operations
    */
   listCommits(owner: string, repo: string, options?: ListCommitsOptions): Promise<Commit[]>;
   getCommit(owner: string, repo: string, sha: string): Promise<Commit>;
-  
+
   /**
    * Issue Operations
    */
   listIssues(owner: string, repo: string, options?: ListIssuesOptions): Promise<Issue[]>;
   getIssue(owner: string, repo: string, issueNumber: number): Promise<Issue>;
   createIssue(owner: string, repo: string, issue: NewIssue): Promise<Issue>;
-  updateIssue(owner: string, repo: string, issueNumber: number, updates: Partial<NewIssue>): Promise<Issue>;
+  updateIssue(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    updates: Partial<NewIssue>
+  ): Promise<Issue>;
   closeIssue(owner: string, repo: string, issueNumber: number): Promise<Issue>;
-  
+
   /**
    * Pull Request Operations
    */
-  listPullRequests(owner: string, repo: string, options?: ListPullRequestsOptions): Promise<PullRequest[]>;
+  listPullRequests(
+    owner: string,
+    repo: string,
+    options?: ListPullRequestsOptions
+  ): Promise<PullRequest[]>;
   getPullRequest(owner: string, repo: string, prNumber: number): Promise<PullRequest>;
   createPullRequest(owner: string, repo: string, pr: NewPullRequest): Promise<PullRequest>;
-  updatePullRequest(owner: string, repo: string, prNumber: number, updates: Partial<NewPullRequest>): Promise<PullRequest>;
-  mergePullRequest(owner: string, repo: string, prNumber: number, options?: { commitTitle?: string; commitMessage?: string; mergeMethod?: 'merge' | 'squash' | 'rebase' }): Promise<PullRequest>;
-  
+  updatePullRequest(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    updates: Partial<NewPullRequest>
+  ): Promise<PullRequest>;
+  mergePullRequest(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    options?: {
+      commitTitle?: string;
+      commitMessage?: string;
+      mergeMethod?: 'merge' | 'squash' | 'rebase';
+    }
+  ): Promise<PullRequest>;
+
   /**
    * Patch Operations (for services that support patch-based workflows)
    */
   listPatches(owner: string, repo: string): Promise<Patch[]>;
   getPatch(owner: string, repo: string, patchId: string): Promise<Patch>;
-  
+
   /**
    * User Operations
    */
   getCurrentUser(): Promise<User>;
   getUser(username: string): Promise<User>;
-  
+
   /**
    * Repository Content Operations
    */
-  getFileContent(owner: string, repo: string, path: string, ref?: string): Promise<{ content: string; encoding: string; sha: string }>;
-  
+  getFileContent(
+    owner: string,
+    repo: string,
+    path: string,
+    ref?: string
+  ): Promise<{ content: string; encoding: string; sha: string }>;
+
   /**
    * Branch Operations
    */
-  listBranches(owner: string, repo: string): Promise<Array<{ name: string; commit: { sha: string; url: string } }>>;
-  getBranch(owner: string, repo: string, branch: string): Promise<{ name: string; commit: { sha: string; url: string }; protected: boolean }>;
-  
+  listBranches(
+    owner: string,
+    repo: string
+  ): Promise<Array<{ name: string; commit: { sha: string; url: string } }>>;
+  getBranch(
+    owner: string,
+    repo: string,
+    branch: string
+  ): Promise<{ name: string; commit: { sha: string; url: string }; protected: boolean }>;
+
   /**
    * Tag Operations
    */
-  listTags(owner: string, repo: string): Promise<Array<{ name: string; commit: { sha: string; url: string } }>>;
-  getTag(owner: string, repo: string, tag: string): Promise<{ name: string; commit: { sha: string; url: string }; zipballUrl: string; tarballUrl: string }>;
+  listTags(
+    owner: string,
+    repo: string
+  ): Promise<Array<{ name: string; commit: { sha: string; url: string } }>>;
+  getTag(
+    owner: string,
+    repo: string,
+    tag: string
+  ): Promise<{
+    name: string;
+    commit: { sha: string; url: string };
+    zipballUrl: string;
+    tarballUrl: string;
+  }>;
 }

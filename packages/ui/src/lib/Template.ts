@@ -54,7 +54,6 @@ export class Template {
   }
 }
 
-
 export function getDefaultTemplates(): Record<number, string> {
   return DEFAULT_TEMPLATES;
 }

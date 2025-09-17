@@ -27,12 +27,14 @@ export function makeGraspServersUnsignedEvent(opts: {
   const { pubkey, urls, identifier = DEFAULT_GRASP_SET_ID } = opts;
   const created_at = opts.created_at ?? Math.floor(Date.now() / 1000);
 
-  const clean = Array.from(new Set(urls.map(normalizeGraspServerUrl))).filter(validateGraspServerUrl);
+  const clean = Array.from(new Set(urls.map(normalizeGraspServerUrl))).filter(
+    validateGraspServerUrl
+  );
   const content = JSON.stringify({ urls: clean });
   const tags: string[][] = [
     ['d', identifier],
     // Optional: include owner for clarity (not required for parameterized replaceable)
-    ['author', pubkey],
+    ['author', pubkey]
   ];
   return { kind: GRASP_SET_KIND, created_at, tags, content };
 }

@@ -5,6 +5,7 @@ A comprehensive TypeScript monorepo for integrating Git workflows with the Nostr
 ## 🎯 Purpose
 
 This platform bridges Git version control with Nostr's decentralized network, allowing developers to:
+
 - Publish Git repositories, patches, and issues as Nostr events
 - Enable decentralized code collaboration without centralized platforms
 - Integrate Git workflows with Nostr clients and relays
@@ -13,12 +14,14 @@ This platform bridges Git version control with Nostr's decentralized network, al
 ## 📦 Packages
 
 ### Core Libraries
+
 - **[@nostr-git/core](packages/core/)** – Core TypeScript library for creating, parsing, and publishing Git-related Nostr events (NIP-34)
 - **[@nostr-git/shared-types](packages/shared-types/)** – Shared TypeScript types and constants for Git/Nostr event structures
 - **[@nostr-git/git-wrapper](packages/git-wrapper/)** – Git operations wrapper with Nostr integration
 - **[@nostr-git/ui](packages/ui/)** – Svelte 5 component library with TailwindCSS for rendering Git and Nostr UI elements
 
 ### Applications & Extensions
+
 - **[Extension](packages/extension/)** – Browser extension that adds Nostr publishing capabilities to GitHub
 - **[VSCode-ngit](packages/vscode-ngit/)** – VS Code extension adding Nostr Git (`ngit`) support to the IDE
 - **[Actions](packages/actions/)** – GitHub Actions for automatically publishing Nostr Git events on push, issue creation, etc.
@@ -27,10 +30,12 @@ This platform bridges Git version control with Nostr's decentralized network, al
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 - Node.js 18+
 - pnpm 8+
 
 ### Installation
+
 ```bash
 # Clone the repository
 git clone https://github.com/your-org/nostr-git.git
@@ -44,6 +49,7 @@ pnpm build
 ```
 
 ### Development
+
 ```bash
 # Start development mode for all packages
 pnpm watch:all

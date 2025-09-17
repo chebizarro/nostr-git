@@ -10,7 +10,9 @@ export interface Branch {
   isHead: boolean;
 }
 
-export async function listBranchesFromEvent(opts: { repoEvent: RepoAnnouncementEvent; }): Promise<Branch[]> {
+export async function listBranchesFromEvent(opts: {
+  repoEvent: RepoAnnouncementEvent;
+}): Promise<Branch[]> {
   assertRepoAnnouncementEvent(opts.repoEvent);
   const repo = parseRepoAnnouncementEvent(opts.repoEvent);
   // Some repos announce only the name (e.g., "grasp") in tag d. Build a canonical key if needed.
@@ -32,16 +34,21 @@ export async function listBranchesFromEvent(opts: { repoEvent: RepoAnnouncementE
 /**
  * List all branches in a repo.
  */
-export async function listBranches(opts: { url: string; dir: string; }): Promise<Branch[]> {
+export async function listBranches(opts: { url: string; dir: string }): Promise<Branch[]> {
   const git = getGitProvider();
-  const branches = await git.listBranches({dir: opts.dir, url: opts.url });
+  const branches = await git.listBranches({ dir: opts.dir, url: opts.url });
   return branches.map((name: string) => ({ name }));
 }
 
 /**
  * Create a new branch.
  */
-export async function createBranch(opts: { owner: string; repo: string; branch: string; checkout?: boolean; }): Promise<void> {
+export async function createBranch(opts: {
+  owner: string;
+  repo: string;
+  branch: string;
+  checkout?: boolean;
+}): Promise<void> {
   const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
   const git = getGitProvider();
   await git.branch({ dir, ref: opts.branch, checkout: opts.checkout });
@@ -50,7 +57,11 @@ export async function createBranch(opts: { owner: string; repo: string; branch: 
 /**
  * Delete a branch.
  */
-export async function deleteBranch(opts: { owner: string; repo: string; branch: string; }): Promise<void> {
+export async function deleteBranch(opts: {
+  owner: string;
+  repo: string;
+  branch: string;
+}): Promise<void> {
   const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
   const git = getGitProvider();
   await git.deleteBranch({ dir, ref: opts.branch });
@@ -59,7 +70,12 @@ export async function deleteBranch(opts: { owner: string; repo: string; branch: 
 /**
  * Rename a branch.
  */
-export async function renameBranch(opts: { owner: string; repo: string; oldBranch: string; newBranch: string; }): Promise<void> {
+export async function renameBranch(opts: {
+  owner: string;
+  repo: string;
+  oldBranch: string;
+  newBranch: string;
+}): Promise<void> {
   const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
   const git = getGitProvider();
   await git.renameBranch({ dir, oldref: opts.oldBranch, ref: opts.newBranch });

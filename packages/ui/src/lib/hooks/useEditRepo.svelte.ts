@@ -1,6 +1,10 @@
 import type { Event } from "nostr-tools";
 import type { RepoAnnouncementEvent, RepoStateEvent } from "@nostr-git/shared-types";
-import { createRepoAnnouncementEvent, createRepoStateEvent, getTagValue } from "@nostr-git/shared-types";
+import {
+  createRepoAnnouncementEvent,
+  createRepoStateEvent,
+  getTagValue,
+} from "@nostr-git/shared-types";
 import { git } from "@nostr-git/core";
 
 const { detectVendorFromUrl } = git;
@@ -124,7 +128,8 @@ export function useEditRepo() {
 
       // Step 2: Update files if needed (README, default branch changes)
       const filesChanged =
-        config.readmeContent !== `# ${currentName}\n\n${getTagValue(currentAnnouncement as any, "description") || ""}` ||
+        config.readmeContent !==
+          `# ${currentName}\n\n${getTagValue(currentAnnouncement as any, "description") || ""}` ||
         config.defaultBranch !==
           (getTagValue(currentState as any, "HEAD")?.replace("ref: refs/heads/", "") || "main");
 
@@ -179,12 +184,12 @@ export function useEditRepo() {
 
       // Determine provider from clone URL
       const provider = detectVendorFromUrl(cloneUrl);
-      
+
       // For GRASP repositories, we need to ensure the relay URL is included in both clone and relays tags
       const cloneUrls = [updatedCloneUrl];
       let relayUrls: string[] = [];
-      
-      if (provider === 'grasp') {
+
+      if (provider === "grasp") {
         // For GRASP, the clone URL is the relay URL, so we need to add it to both clone and relays tags
         relayUrls = [updatedCloneUrl];
       }

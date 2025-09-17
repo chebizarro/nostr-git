@@ -10,7 +10,7 @@ function makeGit(): GitProvider {
 
 function makeCache(): RepoCacheManager {
   return {
-    getRepoCache: vi.fn(async () => null),
+    getRepoCache: vi.fn(async () => null)
   } as any;
 }
 
@@ -28,7 +28,7 @@ describe('safePushToRemoteUtil', () => {
         resolveRobustBranch: async () => 'main',
         hasUncommittedChanges: async () => false,
         needsUpdate: async () => false,
-        pushToRemote: async () => ({ success: true }),
+        pushToRemote: async () => ({ success: true })
       }
     );
     expect(res.success).toBe(false);
@@ -48,7 +48,7 @@ describe('safePushToRemoteUtil', () => {
         resolveRobustBranch: async () => 'main',
         hasUncommittedChanges: async () => false,
         needsUpdate: async () => false,
-        pushToRemote: async () => ({ success: true }),
+        pushToRemote: async () => ({ success: true })
       }
     );
     expect(res.success).toBe(false);
@@ -68,7 +68,7 @@ describe('safePushToRemoteUtil', () => {
         resolveRobustBranch: async () => 'main',
         hasUncommittedChanges: async () => false,
         needsUpdate: async () => true,
-        pushToRemote: async () => ({ success: true }),
+        pushToRemote: async () => ({ success: true })
       }
     );
     expect(res.success).toBe(false);
@@ -89,7 +89,7 @@ describe('safePushToRemoteUtil', () => {
         resolveRobustBranch: async () => 'main',
         hasUncommittedChanges: async () => false,
         needsUpdate: async () => false,
-        pushToRemote: pushSpy,
+        pushToRemote: pushSpy
       }
     );
     expect(res.success).toBe(true);

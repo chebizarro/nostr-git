@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { nip19, type NostrEvent } from 'nostr-tools';
-  import { onMount } from 'svelte';
-  import { Activity, Copy } from '@lucide/svelte';
-  import { useRegistry } from '../../useRegistry';
-  
+  import { nip19, type NostrEvent } from "nostr-tools";
+  import { onMount } from "svelte";
+  import { Activity, Copy } from "@lucide/svelte";
+  import { useRegistry } from "../../useRegistry";
+
   const { Card, Button, ProfileLink, Badge } = useRegistry();
 
   interface Props {
@@ -12,65 +12,65 @@
 
   let { event }: Props = $props();
 
-  let statusMessage = $state('');
-  let authorNpub = $state('');
-  let repoAddress = $state('');
-  let targetEventId = $state('');
-  let previousStatus = $state('');
-  let newStatus = $state('');
+  let statusMessage = $state("");
+  let authorNpub = $state("");
+  let repoAddress = $state("");
+  let targetEventId = $state("");
+  let previousStatus = $state("");
+  let newStatus = $state("");
 
-  const displayMessage = $derived(statusMessage || event.content || 'Status change');
+  const displayMessage = $derived(statusMessage || event.content || "Status change");
   const createdDate = $derived(new Date(event.created_at * 1000));
 
   const statusTypeInfo = $derived.by(() => {
     switch (event.kind) {
       case 1630:
-        return { 
-          type: 'Issue Status', 
-          color: 'text-amber-500' 
+        return {
+          type: "Issue Status",
+          color: "text-amber-500",
         };
       case 1631:
-        return { 
-          type: 'Patch Status', 
-          color: 'text-purple-500' 
+        return {
+          type: "Patch Status",
+          color: "text-purple-500",
         };
       case 1632:
-        return { 
-          type: 'Repository Status', 
-          color: 'text-blue-500' 
+        return {
+          type: "Repository Status",
+          color: "text-blue-500",
         };
       case 1633:
-        return { 
-          type: 'General Status', 
-          color: 'text-gray-500' 
+        return {
+          type: "General Status",
+          color: "text-gray-500",
         };
       default:
-        return { 
-          type: 'Status Change', 
-          color: 'text-yellow-500' 
+        return {
+          type: "Status Change",
+          color: "text-yellow-500",
         };
     }
   });
 
   const parseEventData = () => {
     const tags = event.tags || [];
-    
+
     for (const tag of tags) {
       switch (tag[0]) {
-        case 'status':
-          newStatus = tag[1] || '';
+        case "status":
+          newStatus = tag[1] || "";
           break;
-        case 'previous-status':
-          previousStatus = tag[1] || '';
+        case "previous-status":
+          previousStatus = tag[1] || "";
           break;
-        case 'a':
-          repoAddress = tag[1] || '';
+        case "a":
+          repoAddress = tag[1] || "";
           break;
-        case 'e':
-          targetEventId = tag[1] || '';
+        case "e":
+          targetEventId = tag[1] || "";
           break;
-        case 'subject':
-          statusMessage = tag[1] || '';
+        case "subject":
+          statusMessage = tag[1] || "";
           break;
       }
     }
@@ -80,8 +80,8 @@
       try {
         authorNpub = nip19.npubEncode(event.pubkey);
       } catch (error) {
-        console.warn('Failed to encode npub:', error);
-        authorNpub = event.pubkey.slice(0, 16) + '...';
+        console.warn("Failed to encode npub:", error);
+        authorNpub = event.pubkey.slice(0, 16) + "...";
       }
     }
   };
@@ -98,7 +98,7 @@
     try {
       await navigator.clipboard.writeText(text);
     } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
+      console.error("Failed to copy to clipboard:", error);
     }
   };
 
@@ -110,7 +110,7 @@
 <Card class="git-card hover:bg-accent/50 transition-colors">
   <div class="flex items-start gap-3">
     <Activity class={`h-6 w-6 mt-1 ${statusTypeInfo.color}`} />
-    
+
     <div class="flex-1">
       <div class="flex items-center justify-between">
         <div class="flex-1">
@@ -119,7 +119,7 @@
           </h3>
         </div>
       </div>
-      
+
       <div class="flex items-center gap-2 text-xs text-muted-foreground mb-1">
         <span>By <ProfileLink pubkey={event.pubkey} /></span>
         <span>•</span>
@@ -155,11 +155,11 @@
           {#if repoAddress}
             <span class="text-muted-foreground">Repository:</span>
             <code class="bg-muted px-2 py-1 rounded font-mono">
-              {repoAddress.split('/').pop() || repoAddress}
+              {repoAddress.split("/").pop() || repoAddress}
             </code>
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               class="h-6 px-1"
               onclick={() => copyToClipboard(repoAddress)}
               title="Copy repository address"
@@ -168,16 +168,16 @@
             </Button>
           {/if}
         </div>
-        
+
         {#if targetEventId}
           <div class="flex items-center gap-1 text-xs text-muted-foreground">
             <span>Target:</span>
             <code class="bg-muted px-2 py-1 rounded font-mono">
               {targetEventId.slice(0, 8)}...
             </code>
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               class="h-6 px-1"
               onclick={() => copyToClipboard(targetEventId)}
               title="Copy event ID"

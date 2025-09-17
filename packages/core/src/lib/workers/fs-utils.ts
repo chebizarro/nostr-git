@@ -41,7 +41,8 @@ export async function safeRmrf(fs: any, path: string): Promise<void> {
   async function rmrf(p: string): Promise<void> {
     try {
       const stat = await fs.promises.stat(p);
-      const isDir = typeof stat.isDirectory === 'function' ? stat.isDirectory() : stat.type === 'dir';
+      const isDir =
+        typeof stat.isDirectory === 'function' ? stat.isDirectory() : stat.type === 'dir';
       if (isDir) {
         const entries = await fs.promises.readdir(p);
         for (const entry of entries) await rmrf(`${p}/${entry}`);

@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { Plus, Minus, MessageSquarePlus } from '@lucide/svelte';
+  import { Plus, Minus, MessageSquarePlus } from "@lucide/svelte";
 
   interface Hunk {
     oldStart: number;
     oldLines: number;
     newStart: number;
     newLines: number;
-    patches: Array<{ line: string; type: '+' | '-' | ' ' }>;
+    patches: Array<{ line: string; type: "+" | "-" | " " }>;
   }
 
   interface Props {
@@ -22,27 +22,27 @@
       oldLineNum: number | null;
       newLineNum: number | null;
       content: string;
-      type: '+' | '-' | ' ';
+      type: "+" | "-" | " ";
     }> = [];
 
     let oldLineNum = hunk.oldStart;
     let newLineNum = hunk.newStart;
 
     for (const patch of hunk.patches) {
-      if (patch.type === '+') {
+      if (patch.type === "+") {
         lines.push({
           oldLineNum: null,
           newLineNum: newLineNum,
           content: patch.line,
-          type: patch.type
+          type: patch.type,
         });
         newLineNum++;
-      } else if (patch.type === '-') {
+      } else if (patch.type === "-") {
         lines.push({
           oldLineNum: oldLineNum,
           newLineNum: null,
           content: patch.line,
-          type: patch.type
+          type: patch.type,
         });
         oldLineNum++;
       } else {
@@ -50,7 +50,7 @@
           oldLineNum: oldLineNum,
           newLineNum: newLineNum,
           content: patch.line,
-          type: patch.type
+          type: patch.type,
         });
         oldLineNum++;
         newLineNum++;
@@ -61,47 +61,47 @@
   };
 
   // Get line type styling
-  const getLineClass = (type: '+' | '-' | ' ') => {
+  const getLineClass = (type: "+" | "-" | " ") => {
     switch (type) {
-      case '+':
-        return 'bg-green-50 border-l-2 border-l-green-500 text-green-900';
-      case '-':
-        return 'bg-red-50 border-l-2 border-l-red-500 text-red-900';
+      case "+":
+        return "bg-green-50 border-l-2 border-l-green-500 text-green-900";
+      case "-":
+        return "bg-red-50 border-l-2 border-l-red-500 text-red-900";
       default:
-        return 'bg-background';
+        return "bg-background";
     }
   };
 
   // Get line number styling
-  const getLineNumClass = (type: '+' | '-' | ' ') => {
+  const getLineNumClass = (type: "+" | "-" | " ") => {
     switch (type) {
-      case '+':
-        return 'bg-green-100 text-green-700';
-      case '-':
-        return 'bg-red-100 text-red-700';
+      case "+":
+        return "bg-green-100 text-green-700";
+      case "-":
+        return "bg-red-100 text-red-700";
       default:
-        return 'bg-muted text-muted-foreground';
+        return "bg-muted text-muted-foreground";
     }
   };
 
   // Handle add comment placeholder
   const handleAddComment = (lineNum: number) => {
     // Placeholder for future comment functionality
-    console.log('Add comment at line:', lineNum);
+    console.log("Add comment at line:", lineNum);
   };
 </script>
 
 {#if hunks.length === 0}
-  <div class="p-4 text-center text-muted-foreground">
-    No changes to display
-  </div>
+  <div class="p-4 text-center text-muted-foreground">No changes to display</div>
 {:else}
   <div class="overflow-hidden rounded-md border border-border">
     {#each hunks as hunk, hunkIndex}
       {@const lines = calculateLineNumbers(hunk)}
-      
+
       <!-- Hunk Header -->
-      <div class="bg-muted px-4 py-2 text-sm font-mono text-muted-foreground border-b border-border">
+      <div
+        class="bg-muted px-4 py-2 text-sm font-mono text-muted-foreground border-b border-border"
+      >
         @@
         {#if hunk.oldLines > 0}
           -{hunk.oldStart},{hunk.oldLines}
@@ -126,20 +126,32 @@
             <!-- Line Numbers -->
             <div class="flex shrink-0">
               <!-- Old Line Number -->
-              <div class="w-12 px-2 py-1 text-right text-xs font-mono {getLineNumClass(line.type)} border-r border-border">
-                {line.oldLineNum || ''}
+              <div
+                class="w-12 px-2 py-1 text-right text-xs font-mono {getLineNumClass(
+                  line.type
+                )} border-r border-border"
+              >
+                {line.oldLineNum || ""}
               </div>
               <!-- New Line Number -->
-              <div class="w-12 px-2 py-1 text-right text-xs font-mono {getLineNumClass(line.type)} border-r border-border">
-                {line.newLineNum || ''}
+              <div
+                class="w-12 px-2 py-1 text-right text-xs font-mono {getLineNumClass(
+                  line.type
+                )} border-r border-border"
+              >
+                {line.newLineNum || ""}
               </div>
             </div>
 
             <!-- Change Indicator -->
-            <div class="w-6 px-1 py-1 text-center text-xs font-mono {getLineNumClass(line.type)} border-r border-border">
-              {#if line.type === '+'}
+            <div
+              class="w-6 px-1 py-1 text-center text-xs font-mono {getLineNumClass(
+                line.type
+              )} border-r border-border"
+            >
+              {#if line.type === "+"}
                 <Plus class="h-3 w-3 mx-auto text-green-600" />
-              {:else if line.type === '-'}
+              {:else if line.type === "-"}
                 <Minus class="h-3 w-3 mx-auto text-red-600" />
               {:else}
                 <span class="text-muted-foreground"> </span>
@@ -177,23 +189,24 @@
   /* Ensure code content doesn't break layout */
   pre {
     margin: 0;
-    font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+    font-family:
+      ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
   }
-  
+
   /* Custom scrollbar for horizontal overflow */
   .overflow-x-auto::-webkit-scrollbar {
     height: 6px;
   }
-  
+
   .overflow-x-auto::-webkit-scrollbar-track {
     background: transparent;
   }
-  
+
   .overflow-x-auto::-webkit-scrollbar-thumb {
     background-color: rgba(0, 0, 0, 0.2);
     border-radius: 3px;
   }
-  
+
   .overflow-x-auto::-webkit-scrollbar-thumb:hover {
     background-color: rgba(0, 0, 0, 0.3);
   }

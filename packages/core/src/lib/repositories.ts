@@ -24,13 +24,20 @@ export function groupByEuc(events: RepoAnnouncementEvent[]): RepoGroup[] {
     const euc = evt.tags.find((t: NostrTag) => t[0] === 'r' && t[2] === 'euc')?.[1];
     if (!euc) continue;
     const d = evt.tags.find((t: NostrTag) => t[0] === 'd')?.[1];
-    const web = evt.tags.filter((t: NostrTag) => t[0] === 'web').flatMap((t: NostrTag) => (t as string[]).slice(1));
-    const clone = evt.tags.filter((t: NostrTag) => t[0] === 'clone').flatMap((t: NostrTag) => (t as string[]).slice(1));
-    const relays = evt.tags.filter((t: NostrTag) => t[0] === 'relays').flatMap((t: NostrTag) => (t as string[]).slice(1));
+    const web = evt.tags
+      .filter((t: NostrTag) => t[0] === 'web')
+      .flatMap((t: NostrTag) => (t as string[]).slice(1));
+    const clone = evt.tags
+      .filter((t: NostrTag) => t[0] === 'clone')
+      .flatMap((t: NostrTag) => (t as string[]).slice(1));
+    const relays = evt.tags
+      .filter((t: NostrTag) => t[0] === 'relays')
+      .flatMap((t: NostrTag) => (t as string[]).slice(1));
     const maint = evt.tags.find((t: NostrTag) => t[0] === 'maintainers') as string[] | undefined;
     const maintainers = maint ? maint.slice(1) : [];
 
-    if (!by[euc]) by[euc] = { euc, repos: [], handles: [], web: [], clone: [], relays: [], maintainers: [] };
+    if (!by[euc])
+      by[euc] = { euc, repos: [], handles: [], web: [], clone: [], relays: [], maintainers: [] };
     const g = by[euc];
     g.repos.push(evt);
     if (d) g.handles.push(d);
@@ -39,13 +46,13 @@ export function groupByEuc(events: RepoAnnouncementEvent[]): RepoGroup[] {
     g.relays.push(...relays);
     g.maintainers.push(...maintainers);
   }
-  return Object.values(by).map(g => ({
+  return Object.values(by).map((g) => ({
     ...g,
     handles: Array.from(new Set(g.handles)),
     web: Array.from(new Set(g.web)),
     clone: Array.from(new Set(g.clone)),
     relays: Array.from(new Set(g.relays)),
-    maintainers: Array.from(new Set(g.maintainers)),
+    maintainers: Array.from(new Set(g.maintainers))
   }));
 }
 

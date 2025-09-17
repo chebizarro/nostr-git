@@ -1,38 +1,38 @@
 // NIP-34: Git Collaboration Event Types for Nostr
 // https://github.com/nostr-protocol/nips/blob/master/34.md
 
-import type { Event } from 'nostr-tools';
+import type {Event} from "nostr-tools"
 
 /**
  * Canonical Nostr event type from nostr-tools.
  * https://jsr.io/@nostr/tools/doc/Event
  */
-export type NostrEvent = Event;
+export type NostrEvent = Event
 
 /**
  * Generic Nostr tag: [tagName, ...values]
  */
-export type NostrTag = [string, ...string[]];
+export type NostrTag = [string, ...string[]]
 
 // -------------------
 // Kind Number Constants
 // -------------------
 
 // Repository events
-export const GIT_REPO_ANNOUNCEMENT = 30617;
-export const GIT_REPO_STATE = 30618;
+export const GIT_REPO_ANNOUNCEMENT = 30617
+export const GIT_REPO_STATE = 30618
 
 // Patch events
-export const GIT_PATCH = 1617;
+export const GIT_PATCH = 1617
 
 // Issue events
-export const GIT_ISSUE = 1621;
+export const GIT_ISSUE = 1621
 
 // Status events
-export const GIT_STATUS_OPEN = 1630;
-export const GIT_STATUS_APPLIED = 1631;
-export const GIT_STATUS_CLOSED = 1632;
-export const GIT_STATUS_DRAFT = 1633;
+export const GIT_STATUS_OPEN = 1630
+export const GIT_STATUS_APPLIED = 1631
+export const GIT_STATUS_CLOSED = 1632
+export const GIT_STATUS_DRAFT = 1633
 
 // -------------------
 // Repository Announcement (kind: 30617)
@@ -46,11 +46,11 @@ export type RepoAnnouncementTag =
   | ["relays", ...string[]]
   | ["r", string, "euc"]
   | ["maintainers", ...string[]]
-  | ["t", string];
+  | ["t", string]
 
 export interface RepoAnnouncementEvent extends NostrEvent {
-  kind: typeof GIT_REPO_ANNOUNCEMENT;
-  tags: RepoAnnouncementTag[];
+  kind: typeof GIT_REPO_ANNOUNCEMENT
+  tags: RepoAnnouncementTag[]
 }
 
 // -------------------
@@ -58,16 +58,12 @@ export interface RepoAnnouncementEvent extends NostrEvent {
 // -------------------
 export type RepoStateTag =
   | ["d", string]
-  | [
-      `refs/heads/${string}` | `refs/tags/${string}`,
-      string,
-      ...string[]
-    ]
-  | ["HEAD", `ref: refs/heads/${string}`];
+  | [`refs/heads/${string}` | `refs/tags/${string}`, string, ...string[]]
+  | ["HEAD", `ref: refs/heads/${string}`]
 
 export interface RepoStateEvent extends NostrEvent {
-  kind: typeof GIT_REPO_STATE;
-  tags: RepoStateTag[];
+  kind: typeof GIT_REPO_STATE
+  tags: RepoStateTag[]
 }
 
 // -------------------
@@ -81,12 +77,12 @@ export type PatchTag =
   | ["commit", string]
   | ["parent-commit", string]
   | ["commit-pgp-sig", string]
-  | ["committer", string, string, string, string];
+  | ["committer", string, string, string, string]
 
 export interface PatchEvent extends NostrEvent {
-  kind: typeof GIT_PATCH;
-  content: string; // git format-patch content
-  tags: PatchTag[];
+  kind: typeof GIT_PATCH
+  content: string // git format-patch content
+  tags: PatchTag[]
 }
 
 // -------------------
@@ -97,13 +93,13 @@ export type IssueTag =
   | ["p", string]
   | ["subject", string]
   | ["t", string]
-  | ["e", string];
+  | ["e", string]
 
 export interface IssueEvent extends NostrEvent {
-  id: string;
-  kind: typeof GIT_ISSUE;
-  content: string; // markdown text
-  tags: IssueTag[];
+  id: string
+  kind: typeof GIT_ISSUE
+  content: string // markdown text
+  tags: IssueTag[]
 }
 
 // -------------------
@@ -117,12 +113,16 @@ export type StatusTag =
   | ["r", string]
   | ["e", string, "", "mention"]
   | ["merge-commit", string]
-  | ["applied-as-commits", ...string[]];
+  | ["applied-as-commits", ...string[]]
 
 export interface StatusEvent extends NostrEvent {
-  kind: typeof GIT_STATUS_OPEN | typeof GIT_STATUS_CLOSED | typeof GIT_STATUS_APPLIED | typeof GIT_STATUS_DRAFT;
-  content: string;
-  tags: StatusTag[];
+  kind:
+    | typeof GIT_STATUS_OPEN
+    | typeof GIT_STATUS_CLOSED
+    | typeof GIT_STATUS_APPLIED
+    | typeof GIT_STATUS_DRAFT
+  content: string
+  tags: StatusTag[]
 }
 
 // -------------------
@@ -133,7 +133,7 @@ export type Nip34Event =
   | RepoStateEvent
   | PatchEvent
   | IssueEvent
-  | StatusEvent;
+  | StatusEvent
 
 // Utility: kind to type mapping
 
@@ -141,20 +141,20 @@ export type Nip34Event =
 // Profile Type for Avatars and User Metadata
 // -------------------
 
-export type TrustedEvent = NostrEvent;
+export type TrustedEvent = NostrEvent
 
 export type Profile = {
-  pubkey: string;
-  name?: string;
-  nip05?: string;
-  lud06?: string;
-  lud16?: string;
-  lnurl?: string;
-  about?: string;
-  banner?: string;
-  picture?: string;
-  website?: string;
-  display_name?: string;
-  event?: TrustedEvent;
-};
-export type Nip34EventByKind<K extends Nip34Event["kind"]> = Extract<Nip34Event, { kind: K }>;
+  pubkey: string
+  name?: string
+  nip05?: string
+  lud06?: string
+  lud16?: string
+  lnurl?: string
+  about?: string
+  banner?: string
+  picture?: string
+  website?: string
+  display_name?: string
+  event?: TrustedEvent
+}
+export type Nip34EventByKind<K extends Nip34Event["kind"]> = Extract<Nip34Event, {kind: K}>

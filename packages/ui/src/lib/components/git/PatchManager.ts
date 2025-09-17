@@ -1,9 +1,5 @@
-import {
-  type PatchEvent,
-} from "@nostr-git/shared-types";
-import {
-  type MergeAnalysisResult,
-} from "@nostr-git/core";
+import { type PatchEvent } from "@nostr-git/shared-types";
+import { type MergeAnalysisResult } from "@nostr-git/core";
 import { WorkerManager } from "./WorkerManager";
 import { MergeAnalysisCacheManager } from "./CacheManager";
 import { writable, type Readable } from "svelte/store";
@@ -19,13 +15,13 @@ export interface PatchManagerConfig {
   /** Maximum concurrent analysis operations */
   maxConcurrent?: number;
   /** Log level for PatchManager: controls console noise (default: 'warn') */
-  logLevel?: 'silent' | 'error' | 'warn' | 'info' | 'debug';
+  logLevel?: "silent" | "error" | "warn" | "info" | "debug";
 }
 
 /**
  * PatchManager handles all patch-related operations including merge analysis,
  * background processing, and coordination with cache and worker systems.
- * 
+ *
  * This component is part of the composition-based refactor of the Repo class,
  * extracting patch-specific functionality into a focused, reusable component.
  */
@@ -34,13 +30,13 @@ export class PatchManager {
   private cacheManager: MergeAnalysisCacheManager;
   private config: Required<PatchManagerConfig>;
   // Severity mapping for log filtering
-  private static readonly severity: Record<'debug' | 'info' | 'warn' | 'error', number> = {
+  private static readonly severity: Record<"debug" | "info" | "warn" | "error", number> = {
     debug: 10,
     info: 20,
     warn: 30,
     error: 40,
   };
-  
+
   // Track ongoing operations
   private activeAnalysis = new Set<string>();
   private batchTimeouts = new Set<number>();
@@ -55,35 +51,38 @@ export class PatchManager {
   ) {
     this.workerManager = workerManager;
     this.cacheManager = cacheManager;
-    
+
     // Set default configuration
     this.config = {
       batchSize: config.batchSize ?? 3,
       batchDelay: config.batchDelay ?? 200,
       maxConcurrent: config.maxConcurrent ?? 5,
-      logLevel: config.logLevel ?? 'warn',
+      logLevel: config.logLevel ?? "warn",
     };
   }
 
   /**
    * Internal logging helper that respects configured log level
    */
-  private log(level: 'debug' | 'info' | 'warn' | 'error', ...args: unknown[]) {
-    if (this.config.logLevel === 'silent') return;
-    const current = PatchManager.severity[this.config.logLevel as Exclude<typeof this.config.logLevel, 'silent'>] ?? 30;
+  private log(level: "debug" | "info" | "warn" | "error", ...args: unknown[]) {
+    if (this.config.logLevel === "silent") return;
+    const current =
+      PatchManager.severity[
+        this.config.logLevel as Exclude<typeof this.config.logLevel, "silent">
+      ] ?? 30;
     const severity = PatchManager.severity[level];
     if (severity < current) return;
     switch (level) {
-      case 'debug':
+      case "debug":
         console.debug(...args);
         break;
-      case 'info':
+      case "info":
         console.info?.(...args);
         break;
-      case 'warn':
+      case "warn":
         console.warn(...args);
         break;
-      case 'error':
+      case "error":
         console.error(...args);
         break;
     }
@@ -134,40 +133,40 @@ export class PatchManager {
   ): Promise<MergeAnalysisResult | null> {
     // First try to get cached result
     const cachedResult = await this.cacheManager.get(patch, targetBranch, canonicalKey);
-    
+
     // If we have a valid cached result that's not an error, return it
-    if (cachedResult && cachedResult.analysis !== 'error') {
+    if (cachedResult && cachedResult.analysis !== "error") {
       this.log(
-        'debug',
+        "debug",
         `🧠 MergeAnalysis cache hit for patch ${patch.id} → ${cachedResult.analysis} (branch=${targetBranch}, repo=${canonicalKey})`
       );
       return cachedResult;
     }
-    
+
     // If no cached result or cached result is an error, perform fresh analysis
     try {
       const freshResult = await this.analyzePatch(patch, targetBranch, canonicalKey, workerRepoId);
-      
+
       if (freshResult) {
         // Cache the fresh result
         await this.cacheManager.set(patch, targetBranch, canonicalKey, freshResult);
         // Publish to reactive store
         this.updateStore(patch.id, freshResult);
         this.log(
-          'debug',
+          "debug",
           `🧪 MergeAnalysis fresh result for patch ${patch.id} → ${freshResult.analysis} (branch=${targetBranch}, repo=${canonicalKey})`
         );
       }
-      
+
       return freshResult;
     } catch (error) {
-      this.log('error', 'PatchManager fresh analysis failed:', error);
-      
+      this.log("error", "PatchManager fresh analysis failed:", error);
+
       // Return cached error result if we have one, otherwise create new error result
-      if (cachedResult && cachedResult.analysis === 'error') {
+      if (cachedResult && cachedResult.analysis === "error") {
         return cachedResult;
       }
-      
+
       // Create new error result
       const errorResult: MergeAnalysisResult = {
         canMerge: false,
@@ -177,10 +176,10 @@ export class PatchManager {
         upToDate: false,
         fastForward: false,
         patchCommits: [],
-        analysis: 'error',
-        errorMessage: error instanceof Error ? error.message : 'Unknown analysis error'
+        analysis: "error",
+        errorMessage: error instanceof Error ? error.message : "Unknown analysis error",
       };
-      
+
       return errorResult;
     }
   }
@@ -196,8 +195,8 @@ export class PatchManager {
    * Force refresh merge analysis for a specific patch
    */
   async refreshMergeAnalysis(
-    patch: PatchEvent, 
-    targetBranch: string, 
+    patch: PatchEvent,
+    targetBranch: string,
     canonicalKey: string,
     workerRepoId?: string
   ): Promise<MergeAnalysisResult | null> {
@@ -208,14 +207,14 @@ export class PatchManager {
 
       // Perform fresh analysis
       const result = await this.analyzePatch(patch, targetBranch, canonicalKey, workerRepoId);
-      
+
       if (result) {
         // Cache the new result
         await this.cacheManager.set(patch, targetBranch, canonicalKey, result);
         // Publish to reactive store
         this.updateStore(patch.id, result);
       }
-      
+
       return result;
     } catch (error) {
       console.error(`Failed to refresh merge analysis for patch ${patch.id}:`, error);
@@ -234,7 +233,6 @@ export class PatchManager {
   ): Promise<MergeAnalysisResult | null> {
     // Prevent duplicate analysis
     if (this.activeAnalysis.has(patch.id)) {
-
       return null;
     }
 
@@ -242,35 +240,32 @@ export class PatchManager {
 
     try {
       this.log(
-        'debug',
+        "debug",
         `🔍 Analyzing patch ${patch.id} (branch=${targetBranch}, repo=${canonicalKey})`
       );
       // Parse the patch for analysis
       const { parseGitPatchFromEvent } = await import("@nostr-git/core");
       const parsedPatch = parseGitPatchFromEvent(patch);
-      
+
       // Use WorkerManager to perform the analysis
       const result = await this.workerManager.analyzePatchMerge({
         repoId: canonicalKey,
         patchData: {
           id: parsedPatch.id,
-          commits: parsedPatch.commits.map(c => ({
+          commits: parsedPatch.commits.map((c) => ({
             oid: c.oid,
             message: c.message,
-            author: { name: c.author.name, email: c.author.email }
+            author: { name: c.author.name, email: c.author.email },
           })),
           baseBranch: parsedPatch.baseBranch,
-          rawContent: parsedPatch.raw.content
+          rawContent: parsedPatch.raw.content,
         },
-        targetBranch
+        targetBranch,
       });
-      this.log(
-        'debug',
-        `✅ Analysis complete for patch ${patch.id} → ${result.analysis}`
-      );
+      this.log("debug", `✅ Analysis complete for patch ${patch.id} → ${result.analysis}`);
       return result;
     } catch (error) {
-      this.log('error', `Failed to analyze patch ${patch.id}:`, error);
+      this.log("error", `Failed to analyze patch ${patch.id}:`, error);
       return null;
     } finally {
       this.activeAnalysis.delete(patch.id);
@@ -290,7 +285,7 @@ export class PatchManager {
 
     // Clear any existing timeouts
     this.clearBatchTimeouts();
-    
+
     // Cleanup expired cache entries
     this.cacheManager.cleanup();
 
@@ -303,20 +298,20 @@ export class PatchManager {
 
     // Process patches in batches to avoid overwhelming the system
     const { batchSize, batchDelay } = this.config;
-    
+
     for (let i = 0; i < patches.length; i += batchSize) {
       const batch = patches.slice(i, i + batchSize);
-      
+
       // Schedule batch processing with staggered delays
       const timeoutId = window.setTimeout(async () => {
         this.log(
-          'debug',
+          "debug",
           `📦 Processing merge analysis batch size=${batch.length} (branch=${targetBranch}, repo=${canonicalKey})`
         );
         await this.processBatch(batch, targetBranch, canonicalKey, workerRepoId);
         this.batchTimeouts.delete(timeoutId);
       }, i * batchDelay);
-      
+
       this.batchTimeouts.add(timeoutId);
     }
   }
@@ -337,24 +332,22 @@ export class PatchManager {
         if (cachedResult) {
           // Ensure store reflects cached value
           this.updateStore(patch.id, cachedResult);
-          this.log('debug', `🧠 (bg) cache hit for patch ${patch.id} → ${cachedResult.analysis}`);
+          this.log("debug", `🧠 (bg) cache hit for patch ${patch.id} → ${cachedResult.analysis}`);
           continue;
         }
 
-
-        
         // Perform analysis
         const result = await this.analyzePatch(patch, targetBranch, canonicalKey, workerRepoId);
-        
+
         if (result) {
           // Cache the result
           await this.cacheManager.set(patch, targetBranch, canonicalKey, result);
           // Publish to reactive store
           this.updateStore(patch.id, result);
-          this.log('debug', `🧪 (bg) fresh result for patch ${patch.id} → ${result.analysis}`);
+          this.log("debug", `🧪 (bg) fresh result for patch ${patch.id} → ${result.analysis}`);
         }
       } catch (error) {
-        this.log('warn', `Background merge analysis failed for patch ${patch.id}:`, error);
+        this.log("warn", `Background merge analysis failed for patch ${patch.id}:`, error);
         // Don't cache error results as they might be temporary
       }
     }
@@ -389,7 +382,7 @@ export class PatchManager {
   dispose(): void {
     // Clear all active analysis
     this.activeAnalysis.clear();
-    
+
     // Clear all batch timeouts
     this.clearBatchTimeouts();
     // Clear reactive store

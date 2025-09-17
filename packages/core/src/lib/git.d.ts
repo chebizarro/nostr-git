@@ -1,17 +1,23 @@
 import type { RepoAnnouncement } from '@nostr-git/shared-types';
 import type { PermalinkData } from './permalink.js';
-export declare const rootDir = "/repos";
+export declare const rootDir = '/repos';
 export declare function fetchPermalink(data: PermalinkData): Promise<string>;
-export declare function ensureRepo(opts: {
+export declare function ensureRepo(
+  opts: {
     host: string;
     owner: string;
     repo: string;
     branch: string;
-}, depth?: number): Promise<void>;
-export declare function ensureRepoFromEvent(opts: {
+  },
+  depth?: number
+): Promise<void>;
+export declare function ensureRepoFromEvent(
+  opts: {
     repoEvent: RepoAnnouncement;
     branch: string;
-}, depth?: number): Promise<void>;
+  },
+  depth?: number
+): Promise<void>;
 /**
  * Attempts to guess a file's MIME type from its bytes (accurate),
  * then falls back to extension-based detection
@@ -37,7 +43,12 @@ export declare function githubPermalinkDiffId(filePath: string): Promise<string>
  * Attempt to find which file changed in parentOid..newOid matches
  * the “diff-<sha256(path)>” anchor from GitHub blob permalink.
  */
-export declare function mapDiffHashToFile(dir: string, oldOid: string, newOid: string, diffFileHash: string): Promise<{
-    filepath: string;
-    type: 'add' | 'remove' | 'modify';
+export declare function mapDiffHashToFile(
+  dir: string,
+  oldOid: string,
+  newOid: string,
+  diffFileHash: string
+): Promise<{
+  filepath: string;
+  type: 'add' | 'remove' | 'modify';
 } | null>;

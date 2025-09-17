@@ -41,7 +41,7 @@ export interface CommitLoadResult {
 /**
  * CommitManager handles all commit-related operations including history loading,
  * pagination, caching, and coordination with the git worker system.
- * 
+ *
  * This component is part of the composition-based refactor of the Repo class,
  * extracting commit-specific functionality into a focused, reusable component.
  */
@@ -54,14 +54,14 @@ export class CommitManager {
   private workerRepoId?: string; // for worker API calls
   // Cache
   private readonly COMMIT_CACHE_NAME = "commit_history";
-  
+
   // Commit state
   private commits: any[] = [];
   private totalCommits?: number;
   private currentPage: number = 1;
   private commitsPerPage: number;
   private hasMoreCommits: boolean = false;
-  
+
   // Loading state
   private loadingIds: {
     commits: string | null;
@@ -78,7 +78,7 @@ export class CommitManager {
   ) {
     this.workerManager = workerManager;
     this.cacheManager = cacheManager;
-    
+
     // Set default configuration
     this.config = {
       defaultCommitsPerPage: config.defaultCommitsPerPage ?? 30,
@@ -86,14 +86,14 @@ export class CommitManager {
       defaultDepth: config.defaultDepth ?? 100,
       enableCaching: config.enableCaching ?? true,
     };
-    
+
     this.commitsPerPage = this.config.defaultCommitsPerPage;
 
     // Register commit cache if available
     if (this.cacheManager) {
       this.cacheManager.registerCache(this.COMMIT_CACHE_NAME, {
         type: CacheType.LOCAL_STORAGE,
-        keyPrefix: 'commit_history_cache_',
+        keyPrefix: "commit_history_cache_",
         defaultTTL: 15 * 60 * 1000,
         autoCleanup: true,
         cleanupInterval: 5 * 60 * 1000,
@@ -206,7 +206,7 @@ export class CommitManager {
       // Clear commit history cache to force fresh load
       await this.cacheManager.clear(this.COMMIT_CACHE_NAME);
     }
-    
+
     return await this.loadCommits();
   }
 
@@ -231,43 +231,46 @@ export class CommitManager {
 
       this.loadingIds.commits = context.loading("Loading commits...");
 
-    // Try cache first if enabled
-    const cacheEnabled = !!(this.config.enableCaching && this.cacheManager && this.canonicalKey);
-    // Ensure branchName is a concrete string (short git name)
-    const branchName = (branch ?? mainBranch).split("/").pop()!;
-    const pageKey = cacheEnabled
-      ? `${this.canonicalKey}:${branchName}:p${this.currentPage}:s${this.commitsPerPage}`
-      : undefined;
-    type CommitPageCacheEntry = {
-      commits: any[];
-      total?: number;
-      page: number;
-      pageSize: number;
-      branch: string;
-      repoKey: string;
-    };
-    if (cacheEnabled && pageKey) {
-      const cached = await this.cacheManager!.get<CommitPageCacheEntry>(this.COMMIT_CACHE_NAME, pageKey);
-      if (cached && cached.repoKey === this.canonicalKey && cached.branch === branchName) {
-        // Apply cached state
-        this.commits = cached.commits;
-        this.totalCommits = cached.total;
-        this.hasMoreCommits = cached.total
-          ? this.currentPage * this.commitsPerPage < cached.total
-          : cached.commits.length === this.commitsPerPage; // heuristic if no total
+      // Try cache first if enabled
+      const cacheEnabled = !!(this.config.enableCaching && this.cacheManager && this.canonicalKey);
+      // Ensure branchName is a concrete string (short git name)
+      const branchName = (branch ?? mainBranch).split("/").pop()!;
+      const pageKey = cacheEnabled
+        ? `${this.canonicalKey}:${branchName}:p${this.currentPage}:s${this.commitsPerPage}`
+        : undefined;
+      type CommitPageCacheEntry = {
+        commits: any[];
+        total?: number;
+        page: number;
+        pageSize: number;
+        branch: string;
+        repoKey: string;
+      };
+      if (cacheEnabled && pageKey) {
+        const cached = await this.cacheManager!.get<CommitPageCacheEntry>(
+          this.COMMIT_CACHE_NAME,
+          pageKey
+        );
+        if (cached && cached.repoKey === this.canonicalKey && cached.branch === branchName) {
+          // Apply cached state
+          this.commits = cached.commits;
+          this.totalCommits = cached.total;
+          this.hasMoreCommits = cached.total
+            ? this.currentPage * this.commitsPerPage < cached.total
+            : cached.commits.length === this.commitsPerPage; // heuristic if no total
 
-        if (this.loadingIds.commits) {
-          context.remove(this.loadingIds.commits);
-          this.loadingIds.commits = null;
+          if (this.loadingIds.commits) {
+            context.remove(this.loadingIds.commits);
+            this.loadingIds.commits = null;
+          }
+          return {
+            success: true,
+            commits: this.commits,
+            totalCount: this.totalCommits,
+            fromCache: true,
+          };
         }
-        return {
-          success: true,
-          commits: this.commits,
-          totalCount: this.totalCommits,
-          fromCache: true,
-        };
       }
-    }
 
       // Calculate the depth needed for current page
       const requiredDepth = this.commitsPerPage * this.currentPage;
@@ -305,8 +308,7 @@ export class CommitManager {
         const pageCommits = allCommits.slice(startIndex, endIndex);
 
         // If it's the first page, replace the commits, otherwise append
-        this.commits =
-          this.currentPage === 1 ? pageCommits : [...this.commits, ...pageCommits];
+        this.commits = this.currentPage === 1 ? pageCommits : [...this.commits, ...pageCommits];
 
         this.hasMoreCommits = endIndex < allCommits.length;
 
@@ -428,7 +430,7 @@ export class CommitManager {
     this.totalCommits = undefined;
     this.currentPage = 1;
     this.hasMoreCommits = false;
-    
+
     // Clear any loading states
     if (this.loadingIds.commits) {
       context.remove(this.loadingIds.commits);
@@ -462,13 +464,13 @@ export class CommitManager {
    */
   updateConfig(config: Partial<CommitManagerConfig>): void {
     this.config = { ...this.config, ...config };
-    
+
     // Apply immediate changes
     if (config.defaultCommitsPerPage && config.defaultCommitsPerPage !== this.commitsPerPage) {
       this.setCommitsPerPage(config.defaultCommitsPerPage);
     }
-    
-    console.log('CommitManager configuration updated:', this.config);
+
+    console.log("CommitManager configuration updated:", this.config);
   }
 
   /**
@@ -482,10 +484,10 @@ export class CommitManager {
     if (this.loadingIds.branches) {
       context.remove(this.loadingIds.branches);
     }
-    
+
     // Reset state
     this.reset();
-    
-    console.log('CommitManager disposed');
+
+    console.log("CommitManager disposed");
   }
 }

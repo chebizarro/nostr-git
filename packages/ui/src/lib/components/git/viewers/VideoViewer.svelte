@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { createDataUrl, createBlob } from '@nostr-git/core';
-  
+  import { createDataUrl, createBlob } from "@nostr-git/core";
+
   const {
     content,
     filename,
-    mimeType
+    mimeType,
   }: {
     content: string;
     filename: string;
@@ -12,7 +12,7 @@
   } = $props();
 
   // Convert content to data URL for video display
-  let dataUrl = $state('');
+  let dataUrl = $state("");
   let videoError = $state(false);
   let videoElement = $state<HTMLVideoElement>();
 
@@ -20,7 +20,7 @@
     try {
       dataUrl = createDataUrl(content, mimeType);
     } catch (error) {
-      console.error('Failed to create data URL for video:', error);
+      console.error("Failed to create data URL for video:", error);
       videoError = true;
     }
   });
@@ -33,7 +33,7 @@
     try {
       const blob = createBlob(content, mimeType);
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = filename;
       document.body.appendChild(a);
@@ -41,7 +41,7 @@
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Failed to download video:', error);
+      console.error("Failed to download video:", error);
     }
   }
 </script>
@@ -73,7 +73,7 @@
         <track kind="captions" srclang="en" label="English" />
         Your browser does not support the video tag.
       </video>
-      
+
       <div class="mt-2 flex justify-center">
         <button
           onclick={downloadVideo}

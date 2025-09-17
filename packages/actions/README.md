@@ -12,18 +12,21 @@ These GitHub Actions automate the publishing of repository events, commits, issu
 ## ✨ Features
 
 ### Automated Event Publishing
+
 - **Repository Announcements**: Publish NIP-34 repository events (kind 30617) on repository creation or updates
 - **Commit Events**: Share commit information and patches as Nostr events
 - **Issue Events**: Publish GitHub issues as NIP-34 issue events (kind 1621)
 - **Release Events**: Announce new releases to the Nostr network
 
 ### Flexible Triggers
+
 - **Push Events**: Publish commits and patches on code pushes
 - **Issue Events**: Share issues and discussions automatically
 - **Release Events**: Announce new versions and releases
 - **Custom Triggers**: Configure custom event publishing workflows
 
 ### Security & Configuration
+
 - **Secure Key Management**: Use GitHub Secrets for private key storage
 - **Multi-Relay Support**: Publish to multiple Nostr relays simultaneously
 - **Event Filtering**: Configure which events to publish
@@ -32,12 +35,15 @@ These GitHub Actions automate the publishing of repository events, commits, issu
 ## 📦 Available Actions
 
 ### Repository Announcement Action
+
 Publishes repository metadata to Nostr when repository is created or updated.
 
 ### Commit Publisher Action
+
 Shares commits and patches as Nostr events on push events.
 
 ### Issue Publisher Action
+
 Publishes GitHub issues as decentralized Nostr events.
 
 ## 🚀 Quick Start
@@ -58,7 +64,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        
+
       - name: Announce repository to Nostr
         uses: nostr-git/actions/announce-repo@v1
         with:
@@ -84,8 +90,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch full history for patch generation
-          
+          fetch-depth: 0 # Fetch full history for patch generation
+
       - name: Publish commits to Nostr
         uses: nostr-git/actions/publish-commits@v1
         with:
@@ -136,7 +142,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          
+
       - name: Publish repository events
         uses: nostr-git/actions/publish-events@v1
         with:
@@ -170,35 +176,35 @@ NOSTR_RELAYS=wss://relay.damus.io,wss://nos.lol
 
 #### Common Inputs (All Actions)
 
-| Input | Description | Required | Default |
-|-------|-------------|----------|----------|
-| `nostr_private_key` | Nostr private key (nsec format) | ✅ | - |
-| `relays` | Newline-separated list of relay URLs | ✅ | - |
-| `timeout` | Timeout for relay connections (seconds) | ❌ | `30` |
-| `retry_attempts` | Number of retry attempts for failed publishes | ❌ | `3` |
+| Input               | Description                                   | Required | Default |
+| ------------------- | --------------------------------------------- | -------- | ------- |
+| `nostr_private_key` | Nostr private key (nsec format)               | ✅       | -       |
+| `relays`            | Newline-separated list of relay URLs          | ✅       | -       |
+| `timeout`           | Timeout for relay connections (seconds)       | ❌       | `30`    |
+| `retry_attempts`    | Number of retry attempts for failed publishes | ❌       | `3`     |
 
 #### Repository Announcement Inputs
 
-| Input | Description | Required | Default |
-|-------|-------------|----------|----------|
-| `include_metadata` | Include repository metadata (topics, license) | ❌ | `true` |
-| `include_stats` | Include repository statistics | ❌ | `false` |
+| Input              | Description                                   | Required | Default |
+| ------------------ | --------------------------------------------- | -------- | ------- |
+| `include_metadata` | Include repository metadata (topics, license) | ❌       | `true`  |
+| `include_stats`    | Include repository statistics                 | ❌       | `false` |
 
 #### Commit Publisher Inputs
 
-| Input | Description | Required | Default |
-|-------|-------------|----------|----------|
-| `include_patches` | Generate and include patch data | ❌ | `true` |
-| `max_commits` | Maximum number of commits to process | ❌ | `20` |
-| `include_diffs` | Include commit diffs in events | ❌ | `true` |
+| Input             | Description                          | Required | Default |
+| ----------------- | ------------------------------------ | -------- | ------- |
+| `include_patches` | Generate and include patch data      | ❌       | `true`  |
+| `max_commits`     | Maximum number of commits to process | ❌       | `20`    |
+| `include_diffs`   | Include commit diffs in events       | ❌       | `true`  |
 
 #### Issue Publisher Inputs
 
-| Input | Description | Required | Default |
-|-------|-------------|----------|----------|
-| `issue_number` | GitHub issue number | ✅ | - |
-| `action` | GitHub issue action (opened, closed, etc.) | ✅ | - |
-| `include_comments` | Include issue comments | ❌ | `false` |
+| Input              | Description                                | Required | Default |
+| ------------------ | ------------------------------------------ | -------- | ------- |
+| `issue_number`     | GitHub issue number                        | ✅       | -       |
+| `action`           | GitHub issue action (opened, closed, etc.) | ✅       | -       |
+| `include_comments` | Include issue comments                     | ❌       | `false` |
 
 ## 🏗️ Architecture
 
@@ -214,6 +220,7 @@ packages/actions/
 ```
 
 ### Key Components
+
 - **Event Generators**: Create NIP-34 compliant Nostr events
 - **Relay Publishers**: Handle publishing to multiple Nostr relays
 - **GitHub API Integration**: Extract repository, commit, and issue data
@@ -222,12 +229,14 @@ packages/actions/
 ## 🔒 Security
 
 ### Private Key Management
+
 - Store private keys in GitHub Secrets (never in code)
 - Use environment variables for sensitive configuration
 - Private keys are only used for event signing
 - No private key logging or persistence
 
 ### Network Security
+
 - WSS connections to Nostr relays
 - Certificate validation for all connections
 - Timeout and retry mechanisms for reliability

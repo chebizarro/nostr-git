@@ -1,5 +1,11 @@
 import axios from 'axios';
-import type { VendorProvider, RepoMetadata, CreateRepoOptions, UpdateRepoOptions, GitVendor } from '../vendor-providers.js';
+import type {
+  VendorProvider,
+  RepoMetadata,
+  CreateRepoOptions,
+  UpdateRepoOptions,
+  GitVendor
+} from '../vendor-providers.js';
 
 export class GitLabProvider implements VendorProvider {
   readonly vendor: GitVendor = 'gitlab';
@@ -12,11 +18,8 @@ export class GitLabProvider implements VendorProvider {
   async getRepoMetadata(owner: string, repo: string, token?: string): Promise<RepoMetadata> {
     const headers = token ? this.getAuthHeaders(token) : {};
     const projectPath = encodeURIComponent(`${owner}/${repo}`);
-    
-    const response = await axios.get(
-      this.getApiUrl(`projects/${projectPath}`),
-      { headers }
-    );
+
+    const response = await axios.get(this.getApiUrl(`projects/${projectPath}`), { headers });
 
     const data = response.data;
     return {
@@ -68,9 +71,14 @@ export class GitLabProvider implements VendorProvider {
     };
   }
 
-  async updateRepo(owner: string, repo: string, options: UpdateRepoOptions, token: string): Promise<RepoMetadata> {
+  async updateRepo(
+    owner: string,
+    repo: string,
+    options: UpdateRepoOptions,
+    token: string
+  ): Promise<RepoMetadata> {
     const projectPath = encodeURIComponent(`${owner}/${repo}`);
-    
+
     const response = await axios.put(
       this.getApiUrl(`projects/${projectPath}`),
       {
@@ -103,9 +111,14 @@ export class GitLabProvider implements VendorProvider {
     };
   }
 
-  async forkRepo(owner: string, repo: string, forkName: string, token: string): Promise<RepoMetadata> {
+  async forkRepo(
+    owner: string,
+    repo: string,
+    forkName: string,
+    token: string
+  ): Promise<RepoMetadata> {
     const projectPath = encodeURIComponent(`${owner}/${repo}`);
-    
+
     const response = await axios.post(
       this.getApiUrl(`projects/${projectPath}/fork`),
       {

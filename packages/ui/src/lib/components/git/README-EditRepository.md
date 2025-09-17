@@ -19,6 +19,7 @@ A comprehensive repository editing feature for the Budabit-Flotilla client that 
 A comprehensive modal panel component that provides the repository editing interface.
 
 **Props:**
+
 - `isOpen: boolean` - Controls panel visibility
 - `currentAnnouncement: RepoAnnouncementEvent` - Current repository announcement event
 - `currentState: RepoStateEvent` - Current repository state event
@@ -31,6 +32,7 @@ A comprehensive modal panel component that provides the repository editing inter
 - `isEditing?: boolean` - Whether edit is in progress
 
 **Features:**
+
 - Repository name input with live validation
 - Description textarea with character limit
 - Visibility selector (public/private) with icons
@@ -46,20 +48,22 @@ A comprehensive modal panel component that provides the repository editing inter
 A Svelte 5 composable that manages the complete repository editing workflow.
 
 **API:**
+
 ```typescript
 const editRepo = useEditRepo();
 
 // State
-editRepo.progress    // Current progress information
-editRepo.error       // Current error message
-editRepo.isEditing   // Whether edit is in progress
+editRepo.progress; // Current progress information
+editRepo.error; // Current error message
+editRepo.isEditing; // Whether edit is in progress
 
 // Methods
-await editRepo.editRepository(announcement, state, config, options)  // Start edit operation
-editRepo.reset()                                                     // Reset state
+await editRepo.editRepository(announcement, state, config, options); // Start edit operation
+editRepo.reset(); // Reset state
 ```
 
 **Features:**
+
 - Interfaces with git-worker's edit methods
 - Manages progress state and error handling
 - Creates and emits updated NIP-34 events
@@ -73,6 +77,7 @@ editRepo.reset()                                                     // Reset st
 Updates remote repository metadata via GitHub API.
 
 **Signature:**
+
 ```typescript
 async function updateRemoteRepoMetadata(options: {
   owner: string;
@@ -87,10 +92,11 @@ async function updateRemoteRepoMetadata(options: {
   success: boolean;
   updatedRepo?: any;
   error?: string;
-}>
+}>;
 ```
 
 **Features:**
+
 - PATCH requests to GitHub API `/repos/{owner}/{repo}`
 - Selective updates (only changed fields)
 - Proper authentication headers
@@ -101,6 +107,7 @@ async function updateRemoteRepoMetadata(options: {
 Updates local files, commits changes, and pushes to remote.
 
 **Signature:**
+
 ```typescript
 async function updateAndPushFiles(options: {
   dir: string;
@@ -112,10 +119,11 @@ async function updateAndPushFiles(options: {
   success: boolean;
   commitId?: string;
   error?: string;
-}>
+}>;
 ```
 
 **Workflow:**
+
 1. **Write Files**: Update local files in LightningFS
 2. **Stage Changes**: Add modified files to git index
 3. **Create Commit**: Commit changes with descriptive message
@@ -169,12 +177,12 @@ async function updateAndPushFiles(options: {
 {#if showEditPanel}
   <EditRepoPanel
     isOpen={showEditPanel}
-    {currentAnnouncement}
-    {currentState}
-    onClose={() => showEditPanel = false}
+    currentAnnouncement={currentAnnouncement}
+    currentState={currentState}
+    onClose={() => (showEditPanel = false)}
     onSave={handleSave}
-    {onSignEvent}
-    {onPublishEvent}
+    onSignEvent={onSignEvent}
+    onPublishEvent={onPublishEvent}
     progress={editRepo.progress}
     error={editRepo.error}
     isEditing={editRepo.isEditing}
@@ -188,11 +196,11 @@ async function updateAndPushFiles(options: {
 
 ```typescript
 interface EditConfig {
-  name: string;           // Repository name
-  description: string;    // Repository description
-  visibility: 'public' | 'private'; // Repository visibility
-  defaultBranch: string;  // Default branch name
-  readmeContent: string;  // README.md content
+  name: string; // Repository name
+  description: string; // Repository description
+  visibility: "public" | "private"; // Repository visibility
+  defaultBranch: string; // Default branch name
+  readmeContent: string; // README.md content
 }
 ```
 
@@ -200,9 +208,9 @@ interface EditConfig {
 
 ```typescript
 interface EditProgress {
-  stage: string;        // Current operation stage
-  percentage: number;   // Progress percentage (0-100)
-  isComplete: boolean;  // Whether operation is complete
+  stage: string; // Current operation stage
+  percentage: number; // Progress percentage (0-100)
+  isComplete: boolean; // Whether operation is complete
 }
 ```
 
@@ -211,21 +219,25 @@ interface EditProgress {
 Comprehensive form validation includes:
 
 ### Repository Name
+
 - **Required**: Cannot be empty
 - **Length**: 1-100 characters
 - **Characters**: Letters, numbers, dots, hyphens, underscores only
 - **Pattern**: `/^[a-zA-Z0-9._-]+$/`
 
 ### Description
+
 - **Length**: Maximum 500 characters
 - **Optional**: Can be empty
 
 ### Default Branch
+
 - **Required**: Cannot be empty
 - **Format**: Valid git branch name pattern
 - **Pattern**: `/^[a-zA-Z0-9._/-]+$/`
 
 ### README Content
+
 - **Length**: Maximum 10,000 characters
 - **Format**: Markdown content
 - **Optional**: Can be empty
@@ -245,16 +257,19 @@ The edit operation progresses through these stages:
 ## GitHub API Integration
 
 ### Authentication
+
 - Uses Git tokens from the app's token store
 - Sends `Authorization: token {token}` header
 - Includes proper `User-Agent` and `Accept` headers
 
 ### Repository Updates
+
 - **Endpoint**: `PATCH /repos/{owner}/{repo}`
 - **Payload**: Selective updates (name, description, private)
 - **Response**: Updated repository metadata
 
 ### Error Handling
+
 - API rate limiting
 - Permission errors
 - Repository not found
@@ -265,28 +280,33 @@ The edit operation progresses through these stages:
 The feature automatically creates and emits updated NIP-34 events:
 
 ### Repository Announcement (Kind 30617)
+
 - Updated name, description, visibility
 - Updated clone URLs if name changed
 - Maintains existing tags (maintainers, relays, etc.)
 
 ### Repository State (Kind 30618)
+
 - Updated HEAD reference for default branch
 - Maintains existing branch and tag references
 - Updated timestamp
 
 Uses helpers from `@nostr-git/shared-types`:
+
 - `makeRepoAnnouncementEvent()`
 - `makeRepoStateEvent()`
 
 ## File Management
 
 ### README Editing
+
 - **Live Preview**: Toggle between edit and preview modes
 - **Markdown Support**: Basic markdown rendering
 - **Character Limit**: 10,000 characters maximum
 - **Auto-save**: Changes committed and pushed automatically
 
 ### File Operations
+
 - **Write**: Update files in LightningFS
 - **Stage**: Add changes to git index
 - **Commit**: Create commit with descriptive message

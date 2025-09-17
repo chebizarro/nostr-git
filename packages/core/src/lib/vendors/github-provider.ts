@@ -1,5 +1,11 @@
 import axios from 'axios';
-import type { VendorProvider, RepoMetadata, CreateRepoOptions, UpdateRepoOptions, GitVendor } from '../vendor-providers.js';
+import type {
+  VendorProvider,
+  RepoMetadata,
+  CreateRepoOptions,
+  UpdateRepoOptions,
+  GitVendor
+} from '../vendor-providers.js';
 
 export class GitHubProvider implements VendorProvider {
   readonly vendor: GitVendor = 'github';
@@ -11,11 +17,8 @@ export class GitHubProvider implements VendorProvider {
 
   async getRepoMetadata(owner: string, repo: string, token?: string): Promise<RepoMetadata> {
     const headers = token ? this.getAuthHeaders(token) : {};
-    
-    const response = await axios.get(
-      this.getApiUrl(`repos/${owner}/${repo}`),
-      { headers }
-    );
+
+    const response = await axios.get(this.getApiUrl(`repos/${owner}/${repo}`), { headers });
 
     const data = response.data;
     return {
@@ -50,7 +53,7 @@ export class GitHubProvider implements VendorProvider {
       {
         headers: {
           ...this.getAuthHeaders(token),
-          'Accept': 'application/vnd.github.v3+json'
+          Accept: 'application/vnd.github.v3+json'
         }
       }
     );
@@ -72,7 +75,12 @@ export class GitHubProvider implements VendorProvider {
     };
   }
 
-  async updateRepo(owner: string, repo: string, options: UpdateRepoOptions, token: string): Promise<RepoMetadata> {
+  async updateRepo(
+    owner: string,
+    repo: string,
+    options: UpdateRepoOptions,
+    token: string
+  ): Promise<RepoMetadata> {
     const response = await axios.patch(
       this.getApiUrl(`repos/${owner}/${repo}`),
       {
@@ -87,7 +95,7 @@ export class GitHubProvider implements VendorProvider {
       {
         headers: {
           ...this.getAuthHeaders(token),
-          'Accept': 'application/vnd.github.v3+json'
+          Accept: 'application/vnd.github.v3+json'
         }
       }
     );
@@ -109,7 +117,12 @@ export class GitHubProvider implements VendorProvider {
     };
   }
 
-  async forkRepo(owner: string, repo: string, forkName: string, token: string): Promise<RepoMetadata> {
+  async forkRepo(
+    owner: string,
+    repo: string,
+    forkName: string,
+    token: string
+  ): Promise<RepoMetadata> {
     // Step 1: Create the fork
     const forkResponse = await axios.post(
       this.getApiUrl(`repos/${owner}/${repo}/forks`),
@@ -120,7 +133,7 @@ export class GitHubProvider implements VendorProvider {
       {
         headers: {
           ...this.getAuthHeaders(token),
-          'Accept': 'application/vnd.github.v3+json'
+          Accept: 'application/vnd.github.v3+json'
         }
       }
     );
@@ -136,24 +149,23 @@ export class GitHubProvider implements VendorProvider {
 
     // Check if GitHub ignored our custom fork name (happens when fork already exists)
     if (forkData.name !== forkName) {
-      throw new Error(`Fork already exists with name "${forkData.name}". GitHub does not support renaming existing forks. Please delete the existing fork first or choose a different name.`);
+      throw new Error(
+        `Fork already exists with name "${forkData.name}". GitHub does not support renaming existing forks. Please delete the existing fork first or choose a different name.`
+      );
     }
 
     // Step 2: Poll until fork is ready (GitHub needs time to create the fork)
     const maxPollAttempts = 30;
     let pollAttempts = 0;
-    
+
     while (pollAttempts < maxPollAttempts) {
       try {
-        const checkResponse = await axios.get(
-          this.getApiUrl(`repos/${forkOwner}/${forkName}`),
-          {
-            headers: {
-              ...this.getAuthHeaders(token),
-              'Accept': 'application/vnd.github.v3+json'
-            }
+        const checkResponse = await axios.get(this.getApiUrl(`repos/${forkOwner}/${forkName}`), {
+          headers: {
+            ...this.getAuthHeaders(token),
+            Accept: 'application/vnd.github.v3+json'
           }
-        );
+        });
 
         if (checkResponse.status === 200) {
           const data = checkResponse.data;
@@ -177,7 +189,7 @@ export class GitHubProvider implements VendorProvider {
       }
 
       pollAttempts++;
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second
     }
 
     throw new Error('Fork creation timed out. The fork may still be processing.');
@@ -188,9 +200,8 @@ export class GitHubProvider implements VendorProvider {
   }
 
   getApiUrl(path: string): string {
-    const baseUrl = this.hostname === 'github.com' 
-      ? 'https://api.github.com'
-      : `https://${this.hostname}/api/v3`;
+    const baseUrl =
+      this.hostname === 'github.com' ? 'https://api.github.com' : `https://${this.hostname}/api/v3`;
     return `${baseUrl}/${path}`;
   }
 
@@ -225,7 +236,7 @@ export class GitHubProvider implements VendorProvider {
 
   getAuthHeaders(token: string): Record<string, string> {
     return {
-      'Authorization': `Bearer ${token}`
+      Authorization: `Bearer ${token}`
     };
   }
 }

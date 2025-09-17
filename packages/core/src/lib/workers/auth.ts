@@ -31,7 +31,9 @@ export function getAuthCallback(url: string) {
     return undefined;
   }
 
-  const match = authConfig.tokens.find(t => hostname === t.host || hostname.endsWith('.' + t.host));
+  const match = authConfig.tokens.find(
+    (t) => hostname === t.host || hostname.endsWith('.' + t.host)
+  );
   if (!match) return undefined;
 
   return () => ({ username: 'token', password: match.token });
@@ -42,7 +44,7 @@ export function getAuthCallback(url: string) {
  */
 export function getConfiguredAuthHosts(): string[] {
   try {
-    return (authConfig.tokens || []).map(t => t.host);
+    return (authConfig.tokens || []).map((t) => t.host);
   } catch {
     return [];
   }

@@ -3,15 +3,15 @@ import {
   Node,
   nodePasteRule,
   type PasteRuleMatch,
-  type RawCommands
-} from '@tiptap/core';
-import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
-import { createNeventFromPermalink } from '@nostr-git/core';
-import type { EventTemplate, NostrEvent } from 'nostr-tools';
-import type { MarkdownSerializerState } from '@tiptap/pm/markdown';
-import { mount, unmount, type Component } from 'svelte';
-import Spinner from './Spinner.svelte';
-import PermalinkNodeViewWrapper from './PermalinkNodeViewWrapper.svelte'
+  type RawCommands,
+} from "@tiptap/core";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { createNeventFromPermalink } from "@nostr-git/core";
+import type { EventTemplate, NostrEvent } from "nostr-tools";
+import type { MarkdownSerializerState } from "@tiptap/pm/markdown";
+import { mount, unmount, type Component } from "svelte";
+import Spinner from "./Spinner.svelte";
+import PermalinkNodeViewWrapper from "./PermalinkNodeViewWrapper.svelte";
 
 const PERMALINK_REGEX = /https?:\/\/(?:github\.com|gitlab\.com|gitea\.com)\/\S+/gi;
 
@@ -33,37 +33,37 @@ export interface PermalinkNodeOptions {
 }
 
 export const PermalinkNode = Node.create<PermalinkNodeOptions>({
-  name: 'permalinkNode',
+  name: "permalinkNode",
 
-  group: 'block',
+  group: "block",
   selectable: true,
   draggable: true,
 
   addAttributes() {
     return {
       permalink: { default: null },
-      nevent: { default: '' },
-      error: { default: null }
+      nevent: { default: "" },
+      error: { default: null },
     };
   },
 
   addOptions() {
     return {
-      signer: (() => {
-        throw new Error('nostr.signEvent is not available');
-      }),
-      relays: ['wss://relay.damus.io'],
-      spinnerComponent: Spinner
+      signer: () => {
+        throw new Error("nostr.signEvent is not available");
+      },
+      relays: ["wss://relay.damus.io"],
+      spinnerComponent: Spinner,
     };
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': this.name })];
+    return ["div", mergeAttributes(HTMLAttributes, { "data-type": this.name })];
   },
 
   renderText({ node }) {
     const { nevent, permalink } = node.attrs;
-    return nevent || permalink || '';
+    return nevent || permalink || "";
   },
 
   parseHTML() {
@@ -75,10 +75,10 @@ export const PermalinkNode = Node.create<PermalinkNodeOptions>({
       markdown: {
         serialize(state: MarkdownSerializerState, node: ProseMirrorNode) {
           const { nevent } = node.attrs;
-          state.write(nevent || '');
+          state.write(nevent || "");
         },
-        parse: {}
-      }
+        parse: {},
+      },
     };
   },
 
@@ -86,15 +86,15 @@ export const PermalinkNode = Node.create<PermalinkNodeOptions>({
     return {
       insertPermalink:
         (url: string) =>
-          ({ commands }: { commands: any }) => {
-            return commands.insertContent({
-              type: this.name,
-              attrs: {
-                permalink: url,
-                nevent: null
-              }
-            });
-          }
+        ({ commands }: { commands: any }) => {
+          return commands.insertContent({
+            type: this.name,
+            attrs: {
+              permalink: url,
+              nevent: null,
+            },
+          });
+        },
     } as Partial<RawCommands>;
   },
 
@@ -110,8 +110,8 @@ export const PermalinkNode = Node.create<PermalinkNodeOptions>({
           }
           return matches;
         },
-        getAttributes: (match) => match.data
-      })
+        getAttributes: (match) => match.data,
+      }),
     ];
   },
 
@@ -119,28 +119,28 @@ export const PermalinkNode = Node.create<PermalinkNodeOptions>({
     return ({ editor, node, getPos }) => {
       let currentNode = node;
 
-      const dom = document.createElement('div');
-      dom.classList.add('permalink-node');
+      const dom = document.createElement("div");
+      dom.classList.add("permalink-node");
 
       const props = $state({
         Spinner: this.options.spinnerComponent,
         loading: !currentNode.attrs.nevent && !currentNode.attrs.error,
         nevent: currentNode.attrs.nevent,
         permalink: currentNode.attrs.permalink,
-        error: currentNode.attrs.error
+        error: currentNode.attrs.error,
       });
       const component = mount(PermalinkNodeViewWrapper, {
         target: dom,
-        props
+        props,
       });
 
       function updateNode(attrs: Partial<PermalinkNodeAttrs>) {
-        const pos = typeof getPos === 'function' ? getPos() : null;
+        const pos = typeof getPos === "function" ? getPos() : null;
         if (pos == null) return;
         editor.view.dispatch(
           editor.view.state.tr.setNodeMarkup(pos, undefined, {
             ...currentNode.attrs,
-            ...attrs
+            ...attrs,
           })
         );
       }
@@ -176,8 +176,8 @@ export const PermalinkNode = Node.create<PermalinkNodeOptions>({
         },
         destroy() {
           unmount(component);
-        }
+        },
       };
     };
-  }
+  },
 });

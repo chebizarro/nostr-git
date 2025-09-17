@@ -33,7 +33,9 @@ export function resolveStatus(args: {
   rootAuthor: string;
   maintainers: Set<string>;
 }): { final: LocalStatusEvent | undefined; reason: string } {
-  const valid = args.statuses.filter((e) => typeof e?.kind === 'number' && [1630, 1631, 1632, 1633].includes(e.kind));
+  const valid = args.statuses.filter(
+    (e) => typeof e?.kind === 'number' && [1630, 1631, 1632, 1633].includes(e.kind)
+  );
   if (valid.length === 0) return { final: undefined, reason: 'no-status-events' };
 
   let best: LocalStatusEvent | undefined;
@@ -59,7 +61,14 @@ export function resolveStatus(args: {
   }
 
   const roleLabel = bestRole === 2 ? 'maintainer' : bestRole === 1 ? 'root-author' : 'other';
-  const kindLabel = best?.kind === 1632 ? 'closed' : best?.kind === 1631 ? 'applied' : best?.kind === 1630 ? 'open' : 'draft';
+  const kindLabel =
+    best?.kind === 1632
+      ? 'closed'
+      : best?.kind === 1631
+        ? 'applied'
+        : best?.kind === 1630
+          ? 'open'
+          : 'draft';
   const reason = best
     ? `selected-by precedence: role=${roleLabel} (${bestRole}) > kind=${kindLabel} (${bestKind}) > recency(${bestTime})`
     : 'no-status-events';

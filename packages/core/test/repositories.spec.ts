@@ -2,10 +2,19 @@ import { describe, it, expect } from 'vitest';
 import type { RepoAnnouncementEvent } from '@nostr-git/shared-types';
 import { groupByEuc, isMaintainer } from '../src/lib/repositories';
 
-function repoEvt(tags: string[][], override: Partial<RepoAnnouncementEvent> = {}): RepoAnnouncementEvent {
+function repoEvt(
+  tags: string[][],
+  override: Partial<RepoAnnouncementEvent> = {}
+): RepoAnnouncementEvent {
   return {
-    id: 'x', kind: 30617, pubkey: 'p', created_at: 0, content: '', tags: tags as any, sig: 's',
-    ...override,
+    id: 'x',
+    kind: 30617,
+    pubkey: 'p',
+    created_at: 0,
+    content: '',
+    tags: tags as any,
+    sig: 's',
+    ...override
   } as unknown as RepoAnnouncementEvent;
 }
 
@@ -18,7 +27,7 @@ describe('repositories grouping & maintainers', () => {
       ['web', 'https://example.com'],
       ['clone', 'git+https://example.com/alice/repo.git'],
       ['relays', 'wss://relay.one'],
-      ['maintainers', 'npub1alice', 'npub1bob'],
+      ['maintainers', 'npub1alice', 'npub1bob']
     ]);
     const r2 = repoEvt([
       ['r', euc, 'euc'],
@@ -26,7 +35,7 @@ describe('repositories grouping & maintainers', () => {
       ['web', 'https://example.com/docs'],
       ['clone', 'git+ssh://example.com/alice/repo.git'],
       ['relays', 'wss://relay.two'],
-      ['maintainers', 'npub1bob', 'npub1carol'],
+      ['maintainers', 'npub1bob', 'npub1carol']
     ]);
 
     const groups = groupByEuc([r1, r2]);
@@ -45,9 +54,7 @@ describe('repositories grouping & maintainers', () => {
   });
 
   it('ignores repos without r:euc tag', () => {
-    const r = repoEvt([
-      ['d', 'no/euc'],
-    ]);
+    const r = repoEvt([['d', 'no/euc']]);
     const groups = groupByEuc([r]);
     expect(groups).toHaveLength(0);
   });

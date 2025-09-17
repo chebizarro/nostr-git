@@ -20,7 +20,7 @@ onlyBuiltDependencies:
 # Forces packages to use local workspace versions instead of published versions
 overrides:
   # Always use the local UI package for consistent development
-  '@nostr-git/ui': link:packages/ui
-  '@nostr-git/core': link:packages/core
-  '@nostr-git/git-wrapper': link:packages/git-wrapper
-  '@nostr-git/shared-types': link:packages/shared-types
+  "@nostr-git/ui": link:packages/ui
+  "@nostr-git/core": link:packages/core
+  "@nostr-git/git-wrapper": link:packages/git-wrapper
+  "@nostr-git/shared-types": link:packages/shared-types

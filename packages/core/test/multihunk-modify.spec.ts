@@ -11,7 +11,7 @@ function makeMemFs() {
     },
     writeFile: async (p: string, data: string, enc: string) => {
       files.set(p, data);
-    },
+    }
   } as any;
   return { files, fs: { promises } };
 }
@@ -23,7 +23,7 @@ function makeGit(overrides: Partial<any> = {}): any {
     remove: vi.fn(async () => {}),
     commit: vi.fn(async () => 'abcd1234'),
     listRemotes: vi.fn(async () => []),
-    push: vi.fn(async () => {}),
+    push: vi.fn(async () => {})
   };
   return Object.assign(base, overrides);
 }
@@ -48,7 +48,7 @@ describe('applyPatchAndPushUtil - multi-hunk modify', () => {
       'line7',
       'line8',
       'line9',
-      'line10',
+      'line10'
     ].join('\n');
 
     const dir = '/tmp/org/repo';
@@ -68,7 +68,7 @@ describe('applyPatchAndPushUtil - multi-hunk modify', () => {
       ' line8',
       '+LINE8_5',
       ' line9',
-      ' line10',
+      ' line10'
     ].join('\n');
 
     const res = await applyPatchAndPushUtil(
@@ -77,7 +77,7 @@ describe('applyPatchAndPushUtil - multi-hunk modify', () => {
         repoId: 'org/repo',
         patchData: { id: 'mh1', commits: [], baseBranch: 'main', rawContent: patch },
         authorName: 'Test',
-        authorEmail: 'test@example.com',
+        authorEmail: 'test@example.com'
       },
       {
         rootDir: '/tmp',
@@ -86,7 +86,7 @@ describe('applyPatchAndPushUtil - multi-hunk modify', () => {
         ensureFullClone: async () => ({}),
         getAuthCallback: () => undefined,
         getConfiguredAuthHosts: () => [],
-        getProviderFs: () => mem.fs,
+        getProviderFs: () => mem.fs
       }
     );
 

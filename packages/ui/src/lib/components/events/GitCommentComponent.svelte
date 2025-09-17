@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { nip19, type NostrEvent } from 'nostr-tools';
-  import { onMount } from 'svelte';
-  import { MessageCircle, Copy, Reply } from '@lucide/svelte';
-  import { useRegistry } from '../../useRegistry';
-  
+  import { nip19, type NostrEvent } from "nostr-tools";
+  import { onMount } from "svelte";
+  import { MessageCircle, Copy, Reply } from "@lucide/svelte";
+  import { useRegistry } from "../../useRegistry";
+
   const { Card, Button, ProfileLink } = useRegistry();
 
   interface Props {
@@ -14,36 +14,36 @@
   let { event, relays = [] }: Props = $props();
 
   // Reactive state using Svelte 5 runes
-  let commentSubject = $state('');
-  let authorNpub = $state('');
-  let repoAddress = $state('');
-  let replyToEventId = $state('');
+  let commentSubject = $state("");
+  let authorNpub = $state("");
+  let repoAddress = $state("");
+  let replyToEventId = $state("");
   let threadDepth = $state(0);
 
   // Derived computed values
-  const displaySubject = $derived(commentSubject || 'Comment');
-  const commentContent = $derived(event.content || '');
+  const displaySubject = $derived(commentSubject || "Comment");
+  const commentContent = $derived(event.content || "");
   const createdDate = $derived(new Date(event.created_at * 1000));
   const isReply = $derived(!!replyToEventId);
-  const shortReplyId = $derived(replyToEventId ? replyToEventId.slice(0, 8) : '');
+  const shortReplyId = $derived(replyToEventId ? replyToEventId.slice(0, 8) : "");
 
   // Parse event tags to extract comment information
   const parseEventData = () => {
     const tags = event.tags || [];
-    
+
     for (const tag of tags) {
       switch (tag[0]) {
-        case 'subject':
-          commentSubject = tag[1] || '';
+        case "subject":
+          commentSubject = tag[1] || "";
           break;
-        case 'a':
-          repoAddress = tag[1] || '';
+        case "a":
+          repoAddress = tag[1] || "";
           break;
-        case 'e':
-          replyToEventId = tag[1] || '';
+        case "e":
+          replyToEventId = tag[1] || "";
           break;
-        case 'depth':
-          threadDepth = parseInt(tag[1] || '0', 10);
+        case "depth":
+          threadDepth = parseInt(tag[1] || "0", 10);
           break;
       }
     }
@@ -53,8 +53,8 @@
       try {
         authorNpub = nip19.npubEncode(event.pubkey);
       } catch (error) {
-        console.warn('Failed to encode npub:', error);
-        authorNpub = event.pubkey.slice(0, 16) + '...';
+        console.warn("Failed to encode npub:", error);
+        authorNpub = event.pubkey.slice(0, 16) + "...";
       }
     }
   };
@@ -71,13 +71,13 @@
     try {
       await navigator.clipboard.writeText(text);
     } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
+      console.error("Failed to copy to clipboard:", error);
     }
   };
 
   // Handle reply action (placeholder for future implementation)
   const handleReply = () => {
-    console.log('Reply to comment:', event.id);
+    console.log("Reply to comment:", event.id);
   };
 
   onMount(() => {
@@ -85,10 +85,13 @@
   });
 </script>
 
-<Card class="git-card hover:bg-accent/50 transition-colors" style="margin-left: {threadDepth * 12}px;">
+<Card
+  class="git-card hover:bg-accent/50 transition-colors"
+  style="margin-left: {threadDepth * 12}px;"
+>
   <div class="flex items-start gap-3">
     <MessageCircle class="h-6 w-6 mt-1 text-blue-600" />
-    
+
     <div class="flex-1">
       <div class="flex items-center justify-between">
         <div class="flex-1">
@@ -96,10 +99,10 @@
             {displaySubject}
           </h3>
         </div>
-        
-        <Button 
-          variant="ghost" 
-          size="sm" 
+
+        <Button
+          variant="ghost"
+          size="sm"
           class="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
           onclick={handleReply}
           title="Reply to comment"
@@ -108,7 +111,7 @@
           Reply
         </Button>
       </div>
-      
+
       <div class="flex items-center gap-2 text-xs text-muted-foreground mb-1">
         <span>By <ProfileLink pubkey={event.pubkey} /></span>
         <span>•</span>
@@ -125,20 +128,20 @@
           <span>Level {threadDepth}</span>
         {/if}
       </div>
-      
+
       <div class="text-sm text-muted-foreground mb-3">
         <p class="whitespace-pre-wrap">{commentContent}</p>
       </div>
-      
+
       {#if repoAddress}
         <div class="flex items-center gap-2 text-xs">
           <span class="text-muted-foreground">Repository:</span>
           <code class="bg-muted px-2 py-1 rounded font-mono">
-            {repoAddress.split('/').pop() || repoAddress}
+            {repoAddress.split("/").pop() || repoAddress}
           </code>
-          <Button 
-            variant="ghost" 
-            size="sm" 
+          <Button
+            variant="ghost"
+            size="sm"
             class="h-6 px-1"
             onclick={() => copyToClipboard(repoAddress)}
             title="Copy repository address"

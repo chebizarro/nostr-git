@@ -6,7 +6,7 @@
     title: "ThreadComposer",
     component: ThreadComposer,
     argTypes: {
-      onSubmit: { action: "submitted" }
+      onSubmit: { action: "submitted" },
     },
     args: {
       onSubmit: () => {},

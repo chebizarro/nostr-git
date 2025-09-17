@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { Copy, Calendar, GitCommit } from '@lucide/svelte';
-  import { toast } from '../../stores/toast';
-  import NostrAvatar from './NostrAvatar.svelte';
+  import { Copy, Calendar, GitCommit } from "@lucide/svelte";
+  import { toast } from "../../stores/toast";
+  import NostrAvatar from "./NostrAvatar.svelte";
 
   interface Props {
     sha: string;
@@ -19,7 +19,19 @@
     nip39?: string;
   }
 
-  let { sha, author, email, date, message, parents, avatarUrl, displayName, pubkey, nip05, nip39 }: Props = $props();
+  let {
+    sha,
+    author,
+    email,
+    date,
+    message,
+    parents,
+    avatarUrl,
+    displayName,
+    pubkey,
+    nip05,
+    nip39,
+  }: Props = $props();
 
   // Format date for display
   const formatDate = (timestamp: number) => {
@@ -27,11 +39,11 @@
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays === 0) {
-      return 'today';
+      return "today";
     } else if (diffDays === 1) {
-      return 'yesterday';
+      return "yesterday";
     } else if (diffDays < 7) {
       return `${diffDays} days ago`;
     } else {
@@ -47,17 +59,17 @@
   const copySha = async () => {
     try {
       await navigator.clipboard.writeText(sha);
-      toast.push({ message: 'Commit SHA copied to clipboard' });
+      toast.push({ message: "Commit SHA copied to clipboard" });
     } catch (err) {
-      console.error('Failed to copy SHA:', err);
-      toast.push({ message: 'Failed to copy SHA', theme: 'error' });
+      console.error("Failed to copy SHA:", err);
+      toast.push({ message: "Failed to copy SHA", theme: "error" });
     }
   };
 
   // Extract commit title and body
-  const commitLines = message.split('\n');
-  const commitTitle = commitLines[0] || '';
-  const commitBody = commitLines.slice(1).join('\n').trim();
+  const commitLines = message.split("\n");
+  const commitTitle = commitLines[0] || "";
+  const commitBody = commitLines.slice(1).join("\n").trim();
 </script>
 
 <div class="border-b border-border bg-card">
@@ -109,7 +121,7 @@
           <div class="flex items-center gap-2 text-sm text-muted-foreground">
             <GitCommit class="h-4 w-4" />
             <span>
-              {parents.length === 1 ? 'parent' : 'parents'}:
+              {parents.length === 1 ? "parent" : "parents"}:
               {#each parents as parent, i}
                 <code class="mx-1 rounded bg-muted px-1 py-0.5 text-xs font-mono">
                   {parent.slice(0, 7)}
