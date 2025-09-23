@@ -2,6 +2,7 @@ import { type Event as NostrEvent } from "nostr-tools";
 import { tokens as tokensStore, type Token } from "./stores/tokens.js";
 import { getGitServiceApi, canonicalRepoKey } from "@nostr-git/core";
 import { signer as signerStore } from "./stores/signer";
+import { toast } from "./stores/toast.js";
 import type { Signer as NostrGitSigner } from "./stores/signer";
 import {
   createRepoAnnouncementEvent as createAnnouncementEventShared,
@@ -226,9 +227,16 @@ export async function checkMultiProviderRepoAvailability(
     bitbucket: "bitbucket.org",
   };
 
-  const results = [];
-  const availableProviders = [];
-  const conflictProviders = [];
+  const results: Array<{
+    provider: string;
+    host: string;
+    available: boolean;
+    reason?: string;
+    username?: string;
+    error?: string;
+  }> = [];
+  const availableProviders: string[] = [];
+  const conflictProviders: string[] = [];
 
   // Check availability for each provider the user has tokens for
   for (const token of tokens) {
@@ -383,7 +391,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
   let progress = $state<NewRepoProgress[]>([]);
   let error = $state<string | null>(null);
 
-  let tokens = $state([]);
+  let tokens = $state<Token[]>([]);
 
   // Ensure we only register the GRASP signing event handler once per worker/session
   let signingSetupDone = false;
@@ -420,8 +428,15 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
     if (config.provider === "grasp") {
       let signer: NostrGitSigner | null = null;
       signerStore.subscribe((v) => (signer = v))();
-      if (!signer) throw new Error("No Nostr signer available for GRASP provider");
-      const pubkey = await signer.getPubkey();
+      if (!signer) {
+        // Retry once on next tick in case store hasn't hydrated yet
+        await Promise.resolve();
+        signerStore.subscribe((v) => (signer = v))();
+      }
+      if (!signer) {
+        throw new Error("No Nostr signer available for GRASP provider");
+      }
+      const pubkey = await (signer as NostrGitSigner).getPubkey();
       // Use "owner:name" form which canonicalRepoKey will normalize
       return canonicalRepoKey(`${pubkey}:${config.name}`);
     }
@@ -456,6 +471,25 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       isCreating = true;
       error = null;
       progress = [];
+
+      // Precheck: GRASP requires a Nostr signer
+      if (config.provider === "grasp") {
+        let signer: NostrGitSigner | null = null;
+        signerStore.subscribe((v) => (signer = v))();
+        if (!signer) {
+          updateProgress(
+            "precheck",
+            "Missing Nostr signer for GRASP provider",
+            "error",
+            "No Nostr signer is connected. Please connect a signer in Settings and try again."
+          );
+          toast.push({
+            message: "GRASP requires a connected Nostr signer. Connect one in Settings and try again.",
+            variant: "destructive",
+          });
+          throw new Error("No Nostr signer available for GRASP provider");
+        }
+      }
 
       // Compute canonical key up-front so all subsequent steps use it
       const canonicalKey = await computeCanonicalKey(config);
@@ -818,8 +852,9 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
             worker.addEventListener("message", async (event) => {
               if (event.data.type === "request-event-signing") {
                 try {
+                  if (!nostrSigner) throw new Error("Missing signer for event signing");
                   console.log("🔐 Received event signing request:", event.data);
-                  const signedEvent = await nostrSigner.sign(event.data.event);
+                  const signedEvent = await (nostrSigner as NostrGitSigner).sign(event.data.event);
                   console.log("🔐 Event signed successfully");
                   worker.postMessage({
                     type: "event-signed",
@@ -920,7 +955,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       }
 
       // For GRASP, we use the pubkey as the token
-      providerToken = await nostrSigner.getPubkey();
+      providerToken = await (nostrSigner as NostrGitSigner).getPubkey();
 
       // Set up message-based signing for GRASP
       console.log("🔐 Setting up event signing message handler for GRASP push");
@@ -929,8 +964,9 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       worker.addEventListener("message", async (event) => {
         if (event.data.type === "request-event-signing") {
           try {
+            if (!nostrSigner) throw new Error("Missing signer for push signing");
             console.log("🔐 Received event signing request for push:", event.data);
-            const signedEvent = await nostrSigner!.sign(event.data.event);
+            const signedEvent = await (nostrSigner as NostrGitSigner).sign(event.data.event);
             console.log("🔐 Event signed successfully for push");
 
             // Send the signed event back to the worker

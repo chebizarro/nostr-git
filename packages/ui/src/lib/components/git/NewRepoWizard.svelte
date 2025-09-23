@@ -56,6 +56,7 @@
   let selectedProvider = $state<string | undefined>(undefined);
   let graspRelayUrl = $state<string>("");
   let cachedNpub = $state<string | null>(null);
+  let hasSigner = $state(false);
   let userEditedWebUrl = $state(false);
   let userEditedCloneUrl = $state(false);
   // Grasp server options derived from store
@@ -95,9 +96,11 @@
       const pubkey: string = await s?.getPubkey?.();
       if (pubkey) {
         cachedNpub = nip19.npubEncode(pubkey);
+        hasSigner = true;
         return cachedNpub;
       }
     } catch {}
+    hasSigner = false;
     return null;
   }
 
@@ -361,6 +364,26 @@
     }
   }
 
+  // Track signer presence reactively
+  $effect(() => {
+    void selectedProvider;
+    // Attempt to refresh signer state when provider changes
+    ensureNpub();
+  });
+
+  function connectSignerCTA() {
+    // Host app can listen to this to open signer settings UI
+    try {
+      window.dispatchEvent(new CustomEvent("nostr-git:open-signer-settings"));
+    } catch {}
+    // Fallback: try navigating to a conventional settings route if present
+    try {
+      if (location && typeof location.assign === "function") {
+        location.assign("/settings#nostr");
+      }
+    } catch {}
+  }
+
   // Validate relay URL for GRASP provider
   function isValidGraspConfig(): boolean {
     if (selectedProvider !== "grasp") return true;
@@ -557,6 +580,19 @@
     class="bg-card text-card-foreground rounded-lg border shadow-sm p-6 max-h-[70vh] overflow-auto"
   >
     {#if currentStep === 1}
+      <!-- Inline signer CTA for GRASP when no signer is detected -->
+      {#if selectedProvider === "grasp" && !hasSigner}
+        <div class="mb-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-destructive">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <div class="font-medium">Nostr signer required</div>
+              <div class="text-sm opacity-80">Connect a Nostr signer to create a GRASP repository.</div>
+            </div>
+            <Button size="sm" variant="destructive" onclick={connectSignerCTA}>Connect Signer</Button>
+          </div>
+        </div>
+      {/if}
+
       <StepChooseService
         tokens={tokens}
         selectedProvider={selectedProvider as any}
@@ -644,7 +680,7 @@
         <Button
           onclick={nextStep}
           disabled={(currentStep === 1 &&
-            (!selectedProvider || (selectedProvider === "grasp" && !isValidGraspConfig()))) ||
+            (!selectedProvider || (selectedProvider === "grasp" && (!isValidGraspConfig() || !hasSigner)))) ||
             (currentStep === 2 && !validateStep1())}
           variant="git"
           size="sm"

@@ -5,12 +5,6 @@ export { default as IssueCard } from "./git/IssueCard.svelte";
 export { default as IssueThread } from "./git/IssueThread.svelte";
 export { default as LiveSessionCard } from "./git/LiveSessionCard.svelte";
 export { default as PatchCard } from "./git/PatchCard.svelte";
-export { default as RepoActivityFeed } from "./git/RepoActivityFeed.svelte";
-export { default as RepoCard } from "./git/RepoCard.svelte";
-export { default as RepoHeader } from "./git/RepoHeader.svelte";
-export { default as RepoSocialSidebar } from "./git/RepoSocialSidebar.svelte";
-export { default as RepoThreadView } from "./git/RepoThreadView.svelte";
-export { default as WikiContent } from "./git/WikiContent.svelte";
 export { default as WikiSidebar } from "./git/WikiSidebar.svelte";
 export { default as RepoTab } from "./git/RepoTab.svelte";
 export { default as NewIssueForm } from "./git/NewIssueForm.svelte";
@@ -33,6 +27,7 @@ export { default as StackedDiff } from "./git/StackedDiff.svelte";
 export { default as ForkRepoDialog } from "./git/ForkRepoDialog.svelte";
 export { default as GraspServersPanel } from "./git/GraspServersPanel.svelte";
 export { Repo } from "./git/Repo.svelte";
+export { default as RepoPatchStatus } from "./git/RepoPatchStatus.svelte";
 
 // Media viewers
 export { default as ImageViewer } from "./git/viewers/ImageViewer.svelte";
