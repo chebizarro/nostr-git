@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { Bell, Info } from "@lucide/svelte";
   // Svelte 5 runes: use $props instead of export let
-  const { state, kind, reason, badgeRole, className = "" } = $props<{
+  const { state, kind, reason, badgeRole, reviewRequested = false, className = "" } = $props<{
     state?: "open" | "draft" | "closed" | "merged" | "resolved";
     kind?: number;
     reason?: string;
     badgeRole?: "owner" | "maintainer" | null;
+    reviewRequested?: boolean;
     className?: string;
   }>();
 
@@ -45,6 +47,9 @@
 
 <div class={`flex items-center gap-2 ${className}`}>
   <span class={`inline-flex items-center rounded px-2 py-0.5 text-[11px] border ${chipClass}`}>{label}</span>
+  {#if reviewRequested}
+    <Bell class="h-3.5 w-3.5 text-amber-600" aria-label="Review requested" />
+  {/if}
   {#if badgeRole}
     <span
       class="inline-flex items-center rounded px-2 py-0.5 text-[10px] border border-amber-200 bg-amber-50 text-amber-800"
@@ -53,6 +58,8 @@
     >
   {/if}
   {#if reason}
-    <div class="text-[10px] opacity-60" title={reason}>ⓘ</div>
+    <span class="opacity-60" title={reason} aria-label={reason}>
+      <Info class="h-3.5 w-3.5" />
+    </span>
   {/if}
 </div>

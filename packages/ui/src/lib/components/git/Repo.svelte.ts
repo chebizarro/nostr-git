@@ -9,7 +9,6 @@ import {
   type RepoStateEvent,
   createRepoAnnouncementEvent,
   createRepoStateEvent,
-  type NostrEvent,
 } from "@nostr-git/shared-types";
 import {
   extractSelfLabelsV2,
@@ -48,6 +47,16 @@ type EffectiveLabelsV2 = {
   legacyT: Set<string>;
 };
 
+// Local minimal event interface to avoid non-portable d.ts references
+type NGEvent = {
+  id: string;
+  kind: number;
+  pubkey: string;
+  created_at: number;
+  tags: any[];
+  content: string;
+};
+
 export class Repo {
   repoEvent: RepoAnnouncementEvent | undefined = $state(undefined);
   repo: RepoAnnouncement | undefined = $state(undefined);
@@ -57,9 +66,9 @@ export class Repo {
   patches = $state<PatchEvent[]>([]);
   // Optional multi-state/status/comments/labels streams
   repoStateEventsArr = $state<RepoStateEvent[] | undefined>(undefined);
-  statusEventsArr = $state<NostrEvent[] | undefined>(undefined);
-  commentEventsArr = $state<NostrEvent[] | undefined>(undefined);
-  labelEventsArr = $state<NostrEvent[] | undefined>(undefined);
+  statusEventsArr = $state<NGEvent[] | undefined>(undefined);
+  commentEventsArr = $state<NGEvent[] | undefined>(undefined);
+  labelEventsArr = $state<NGEvent[] | undefined>(undefined);
   // Stable, canonical key used for all UI caches and internal maps
   canonicalKey: string = $state("");
 
@@ -99,7 +108,7 @@ export class Repo {
       eventId: string;
     } | null
   > = new Map();
-  #issueThreadCache: Map<string, { rootId: string; comments: NostrEvent[] }> = new Map();
+  #issueThreadCache: Map<string, { rootId: string; comments: NGEvent[] }> = new Map();
   #labelsCache: Map<string, EffectiveLabelsV2> = new Map();
 
   // Cached resolved branch to avoid redundant fallback iterations
@@ -135,9 +144,9 @@ export class Repo {
     issues: Readable<IssueEvent[]>;
     patches: Readable<PatchEvent[]>;
     repoStateEvents?: Readable<RepoStateEvent[]>;
-    statusEvents?: Readable<NostrEvent[]>;
-    commentEvents?: Readable<NostrEvent[]>;
-    labelEvents?: Readable<NostrEvent[]>;
+    statusEvents?: Readable<NGEvent[]>;
+    commentEvents?: Readable<NGEvent[]>;
+    labelEvents?: Readable<NGEvent[]>;
   }) {
     // Initialize WorkerManager first
     this.workerManager = new WorkerManager((progressEvent: WorkerProgressEvent) => {
@@ -493,7 +502,7 @@ export class Repo {
   // Issues + NIP-22 comments
   // -------------------------
   /** Return NIP-22 scoped comments for a given root id. */
-  public getIssueThread(rootId: string): { rootId: string; comments: NostrEvent[] } {
+  public getIssueThread(rootId: string): { rootId: string; comments: NGEvent[] } {
     const cached = this.#issueThreadCache.get(rootId);
     if (cached) return cached;
     const res = coreGetIssueThread(this.#coreCtx(), rootId);

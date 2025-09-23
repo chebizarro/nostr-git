@@ -28,6 +28,7 @@ export { default as ForkRepoDialog } from "./git/ForkRepoDialog.svelte";
 export { default as GraspServersPanel } from "./git/GraspServersPanel.svelte";
 export { Repo } from "./git/Repo.svelte";
 export { default as RepoPatchStatus } from "./git/RepoPatchStatus.svelte";
+export { default as RepoHeader } from "./git/RepoHeader.svelte";
 
 // Media viewers
 export { default as ImageViewer } from "./git/viewers/ImageViewer.svelte";
