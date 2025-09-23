@@ -2,6 +2,7 @@
 // https://github.com/nostr-protocol/nips/blob/master/34.md
 
 import type {Event} from "nostr-tools"
+import {nip19} from "nostr-tools"
 
 /**
  * Canonical Nostr event type from nostr-tools.
@@ -158,3 +159,28 @@ export type Profile = {
   event?: TrustedEvent
 }
 export type Nip34EventByKind<K extends Nip34Event["kind"]> = Extract<Nip34Event, {kind: K}>
+
+// -------------------
+// Additional helpers
+// -------------------
+
+// Repo address pointer using 30617 (NIP-34 repo announcement kind)
+export type RepoAddressA = `30617:${string}:${string}`;
+
+// Extract r:euc (Encoded URL Component) tag value
+export function parseEucTag(tags: string[][]): string | undefined {
+  const r = tags.find(t => t[0] === "r" && t[2] === "euc");
+  return r ? r[1] : undefined;
+}
+
+// Canonical repo key: `${npub}/${name}` if name provided, otherwise `${npub}`
+export function canonicalRepoKey(pubkey: string, name?: string): string {
+  const cleanName = (name ?? "").trim();
+  try {
+    const npub = nip19.npubEncode(pubkey);
+    return cleanName.length > 0 ? `${npub}/${cleanName}` : npub;
+  } catch (_e) {
+    // Fallback to raw pubkey if encoding fails
+    return cleanName.length > 0 ? `${pubkey}/${cleanName}` : pubkey;
+  }
+}

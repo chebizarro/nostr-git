@@ -29,6 +29,7 @@ export type {
   Profile,
   TrustedEvent,
 } from "./nip34.js"
+export { RepoAddressA, parseEucTag, canonicalRepoKey } from "./nip34.js"
 
 // Utilities: type guards, labels, tag helpers, creators, immutable tag ops, parsers
 export {
