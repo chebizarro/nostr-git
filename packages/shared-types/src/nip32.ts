@@ -3,6 +3,8 @@
 
 import type {Event} from "nostr-tools"
 
+export const GIT_LABEL = 1985
+
 export type NostrEvent = Event
 export type Label = {namespace?: string; value: string; mark?: string}
 export type EffectiveLabels = {
@@ -10,6 +12,10 @@ export type EffectiveLabels = {
   external: Label[]
   t: string[]
   normalized: string[] // e.g., "status/open", "type/bug"
+}
+
+export type LabelEvent = NostrEvent & {
+  kind: typeof GIT_LABEL
 }
 
 // New typed interfaces requested by convergence spec

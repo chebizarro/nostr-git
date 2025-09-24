@@ -16,6 +16,7 @@ export type RepoGroup = {
   clone: string[];
   relays: string[];
   maintainers: string[];
+  name: string;
 };
 
 export function groupByEuc(events: RepoAnnouncementEvent[]): RepoGroup[] {
@@ -35,9 +36,10 @@ export function groupByEuc(events: RepoAnnouncementEvent[]): RepoGroup[] {
       .flatMap((t: NostrTag) => (t as string[]).slice(1));
     const maint = evt.tags.find((t: NostrTag) => t[0] === 'maintainers') as string[] | undefined;
     const maintainers = maint ? maint.slice(1) : [];
+    const name = evt.tags.find((t: NostrTag) => t[0] === 'name')?.[1] || '';
 
     if (!by[euc])
-      by[euc] = { euc, repos: [], handles: [], web: [], clone: [], relays: [], maintainers: [] };
+      by[euc] = { euc, repos: [], handles: [], web: [], clone: [], relays: [], maintainers: [], name };
     const g = by[euc];
     g.repos.push(evt);
     if (d) g.handles.push(d);

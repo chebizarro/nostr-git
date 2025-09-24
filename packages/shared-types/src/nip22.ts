@@ -6,6 +6,7 @@ import {NostrEvent} from "nostr-tools"
 // -------------------
 // Comment Event (kind: 1111)
 // -------------------
+export const GIT_COMMENT = 1111
 
 /**
  * NIP-22 Comment event tag types.

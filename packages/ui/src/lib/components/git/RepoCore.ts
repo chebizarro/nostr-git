@@ -1,4 +1,4 @@
-import type { NostrEvent } from "@nostr-git/shared-types";
+import type { CommentEvent, LabelEvent, NostrEvent, StatusEvent } from "@nostr-git/shared-types";
 import {
   parseRepoAnnouncementEvent,
   parseRepoStateEvent,
@@ -15,9 +15,9 @@ export type RepoContext = {
   issues?: IssueEvent[];
   patches?: PatchEvent[];
   repoStateEventsArr?: RepoStateEvent[];
-  statusEventsArr?: NostrEvent[];
-  commentEventsArr?: NostrEvent[];
-  labelEventsArr?: NostrEvent[];
+  statusEventsArr?: StatusEvent[];
+  commentEventsArr?: CommentEvent[];
+  labelEventsArr?: LabelEvent[];
 };
 
 function getOwnerPubkey(ctx: RepoContext): string {
@@ -181,8 +181,8 @@ function findRootAuthor(ctx: RepoContext, rootId: string): string | undefined {
 export function getIssueThread(
   ctx: RepoContext,
   rootId: string
-): { rootId: string; comments: NostrEvent[] } {
-  const out: NostrEvent[] = [];
+): { rootId: string; comments: CommentEvent[] } {
+  const out: CommentEvent[] = [];
   if (!ctx.commentEventsArr) return { rootId, comments: out };
   for (const ev of ctx.commentEventsArr) {
     const tags = (ev.tags || []) as string[][];

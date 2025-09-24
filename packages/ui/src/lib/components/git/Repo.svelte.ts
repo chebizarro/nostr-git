@@ -9,12 +9,10 @@ import {
   type RepoStateEvent,
   createRepoAnnouncementEvent,
   createRepoStateEvent,
-} from "@nostr-git/shared-types";
-import {
-  extractSelfLabelsV2,
-  extractLabelEventsV2,
-  mergeEffectiveLabelsV2,
-} from "@nostr-git/shared-types";
+  StatusEvent,
+  CommentEvent,
+  LabelEvent,
+ } from "@nostr-git/shared-types";
 import { type MergeAnalysisResult } from "@nostr-git/core";
 import { canonicalRepoKey } from "@nostr-git/core";
 import { type Readable } from "svelte/store";
@@ -47,16 +45,6 @@ type EffectiveLabelsV2 = {
   legacyT: Set<string>;
 };
 
-// Local minimal event interface to avoid non-portable d.ts references
-type NGEvent = {
-  id: string;
-  kind: number;
-  pubkey: string;
-  created_at: number;
-  tags: any[];
-  content: string;
-};
-
 export class Repo {
   repoEvent: RepoAnnouncementEvent | undefined = $state(undefined);
   repo: RepoAnnouncement | undefined = $state(undefined);
@@ -66,9 +54,9 @@ export class Repo {
   patches = $state<PatchEvent[]>([]);
   // Optional multi-state/status/comments/labels streams
   repoStateEventsArr = $state<RepoStateEvent[] | undefined>(undefined);
-  statusEventsArr = $state<NGEvent[] | undefined>(undefined);
-  commentEventsArr = $state<NGEvent[] | undefined>(undefined);
-  labelEventsArr = $state<NGEvent[] | undefined>(undefined);
+  statusEventsArr = $state<StatusEvent[] | undefined>(undefined);
+  commentEventsArr = $state<CommentEvent[] | undefined>(undefined);
+  labelEventsArr = $state<LabelEvent[] | undefined>(undefined);
   // Stable, canonical key used for all UI caches and internal maps
   canonicalKey: string = $state("");
 
@@ -108,7 +96,7 @@ export class Repo {
       eventId: string;
     } | null
   > = new Map();
-  #issueThreadCache: Map<string, { rootId: string; comments: NGEvent[] }> = new Map();
+  #issueThreadCache: Map<string, { rootId: string; comments: CommentEvent[] }> = new Map();
   #labelsCache: Map<string, EffectiveLabelsV2> = new Map();
 
   // Cached resolved branch to avoid redundant fallback iterations
@@ -144,9 +132,9 @@ export class Repo {
     issues: Readable<IssueEvent[]>;
     patches: Readable<PatchEvent[]>;
     repoStateEvents?: Readable<RepoStateEvent[]>;
-    statusEvents?: Readable<NGEvent[]>;
-    commentEvents?: Readable<NGEvent[]>;
-    labelEvents?: Readable<NGEvent[]>;
+    statusEvents?: Readable<StatusEvent[]>;
+    commentEvents?: Readable<CommentEvent[]>;
+    labelEvents?: Readable<LabelEvent[]>;
   }) {
     // Initialize WorkerManager first
     this.workerManager = new WorkerManager((progressEvent: WorkerProgressEvent) => {
@@ -502,7 +490,7 @@ export class Repo {
   // Issues + NIP-22 comments
   // -------------------------
   /** Return NIP-22 scoped comments for a given root id. */
-  public getIssueThread(rootId: string): { rootId: string; comments: NGEvent[] } {
+  public getIssueThread(rootId: string): { rootId: string; comments: CommentEvent[] } {
     const cached = this.#issueThreadCache.get(rootId);
     if (cached) return cached;
     const res = coreGetIssueThread(this.#coreCtx(), rootId);

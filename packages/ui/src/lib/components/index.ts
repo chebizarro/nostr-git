@@ -29,6 +29,8 @@ export { default as GraspServersPanel } from "./git/GraspServersPanel.svelte";
 export { Repo } from "./git/Repo.svelte";
 export { default as RepoPatchStatus } from "./git/RepoPatchStatus.svelte";
 export { default as RepoHeader } from "./git/RepoHeader.svelte";
+export { default as BranchSelector } from "./git/BranchSelector.svelte";
+export { default as RepoAlertBadge } from "./git/RepoAlertBadge.svelte";
 
 // Media viewers
 export { default as ImageViewer } from "./git/viewers/ImageViewer.svelte";

@@ -60,8 +60,15 @@ export {
 } from "./utils.js"
 export type {Patch, Issue, RepoAnnouncement, RepoState, Status} from "./utils.js"
 
+export {
+  GIT_COMMENT,
+} from "./nip22.js"
 // NIP-22 comments
-export type {CommentTag, CommentEvent, CreateCommentOpts} from "./nip22.js"
+export type {
+  CommentTag,
+  CommentEvent,
+  CreateCommentOpts,
+} from "./nip22.js"
 export {parseCommentEvent} from "./utils-comment.js"
 export {createCommentEvent} from "./nip22.js"
 
@@ -93,12 +100,27 @@ export {
 } from "./validation.js"
 export type {NostrTagRuntime, NostrEventLike} from "./validation.js"
 
+export {
+  GIT_LABEL,
+} from "./nip32.js"
 // NIP-32 labels (helpers)
-export {extractSelfLabels, extractLabelEvents, mergeEffectiveLabels} from "./nip32.js"
-export type {Label as Nip32Label, EffectiveLabels as Nip32EffectiveLabels} from "./nip32.js"
+export {
+  extractSelfLabels,
+  extractLabelEvents,
+  mergeEffectiveLabels,
+} from "./nip32.js"
+export type {
+  Label as Nip32Label,
+  EffectiveLabels as Nip32EffectiveLabels,
+  LabelEvent,
+} from "./nip32.js"
 
 // NIP-32 V2 convergence helpers and types
-export {extractSelfLabelsV2, extractLabelEventsV2, mergeEffectiveLabelsV2} from "./nip32.js"
+export {
+  extractSelfLabelsV2,
+  extractLabelEventsV2,
+  mergeEffectiveLabelsV2,
+} from "./nip32.js"
 export type {
   EffectiveLabelsInput as Nip32EffectiveLabelsInput,
   EffectiveLabelsV2 as Nip32EffectiveLabelsV2,
