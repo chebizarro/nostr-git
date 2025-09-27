@@ -34,6 +34,9 @@
     defaultRelays = [],
   }: Props = $props();
 
+  console.log("graspServerUrls", graspServerUrls);
+  console.log("defaultRelays", defaultRelays);
+
   // Initialize the useNewRepo hook
   const { createRepository, isCreating, progress, error, reset } = useNewRepo({
     onProgress: (steps) => {
@@ -582,13 +585,19 @@
     {#if currentStep === 1}
       <!-- Inline signer CTA for GRASP when no signer is detected -->
       {#if selectedProvider === "grasp" && !hasSigner}
-        <div class="mb-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-destructive">
+        <div
+          class="mb-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-destructive"
+        >
           <div class="flex items-center justify-between gap-3">
             <div>
               <div class="font-medium">Nostr signer required</div>
-              <div class="text-sm opacity-80">Connect a Nostr signer to create a GRASP repository.</div>
+              <div class="text-sm opacity-80">
+                Connect a Nostr signer to create a GRASP repository.
+              </div>
             </div>
-            <Button size="sm" variant="destructive" onclick={connectSignerCTA}>Connect Signer</Button>
+            <Button size="sm" variant="destructive" onclick={connectSignerCTA}
+              >Connect Signer</Button
+            >
           </div>
         </div>
       {/if}
@@ -680,7 +689,8 @@
         <Button
           onclick={nextStep}
           disabled={(currentStep === 1 &&
-            (!selectedProvider || (selectedProvider === "grasp" && (!isValidGraspConfig() || !hasSigner)))) ||
+            (!selectedProvider ||
+              (selectedProvider === "grasp" && (!isValidGraspConfig() || !hasSigner)))) ||
             (currentStep === 2 && !validateStep1())}
           variant="git"
           size="sm"

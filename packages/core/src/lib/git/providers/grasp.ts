@@ -22,7 +22,7 @@ import type {
   User,
   GitForkOptions
 } from '../api.js';
-import { SimplePool, type EventTemplate, type NostrEvent, nip19 } from 'nostr-tools';
+import { SimplePool, type EventTemplate, type NostrEvent, nip19, Filter } from 'nostr-tools';
 import { getTagValue, getTags } from '@nostr-git/shared-types';
 
 // Import or declare the requestEventSigning function
@@ -195,10 +195,10 @@ export class GraspApi implements GitServiceApi {
   /**
    * Query Nostr events from relay
    */
-  private async queryEvents(filter: any): Promise<NostrEvent[]> {
+  private async queryEvents(filters: Filter[]): Promise<NostrEvent[]> {
     return new Promise((resolve) => {
       const events: NostrEvent[] = [];
-      const sub = this.pool.subscribeMany([this.relayUrl], [filter], {
+      const sub = this.pool.subscribeMany([this.relayUrl], filters as any, {
         onevent: (event: NostrEvent) => {
           events.push(event);
         },
@@ -221,12 +221,14 @@ export class GraspApi implements GitServiceApi {
    */
   async getRepo(owner: string, repo: string): Promise<RepoMetadata> {
     // Query for repository announcement event (NIP-34 kind 30617)
-    const events = await this.queryEvents({
-      kinds: [30617],
-      authors: [owner],
-      '#d': [repo],
-      limit: 1
-    });
+    const events = await this.queryEvents([
+      {
+        kinds: [30617],
+        authors: [owner],
+        '#d': [repo],
+        limit: 1
+      }
+    ]);
 
     if (events.length === 0) {
       throw new Error(`Repository ${owner}/${repo} not found`);
@@ -518,11 +520,13 @@ export class GraspApi implements GitServiceApi {
   async listIssues(owner: string, repo: string, options?: ListIssuesOptions): Promise<Issue[]> {
     // Query for issue events (NIP-34 kind 1621)
     const repoId = `${nip19.npubEncode(owner)}:${repo}`;
-    const events = await this.queryEvents({
-      kinds: [1621],
-      '#a': [repoId],
-      limit: options?.per_page || 30
-    });
+    const events = await this.queryEvents([
+      {
+        kinds: [1621],
+        '#a': [repoId],
+        limit: options?.per_page || 30
+      }
+    ]);
 
     return events.map((event) => ({
       id: parseInt(event.id.slice(-8), 16), // Use last 8 chars of event ID as number
@@ -702,11 +706,13 @@ export class GraspApi implements GitServiceApi {
   async listPatches(owner: string, repo: string): Promise<Patch[]> {
     // Query for patch events (NIP-34 kind 1617)
     const repoId = `${nip19.npubEncode(owner)}:${repo}`;
-    const events = await this.queryEvents({
-      kinds: [1617],
-      '#a': [repoId],
-      limit: 50
-    });
+    const events = await this.queryEvents([
+      {
+        kinds: [1617],
+        '#a': [repoId],
+        limit: 50
+      }
+    ]);
 
     return events.map((event) => ({
       id: event.id,
@@ -741,11 +747,13 @@ export class GraspApi implements GitServiceApi {
     const npub = nip19.npubEncode(this.pubkey);
 
     // Query for profile metadata (NIP-01 kind 0)
-    const events = await this.queryEvents({
-      kinds: [0],
-      authors: [this.pubkey],
-      limit: 1
-    });
+    const events = await this.queryEvents([
+      {
+        kinds: [0],
+        authors: [this.pubkey],
+        limit: 1
+      }
+    ]);
 
     let profile: any = {};
     if (events.length > 0) {
@@ -783,11 +791,13 @@ export class GraspApi implements GitServiceApi {
       throw new Error(`Invalid user identifier: ${username}`);
     }
 
-    const events = await this.queryEvents({
-      kinds: [0],
-      authors: [pubkey],
-      limit: 1
-    });
+    const events = await this.queryEvents([
+      {
+        kinds: [0],
+        authors: [pubkey],
+        limit: 1
+      }
+    ]);
 
     let profile: any = {};
     if (events.length > 0) {

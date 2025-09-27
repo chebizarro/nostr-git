@@ -33,7 +33,7 @@
     "vitest": "^2.0.5"
   },
   "dependencies": {
-    "@nostr-git/shared-types": "link:../../shared-types",
+    "@nostr-git/shared-types": "workspace:*",
     "lang-map": "^0.4.0",
     "nostr-tools": "^2.11.0",
     "zip-a-folder": "^3.1.9"
