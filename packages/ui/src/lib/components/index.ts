@@ -31,6 +31,9 @@ export { default as RepoPatchStatus } from "./git/RepoPatchStatus.svelte";
 export { default as RepoHeader } from "./git/RepoHeader.svelte";
 export { default as BranchSelector } from "./git/BranchSelector.svelte";
 export { default as RepoAlertBadge } from "./git/RepoAlertBadge.svelte";
+export { default as PatchDagSummary } from "./git/PatchDagSummary.svelte";
+export { default as MaintainerBadge } from "./git/MaintainerBadge.svelte";
+export { default as StatusChip } from "./git/StatusChip.svelte";
 
 // Media viewers
 export { default as ImageViewer } from "./git/viewers/ImageViewer.svelte";
