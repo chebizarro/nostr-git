@@ -35,7 +35,9 @@ export function groupByEuc(events: RepoAnnouncementEvent[]): RepoGroup[] {
       .filter((t: NostrTag) => t[0] === 'relays')
       .flatMap((t: NostrTag) => (t as string[]).slice(1));
     const maint = evt.tags.find((t: NostrTag) => t[0] === 'maintainers') as string[] | undefined;
+    // Ensure the author is considered a maintainer if not explicitly listed
     const maintainers = maint ? maint.slice(1) : [];
+    if (evt.pubkey && !maintainers.includes(evt.pubkey)) maintainers.push(evt.pubkey);
     const name = evt.tags.find((t: NostrTag) => t[0] === 'name')?.[1] || '';
 
     if (!by[euc])
@@ -63,7 +65,12 @@ export function isMaintainer(npub: string, group: RepoGroup): boolean {
 }
 
 export function deriveMaintainers(group: RepoGroup): Set<string> {
-  return new Set(group.maintainers);
+  const out = new Set<string>(group.maintainers);
+  // Add authors of all repo events as implicit maintainers
+  for (const evt of group.repos) {
+    if (evt.pubkey) out.add(evt.pubkey);
+  }
+  return out;
 }
 
 export async function loadRepositories(io: IO): Promise<RepoGroup[]> {
