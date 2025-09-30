@@ -11,6 +11,7 @@ export type RepoGroup = {
   maintainers: string[];
   name: string;
 };
+
 export type IO = {
   fetchEvents: (filters: any[]) => Promise<any[]>;
   publishEvent?: (evt: any) => Promise<any>;
@@ -29,6 +30,10 @@ export type RepoFetchEvent = {
   onResult: (events: any[]) => void;
 };
 
+export function createRepositoriesStore(
+  initialIO: IO,
+  loaderThunk: ThunkFunction<RepoFetchEvent>
+): RepositoriesStore {
 export function createRepositoriesStore(
   initialIO: IO,
   loaderThunk: ThunkFunction<RepoFetchEvent>
@@ -110,8 +115,6 @@ export function createRepositoriesStore(
   function setIO(next: IO) {
     io = next;
   }
-
-  // Initial lazy load trigger left to the caller (host app can call refresh())
 
   return Object.assign(data, {
     refresh,
