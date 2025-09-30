@@ -10,6 +10,7 @@ export type { FunctionRegistry } from "./internal/function-registry";
 export * from "./Template";
 export { toast } from "./stores/toast";
 export { pushRepoAlert } from "./alertsAdapter";
+export { loadTokensFromStorage, saveTokensToStorage, type TokenEntry } from "./utils/tokenLoader";
 
 // Export event kind utilities
 export * from "./utils/eventKinds";
