@@ -34,10 +34,6 @@ export function createRepositoriesStore(
   initialIO: IO,
   loaderThunk: ThunkFunction<RepoFetchEvent>
 ): RepositoriesStore {
-export function createRepositoriesStore(
-  initialIO: IO,
-  loaderThunk: ThunkFunction<RepoFetchEvent>
-): RepositoriesStore {
   let io = initialIO;
   const data = writable<RepoGroup[]>([]);
   const loading = writable<boolean>(false);
