@@ -3,6 +3,7 @@ export { default as ConfigProvider } from "./ConfigProvider.svelte";
 export * from "./stores/tokens";
 export * from "./stores/graspServers";
 export * from "./stores/repositories";
+export { bookmarksStore } from "./stores/repositories";
 export * from "./components";
 export * from "./types/signer";
 export * from "./utils/signer-context";

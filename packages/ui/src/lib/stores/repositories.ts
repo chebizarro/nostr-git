@@ -1,6 +1,39 @@
 import { writable, type Readable } from "svelte/store";
 import type { ThunkFunction } from "../internal/function-registry";
-// Avoid strict type coupling across packages by defining minimal local types
+
+// Bookmark entry for a single repo
+export type BookmarkedRepo = {
+  address: string;  // kind:pubkey:identifier
+  event: any;       // The repo announcement event
+  relayHint: string;
+};
+
+// Singleton writable store for bookmarked repositories
+function createBookmarksStore() {
+  const { subscribe, set, update } = writable<BookmarkedRepo[]>([]);
+  
+  return {
+    subscribe,
+    set,
+    update,
+    add: (repo: BookmarkedRepo) => update(repos => {
+      // Don't add duplicates
+      if (repos.some(r => r.address === repo.address)) {
+        return repos;
+      }
+      return [...repos, repo];
+    }),
+    remove: (address: string) => update(repos => 
+      repos.filter(r => r.address !== address)
+    ),
+    clear: () => set([])
+  };
+}
+
+// Export singleton instance
+export const bookmarksStore = createBookmarksStore();
+
+// Legacy types for backward compatibility
 export type RepoGroup = {
   euc: string;
   repos: any[];
