@@ -14,6 +14,7 @@ export { default as MergeStatus } from "./git/MergeStatus.svelte";
 export { default as PatchSelector } from "./git/PatchSelector.svelte";
 export { default as CommitCard } from "./git/CommitCard.svelte";
 export { default as CommitHeader } from "./git/CommitHeader.svelte";
+export { default as CommitSelector } from "./git/CommitSelector.svelte";
 export { default as SplitDiff } from "./git/SplitDiff.svelte";
 export { default as FileMetadataPanel } from "./git/FileMetadataPanel.svelte";
 export { default as NewRepoWizard } from "./git/NewRepoWizard.svelte";
