@@ -63,32 +63,32 @@
               </Avatar>
 
               <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2 mb-1">
-                  <code class="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded">
+                <div class="flex items-center gap-2 mb-1 overflow-hidden">
+                  <code class="text-xs font-mono bg-secondary px-1.5 py-0.5 rounded whitespace-nowrap">
                     {truncateHash(commit.oid)}
                   </code>
-                  <Badge variant="outline" class={`text-xs ${getBranchColor(commit.branch)}`}>
+                  <Badge variant="outline" class={`text-xs whitespace-nowrap ${getBranchColor(commit.branch)}`}>
                     <GitBranch class="h-2.5 w-2.5 mr-1" />
-                    {commit.branch}
+                    <span class="truncate max-w-[80px]" title={commit.branch}>{commit.branch}</span>
                   </Badge>
                 </div>
 
-                <p class="text-sm font-medium mb-1 line-clamp-2">
+                <p class="text-sm font-medium mb-1 line-clamp-2" title={commit.commit.message}>
                   {commit.commit.message}
                 </p>
 
-                <div class="flex items-center justify-between text-xs text-muted-foreground">
-                  <div class="flex items-center gap-2">
-                    <User class="h-3 w-3" />
-                    <span>{commit.commit.author.name}</span>
+                <div class="flex items-center justify-between text-xs text-muted-foreground overflow-hidden">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <User class="h-3 w-3 flex-shrink-0" />
+                    <span class="truncate" title={commit.commit.author.name}>{commit.commit.author.name}</span>
                   </div>
-                  <div class="flex items-center gap-2">
+                  <div class="flex items-center gap-2 whitespace-nowrap flex-shrink-0">
                     <Calendar class="h-3 w-3" />
                     <span>{formatDate(commit.commit.author.timestamp)}</span>
                   </div>
                 </div>
 
-                <div class="text-xs text-muted-foreground mt-1">
+                <div class="text-xs text-muted-foreground mt-1 whitespace-nowrap">
                   {commit.filesChanged} files changed
                 </div>
               </div>

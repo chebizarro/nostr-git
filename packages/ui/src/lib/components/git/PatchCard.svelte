@@ -117,12 +117,11 @@
       <Icon class={`h-6 w-6 ${color}`} />
     {/if}
     <div class="flex-1">
-      <div class="flex items-center justify-between">
-        <div class="flex-1">
+      <div class="flex items-start justify-between gap-2">
+        <div class="flex-1 min-w-0">
           <a href={`patches/${id}`} class="block">
             <h3
-              class="text-lg font-medium hover:text-accent transition-colors truncate max-w-xs"
-              title={title}
+              class="text-lg font-medium hover:text-accent transition-colors break-words"
             >
               {description}
             </h3>
@@ -160,15 +159,15 @@
         </div>
       </div>
 
-      <div class="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-        <span>Base: {baseBranch}</span>
+      <div class="flex items-center gap-2 text-xs text-muted-foreground mb-1 overflow-hidden flex-wrap">
+        <span class="whitespace-nowrap">Base: <span class="max-w-[120px] inline-block truncate align-bottom" title={baseBranch}>{baseBranch}</span></span>
         <span>•</span>
-        <span>{commitCount + (patches?.length ?? 0)} commits</span>
+        <span class="whitespace-nowrap">{commitCount + (patches?.length ?? 0)} commits</span>
         <span>•</span>
-        <span>{comments?.length ?? 0} comments</span>
+        <span class="whitespace-nowrap">{comments?.length ?? 0} comments</span>
         {#if parsed.commitHash}
           <span>•</span>
-          <div class="flex items-center gap-1">
+          <div class="flex items-center gap-1 whitespace-nowrap">
             <GitCommit class="h-3 w-3" />
             <code class="text-xs font-mono">{parsed.commitHash.substring(0, 7)}</code>
             <button
@@ -216,9 +215,9 @@
               {#if committerName && committerName !== parsed.author.name}
                 <div class="flex items-center justify-between">
                   <span class="text-muted-foreground">Committer:</span>
-                  <div class="flex items-center gap-1">
-                    <User class="h-3 w-3" />
-                    <span>{committerName}</span>
+                  <div class="flex items-center gap-1 min-w-0">
+                    <User class="h-3 w-3 flex-shrink-0" />
+                    <span class="truncate" title={committerName}>{committerName}</span>
                   </div>
                 </div>
               {/if}

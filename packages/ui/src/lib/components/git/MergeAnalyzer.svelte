@@ -104,24 +104,24 @@
       <div class="space-y-3">
         {#each analysis.affectedFiles as file, index (file)}
           {@const hasConflict = analysis.conflictCount > 0 && index < analysis.conflictCount}
-          <div class="flex items-center justify-between p-3 rounded border">
-            <div class="flex items-center gap-3">
-              <FileText class="h-4 w-4 text-muted-foreground" />
-              <code class="text-sm font-mono">{file}</code>
+          <div class="flex items-center justify-between p-3 rounded border gap-3">
+            <div class="flex items-center gap-3 min-w-0 flex-1">
+              <FileText class="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <code class="text-sm font-mono truncate" title={file}>{file}</code>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-shrink-0">
               {#if hasConflict}
-                <Badge variant="destructive" class="text-xs">
+                <Badge variant="destructive" class="text-xs whitespace-nowrap">
                   <AlertTriangle class="h-2.5 w-2.5 mr-1" />
                   Conflict
                 </Badge>
               {:else}
-                <Badge variant="secondary" class="text-xs">
+                <Badge variant="secondary" class="text-xs whitespace-nowrap">
                   <CheckCircle class="h-2.5 w-2.5 mr-1" />
                   Clean
                 </Badge>
               {/if}
-              <span class="text-xs text-muted-foreground">
+              <span class="text-xs text-muted-foreground whitespace-nowrap">
                 +{Math.floor(Math.random() * 50)} -{Math.floor(Math.random() * 30)}
               </span>
             </div>

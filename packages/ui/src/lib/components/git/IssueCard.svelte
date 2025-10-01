@@ -23,7 +23,14 @@
   import IssueThread from "./IssueThread.svelte";
   import { useRegistry } from "../../useRegistry";
   import { fly } from "svelte/transition";
+  import markdownit from "markdown-it";
   const { Button, ProfileLink, Card, EventActions } = useRegistry();
+
+  const md = markdownit({
+    html: true,
+    linkify: true,
+    typographer: true,
+  });
 
   interface Props {
     event: IssueEvent;
@@ -97,12 +104,11 @@
         <Icon class={`h-6 w-6 mt-1 ${color}`} />
       {/if}
       <div class="flex-1">
-        <div class="flex items-center justify-between">
-          <div class="flex-1">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex-1 min-w-0">
             <a href={`issues/${id}`}>
               <h3
-                class="text-base font-semibold mb-0.5 leading-tight hover:text-accent transition-colors"
-                title={title}
+                class="text-base font-semibold mb-0.5 leading-tight hover:text-accent transition-colors break-words"
               >
                 {title || "No title"}
               </h3>
@@ -121,14 +127,14 @@
             {/if}
           </Button>
         </div>
-        <div class="flex items-center flex-wrap gap-2 text-sm text-muted-foreground mb-1">
-          <span>Opened <TimeAgo date={createdAt} /></span>
-          <span>• By <ProfileLink pubkey={event.pubkey} /> </span>
-          <span>• {commentCount} comments</span>
+        <div class="flex items-center flex-wrap gap-2 text-sm text-muted-foreground mb-1 overflow-hidden">
+          <span class="whitespace-nowrap">Opened <TimeAgo date={createdAt} /></span>
+          <span class="whitespace-nowrap">• By <ProfileLink pubkey={event.pubkey} /> </span>
+          <span class="whitespace-nowrap">• {commentCount} comments</span>
         </div>
-        <p class="my-3 line-clamp-2 text-sm text-muted-foreground">
-          {description}
-        </p>
+        <div class="my-3 line-clamp-2 text-sm text-muted-foreground prose prose-sm max-w-none">
+          {@html md.render(description || "")}
+        </div>
         {#if displayLabels && displayLabels.length}
           <div class="mb-2 inline-flex gap-1">
             {#each displayLabels as label}
@@ -166,3 +172,29 @@
     />
   </Card>
 {/if}
+
+<style>
+  /* Ensure markdown content works with line-clamp */
+  :global(.line-clamp-2 > *) {
+    display: inline;
+  }
+  :global(.line-clamp-2 > p) {
+    display: inline;
+    margin: 0;
+  }
+  :global(.line-clamp-2 > ul),
+  :global(.line-clamp-2 > ol) {
+    display: inline;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  :global(.line-clamp-2 > ul > li),
+  :global(.line-clamp-2 > ol > li) {
+    display: inline;
+  }
+  :global(.line-clamp-2 > ul > li::before),
+  :global(.line-clamp-2 > ol > li::before) {
+    content: "• ";
+  }
+</style>

@@ -115,9 +115,9 @@
       <div class="flex-1 min-w-0">
         <div class="flex items-start justify-between mb-2">
           <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 mb-1">
-              <span class="font-semibold text-sm">{displayName || commit.commit.author.name}</span>
-              <span class="text-xs text-muted-foreground">
+            <div class="flex items-center gap-2 mb-1 overflow-hidden">
+              <span class="font-semibold text-sm truncate">{displayName || commit.commit.author.name}</span>
+              <span class="text-xs text-muted-foreground whitespace-nowrap">
                 {formatDate(commit.commit.author.timestamp)}
               </span>
             </div>
@@ -157,7 +157,7 @@
         </div>
 
         <div
-          class="mb-3 cursor-pointer hover:bg-muted/30 -mx-2 px-2 py-1 rounded transition-colors"
+          class="mb-3 cursor-pointer hover:bg-muted/30 -mx-2 px-2 py-1 rounded transition-colors min-w-0"
           onclick={handleCommitClick}
           role="button"
           tabindex={0}
@@ -168,13 +168,13 @@
             }
           }}
         >
-          <h3 class="font-medium text-sm leading-tight mb-1 truncate">
+          <h3 class="font-medium text-sm leading-tight mb-1 truncate" title={commit.commit.message}>
             {commit.commit.message}
           </h3>
 
           {#if commit.commit.author.email}
-            <div class="flex items-center gap-4 text-xs text-muted-foreground">
-              <span>{commit.commit.author.email}</span>
+            <div class="flex items-center gap-4 text-xs text-muted-foreground overflow-hidden">
+              <span class="truncate" title={commit.commit.author.email}>{commit.commit.author.email}</span>
             </div>
           {/if}
         </div>
@@ -203,7 +203,7 @@
           </div>
 
           {#if commit.commit.parent.length > 0}
-            <div class="text-xs text-muted-foreground">
+            <div class="text-xs text-muted-foreground whitespace-nowrap">
               Parent: {truncateHash(commit.commit.parent[0])}
             </div>
           {/if}

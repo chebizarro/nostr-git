@@ -90,7 +90,7 @@
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
         <!-- Author Info -->
-        <div class="flex items-center gap-2 text-sm text-muted-foreground">
+        <div class="flex items-center gap-2 text-sm text-muted-foreground min-w-0">
           <NostrAvatar
             pubkey={pubkey}
             avatarUrl={avatarUrl}
@@ -99,12 +99,12 @@
             email={email}
             displayName={displayName || author}
             size={24}
-            class="h-6 w-6"
+            class="h-6 w-6 flex-shrink-0"
             title={displayName || author}
           />
-          <span class="font-medium text-foreground">{displayName || author}</span>
+          <span class="font-medium text-foreground truncate" title={displayName || author}>{displayName || author}</span>
           {#if email}
-            <span class="text-muted-foreground">({email})</span>
+            <span class="text-muted-foreground truncate" title={email}>({email})</span>
           {/if}
         </div>
 
@@ -118,12 +118,12 @@
 
         <!-- Parent Commits -->
         {#if parents.length > 0}
-          <div class="flex items-center gap-2 text-sm text-muted-foreground">
-            <GitCommit class="h-4 w-4" />
-            <span>
+          <div class="flex items-center gap-2 text-sm text-muted-foreground min-w-0">
+            <GitCommit class="h-4 w-4 flex-shrink-0" />
+            <span class="truncate">
               {parents.length === 1 ? "parent" : "parents"}:
               {#each parents as parent, i}
-                <code class="mx-1 rounded bg-muted px-1 py-0.5 text-xs font-mono">
+                <code class="mx-1 rounded bg-muted px-1 py-0.5 text-xs font-mono" title={parent}>
                   {parent.slice(0, 7)}
                 </code>{#if i < parents.length - 1},{/if}
               {/each}
