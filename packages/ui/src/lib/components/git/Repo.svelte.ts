@@ -12,7 +12,7 @@ import {
   StatusEvent,
   CommentEvent,
   LabelEvent,
- } from "@nostr-git/shared-types";
+} from "@nostr-git/shared-types";
 import { type MergeAnalysisResult } from "@nostr-git/core";
 import { canonicalRepoKey } from "@nostr-git/core";
 import { type Readable } from "svelte/store";
