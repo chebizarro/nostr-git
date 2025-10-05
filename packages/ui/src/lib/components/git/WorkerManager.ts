@@ -342,6 +342,43 @@ export class WorkerManager {
   }
 
   /**
+   * List tree at a specific commit (for tag browsing)
+   * NOTE: Requires worker API support for listTreeAtCommit.
+   */
+  async listTreeAtCommit(params: {
+    repoEvent: RepoAnnouncementEvent;
+    commit: string;
+    path?: string;
+    repoKey?: string;
+  }): Promise<any> {
+    if (!this.isInitialized || !this.api) {
+      throw new Error("WorkerManager not initialized");
+    }
+    try {
+      if (!this.api || typeof (this.api as any).listTreeAtCommit !== "function") {
+        throw new Error("Worker does not support listTreeAtCommit (update worker to enable tag browsing)");
+      }
+      // Ensure params are structured-cloneable to avoid DataCloneError across Comlink boundary
+      let safeParams = params;
+      try {
+        safeParams = JSON.parse(JSON.stringify(params));
+      } catch {
+        /* fall back to original */
+      }
+      // Call through to worker API (must be implemented there)
+      const result = await (this.api as any).listTreeAtCommit(safeParams);
+      try {
+        return JSON.parse(JSON.stringify(result));
+      } catch {
+        return result;
+      }
+    } catch (error) {
+      console.error("listTreeAtCommit failed:", error);
+      throw error;
+    }
+  }
+
+  /**
    * Check if file exists at commit
    */
   async fileExistsAtCommit(params: {

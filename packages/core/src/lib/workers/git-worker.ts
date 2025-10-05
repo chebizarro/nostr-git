@@ -8,6 +8,7 @@ import { getGitServiceApi } from '../git/factory.js';
 import type { GitVendor } from '../vendor-providers.js';
 import { createRepoStateEvent } from '@nostr-git/shared-types';
 import { canonicalRepoKey } from '../utils/canonicalRepoKey.js';
+import { listRepoFilesFromEvent } from '../files.js';
 
 import { setAuthConfig, getAuthCallback, getConfiguredAuthHosts, type AuthConfig } from './auth.js';
 import { RepoCache, RepoCacheManager } from './cache.js';
@@ -27,6 +28,21 @@ import { analyzePatchMergeUtil, applyPatchAndPushUtil } from './patches.js';
 
 if (typeof globalThis.Buffer === 'undefined') {
   (globalThis as any).Buffer = Buffer;
+}
+
+/**
+ * List tree entries at a specific commit (supports tag browsing via commit OID)
+ * Returns a JSON-safe array of entries { name, path, type, size?, mode?, oid? }
+ */
+async function listTreeAtCommit(args: {
+  repoEvent: any;
+  commit: string;
+  path?: string;
+  repoKey?: string;
+}) {
+  const { repoEvent, commit, path, repoKey } = args;
+  const entries = await listRepoFilesFromEvent({ repoEvent, commit, path, repoKey });
+  return toPlain(entries);
 }
 
 // Environment-aware Git provider (browser/node) from git-wrapper
@@ -2373,6 +2389,7 @@ expose({
   updateAndPushFiles,
   getCommitDetails,
   getStatus,
+  listTreeAtCommit,
   setEventSigner, // Flag to indicate signing is available
   requestEventSigning, // Function to request event signing from UI thread
   setRequestEventSigningHandler // Function to register the event signing handler

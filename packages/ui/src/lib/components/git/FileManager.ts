@@ -130,6 +130,78 @@ export class FileManager {
   }
 
   /**
+   * List files and directories at a specific commit (used for tags)
+   */
+  async listRepoFilesAtCommit({
+    repoEvent,
+    repoKey: providedRepoKey,
+    commit,
+    path = "",
+    useCache = true,
+  }: {
+    repoEvent: RepoAnnouncementEvent;
+    repoKey?: string;
+    commit: string;
+    path?: string;
+    useCache?: boolean;
+  }): Promise<FileListingResult> {
+    const repoKey = providedRepoKey || this.getCanonicalRepoKey(repoEvent);
+    const ref = commit;
+    const cacheKey = this.generateCacheKey("LISTING", repoKey, path, ref);
+
+    // Try cache first if enabled
+    if (this.config.enableCaching && useCache && this.cacheManager) {
+      try {
+        const cached = await this.cacheManager.get("file_listing", cacheKey);
+        if (cached && typeof cached === "object") {
+          console.log(`File listing (commit) cache hit for ${path} at ${ref}`);
+          return { ...(cached as FileListingResult), fromCache: true };
+        }
+      } catch (error) {
+        console.warn("Cache read failed for file listing (commit):", error);
+      }
+    }
+
+    try {
+      const result = await this.workerManager.listTreeAtCommit({
+        repoEvent,
+        commit,
+        path,
+        repoKey,
+      });
+
+      const fileListingResult: FileListingResult = {
+        files: result.map(
+          (file: any): FileInfo => ({
+            path: file.path || file.name,
+            type: file.type || "file",
+            size: file.size,
+            mode: file.mode,
+            lastCommit: file.oid,
+          })
+        ),
+        path,
+        ref,
+        fromCache: false,
+      };
+
+      if (this.config.enableCaching && this.cacheManager) {
+        await this.cacheManager.set(
+          "file_listing",
+          cacheKey,
+          fileListingResult,
+          this.config.listingCacheTTL
+        );
+      }
+
+      return fileListingResult;
+    } catch (error) {
+      console.error(`Failed to list repository files for commit '${ref}':`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Compute a canonical repo key for stable UI cache keys
    */
   private getCanonicalRepoKey(repoEvent: RepoAnnouncementEvent): string {

@@ -88,17 +88,47 @@ export async function listRepoFilesFromEvent(opts: {
           // Retry reading the commit
           await git.readCommit({ dir, oid });
         } catch (deepenError: any) {
-          // Try to get more information about available commits
+          // As a next attempt, fetch tags and recent history from remote (commit may be reachable via tag only)
           try {
-            const commits = await git.log({ dir, depth: 10 });
-            const availableCommits = commits.map((c: any) => c.oid.substring(0, 8)).join(', ');
-            throw new Error(
-              `Commit ${opts.commit} not found in repository. Available recent commits: ${availableCommits}`
-            );
-          } catch (logError) {
-            throw new Error(
-              `Commit ${opts.commit} not found in repository. Unable to list available commits.`
-            );
+            const selectCloneUrl = () => {
+              let url = event.clone?.find((u: string) => u.startsWith('https://'));
+              if (!url && event.clone?.length) {
+                const ssh = event.clone.find((u: string) => u.startsWith('git@'));
+                if (ssh) {
+                  const m = ssh.match(/^git@([^:]+):(.+?)(\.git)?$/);
+                  if (m) url = `https://${m[1]}/${m[2]}.git`;
+                }
+              }
+              return url;
+            };
+            const url = selectCloneUrl();
+            if (url) {
+              // Fetch tags and a bit more history to try to obtain the commit
+              await git.fetch({
+                dir,
+                url,
+                singleBranch: false,
+                depth: 200,
+                tags: true
+              });
+              // Retry reading commit after tag fetch
+              await git.readCommit({ dir, oid });
+            } else {
+              throw deepenError;
+            }
+          } catch (fetchTagsError: any) {
+            // Final diagnostic: list some commits for error context
+            try {
+              const commits = await git.log({ dir, depth: 10 });
+              const availableCommits = commits.map((c: any) => c.oid.substring(0, 8)).join(', ');
+              throw new Error(
+                `Commit ${opts.commit} not found in repository. Available recent commits: ${availableCommits}`
+              );
+            } catch (logError) {
+              throw new Error(
+                `Commit ${opts.commit} not found in repository. Unable to list available commits.`
+              );
+            }
           }
         }
       } else {
@@ -136,33 +166,56 @@ export async function listRepoFilesFromEvent(opts: {
       oid: entry.oid
     }));
   } catch (error: any) {
-    if (error.name === 'NotFoundError') {
-      // If tree not found, try to deepen repository further
-      console.warn(`Tree not found for ${oid}, attempting to deepen repository further...`);
+    const original = error;
+    const attemptReadTree = async (depthHint: number) => {
+      // Deepen repo and retry
+      await ensureRepoFromEvent({ repoEvent: event, branch, repoKey: opts.repoKey }, depthHint);
+      const fp: any = treePath ? treePath : undefined;
+      const { tree } = await git.readTree({ dir, oid, filepath: fp });
+      return tree.map((entry: any) => ({
+        name: entry.path,
+        path: treePath ? `${treePath}/${entry.path}` : entry.path,
+        type:
+          entry.type === 'blob'
+            ? 'file'
+            : entry.type === 'tree'
+              ? 'directory'
+              : entry.type === 'commit'
+                ? 'submodule'
+                : 'file',
+        oid: entry.oid
+      }));
+    };
+
+    try {
+      // First recovery path for missing subtrees
+      console.warn(`Tree read failed for ${oid} at '${treePath || '/'}' (${original?.name || original}). Deepening and retrying...`);
+      return await attemptReadTree(1000);
+    } catch (retry1: any) {
       try {
-        await ensureRepoFromEvent({ repoEvent: event, branch }, 1000);
-        const fp2: any = treePath ? treePath : undefined;
-        const { tree } = await git.readTree({ dir, oid, filepath: fp2 });
-        return tree.map((entry: any) => ({
-          name: entry.path,
-          path: treePath ? `${treePath}/${entry.path}` : entry.path,
-          type:
-            entry.type === 'blob'
-              ? 'file'
-              : entry.type === 'tree'
-                ? 'directory'
-                : entry.type === 'commit'
-                  ? 'submodule'
-                  : 'file',
-          oid: entry.oid
-        }));
-      } catch (retryError) {
+        // Second recovery path: fetch tags and more history, then retry again
+        const selectCloneUrl = () => {
+          let url = event.clone?.find((u: string) => u.startsWith('https://'));
+          if (!url && event.clone?.length) {
+            const ssh = event.clone.find((u: string) => u.startsWith('git@'));
+            if (ssh) {
+              const m = ssh.match(/^git@([^:]+):(.+?)(\.git)?$/);
+              if (m) url = `https://${m[1]}/${m[2]}.git`;
+            }
+          }
+          return url;
+        };
+        const url = selectCloneUrl();
+        if (url) {
+          await git.fetch({ dir, url, singleBranch: false, depth: 500, tags: true });
+        }
+        return await attemptReadTree(1500);
+      } catch (retry2: any) {
         throw new Error(
-          `Unable to access file tree at ${treePath}. Repository may be incomplete or corrupted.`
+          `Unable to access file tree at ${treePath || '/'} after retries. Original error: ${original?.message || String(original)}`
         );
       }
     }
-    throw error;
   }
 }
 

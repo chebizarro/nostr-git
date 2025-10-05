@@ -3,6 +3,7 @@ import { CacheManager } from "./CacheManager";
 import { context } from "$lib/stores/context";
 import { toast } from "$lib/stores/toast";
 import type { RepoAnnouncementEvent, RepoStateEvent } from "@nostr-git/shared-types";
+import { parseRepoAnnouncementEvent } from "@nostr-git/shared-types";
 
 // Branch interface definition (since it's not exported from shared-types)
 export interface Branch {
@@ -73,6 +74,8 @@ export class BranchManager {
   private selectedBranch?: string;
   private mainBranch?: string;
   private nip34References: Map<string, NIP34Reference> = new Map();
+  private refs: Array<{name: string; type: "heads" | "tags"; fullRef: string; commitId: string}> = [];
+  private loadingRefs: boolean = false;
 
   // Loading state
   private loadingIds: {
@@ -175,6 +178,24 @@ export class BranchManager {
   }
 
   /**
+   * Compute a canonical repo key for worker calls (mirrors FileManager behavior)
+   */
+  private getCanonicalRepoKey(repoEvent: RepoAnnouncementEvent): string {
+    try {
+      const dTag = (repoEvent as any).tags?.find((t: any[]) => t?.[0] === "d");
+      const identifier = dTag?.[1]?.trim();
+      if (identifier) {
+        return `${repoEvent.pubkey}/${identifier}`;
+      }
+      const parsed = parseRepoAnnouncementEvent(repoEvent as any) as any;
+      if (parsed?.repoId) {
+        return String(parsed.repoId);
+      }
+    } catch {}
+    return (repoEvent as any)?.id || `${(repoEvent as any)?.pubkey || "unknown"}`;
+  }
+
+  /**
    * Process repository state event to extract branch/tag information
    */
   processRepoStateEvent(stateEvent: RepoStateEvent): void {
@@ -209,10 +230,101 @@ export class BranchManager {
   }
 
   /**
+   * Check if a given branch exists in the actual repo via worker.
+   * Uses a lightweight list call; if it errors with not found, we treat as non-existent.
+   */
+  private async branchExists(repoEvent: RepoAnnouncementEvent, branch: string): Promise<boolean> {
+    try {
+      const repoKey = this.getCanonicalRepoKey(repoEvent);
+      await this.workerManager.listRepoFilesFromEvent({ repoEvent, repoKey, branch, path: "" });
+      return true;
+    } catch (err: any) {
+      const msg = (err && (err.message || String(err))) || "";
+      if (typeof msg === "string" && /could not find|not found|unknown ref/i.test(msg)) {
+        return false;
+      }
+      // If error is something else (e.g., transient), don't exclude decisively
+      console.warn(`branchExists(${branch}) indeterminate due to error:`, err);
+      return true;
+    }
+  }
+
+  /**
+   * Process repository state event but only keep branches that actually exist in the repo.
+   * Tags are kept as-is; HEAD is only set if the branch exists.
+   */
+  async processRepoStateEventVerified(
+    stateEvent: RepoStateEvent,
+    repoEvent: RepoAnnouncementEvent
+  ): Promise<void> {
+    this.nip34References.clear();
+
+    if (!stateEvent.tags) return;
+
+    let newMainBranch: string | undefined;
+
+    const fallbackDefaults = new Set(["main", "master", "develop", "dev"]);
+
+    for (const tag of stateEvent.tags) {
+      if (tag[0] === "HEAD") {
+        const headBranch = BranchManager.parseNIP34Head(tag);
+        if (headBranch) {
+          // Always honor HEAD; warn if verification fails but don't drop it
+          const exists = await this.branchExists(repoEvent, headBranch);
+          if (!exists) {
+            this.handleBranchNotFound(headBranch, new Error("HEAD branch missing in repo (kept due to HEAD)"));
+          }
+          newMainBranch = headBranch;
+        }
+      } else if (tag[0].startsWith("refs/")) {
+        const ref = BranchManager.parseNIP34Reference(tag);
+        if (ref) {
+          if (ref.type === "heads") {
+            // Always include common defaults and HEAD branch even if verification fails
+            const isDefault = fallbackDefaults.has(ref.shortName);
+            const isHead = newMainBranch && ref.shortName === newMainBranch;
+            const exists = await this.branchExists(repoEvent, ref.shortName);
+            if (exists || isDefault || isHead) {
+              this.nip34References.set(ref.shortName, ref);
+            } else {
+              this.handleBranchNotFound(ref.shortName, new Error("Branch missing in repo"));
+            }
+          } else {
+            // Always include tags
+            this.nip34References.set(ref.shortName, ref);
+          }
+        }
+      }
+    }
+
+    if (newMainBranch) {
+      this.mainBranch = newMainBranch;
+    }
+
+    console.log(
+      `Verified ${this.nip34References.size} NIP-34 refs (heads filtered by existence), HEAD: ${newMainBranch}`
+    );
+  }
+
+  /**
    * Get current branches
    */
   getBranches(): ProcessedBranch[] {
     return this.branches;
+  }
+
+  /**
+   * Get all refs (branches and tags)
+   */
+  getAllRefs(): Array<{name: string; type: "heads" | "tags"; fullRef: string; commitId: string}> {
+    return this.refs;
+  }
+
+  /**
+   * Check if refs are currently loading
+   */
+  isLoadingRefs(): boolean {
+    return this.loadingRefs;
   }
 
   /**
@@ -285,7 +397,50 @@ export class BranchManager {
   }
 
   /**
-   * Load branches from repository event
+   * Load all refs (branches and tags) with fallback logic
+   * This is the primary method that should be used to load branch/tag data
+   */
+  async loadAllRefs(
+    getAllRefsWithFallback: () => Promise<Array<{name: string; type: "heads" | "tags"; fullRef: string; commitId: string}>>
+  ): Promise<void> {
+    try {
+      this.loadingRefs = true;
+      
+      // Use the Repo's getAllRefsWithFallback which has proper fallback logic
+      const loadedRefs = await getAllRefsWithFallback();
+      this.refs = loadedRefs;
+      
+      // Convert refs to ProcessedBranch format for backward compatibility
+      this.branches = loadedRefs
+        .filter(ref => ref.type === "heads")
+        .map((ref): ProcessedBranch => {
+          const nip34Ref = this.nip34References.get(ref.name);
+          return {
+            name: ref.name,
+            commit: ref.commitId,
+            oid: ref.commitId,
+            lineage: ref.name === this.mainBranch,
+            isHead: ref.name === this.mainBranch,
+            nip34Ref,
+            fromStateEvent: !!nip34Ref,
+            isNIP34Head: ref.name === this.mainBranch,
+          };
+        });
+      
+      this.loadingRefs = false;
+      console.log(`Loaded ${this.refs.length} refs (${this.branches.length} branches, ${this.refs.filter(r => r.type === "tags").length} tags)`);
+    } catch (error) {
+      console.error("Error loading refs:", error);
+      this.refs = [];
+      this.branches = [];
+      this.loadingRefs = false;
+      throw error;
+    }
+  }
+
+  /**
+   * Load branches from repository event (legacy method, prefer loadAllRefs)
+   * @deprecated Use loadAllRefs instead
    */
   async loadBranchesFromRepo(repoEvent: RepoAnnouncementEvent): Promise<void> {
     try {

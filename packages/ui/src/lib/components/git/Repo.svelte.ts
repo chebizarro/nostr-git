@@ -46,12 +46,19 @@ type EffectiveLabelsV2 = {
 };
 
 export class Repo {
+  name: string = $state("");
+  description: string = $state("");
   repoEvent: RepoAnnouncementEvent | undefined = $state(undefined);
   repo: RepoAnnouncement | undefined = $state(undefined);
   repoStateEvent: RepoStateEvent | undefined = $state(undefined);
   state: RepoState | undefined = $state(undefined);
   issues = $state<IssueEvent[]>([]);
   patches = $state<PatchEvent[]>([]);
+  // Reactive selected branch so UI can respond to changes
+  #selectedBranchState: string | undefined = $state(undefined);
+  // Reactive refs (branches/tags) and loading flag for Svelte 5
+  refs: Array<{ name: string; type: "heads" | "tags"; fullRef: string; commitId: string }> = $state([]);
+  refsLoading: boolean = $state(false);
   // Optional multi-state/status/comments/labels streams
   repoStateEventsArr = $state<RepoStateEvent[] | undefined>(undefined);
   statusEventsArr = $state<StatusEvent[] | undefined>(undefined);
@@ -215,6 +222,8 @@ export class Repo {
       if (event) {
         this.repoEvent = event;
         this.repo = parseRepoAnnouncementEvent(event);
+        this.name = this.repo.name;
+        this.description = this.repo.description;
         // Compute canonical key from "pubkey:name" string (matches current @nostr-git/core signature)
         const _owner = this.getOwnerPubkey();
         this.canonicalKey = canonicalRepoKey(`${_owner}:${this.repo.name}`);
@@ -245,8 +254,13 @@ export class Repo {
         this.repoStateEvent = event; // Set the reactive state
         this.state = parseRepoStateEvent(event);
 
-        // Process the Repository State event in BranchManager
-        this.branchManager.processRepoStateEvent(event);
+        // Process the Repository State event in BranchManager (verified against worker when possible)
+        if (initialRepoEvent) {
+          // Fire-and-forget; verification is async
+          void this.branchManager.processRepoStateEventVerified(event, initialRepoEvent);
+        } else {
+          this.branchManager.processRepoStateEvent(event);
+        }
 
         // Invalidate branch cache when repo state changes
         this.invalidateBranchCache();
@@ -290,7 +304,7 @@ export class Repo {
       // Update WorkerManager authentication if it's ready
       if (this.workerManager.isReady) {
         await this.workerManager.setAuthConfig({ tokens: tokenList });
-        console.log("🔐 Updated WorkerManager authentication with", tokenList.length, "tokens");
+        console.log("Updated WorkerManager authentication with", tokenList.length, "tokens");
       }
     });
 
@@ -304,13 +318,25 @@ export class Repo {
         const loadedTokens = await tokens.waitForInitialization();
         if (loadedTokens.length > 0) {
           await this.workerManager.setAuthConfig({ tokens: loadedTokens });
-          console.log("🔐 Configured git authentication for", loadedTokens.length, "hosts");
+          console.log("Configured git authentication for", loadedTokens.length, "hosts");
         } else {
-          console.log("🔐 No authentication tokens found");
+          console.log("No authentication tokens found");
         }
 
         // Delegate initialization and commit loading to a single method
         await this.#loadCommitsFromRepo();
+
+        // Load branches/refs using the new unified method
+        try {
+          this.refsLoading = true;
+          await this.branchManager.loadAllRefs(() => this.getAllRefsWithFallback());
+          this.refs = this.branchManager.getAllRefs();
+        } catch (error) {
+          console.error("Failed to load branches:", error);
+          this.refs = [];
+        } finally {
+          this.refsLoading = false;
+        }
 
         // Ensure background merge analysis runs once worker is ready
         if (this.patches.length > 0) {
@@ -333,7 +359,6 @@ export class Repo {
     issues.subscribe((issueEvents) => {
       this.issues = issueEvents;
     });
-
     tokens.subscribe(async (tokens) => {
       this.tokens = tokens;
 
@@ -705,7 +730,8 @@ export class Repo {
   async #loadBranchesFromRepo(repoEvent: RepoAnnouncementEvent) {
     // Process repository state event for NIP-34 references if available
     if (this.repoStateEvent) {
-      this.branchManager.processRepoStateEvent(this.repoStateEvent);
+      // Prefer verified processing when we have the repoEvent
+      await this.branchManager.processRepoStateEventVerified(this.repoStateEvent, repoEvent);
     }
 
     // Delegate to BranchManager
@@ -786,7 +812,11 @@ export class Repo {
     if (this.repoStateEvent && this.repoStateEvent.tags) {
       const hasProcessedState = this.branchManager?.getAllNIP34References().size > 0;
       if (!hasProcessedState) {
-        this.branchManager?.processRepoStateEvent(this.repoStateEvent);
+        if (this.repo) {
+          await this.branchManager.processRepoStateEventVerified(this.repoStateEvent, this.repoEvent!);
+        } else {
+          this.branchManager?.processRepoStateEvent(this.repoStateEvent);
+        }
       }
     } else if (!this.repoStateEvent) {
       // Load branches from repository if not available and we have a repo event
@@ -858,11 +888,87 @@ export class Repo {
   }
 
   get selectedBranch() {
-    return this.branchManager.getSelectedBranch();
+    // Prefer reactive state when available to trigger Svelte updates
+    return this.#selectedBranchState ?? this.branchManager.getSelectedBranch();
   }
 
-  setSelectedBranch(branchName: string) {
+  async setSelectedBranch(branchName: string) {
+    // Update in BranchManager first
     this.branchManager.setSelectedBranch(branchName);
+
+    // Resolve short branch name (git expects short ref like "main")
+    const shortBranch = (branchName || "").split("/").pop() || branchName;
+
+    // Update reactive state for UI immediately
+    this.#selectedBranchState = shortBranch;
+
+    // Detect if the selection is a tag; skip worker branch ops in that case
+    let isTag = false;
+    try {
+      const refs = this.branchManager.getAllRefs();
+      const hit = refs.find((r) => r.name === shortBranch);
+      isTag = hit?.type === "tags";
+      if (isTag) {
+        console.warn(`Selected ref '${shortBranch}' is a tag; skipping branch checkout.`);
+      }
+    } catch {}
+
+    try {
+      if (!isTag) {
+        // Ensure worker is ready
+        if (!this.workerManager?.isReady) {
+          await this.workerManager.initialize();
+        }
+
+        // Gather clone URLs for remote operations
+        const cloneUrls = [...(this.repo?.clone || [])];
+
+        // 1) Ask worker to sync local repo with remote for the selected branch (switch/checkout)
+        if (this.canonicalKey && cloneUrls.length > 0) {
+          try {
+            await this.workerManager.syncWithRemote({
+              repoId: this.canonicalKey,
+              cloneUrls,
+              branch: shortBranch,
+            });
+          } catch (syncErr) {
+            console.warn("syncWithRemote failed, will try ensureFullClone:", syncErr);
+          }
+        }
+
+        // 2) Ensure the branch is fully available locally (deep clone as needed)
+        if (this.canonicalKey) {
+          await this.workerManager.ensureFullClone({ repoId: this.canonicalKey, branch: shortBranch });
+        }
+
+        // 3) Clear caches impacted by branch change
+        try { await this.fileManager.clearCache(this.canonicalKey); } catch {}
+
+        // Refresh commits on the newly selected branch
+        // Use explicit branch to override default selection in CommitManager
+        await this.commitManager.loadCommits(this.repoId, shortBranch, this.branchManager.getMainBranch());
+      }
+
+      // Invalidate cached resolved default branch so future calls re-resolve against new selection
+      this.invalidateBranchCache();
+
+      // 4) Reload refs so UI sees updated heads/tags state
+      try {
+        this.refsLoading = true;
+        await this.branchManager.loadAllRefs(() => this.getAllRefsWithFallback());
+        this.refs = this.branchManager.getAllRefs();
+      } finally {
+        this.refsLoading = false;
+      }
+
+      // 5) Verify worker status (debug visibility)
+      try {
+        const status = await this.workerManager.getStatus({ repoId: this.canonicalKey, branch: shortBranch });
+        console.log("Worker status after branch switch:", status);
+      } catch {}
+    } catch (e) {
+      console.error("Failed to switch branch in worker or refresh commits:", e);
+    }
   }
 
   get isLoading() {
@@ -944,19 +1050,35 @@ export class Repo {
   }
 
   async listRepoFiles({ branch, path }: { branch?: string; path?: string }) {
-    const targetBranch = branch || this.branchManager.getMainBranch();
+    const target = branch || this.branchManager.getMainBranch();
     if (!this.repoEvent) {
       return {
         files: [],
         path: path || "/",
-        ref: (targetBranch || "").split("/").pop() || "",
+        ref: (target || "").split("/").pop() || "",
         fromCache: false,
       } as const;
     }
+
+    // If target name corresponds to a tag, list files by its commit
+    try {
+      const refs = this.branchManager.getAllRefs();
+      const hit = refs.find((r) => r.name === (target || "").split("/").pop());
+      if (hit && hit.type === "tags" && hit.commitId) {
+        return this.fileManager.listRepoFilesAtCommit({
+          repoEvent: this.repoEvent,
+          repoKey: this.canonicalKey,
+          commit: hit.commitId,
+          path: path || "/",
+        });
+      }
+    } catch {}
+
+    // Otherwise, treat as a branch
     return this.fileManager.listRepoFiles({
       repoEvent: this.repoEvent,
       repoKey: this.canonicalKey,
-      branch: targetBranch,
+      branch: target,
       path: path || "/",
     });
   }

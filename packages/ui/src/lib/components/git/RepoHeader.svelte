@@ -3,42 +3,30 @@
   import { GitBranch, Eye, GitFork, RotateCcw, Settings, LayoutDashboard } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
   const { Button } = useRegistry();
-  import type { RepoAnnouncementEvent } from "@nostr-git/shared-types";
-  import { parseRepoAnnouncementEvent } from "@nostr-git/shared-types";
-  import AuthStatusIndicator from "./AuthStatusIndicator.svelte";
   import { Repo } from "./Repo.svelte";
+  import { BranchSelector } from "..";
 
-  // Accept props: event (NIP-34 RepoAnnouncementEvent), owner (Profile), activeTab
   const {
-    event,
     repoClass,
     activeTab = "overview",
     children,
-    pubkey,
-    watchRepo,
-    isRepoWatched,
     refreshRepo,
     isRefreshing = false,
     forkRepo,
     settingsRepo,
     overviewRepo,
   }: {
-    event: RepoAnnouncementEvent;
     repoClass: Repo;
     activeTab?: string;
     children?: any;
-    pubkey?: string;
-    watchRepo?: () => void;
-    isRepoWatched: boolean;
     refreshRepo?: () => Promise<void>;
     forkRepo?: () => void;
     overviewRepo?: () => void;
     isRefreshing?: boolean;
     settingsRepo?: () => void;
   } = $props();
-  const parsed = parseRepoAnnouncementEvent(event);
-  const name = parsed.name ?? "";
-  const description = parsed.description ?? "";
+  const name = repoClass.name;
+  const description = repoClass.description;
 </script>
 
 <div class="border-b border-border pb-4">
@@ -96,6 +84,7 @@
       >
         <Settings class="h-4 w-4" />
       </Button>
+      <BranchSelector repo={repoClass} />
     </div>
   </div>
   <p class="text-muted-foreground mb-4">{description}</p>
