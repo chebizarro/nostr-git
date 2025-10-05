@@ -10,6 +10,7 @@ export {
   GIT_STATUS_APPLIED,
   GIT_STATUS_CLOSED,
   GIT_STATUS_DRAFT,
+  GitIssueStatus,
 } from "./nip34.js"
 export type {
   NostrEvent,

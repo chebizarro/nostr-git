@@ -7,8 +7,8 @@
   const { Button, Spinner } = useRegistry();
   import { fly } from "svelte/transition";
   import { preventDefault } from "svelte/legacy";
+  import { GIT_REPO_BOOKMARK_DTAG } from "@nostr-git/core";
 
-  const GIT_REPO_BOOKMARK_DTAG = "git-repo-bookmark";
 
   // Props/closures injected by host app via FunctionProvider or direct props
   let {
@@ -221,7 +221,6 @@
   </div>
   <div class="relative">
     <input
-      autofocus={false}
       bind:value={searchTerm}
       class="w-full rounded-md border border-border bg-background px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
       type="text"

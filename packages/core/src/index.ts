@@ -33,3 +33,4 @@ export type { LabelNS } from './lib/labels32.js';
 export { mergeEffectiveLabels as mergeEffectiveLabels32 } from './lib/labels32.js';
 export * from './lib/grasp.js';
 export * from './lib/utils/groupByRepoIdentity.js';
+export * from './lib/repo-list.js';

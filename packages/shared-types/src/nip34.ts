@@ -184,3 +184,10 @@ export function canonicalRepoKey(pubkey: string, name?: string): string {
     return cleanName.length > 0 ? `${pubkey}/${cleanName}` : pubkey;
   }
 }
+
+export enum GitIssueStatus {
+  OPEN = "Open",
+  CLOSED = "Closed",
+  RESOLVED = "Resolved",
+  DRAFT = "Draft"
+}
