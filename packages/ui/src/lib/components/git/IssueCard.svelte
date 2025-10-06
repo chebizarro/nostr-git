@@ -23,9 +23,11 @@
   import IssueThread from "./IssueThread.svelte";
   import Status from "./Status.svelte";
   import { useRegistry } from "../../useRegistry";
+  import NostrAvatar from "./NostrAvatar.svelte";
   import { fly } from "svelte/transition";
   import RichText from "../RichText.svelte";
   const { Button, ProfileLink, Card, EventActions } = useRegistry();
+  import BaseItemCard from "../BaseItemCard.svelte";
 
 
   interface Props {
@@ -104,9 +106,9 @@
 </script>
 
 <div transition:fly>
-  <Card class="git-card hover:bg-accent/50 transition-colors">
-    <div class="flex items-start gap-3">
-      <!-- Prefer canonical Status component when repo + events are provided -->
+  <BaseItemCard clickable={true} href={`issues/${id}`} variant="issue">
+    <!-- icon / status indicator -->
+    {#snippet slotIcon()}
       {#if repo && statusEvents}
         <Status
           repo={repo}
@@ -117,66 +119,83 @@
           actorPubkey={actorPubkey}
           compact={true} />
       {:else if statusIcon}
-        {@const { icon: Icon, color } = statusIcon()}
-        <Icon class={`h-6 w-6 mt-1 ${color}`} />
+        {@const { icon: IconCmp, color } = statusIcon()}
+        <IconCmp class={`h-6 w-6 mt-1 ${color}`} />
       {/if}
-      <div class="flex-1">
-        <div class="flex items-start justify-between gap-2">
-          <div class="flex-1 min-w-0">
-            <a href={`issues/${id}`}>
-              <h3
-                class="text-base font-semibold mb-0.5 leading-tight hover:text-accent transition-colors break-words"
-              >
-                {title || "No title"}
-              </h3>
-            </a>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            class={isBookmarked ? "text-primary" : "text-muted-foreground"}
-            onclick={toggleBookmark}
-          >
-            {#if isBookmarked}
-              <BookmarkCheck class="h-4 w-4" />
-            {:else}
-              <BookmarkPlus class="h-4 w-4" />
-            {/if}
-          </Button>
-        </div>
-        <div class="flex items-center flex-wrap gap-2 text-sm text-muted-foreground mb-1 overflow-hidden">
-          <span class="whitespace-nowrap">Opened <TimeAgo date={createdAt} /></span>
-          <span class="whitespace-nowrap">• By <ProfileLink pubkey={event.pubkey} /> </span>
-          <span class="whitespace-nowrap">• {commentCount} comments</span>
-        </div>
-        <div class="my-3 line-clamp-2 text-sm text-muted-foreground prose prose-sm max-w-none">
-          <RichText content={description || ""} prose={false} linkTemplate={nip19LinkTemplate ?? "https://njump.me/{raw}"} />
-        </div>
-        {#if displayLabels && displayLabels.length}
-          <div class="mb-2 inline-flex gap-1">
-            {#each displayLabels as label}
-              <span class="rounded bg-muted px-2 py-0.5 text-xs">{label}</span>
-            {/each}
-          </div>
+    {/snippet}
+
+    <!-- title -->
+    {#snippet slotTitle()}
+      {title || "No title"}
+    {/snippet}
+
+    <!-- actions (bookmark) -->
+    {#snippet slotActions()}
+      <Button
+        variant="ghost"
+        size="icon"
+        class={isBookmarked ? "text-primary" : "text-muted-foreground"}
+        onclick={toggleBookmark}
+        aria-label="Toggle bookmark"
+      >
+        {#if isBookmarked}
+          <BookmarkCheck class="h-4 w-4" />
+        {:else}
+          <BookmarkPlus class="h-4 w-4" />
         {/if}
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            aria-expanded={isExpanded}
-            aria-controls="issue-thread"
-            class="ml-auto"
-            onclick={toggleExpand}
-          >
-            {#if isExpanded}
-              <ChevronUp class="h-5 w-5 text-muted-foreground" />
-            {:else}
-              <ChevronDown class="h-5 w-5 text-muted-foreground" />
-            {/if}
-          </button>
-        </div>
-      </div>
+      </Button>
+    {/snippet}
+
+    <!-- meta row -->
+    {#snippet slotMeta()}
+      <span class="whitespace-nowrap">Opened <TimeAgo date={createdAt} /></span>
+      <span class="whitespace-nowrap">• By <ProfileLink pubkey={event.pubkey} /> </span>
+      <span class="whitespace-nowrap">• {commentCount} comments</span>
+    {/snippet}
+
+    <!-- body content -->
+    <div class="line-clamp-2 prose prose-sm max-w-none">
+      <RichText content={description || ""} prose={false} linkTemplate={nip19LinkTemplate ?? "https://njump.me/{raw}"} />
     </div>
-  </Card>
+
+    <!-- tags -->
+    {#snippet slotTags()}
+      {#if displayLabels && displayLabels.length}
+        {#each displayLabels as label}
+          <span class="rounded bg-muted px-2 py-0.5 text-xs">{label}</span>
+        {/each}
+      {/if}
+    {/snippet}
+
+    <!-- footer actions (expand) -->
+    {#snippet slotFooter()}
+      <div class="flex items-center gap-2">
+        <EventActions event={event} url={`issues/${id}`} noun="issue" customActions={undefined} />
+        <button
+          type="button"
+          aria-expanded={isExpanded}
+          aria-controls="issue-thread"
+          onclick={toggleExpand}
+        >
+          {#if isExpanded}
+            <ChevronUp class="h-5 w-5 text-muted-foreground" />
+          {:else}
+            <ChevronDown class="h-5 w-5 text-muted-foreground" />
+          {/if}
+        </button>
+      </div>
+    {/snippet}
+
+    <!-- right side (avatar/profile) to match PatchCard -->
+    {#snippet slotSide()}
+      <NostrAvatar
+        pubkey={event.pubkey}
+        size={40}
+        class="h-10 w-10"
+        title={title || 'Issue author'}
+      />
+    {/snippet}
+  </BaseItemCard>
 </div>
 {#if isExpanded}
   <Card class="git-card transition-colors">
