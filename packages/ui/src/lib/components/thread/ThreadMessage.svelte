@@ -2,6 +2,7 @@
   import { useRegistry } from "../../useRegistry";
   const { Avatar, AvatarFallback, AvatarImage } = useRegistry();
   import TimeAgo from "../../TimeAgo.svelte";
+  import RichText from "../RichText.svelte";
 
   const props = $props();
   const content: string = props.content;
@@ -19,6 +20,8 @@
       <span class="font-semibold text-sm">{author.name}</span>
       <span class="text-xs text-muted-foreground"><TimeAgo date={createdAt} /></span>
     </div>
-    <p class="text-sm mt-1">{content}</p>
+    <div class="text-sm mt-1 text-muted-foreground">
+      <RichText content={content} prose={false} />
+    </div>
   </div>
 </div>

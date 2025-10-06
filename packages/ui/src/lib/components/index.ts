@@ -43,7 +43,6 @@ export { default as PDFViewer } from "./git/viewers/PDFViewer.svelte";
 export { default as VideoViewer } from "./git/viewers/VideoViewer.svelte";
 export { default as AudioViewer } from "./git/viewers/AudioViewer.svelte";
 export { default as BinaryViewer } from "./git/viewers/BinaryViewer.svelte";
-
 // Thread components
 export { default as ThreadCommit } from "./thread/ThreadCommit.svelte";
 export { default as ThreadComposer } from "./thread/ThreadComposer.svelte";
@@ -51,15 +50,13 @@ export { default as ThreadIssue } from "./thread/ThreadIssue.svelte";
 export { default as ThreadMessage } from "./thread/ThreadMessage.svelte";
 export { default as ThreadPatch } from "./thread/ThreadPatch.svelte";
 export { default as ContextMessages } from "./ContextMessages.svelte";
-
-// Editor extras
+export { default as RichText } from "./RichText.svelte";
 export { PermalinkExtension, type PermalinkExtensionOptions } from "./editor/PermalinkExtension";
 export { default as Spinner } from "./editor/Spinner.svelte";
 
 // UI primitives
 export { Button } from "./ui/button";
 export { Input } from "./ui/input";
-export { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 export { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
 export { Textarea } from "./ui/textarea";
 export * from "./ui/collapsible";

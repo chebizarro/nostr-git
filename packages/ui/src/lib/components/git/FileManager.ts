@@ -129,6 +129,17 @@ export class FileManager {
     };
   }
 
+  // In-flight and recent-call guards to avoid thrashing
+  private inFlightListings: Map<string, Promise<FileListingResult>> = new Map();
+  private recentListingCalls: Map<string, number> = new Map();
+  private static readonly MIN_LISTING_INTERVAL_MS = 2000; // 2s guard per key
+  // Failure backoff per key to avoid rapid retries on the same failing target
+  private failureBackoffUntil: Map<string, number> = new Map();
+  private static readonly FAILURE_BACKOFF_MS = 15_000; // 15s backoff per failing key
+  // Toast spam guard per key
+  private lastToastAt: Map<string, number> = new Map();
+  private static readonly MIN_TOAST_INTERVAL_MS = 10_000; // 10s per key
+
   /**
    * List files and directories at a specific commit (used for tags)
    */
@@ -149,6 +160,28 @@ export class FileManager {
     const ref = commit;
     const cacheKey = this.generateCacheKey("LISTING", repoKey, path, ref);
 
+    // Rate-limit duplicate calls for same key
+    const now = Date.now();
+    const backoffUntil = this.failureBackoffUntil.get(cacheKey) || 0;
+    if (now < backoffUntil) {
+      // Still backing off; return cached (if any) or short-circuit
+      if (this.config.enableCaching && this.cacheManager) {
+        try {
+          const cached = await this.cacheManager.get("file_listing", cacheKey);
+          if (cached && typeof cached === "object") {
+            return { ...(cached as FileListingResult), fromCache: true };
+          }
+        } catch {}
+      }
+      throw new Error("listing temporarily backed off due to recent failures");
+    }
+    const lastTs = this.recentListingCalls.get(cacheKey) || 0;
+    if (now - lastTs < FileManager.MIN_LISTING_INTERVAL_MS) {
+      const pending = this.inFlightListings.get(cacheKey);
+      if (pending) return pending;
+      // fall through to cache if available below
+    }
+
     // Try cache first if enabled
     if (this.config.enableCaching && useCache && this.cacheManager) {
       try {
@@ -163,12 +196,15 @@ export class FileManager {
     }
 
     try {
-      const result = await this.workerManager.listTreeAtCommit({
+      const pending = this.workerManager.listTreeAtCommit({
         repoEvent,
         commit,
         path,
         repoKey,
       });
+      this.inFlightListings.set(cacheKey, pending as unknown as Promise<FileListingResult>);
+      this.recentListingCalls.set(cacheKey, now);
+      const result = await pending;
 
       const fileListingResult: FileListingResult = {
         files: result.map(
@@ -195,9 +231,14 @@ export class FileManager {
       }
 
       return fileListingResult;
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Failed to list repository files for commit '${ref}':`, error);
+      // Apply backoff on failure for this key
+      this.failureBackoffUntil.set(cacheKey, Date.now() + FileManager.FAILURE_BACKOFF_MS);
       throw error;
+    }
+    finally {
+      this.inFlightListings.delete(cacheKey);
     }
   }
 
@@ -266,6 +307,28 @@ export class FileManager {
     const repoKey = providedRepoKey || this.getCanonicalRepoKey(repoEvent);
     const cacheKey = this.generateCacheKey("LISTING", repoKey, path, shortBranch);
 
+    // Rate-limit duplicate calls for same key
+    const now = Date.now();
+    const backoffUntil = this.failureBackoffUntil.get(cacheKey) || 0;
+    if (now < backoffUntil) {
+      // Still backing off; return cached (if any) or short-circuit
+      if (this.config.enableCaching && this.cacheManager) {
+        try {
+          const cached = await this.cacheManager.get("file_listing", cacheKey);
+          if (cached && typeof cached === "object") {
+            return { ...(cached as FileListingResult), fromCache: true };
+          }
+        } catch {}
+      }
+      throw new Error("listing temporarily backed off due to recent failures");
+    }
+    const lastTs = this.recentListingCalls.get(cacheKey) || 0;
+    if (now - lastTs < FileManager.MIN_LISTING_INTERVAL_MS) {
+      const pending = this.inFlightListings.get(cacheKey);
+      if (pending) return pending;
+      // fall through to cache if available
+    }
+
     // Try cache first if enabled
     if (this.config.enableCaching && useCache && this.cacheManager) {
       try {
@@ -281,12 +344,15 @@ export class FileManager {
 
     try {
       // Get files from worker
-      const result = await this.workerManager.listRepoFilesFromEvent({
+      const pending = this.workerManager.listRepoFilesFromEvent({
         repoEvent,
         branch: shortBranch,
         path,
         repoKey,
       });
+      this.inFlightListings.set(cacheKey, pending as unknown as Promise<FileListingResult>);
+      this.recentListingCalls.set(cacheKey, now);
+      const result = await pending;
 
       const fileListingResult: FileListingResult = {
         files: result.map(
@@ -314,7 +380,7 @@ export class FileManager {
       }
 
       return fileListingResult;
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof Error && error.message.includes("Could not find")) {
         const alternatives = shortBranch === "main" ? ["master", "develop"] : ["main", "master"];
 
@@ -357,11 +423,21 @@ export class FileManager {
           }
         }
       }
-      toast.push({
-        message: `Failed to list repository files for branch '${shortBranch}': ${error}`,
-        duration: 8000,
-      });
+      // Apply failure backoff for this key
+      this.failureBackoffUntil.set(cacheKey, Date.now() + FileManager.FAILURE_BACKOFF_MS);
+      // Avoid spamming toasts for the same key too frequently
+      const lastToast = this.lastToastAt.get(cacheKey) || 0;
+      if (Date.now() - lastToast > FileManager.MIN_TOAST_INTERVAL_MS) {
+        toast.push({
+          message: `Failed to list repository files for branch '${shortBranch}': ${error}`,
+          duration: 8000,
+        });
+        this.lastToastAt.set(cacheKey, Date.now());
+      }
       throw error;
+    }
+    finally {
+      this.inFlightListings.delete(cacheKey);
     }
   }
 

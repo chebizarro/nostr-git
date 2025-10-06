@@ -24,14 +24,9 @@
   import Status from "./Status.svelte";
   import { useRegistry } from "../../useRegistry";
   import { fly } from "svelte/transition";
-  import markdownit from "markdown-it";
+  import RichText from "../RichText.svelte";
   const { Button, ProfileLink, Card, EventActions } = useRegistry();
 
-  const md = markdownit({
-    html: true,
-    linkify: true,
-    typographer: true,
-  });
 
   interface Props {
     event: IssueEvent;
@@ -44,6 +39,9 @@
     repo?: any;
     statusEvents?: StatusEvent[];
     actorPubkey?: string;
+    // When provided, NIP-19 codes in description are replaced by this URL template.
+    // e.g. "https://njump.me/{raw}" or "/spaces/{type}/{id}"
+    nip19LinkTemplate?: string;
   }
   // Accept event and optional author (Profile store)
   const {
@@ -56,6 +54,7 @@
     repo,
     statusEvents = [],
     actorPubkey,
+    nip19LinkTemplate,
   }: Props = $props();
 
   const parsed = parseIssueEvent(event);
@@ -151,7 +150,7 @@
           <span class="whitespace-nowrap">• {commentCount} comments</span>
         </div>
         <div class="my-3 line-clamp-2 text-sm text-muted-foreground prose prose-sm max-w-none">
-          {@html md.render(description || "")}
+          <RichText content={description || ""} prose={false} linkTemplate={nip19LinkTemplate ?? "https://njump.me/{raw}"} />
         </div>
         {#if displayLabels && displayLabels.length}
           <div class="mb-2 inline-flex gap-1">

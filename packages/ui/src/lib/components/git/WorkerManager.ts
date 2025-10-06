@@ -47,7 +47,12 @@ export class WorkerManager {
   private progressCallback?: WorkerProgressCallback;
   private authConfig: AuthConfig = { tokens: [] };
   private currentSigner: Signer | null = null;
-
+  // Throttle repeated initialize() calls and avoid duplicate work
+  private initInFlight: Promise<void> | null = null;
+  private lastInitAt = 0;
+  private static readonly MIN_INIT_INTERVAL_MS = 1500;
+  // Deduplicate auth-config updates
+  private lastAuthConfigJson = "";
   constructor(progressCallback?: WorkerProgressCallback) {
     this.progressCallback = progressCallback;
     // Track latest signer from the store
@@ -64,56 +69,59 @@ export class WorkerManager {
   /**
    * Initialize the git worker and API
    */
-  async initialize(): Promise<void> {
-    // Always recreate worker to avoid stale instances across HMR/dev
-    if (this.worker) {
-      try {
-        this.worker.terminate();
-      } catch (e) {
-        /* ignore terminate errors */
-      }
-      this.worker = null;
-      this.api = null as any;
-      this.isInitialized = false;
+  async initialize() {
+    if (this.initInFlight) {
+      return this.initInFlight;
     }
-    const { worker, api } = getGitWorker(this.progressCallback);
-    this.worker = worker;
-    this.api = api as any;
-    this.isInitialized = true;
+    if (this.isInitialized) {
+      return;
+    }
+    this.initInFlight = (async () => {
+      const { worker, api } = await getGitWorker(this.progressCallback);
+      this.worker = worker;
+      this.api = api as any;
+      this.isInitialized = true;
+      try {
+        // Register UI event signer so worker can request Nostr event signatures (e.g., GRASP push)
+        if (this.worker) {
+          registerEventSigner(this.worker, async (event: any) => {
+            const s = this.currentSigner;
+            if (!s || typeof s.sign !== "function") {
+              throw new Error("No signer available");
+            }
+            const signed = await s.sign(event);
+            return signed;
+          });
+        }
+
+        // Set authentication configuration in the worker (dedup)
+        const cfgJson = JSON.stringify(this.authConfig || {});
+        if (cfgJson !== this.lastAuthConfigJson) {
+          if (this.authConfig.tokens.length > 0) {
+            await this.api.setAuthConfig(this.authConfig);
+          }
+          this.lastAuthConfigJson = cfgJson;
+        }
+      } catch (error) {
+        console.error("Failed to initialize git worker:", error);
+        throw new Error(
+          `Worker initialization failed: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+
+      this.lastInitAt = Date.now();
+    })();
 
     try {
-      // Register UI event signer so worker can request Nostr event signatures (e.g., GRASP push)
-      if (this.worker) {
-        registerEventSigner(this.worker, async (event: any) => {
-          const s = this.currentSigner;
-          if (!s || typeof s.sign !== "function") {
-            throw new Error("No signer available");
-          }
-          const signed = await s.sign(event);
-          return signed;
-        });
-      }
-
-      // Set authentication configuration in the worker
-      if (this.authConfig.tokens.length > 0) {
-        await this.api.setAuthConfig(this.authConfig);
-      }
-    } catch (error) {
-      console.error("Failed to initialize git worker:", error);
-      throw new Error(
-        `Worker initialization failed: ${error instanceof Error ? error.message : String(error)}`
-      );
+      await this.initInFlight;
+    } finally {
+      this.initInFlight = null;
     }
   }
-
-  /**
-   * Execute a git operation through the worker API
-   */
   async execute<T>(operation: string, params: any): Promise<T> {
     if (!this.isInitialized || !this.api) {
       throw new Error("WorkerManager not initialized. Call initialize() first.");
     }
-
     try {
       // Bypass Comlink for syncWithRemote due to clone issues; use raw RPC channel
       if (operation === "syncWithRemote" && this.worker) {
@@ -489,8 +497,12 @@ export class WorkerManager {
     // If worker is already initialized, update the configuration
     if (this.isInitialized && this.api) {
       try {
-        await this.api.setAuthConfig(config);
-        console.log("Authentication configuration updated for", config.tokens.length, "hosts");
+        const nextJson = JSON.stringify(config || {});
+        if (nextJson !== this.lastAuthConfigJson) {
+          await this.api.setAuthConfig(config);
+          this.lastAuthConfigJson = nextJson;
+          console.log("Authentication configuration updated for", config.tokens.length, "hosts");
+        } // else no-op
       } catch (error) {
         console.error("Failed to update authentication configuration:", error);
       }

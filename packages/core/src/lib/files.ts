@@ -136,18 +136,23 @@ export async function listRepoFilesFromEvent(opts: {
       }
     }
   } else {
-    oid = await resolveRobustBranch(git, dir, branch, {
-      onBranchNotFound: (branchName, error) => {
-        throw error;
-        // This will be handled by the UI layer if they provide a callback
-        // console.warn(`Branch '${branchName}' from repository state not found in local git:`, error.message);
-      }
-    });
+    // Prefer a full OID for subsequent tree/blob reads
+    try {
+      oid = await git.resolveRef({ dir, ref: branch });
+    } catch (e) {
+      // Fallback to robust resolver if direct ref resolution fails
+      oid = await resolveRobustBranch(git, dir, branch, {
+        onBranchNotFound: (branchName, error) => {
+          throw error;
+        }
+      });
+    }
   }
 
   // Normalize file path - remove leading/trailing directory separators
   const rawPath = opts.path || '';
   const treePath = rawPath.replace(/^\/+|\/+$/g, ''); // Remove leading/trailing slashes
+  const displayPath = treePath || '(root)';
 
   try {
     const fp: any = treePath ? treePath : undefined;
@@ -167,6 +172,7 @@ export async function listRepoFilesFromEvent(opts: {
     }));
   } catch (error: any) {
     const original = error;
+    let attempts = 0;
     const attemptReadTree = async (depthHint: number) => {
       // Deepen repo and retry
       await ensureRepoFromEvent({ repoEvent: event, branch, repoKey: opts.repoKey }, depthHint);
@@ -189,7 +195,8 @@ export async function listRepoFilesFromEvent(opts: {
 
     try {
       // First recovery path for missing subtrees
-      console.warn(`Tree read failed for ${oid} at '${treePath || '/'}' (${original?.name || original}). Deepening and retrying...`);
+      console.warn(`Tree read failed for ${oid} at '${displayPath}' (${original?.name || original}). Deepening and retrying...`);
+      attempts += 1;
       return await attemptReadTree(1000);
     } catch (retry1: any) {
       try {
@@ -207,12 +214,35 @@ export async function listRepoFilesFromEvent(opts: {
         };
         const url = selectCloneUrl();
         if (url) {
-          await git.fetch({ dir, url, singleBranch: false, depth: 500, tags: true });
+          // Prefer fetching the exact branch with full history to ensure the root tree exists
+          try {
+            await git.fetch({ dir, url, singleBranch: true, depth: 0, ref: branch, tags: true });
+          } catch (fetchErr) {
+            // Fallback to a limited-depth, multi-branch fetch if full fetch fails
+            try {
+              await git.fetch({ dir, url, singleBranch: false, depth: 500, tags: true });
+            } catch (fetchTagsError) {
+              // Final diagnostic: list some commits for error context
+              try {
+                const commits = await git.log({ dir, depth: 10 });
+                const availableCommits = commits.map((c: any) => c.oid.substring(0, 8)).join(', ');
+                throw new Error(
+                  `Commit ${opts.commit} not found in repository. Available recent commits: ${availableCommits}`
+                );
+              } catch (logError) {
+                throw new Error(
+                  `Commit ${opts.commit} not found in repository. Unable to list available commits.`
+                );
+              }
+            }
+          }
         }
         return await attemptReadTree(1500);
       } catch (retry2: any) {
+        const context = `commit=${oid?.slice?.(0, 8) || 'unknown'} branch=${branch}`;
+        const attemptsText = attempts > 0 ? `${attempts} ${attempts === 1 ? 'attempt' : 'attempts'}` : 'retries';
         throw new Error(
-          `Unable to access file tree at ${treePath || '/'} after retries. Original error: ${original?.message || String(original)}`
+          `Unable to access file tree at ${displayPath} after ${attemptsText}. ${context}. Original error: ${original?.message || String(original)}`
         );
       }
     }

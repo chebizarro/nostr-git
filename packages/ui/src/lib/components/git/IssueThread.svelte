@@ -6,6 +6,7 @@
 
   import { useRegistry } from "../../useRegistry";
   import { slide } from "svelte/transition";
+  import RichText from "../RichText.svelte";
   const { Button, Textarea, Card, ProfileComponent } = useRegistry();
 
   interface Props {
@@ -65,7 +66,9 @@
             </div>
           </div>
           <div class="w-full flex flex-col gap-y-2 mt-2">
-            <p class="text-muted-foreground whitespace-pre-wrap">{c.content}</p>
+            <div class="text-muted-foreground">
+              <RichText content={c.content} prose={false} />
+            </div>
           </div>
         </div>
       {/each}

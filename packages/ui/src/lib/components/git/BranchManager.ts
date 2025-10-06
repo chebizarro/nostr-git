@@ -87,6 +87,13 @@ export class BranchManager {
   // Auto-refresh timer
   private refreshTimer?: ReturnType<typeof setInterval>;
 
+  // Guards to reduce repeated work
+  private branchExistsCache: Map<string, { exists: boolean; ts: number }> = new Map();
+  private branchExistsInFlight: Map<string, Promise<boolean>> = new Map();
+  private static readonly BRANCH_EXISTS_TTL_MS = 60_000; // 60s
+  private lastLoadRefsAt = 0;
+  private static readonly MIN_LOADREFS_INTERVAL_MS = 2000; // 2s
+
   constructor(
     workerManager: WorkerManager,
     cacheManager?: CacheManager,
@@ -234,19 +241,36 @@ export class BranchManager {
    * Uses a lightweight list call; if it errors with not found, we treat as non-existent.
    */
   private async branchExists(repoEvent: RepoAnnouncementEvent, branch: string): Promise<boolean> {
-    try {
-      const repoKey = this.getCanonicalRepoKey(repoEvent);
-      await this.workerManager.listRepoFilesFromEvent({ repoEvent, repoKey, branch, path: "" });
-      return true;
-    } catch (err: any) {
-      const msg = (err && (err.message || String(err))) || "";
-      if (typeof msg === "string" && /could not find|not found|unknown ref/i.test(msg)) {
-        return false;
-      }
-      // If error is something else (e.g., transient), don't exclude decisively
-      console.warn(`branchExists(${branch}) indeterminate due to error:`, err);
-      return true;
+    const repoKey = this.getCanonicalRepoKey(repoEvent);
+    const key = `${repoKey}:${branch}`;
+    const now = Date.now();
+    const cached = this.branchExistsCache.get(key);
+    if (cached && now - cached.ts < BranchManager.BRANCH_EXISTS_TTL_MS) {
+      return cached.exists;
     }
+    const inFlight = this.branchExistsInFlight.get(key);
+    if (inFlight) return inFlight;
+    const p = (async () => {
+      try {
+        await this.workerManager.listRepoFilesFromEvent({ repoEvent, repoKey, branch, path: "" });
+        this.branchExistsCache.set(key, { exists: true, ts: Date.now() });
+        return true;
+      } catch (err: any) {
+        const msg = (err && (err.message || String(err))) || "";
+        if (typeof msg === "string" && /could not find|not found|unknown ref/i.test(msg)) {
+          this.branchExistsCache.set(key, { exists: false, ts: Date.now() });
+          return false;
+        }
+        console.warn(`branchExists(${branch}) indeterminate due to error:`, err);
+        // Treat as exists to avoid overly aggressive pruning; cache briefly
+        this.branchExistsCache.set(key, { exists: true, ts: Date.now() });
+        return true;
+      } finally {
+        this.branchExistsInFlight.delete(key);
+      }
+    })();
+    this.branchExistsInFlight.set(key, p);
+    return p;
   }
 
   /**
@@ -270,10 +294,10 @@ export class BranchManager {
         const headBranch = BranchManager.parseNIP34Head(tag);
         if (headBranch) {
           // Always honor HEAD; warn if verification fails but don't drop it
-          const exists = await this.branchExists(repoEvent, headBranch);
-          if (!exists) {
-            this.handleBranchNotFound(headBranch, new Error("HEAD branch missing in repo (kept due to HEAD)"));
-          }
+          //const exists = await this.branchExists(repoEvent, headBranch);
+          //if (!exists) {
+          //  this.handleBranchNotFound(headBranch, new Error("HEAD branch missing in repo (kept due to HEAD)"));
+          //}
           newMainBranch = headBranch;
         }
       } else if (tag[0].startsWith("refs/")) {
@@ -283,12 +307,12 @@ export class BranchManager {
             // Always include common defaults and HEAD branch even if verification fails
             const isDefault = fallbackDefaults.has(ref.shortName);
             const isHead = newMainBranch && ref.shortName === newMainBranch;
-            const exists = await this.branchExists(repoEvent, ref.shortName);
-            if (exists || isDefault || isHead) {
+            //const exists = await this.branchExists(repoEvent, ref.shortName);
+            //if (exists || isDefault || isHead) {
               this.nip34References.set(ref.shortName, ref);
-            } else {
-              this.handleBranchNotFound(ref.shortName, new Error("Branch missing in repo"));
-            }
+            //} else {
+            //  this.handleBranchNotFound(ref.shortName, new Error("Branch missing in repo"));
+            //}
           } else {
             // Always include tags
             this.nip34References.set(ref.shortName, ref);
@@ -403,8 +427,14 @@ export class BranchManager {
   async loadAllRefs(
     getAllRefsWithFallback: () => Promise<Array<{name: string; type: "heads" | "tags"; fullRef: string; commitId: string}>>
   ): Promise<void> {
+    const now = Date.now();
+    if (this.loadingRefs && now - this.lastLoadRefsAt < BranchManager.MIN_LOADREFS_INTERVAL_MS) {
+      // Prevent re-entrance thrash
+      return;
+    }
     try {
       this.loadingRefs = true;
+      this.lastLoadRefsAt = now;
       
       // Use the Repo's getAllRefsWithFallback which has proper fallback logic
       const loadedRefs = await getAllRefsWithFallback();
