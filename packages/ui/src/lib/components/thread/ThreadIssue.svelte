@@ -3,7 +3,8 @@
   const { Avatar, AvatarFallback, AvatarImage } = useRegistry();
   import TimeAgo from "../../TimeAgo.svelte";
   import IssueCard from "../git/IssueCard.svelte";
-  import { Profile, Status } from "@nostr-git/shared-types";
+  import Status from "../git/Status.svelte";
+  import { type Profile } from "@nostr-git/shared-types";
 
   const {
     repoId,
