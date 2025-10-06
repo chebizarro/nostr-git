@@ -29,6 +29,7 @@
   } from "@nostr-git/shared-types";
   import { parseGitPatchFromEvent } from "@nostr-git/core";
   import IssueThread from "./IssueThread.svelte";
+  import Status from "./Status.svelte";
   import { getTagValue, getTags } from "@nostr-git/shared-types";
 
   interface Props {
@@ -39,6 +40,10 @@
     currentCommenter: string;
     onCommentCreated: (comment: CommentEvent) => Promise<void>;
     extraLabels?: string[];
+    // Optional for Status.svelte integration
+    repo?: any;
+    statusEvents?: StatusEvent[];
+    actorPubkey?: string;
   }
 
   const {
@@ -49,6 +54,9 @@
     currentCommenter,
     onCommentCreated,
     extraLabels = [],
+    repo,
+    statusEvents = [],
+    actorPubkey,
   }: Props = $props();
 
   const parsed = parseGitPatchFromEvent(event);
@@ -112,7 +120,17 @@
 
 <Card class="git-card hover:bg-accent/50 transition-colors">
   <div class="flex items-start gap-3">
-    {#if statusIcon}
+    <!-- Prefer canonical Status component when repo + events are provided -->
+    {#if repo && statusEvents}
+      <Status
+        repo={repo}
+        rootId={id}
+        rootKind={1617}
+        rootAuthor={event.pubkey}
+        statusEvents={statusEvents}
+        actorPubkey={actorPubkey}
+        compact={true} />
+    {:else if statusIcon}
       {@const { icon: Icon, color } = statusIcon()}
       <Icon class={`h-6 w-6 ${color}`} />
     {/if}
@@ -121,7 +139,9 @@
         <div class="flex-1 min-w-0">
           <a href={`patches/${id}`} class="block">
             <h3
-              class="text-lg font-medium hover:text-accent transition-colors break-words"
+              class="text-lg leading-snug font-medium hover:text-accent transition-colors break-words"
+              style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;"
+              title={description}
             >
               {description}
             </h3>

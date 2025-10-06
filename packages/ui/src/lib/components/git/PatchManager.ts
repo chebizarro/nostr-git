@@ -4,6 +4,28 @@ import { WorkerManager } from "./WorkerManager";
 import { MergeAnalysisCacheManager } from "./CacheManager";
 import { writable, type Readable } from "svelte/store";
 
+// Summary shape compatible with PatchDagSummary.svelte props
+export interface PatchDagSummary {
+  nodeCount: number;
+  roots: string[];
+  rootRevisions: string[];
+  edgesCount?: number;
+  topParents?: string[];
+  parentOutDegree?: Record<string, number>;
+  parentChildren?: Record<string, string[]>;
+}
+
+export interface LabelsData {
+  byId: Map<string, string[]>;
+  groupsById: Map<string, Record<string, string[]>>;
+  allLabels: string[];
+}
+
+export interface StatusData {
+  stateById: Record<string, "open" | "draft" | "closed" | "merged" | "resolved" | undefined>;
+  reasonById: Record<string, string | undefined>;
+}
+
 /**
  * Configuration options for PatchManager
  */
@@ -406,5 +428,121 @@ export class PatchManager {
   updateConfig(config: Partial<PatchManagerConfig>): void {
     this.config = { ...this.config, ...config };
     // No-op: config update currently does not require store changes
+  }
+
+  // -------------------------
+  // Patch DAG helpers
+  // -------------------------
+  /**
+   * Build a light-weight DAG summary from a full graph object (as returned by Repo.getPatchGraph).
+   */
+  buildDagSummary(graph: {
+    nodes?: Map<string, any> | Record<string, any>;
+    roots?: string[];
+    rootRevisions?: string[];
+    edgesCount?: number;
+    topParents?: string[];
+    parentOutDegree?: Record<string, number>;
+    parentChildren?: Record<string, string[]>;
+  }): PatchDagSummary {
+    const nodeCount = (() => {
+      if (!graph?.nodes) return 0;
+      if (graph.nodes instanceof Map) return graph.nodes.size;
+      if (typeof graph.nodes === "object") return Object.keys(graph.nodes).length;
+      return 0;
+    })();
+
+    return {
+      nodeCount,
+      roots: Array.isArray(graph?.roots) ? graph.roots : [],
+      rootRevisions: Array.isArray(graph?.rootRevisions) ? graph.rootRevisions : [],
+      edgesCount: typeof graph?.edgesCount === "number" ? graph.edgesCount : undefined,
+      topParents: Array.isArray(graph?.topParents) ? graph.topParents : undefined,
+      parentOutDegree:
+        graph && typeof graph.parentOutDegree === "object" ? graph.parentOutDegree : undefined,
+      parentChildren:
+        graph && typeof graph.parentChildren === "object" ? graph.parentChildren : undefined,
+    };
+  }
+
+  /**
+   * Convenience: obtain DAG summary directly from a Repo-like with getPatchGraph().
+   */
+  getDagSummaryFromRepo(repo: { getPatchGraph: () => any }): PatchDagSummary | null {
+    try {
+      const graph = repo.getPatchGraph();
+      return this.buildDagSummary(graph);
+    } catch (e) {
+      this.log("warn", "getDagSummaryFromRepo failed:", e);
+      return null;
+    }
+  }
+
+  // -------------------------
+  // Labels helpers
+  // -------------------------
+  /** Normalize labels for all patches via Repo.getPatchLabels, returning flat and grouped views */
+  getLabelsData(repo: {
+    patches: Array<{ id: string }>;
+    getPatchLabels: (id: string) => any;
+  }): LabelsData {
+    const toNatural = (s: string) => {
+      const idx = s.lastIndexOf(":");
+      return idx >= 0 ? s.slice(idx + 1) : s.replace(/^#/, "");
+    };
+
+    const byId = new Map<string, string[]>();
+    const groupsById = new Map<string, Record<string, string[]>>();
+
+    for (const p of repo.patches || []) {
+      const eff: any = repo.getPatchLabels?.(p.id);
+      const flat: string[] = Array.isArray(eff?.flat) ? eff.flat.map(String) : [];
+      const naturals = flat.map(toNatural);
+      byId.set(p.id, naturals);
+
+      const groups: Record<string, string[]> = { Status: [], Type: [], Area: [], Tags: [], Other: [] };
+      if (eff?.byNamespace && typeof eff.byNamespace === "object") {
+        for (const ns of Object.keys(eff.byNamespace)) {
+          const vals = Array.isArray(eff.byNamespace[ns]) ? eff.byNamespace[ns] : [];
+          const naturalsNs = vals.map((v: any) => toNatural(String(v)));
+          if (ns === "org.nostr.git.status") groups.Status.push(...naturalsNs);
+          else if (ns === "org.nostr.git.type") groups.Type.push(...naturalsNs);
+          else if (ns === "org.nostr.git.area") groups.Area.push(...naturalsNs);
+          else if (ns === "#t") groups.Tags.push(...naturalsNs);
+          else groups.Other.push(...naturalsNs);
+        }
+        for (const k of Object.keys(groups)) groups[k] = Array.from(new Set(groups[k]));
+      }
+      groupsById.set(p.id, groups);
+    }
+
+    const allLabels = Array.from(new Set(Array.from(byId.values()).flat()));
+    return { byId, groupsById, allLabels };
+  }
+
+  // -------------------------
+  // Status helpers
+  // -------------------------
+  /** Compute resolved state per patch using Repo.resolveStatusFor if available */
+  getStatusData(repo: {
+    patches: Array<{ id: string; pubkey?: string }>;
+    resolveStatusFor?: (
+      id: string
+    ) => { state: "open" | "draft" | "closed" | "merged" | "resolved" } | null;
+  }): StatusData {
+    const stateById: StatusData["stateById"] = {};
+    const reasonById: StatusData["reasonById"] = {};
+
+    for (const p of repo.patches || []) {
+      try {
+        const resolved = repo.resolveStatusFor?.(p.id) || null;
+        stateById[p.id] = resolved?.state;
+        reasonById[p.id] = undefined;
+      } catch {
+        // ignore and leave undefined
+      }
+    }
+
+    return { stateById, reasonById };
   }
 }

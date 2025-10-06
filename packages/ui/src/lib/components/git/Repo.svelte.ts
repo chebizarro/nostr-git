@@ -48,24 +48,30 @@ type EffectiveLabelsV2 = {
 export class Repo {
   name: string = $state("");
   description: string = $state("");
-  repoEvent: RepoAnnouncementEvent | undefined = $state(undefined);
-  repo: RepoAnnouncement | undefined = $state(undefined);
-  repoStateEvent: RepoStateEvent | undefined = $state(undefined);
-  state: RepoState | undefined = $state(undefined);
+
   issues = $state<IssueEvent[]>([]);
   patches = $state<PatchEvent[]>([]);
+
+  tokens = $state<Token[]>([]);
+
+  refs: Array<{ name: string; type: "heads" | "tags"; fullRef: string; commitId: string }> = $state([]);
+
+  // Stable, canonical key used for all UI caches and internal maps
+  key: string = $state("");
+
+
+  #repoEvent: RepoAnnouncementEvent | undefined = $state(undefined);
+  #repo: RepoAnnouncement | undefined = $state(undefined);
+  #repoStateEvent: RepoStateEvent | undefined = $state(undefined);
+  #state: RepoState | undefined = $state(undefined);
   // Reactive selected branch so UI can respond to changes
   #selectedBranchState: string | undefined = $state(undefined);
-  // Reactive refs (branches/tags) and loading flag for Svelte 5
-  refs: Array<{ name: string; type: "heads" | "tags"; fullRef: string; commitId: string }> = $state([]);
-  refsLoading: boolean = $state(false);
+  #refsLoading: boolean = $state(false);
   // Optional multi-state/status/comments/labels streams
-  repoStateEventsArr = $state<RepoStateEvent[] | undefined>(undefined);
-  statusEventsArr = $state<StatusEvent[] | undefined>(undefined);
-  commentEventsArr = $state<CommentEvent[] | undefined>(undefined);
-  labelEventsArr = $state<LabelEvent[] | undefined>(undefined);
-  // Stable, canonical key used for all UI caches and internal maps
-  canonicalKey: string = $state("");
+  #repoStateEventsArr = $state<RepoStateEvent[] | undefined>(undefined);
+  #statusEventsArr = $state<StatusEvent[] | undefined>(undefined);
+  #commentEventsArr = $state<CommentEvent[] | undefined>(undefined);
+  #labelEventsArr = $state<LabelEvent[] | undefined>(undefined);
 
   // Manager components
   workerManager!: WorkerManager;
@@ -76,7 +82,6 @@ export class Repo {
   branchManager!: BranchManager;
   fileManager!: FileManager;
 
-  tokens = $state<Token[]>([]);
 
   // Private caches used across helpers
   #mergedRefsCache:
@@ -226,9 +231,9 @@ export class Repo {
         this.description = this.repo.description;
         // Compute canonical key from "pubkey:name" string (matches current @nostr-git/core signature)
         const _owner = this.getOwnerPubkey();
-        this.canonicalKey = canonicalRepoKey(`${_owner}:${this.repo.name}`);
+        this.key = canonicalRepoKey(`${_owner}:${this.repo.name}`);
         this.commitManager.setRepoKeys({
-          canonicalKey: this.canonicalKey,
+          canonicalKey: this.key,
           workerRepoId: this.repoEvent.id,
         });
 
@@ -616,7 +621,7 @@ export class Repo {
   ): Promise<MergeAnalysisResult | null> {
     if (!this.repoEvent) return null;
 
-    const repoId = this.canonicalKey;
+    const repoId = this.key;
     const fallbackMain = this.branchManager.getMainBranch();
     const branch =
       (targetBranch ?? this.mainBranch ?? fallbackMain).split("/").pop() || fallbackMain;
@@ -637,7 +642,7 @@ export class Repo {
   ): Promise<MergeAnalysisResult | null> {
     if (!this.repoEvent) return null;
 
-    const repoId = this.canonicalKey;
+    const repoId = this.key;
     const fallbackMain = this.branchManager.getMainBranch();
     const branch =
       (targetBranch ?? this.mainBranch ?? fallbackMain).split("/").pop() || fallbackMain;
@@ -674,7 +679,7 @@ export class Repo {
     if (!this.repoEvent) return;
 
     try {
-      const repoId = this.canonicalKey;
+      const repoId = this.key;
       const cloneUrls = [...(this.repo?.clone || [])];
 
       if (!repoId || !cloneUrls.length) {
@@ -721,7 +726,7 @@ export class Repo {
 
     // Delegate to CommitManager
     await this.commitManager.loadCommits(
-      this.canonicalKey,
+      this.key,
       undefined, // branch (will use mainBranch)
       this.mainBranch
     );
@@ -739,7 +744,7 @@ export class Repo {
   }
 
   get repoId() {
-    return this.canonicalKey;
+    return this.key;
   }
 
   get mainBranch() {
@@ -924,10 +929,10 @@ export class Repo {
         const cloneUrls = [...(this.repo?.clone || [])];
 
         // 1) Ask worker to sync local repo with remote for the selected branch (switch/checkout)
-        if (this.canonicalKey && cloneUrls.length > 0) {
+        if (this.key && cloneUrls.length > 0) {
           try {
             await this.workerManager.syncWithRemote({
-              repoId: this.canonicalKey,
+              repoId: this.key,
               cloneUrls,
               branch: shortBranch,
             });
@@ -937,12 +942,12 @@ export class Repo {
         }
 
         // 2) Ensure the branch is fully available locally (deep clone as needed)
-        if (this.canonicalKey) {
-          await this.workerManager.ensureFullClone({ repoId: this.canonicalKey, branch: shortBranch });
+        if (this.key) {
+          await this.workerManager.ensureFullClone({ repoId: this.key, branch: shortBranch });
         }
 
         // 3) Clear caches impacted by branch change
-        try { await this.fileManager.clearCache(this.canonicalKey); } catch {}
+        try { await this.fileManager.clearCache(this.key); } catch {}
 
         // Refresh commits on the newly selected branch
         // Use explicit branch to override default selection in CommitManager
@@ -963,7 +968,7 @@ export class Repo {
 
       // 5) Verify worker status (debug visibility)
       try {
-        const status = await this.workerManager.getStatus({ repoId: this.canonicalKey, branch: shortBranch });
+        const status = await this.workerManager.getStatus({ repoId: this.key, branch: shortBranch });
         console.log("Worker status after branch switch:", status);
       } catch {}
     } catch (e) {
@@ -1067,7 +1072,7 @@ export class Repo {
       if (hit && hit.type === "tags" && hit.commitId) {
         return this.fileManager.listRepoFilesAtCommit({
           repoEvent: this.repoEvent,
-          repoKey: this.canonicalKey,
+          repoKey: this.key,
           commit: hit.commitId,
           path: path || "/",
         });
@@ -1077,7 +1082,7 @@ export class Repo {
     // Otherwise, treat as a branch
     return this.fileManager.listRepoFiles({
       repoEvent: this.repoEvent,
-      repoKey: this.canonicalKey,
+      repoKey: this.key,
       branch: target,
       path: path || "/",
     });
@@ -1105,7 +1110,7 @@ export class Repo {
     }
     return this.fileManager.getFileContent({
       repoEvent: this.repoEvent,
-      repoKey: this.canonicalKey,
+      repoKey: this.key,
       path,
       branch: targetBranch,
       commit,
@@ -1125,7 +1130,7 @@ export class Repo {
     if (!this.repoEvent) return false;
     return this.fileManager.fileExistsAtCommit({
       repoEvent: this.repoEvent,
-      repoKey: this.canonicalKey,
+      repoKey: this.key,
       path,
       branch: targetBranch,
       commit,
@@ -1145,7 +1150,7 @@ export class Repo {
     if (!this.repoEvent) return [];
     return this.fileManager.getFileHistory({
       repoEvent: this.repoEvent,
-      repoKey: this.canonicalKey,
+      repoKey: this.key,
       path,
       branch: targetBranch,
       maxCount,
@@ -1155,7 +1160,7 @@ export class Repo {
   async getCommitHistory({ branch, depth }: { branch?: string; depth?: number }) {
     const targetBranch = branch || this.branchManager.getMainBranch();
     return await this.workerManager.getCommitHistory({
-      repoId: this.canonicalKey,
+      repoId: this.key,
       branch: targetBranch,
       depth: depth ?? this.commitManager.getCommitsPerPage(),
     });
@@ -1204,7 +1209,7 @@ export class Repo {
       try {
         console.log("Resetting local git repository to match remote...");
         const resetResult = await this.workerManager.resetRepoToRemote(
-          this.canonicalKey,
+          this.key,
           this.mainBranch
         );
 
@@ -1325,7 +1330,7 @@ export class Repo {
   async #performMergeAnalysis(patches: PatchEvent[]) {
     if (!patches?.length) return;
 
-    const repoId = this.canonicalKey;
+    const repoId = this.key;
     const targetBranch = this.mainBranch?.split("/").pop() || "";
     const workerRepoId = this.repoEvent?.id;
 

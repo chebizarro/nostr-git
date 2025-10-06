@@ -21,6 +21,7 @@
     GIT_STATUS_DRAFT,
   } from "@nostr-git/shared-types";
   import IssueThread from "./IssueThread.svelte";
+  import Status from "./Status.svelte";
   import { useRegistry } from "../../useRegistry";
   import { fly } from "svelte/transition";
   import markdownit from "markdown-it";
@@ -35,19 +36,26 @@
   interface Props {
     event: IssueEvent;
     comments?: CommentEvent[];
-    status: StatusEvent | undefined;
+    status?: StatusEvent | undefined;
     currentCommenter: string;
     onCommentCreated: (comment: CommentEvent) => Promise<void>;
     extraLabels?: string[];
+    // Optional for Status.svelte integration
+    repo?: any;
+    statusEvents?: StatusEvent[];
+    actorPubkey?: string;
   }
   // Accept event and optional author (Profile store)
   const {
     event,
     comments,
-    status,
+    status = undefined,
     currentCommenter,
     onCommentCreated,
     extraLabels = [],
+    repo,
+    statusEvents = [],
+    actorPubkey,
   }: Props = $props();
 
   const parsed = parseIssueEvent(event);
@@ -99,7 +107,17 @@
 <div transition:fly>
   <Card class="git-card hover:bg-accent/50 transition-colors">
     <div class="flex items-start gap-3">
-      {#if statusIcon}
+      <!-- Prefer canonical Status component when repo + events are provided -->
+      {#if repo && statusEvents}
+        <Status
+          repo={repo}
+          rootId={id}
+          rootKind={1621}
+          rootAuthor={event.pubkey}
+          statusEvents={statusEvents}
+          actorPubkey={actorPubkey}
+          compact={true} />
+      {:else if statusIcon}
         {@const { icon: Icon, color } = statusIcon()}
         <Icon class={`h-6 w-6 mt-1 ${color}`} />
       {/if}

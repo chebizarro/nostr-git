@@ -33,29 +33,9 @@
   <div class="flex items-center justify-between mb-4">
     <h1 class="text-2xl font-bold flex items-center gap-2">
       <GitBranch class="h-6 w-6" />
-      {name}
+      <button onclick={overviewRepo}>{name}</button>
     </h1>
     <div class="flex items-center gap-1 sm:gap-2">
-      <Button
-        variant="outline"
-        size="sm"
-        class="gap-1 sm:gap-2 px-2 sm:px-3"
-        onclick={overviewRepo}
-        title="Repo Overview"
-      >
-        <LayoutDashboard class="h-4 w-4" />
-      </Button>
-      <!--
-      <Button
-        variant="outline"
-        size="sm"
-        class="gap-1 sm:gap-2 px-2 sm:px-3"
-        onclick={watchRepo}
-        title={isRepoWatched ? "Unwatch" : "Watch"}
-      >
-        <Eye class="h-4 w-4" />
-      </Button>
-       -->
       <Button
         variant="outline"
         size="sm"

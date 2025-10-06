@@ -339,7 +339,7 @@
         })) || [];
 
       const updatedStateEvent = repo.createRepoStateEvent({
-        repositoryId: repo.canonicalKey,
+        repositoryId: repo.key,
         headBranch: formData.defaultBranch,
         branches: branchNames,
         refs: refs,
