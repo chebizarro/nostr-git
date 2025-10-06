@@ -59,8 +59,13 @@
     "@codemirror/lang-html": "^6.4.9",
     "@codemirror/lang-javascript": "^6.2.4",
     "@codemirror/lang-json": "^6.0.2",
+    "@codemirror/lang-yaml": "^6.1.2",
     "@codemirror/lang-markdown": "^6.3.3",
     "@codemirror/lang-python": "^6.2.1",
+    "@codemirror/lang-rust": "^6.0.1",
+    "@codemirror/lang-go": "^6.0.1",
+    "@codemirror/lang-java": "^6.0.1",
+    "@codemirror/lang-cpp": "^6.0.2",
     "@codemirror/lang-sql": "^6.9.0",
     "@codemirror/lang-xml": "^6.1.0",
     "@codemirror/state": "^6.5.2",
@@ -80,7 +85,7 @@
     "parse-diff": "^0.11.1",
     "parse-git-diff": "^0.0.19",
     "parse-patch": "^0.1.4",
-    "svelte-codemirror-editor": "^1.4.1",
+    "svelte-codemirror-editor": "^2.0.0",
     "zod": "^3.25.50"
   }
 }

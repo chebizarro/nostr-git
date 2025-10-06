@@ -30,7 +30,7 @@
     "http-server": "^14.1.1",
     "happy-dom": "^15.11.7",
     "typescript": "^5.8.2",
-    "vitest": "^2.0.5"
+    "vitest": "^3.2.4"
   },
   "dependencies": {
     "@nostr-git/shared-types": "workspace:*",

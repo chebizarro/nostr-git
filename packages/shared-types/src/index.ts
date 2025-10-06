@@ -101,6 +101,10 @@ export {
 } from "./validation.js"
 export type {NostrTagRuntime, NostrEventLike} from "./validation.js"
 
+// NIP-34-adjacent permalink (immutable file range reference)
+export { GIT_PERMALINK } from "./permalink.js"
+export type { Permalink, PermalinkEvent } from "./permalink.js"
+
 export {
   GIT_LABEL,
 } from "./nip32.js"

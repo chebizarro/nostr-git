@@ -4,6 +4,9 @@
   const { Button, Spinner } = useRegistry();
   import { toast } from "../../stores/toast";
   import type { FileEntry } from "@nostr-git/core";
+  import type { PermalinkEvent } from "@nostr-git/shared-types";
+  import { GIT_PERMALINK } from "@nostr-git/shared-types";
+  import type { Repo } from "./Repo.svelte";
   import CodeMirror from "svelte-codemirror-editor";
   import {
     detectFileType,
@@ -12,19 +15,26 @@
   } from "../../utils/fileTypeDetection";
   import FileMetadataPanel from "./FileMetadataPanel.svelte";
   import { ImageViewer, PDFViewer, VideoViewer, AudioViewer, BinaryViewer } from "./viewers";
+  import { lineNumbers } from "@codemirror/view";
 
   const {
     file,
     getFileContent,
     setDirectory,
+    repo,
+    publish,
+    editable = true,
   }: {
     file: FileEntry;
     getFileContent: (path: string) => Promise<string>;
     setDirectory: (path: string) => void;
+    repo?: Repo;
+    publish?: (permalink: PermalinkEvent) => Promise<void>;
+    editable?: boolean;
   } = $props();
 
   const name = file.name;
-  const type = file.type ?? "file";
+  const type: string = (file.type ?? "file") as string;
   const path = file.path;
   let content = $state("");
   let isExpanded = $state(false);
@@ -33,6 +43,16 @@
 
   let fileTypeInfo = $state<FileTypeInfo | null>(null);
   let metadata = $state<Record<string, string>>({});
+  let selectedStart: number | null = $state(null);
+  let selectedEnd: number | null = $state(null);
+  let cmExtensions: any[] = $state([]);
+  let showPermalinkMenu = $state(false);
+  let editorHost: HTMLElement | null = $state(null);
+  // Gutter context menu state (positioned near click)
+  let showGutterMenu = $state(false);
+  let gutterMenuX = $state(0);
+  let gutterMenuY = $state(0);
+  let isDraggingSelect = $state(false);
 
   $effect(() => {
     if (isExpanded && type === "file") {
@@ -44,7 +64,7 @@
             isLoading = false;
 
             fileTypeInfo = detectFileType(name, c);
-            metadata = getFileMetadata(file, c, fileTypeInfo);
+            void loadLanguageExtension(name, fileTypeInfo);
           })
           .catch((error) => {
             toast.push({
@@ -52,6 +72,8 @@
               description: error.message,
               variant: "destructive",
             });
+          })
+          .finally(() => {
             isLoading = false;
           });
       }
@@ -59,6 +81,126 @@
       content = "";
       setDirectory(path);
     }
+  });
+
+  // Minimal hash sync for line anchors: #Lx or #Lx-Ly
+  function parseHash() {
+    const m = (location.hash || "").match(/^#L(\d+)(?:-L(\d+))?$/);
+    if (m) {
+      selectedStart = parseInt(m[1], 10);
+      selectedEnd = m[2] ? parseInt(m[2], 10) : null;
+    } else {
+      selectedStart = null;
+      selectedEnd = null;
+    }
+  }
+
+  // Initialize from current hash and keep in sync on navigation
+  parseHash();
+  const onHashChange = () => parseHash();
+  window.addEventListener("hashchange", onHashChange);
+  $effect(() => () => window.removeEventListener("hashchange", onHashChange));
+
+  // Update URL hash from current selection when user selects lines
+  function syncHashFromSelection() {
+    if (selectedStart) {
+      const hash = `#L${selectedStart}${selectedEnd ? `-L${selectedEnd}` : ""}`;
+      if (location.hash !== hash) {
+        // Update hash without touching history APIs to remain framework-agnostic
+        location.hash = hash;
+      }
+    }
+  }
+
+  $effect(() => {
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest?.('[data-permalink-menu]')) {
+        showPermalinkMenu = false;
+      }
+    };
+    window.addEventListener('click', handler);
+    return () => window.removeEventListener('click', handler);
+  });
+
+  // Capture gutter interactions from CodeMirror reliably
+  $effect(() => {
+    if (!editorHost) return;
+    const getLineFromGutter = (el: HTMLElement | null) => {
+      const text = el?.textContent || "";
+      const n = parseInt(text.trim(), 10);
+      return isNaN(n) ? null : n;
+    };
+
+    const handleClickOrContext = (e: MouseEvent) => {
+      const el = e.target as HTMLElement;
+      const gutterEl = el?.closest?.('.cm-gutterElement') as HTMLElement | null;
+      if (!gutterEl) return;
+      // Right-click or normal click on gutter selects line(s)
+      if (e.type === 'contextmenu') {
+        e.preventDefault();
+      }
+      const n = getLineFromGutter(gutterEl);
+      if (n == null) return;
+      if ((e as MouseEvent).shiftKey && selectedStart) {
+        selectedEnd = n;
+      } else {
+        selectedStart = n;
+        selectedEnd = null;
+      }
+      syncHashFromSelection();
+      // Open gutter menu near mouse, hide toolbar menu
+      const rect = editorHost!.getBoundingClientRect();
+      gutterMenuX = Math.max(8, e.clientX - rect.left + editorHost!.scrollLeft);
+      gutterMenuY = Math.max(8, e.clientY - rect.top + editorHost!.scrollTop);
+      showPermalinkMenu = false;
+      showGutterMenu = true;
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      const el = e.target as HTMLElement;
+      const gutterEl = el?.closest?.('.cm-gutterElement') as HTMLElement | null;
+      if (!gutterEl) return;
+      const n = getLineFromGutter(gutterEl);
+      if (n == null) return;
+      isDraggingSelect = true;
+      selectedStart = n;
+      selectedEnd = null;
+      showGutterMenu = false;
+      e.preventDefault();
+    };
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingSelect) return;
+      const el = e.target as HTMLElement;
+      const gutterEl = el?.closest?.('.cm-gutterElement') as HTMLElement | null;
+      const n = getLineFromGutter(gutterEl);
+      if (n != null) {
+        selectedEnd = n;
+      }
+    };
+    const handleMouseUp = (e: MouseEvent) => {
+      if (!isDraggingSelect) return;
+      isDraggingSelect = false;
+      syncHashFromSelection();
+      const rect = editorHost!.getBoundingClientRect();
+      gutterMenuX = Math.max(8, e.clientX - rect.left + editorHost!.scrollLeft);
+      gutterMenuY = Math.max(8, e.clientY - rect.top + editorHost!.scrollTop);
+      showPermalinkMenu = false;
+      showGutterMenu = true;
+    };
+
+    editorHost.addEventListener('click', handleClickOrContext, { capture: true } as any);
+    editorHost.addEventListener('contextmenu', handleClickOrContext, { capture: true } as any);
+    editorHost.addEventListener('mousedown', handleMouseDown, { capture: true } as any);
+    window.addEventListener('mousemove', handleMouseMove, { capture: true } as any);
+    window.addEventListener('mouseup', handleMouseUp, { capture: true } as any);
+    return () => {
+      editorHost?.removeEventListener('click', handleClickOrContext, { capture: true } as any);
+      editorHost?.removeEventListener('contextmenu', handleClickOrContext, { capture: true } as any);
+      editorHost?.removeEventListener('mousedown', handleMouseDown, { capture: true } as any);
+      window.removeEventListener('mousemove', handleMouseMove, { capture: true } as any);
+      window.removeEventListener('mouseup', handleMouseUp, { capture: true } as any);
+    };
   });
 
   async function copyContent(event: MouseEvent | undefined) {
@@ -111,7 +253,10 @@
 
   function shareLink(event?: MouseEvent) {
     event?.stopPropagation();
-    const shareUrl = `${location.origin}/git/repo/${path}`;
+    const hash = selectedStart
+      ? `#L${selectedStart}${selectedEnd ? `-L${selectedEnd}` : ""}`
+      : "";
+    const shareUrl = `${location.origin}/git/repo/${path}${hash}`;
     navigator.clipboard.writeText(shareUrl);
     toast.push({
       title: "Link copied",
@@ -122,6 +267,196 @@
   function showMetadata(event?: MouseEvent) {
     event?.stopPropagation();
     isMetadataPanelOpen = true;
+  }
+
+  function togglePermalinkMenu(event?: MouseEvent) {
+    event?.stopPropagation();
+    showGutterMenu = false;
+    showPermalinkMenu = !showPermalinkMenu;
+  }
+
+  async function loadLanguageExtension(filename: string, info: FileTypeInfo | null) {
+    try {
+      const ext = (filename.split(".").pop() || "").toLowerCase();
+      let mod: any | null = null;
+      switch (ext) {
+        case "ts":
+        case "tsx":
+        case "js":
+        case "jsx":
+          mod = await import("@codemirror/lang-javascript");
+          cmExtensions = [mod.javascript({ jsx: true, typescript: ext.startsWith("ts") })];
+          break;
+        case "json":
+          mod = await import("@codemirror/lang-json");
+          cmExtensions = [mod.json()];
+          break;
+        case "css":
+        case "scss":
+        case "less":
+          mod = await import("@codemirror/lang-css");
+          cmExtensions = [mod.css()];
+          break;
+        case "html":
+        case "svelte":
+          mod = await import("@codemirror/lang-html");
+          cmExtensions = [mod.html()];
+          break;
+        case "md":
+        case "markdown":
+          mod = await import("@codemirror/lang-markdown");
+          cmExtensions = [mod.markdown()];
+          break;
+        case "py":
+          mod = await import("@codemirror/lang-python");
+          cmExtensions = [mod.python()];
+          break;
+        case "rs":
+          mod = await import("@codemirror/lang-rust");
+          cmExtensions = [mod.rust()];
+          break;
+        case "go":
+          mod = await import("@codemirror/lang-go");
+          cmExtensions = [mod.go()];
+          break;
+        case "java":
+          mod = await import("@codemirror/lang-java");
+          cmExtensions = [mod.java()];
+          break;
+        case "c":
+        case "h":
+        case "cc":
+        case "cpp":
+        case "cxx":
+        case "hpp":
+        case "hh":
+          mod = await import("@codemirror/lang-cpp");
+          cmExtensions = [mod.cpp()];
+          break;
+        case "yml":
+        case "yaml":
+          mod = await import("@codemirror/lang-yaml");
+          cmExtensions = [mod.yaml()];
+          break;
+        // removed unsupported dynamic imports (toml, shell)
+        case "sql":
+          mod = await import("@codemirror/lang-sql");
+          cmExtensions = [mod.sql()];
+          break;
+        case "xml":
+          mod = await import("@codemirror/lang-xml");
+          cmExtensions = [mod.xml()];
+          break;
+        default:
+          cmExtensions = [];
+      }
+    } catch (e) {
+      console.warn("Failed to load language extension", e);
+      cmExtensions = [];
+    }
+    // Ensure line numbers are shown for code files
+    try {
+      const hasLineNumbers = (cmExtensions || []).some((e: any) => String(e ?? '').includes('lineNumbers'));
+      if (!hasLineNumbers) {
+        cmExtensions = [...cmExtensions, lineNumbers()];
+      }
+    } catch {}
+  }
+
+  function buildPermalinkEvent(): PermalinkEvent | null {
+    try {
+      if (!path) return null;
+      if (!repo) return null;
+      const tags: string[][] = [];
+      // Extract current commit and branch
+      let commit = "";
+      let branch = "";
+      try {
+        branch = (repo.selectedBranch || repo.mainBranch || "").split("/").pop() || "";
+        const hit = (repo.refs || []).find((r) => r.type === "heads" && r.name === branch);
+        commit = hit?.commitId || "";
+      } catch {}
+      if (repo.address) tags.push(["a", repo.address]);
+      const repoUrl = (repo.web && repo.web[0]) || (repo.clone && repo.clone[0]) || "";
+      if (repoUrl) tags.push(["repo", repoUrl]);
+      if (commit) {
+        if (branch) tags.push([`refs/heads/${branch}`, commit]);
+        tags.push(["commit", commit]);
+      }
+      tags.push(["file", path]);
+      if (selectedStart) {
+        if (selectedEnd) tags.push(["lines", String(selectedStart), String(selectedEnd)]);
+        else tags.push(["lines", String(selectedStart)]);
+      }
+      if (fileTypeInfo?.language) tags.push(["l", String(fileTypeInfo.language)]);
+      const evt: PermalinkEvent = {
+        kind: GIT_PERMALINK,
+        content: content || "",
+        tags,
+        pubkey: "",
+        created_at: Math.floor(Date.now() / 1000),
+        id: "",
+        sig: "",
+      };
+      return evt;
+    } catch (e) {
+      console.warn("Failed to build permalink event", e);
+      return null;
+    }
+  }
+
+  async function createPermalink(event?: MouseEvent) {
+    event?.stopPropagation();
+    showPermalinkMenu = false;
+    showGutterMenu = false;
+    const evt = buildPermalinkEvent();
+    if (!evt) {
+      const missing = !repo ? "repo context" : "file path";
+      toast.push({ title: "Cannot create permalink", description: `Missing ${missing}`, variant: "destructive" });
+      return;
+    }
+    try {
+      if (publish) {
+        await publish(evt);
+        toast.push({ title: "Permalink published", description: "Permalink published successfully" });
+        console.log("Permalink published successfully", evt);
+      } else {
+        await navigator.clipboard.writeText(JSON.stringify(evt));
+        toast.push({ title: "Permalink copied", description: "JSON copied to clipboard" });
+        console.log("Permalink copied to clipboard", evt);
+      }
+    } catch (e: any) {
+      console.error("Failed to create permalink", e);
+      toast.push({ title: "Error", description: e?.message || String(e), variant: "destructive" });
+    }
+  }
+
+  function copyLinkToLines(event?: MouseEvent) {
+    event?.stopPropagation();
+    showPermalinkMenu = false;
+    showGutterMenu = false;
+    shareLink();
+  }
+
+  // Basic gutter interaction: right-click to set selection
+  function onEditorContextMenu(e: MouseEvent) {
+    const el = e.target as HTMLElement;
+    const gutterEl = el?.closest?.('.cm-gutterElement') as HTMLElement | null;
+    if (gutterEl) {
+      e.preventDefault();
+      const text = gutterEl.textContent || "";
+      const n = parseInt(text.trim(), 10);
+      if (!isNaN(n)) {
+        if (e.shiftKey && selectedStart) {
+          selectedEnd = n;
+        } else {
+          selectedStart = n;
+          selectedEnd = null;
+        }
+        syncHashFromSelection();
+        showPermalinkMenu = true;
+      }
+    }
   }
 
   function getFileIcon() {
@@ -150,10 +485,12 @@
 </script>
 
 <div class="border" style="border-color: hsl(var(--border)); rounded-lg mb-2">
-  <button
-    type="button"
+  <div
+    role="button"
+    tabindex="0"
     class="flex items-center justify-between p-2 hover:bg-secondary/30 cursor-pointer w-full text-left"
     onclick={() => (isExpanded = !isExpanded)}
+    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); isExpanded = !isExpanded; } }}
     aria-expanded={type === "file" ? isExpanded : undefined}
   >
     <div class="flex items-center">
@@ -175,20 +512,28 @@
         <Button variant="ghost" size="sm" class="h-8 w-8 p-0" onclick={showMetadata}>
           <Info class="h-4 w-4" />
         </Button>
-        <Button variant="ghost" size="sm" class="h-8 w-8 p-0" onclick={shareLink}>
-          <Share class="h-4 w-4" />
-        </Button>
+        <div class="relative" data-permalink-menu>
+          <Button variant="ghost" size="sm" class="h-8 w-8 p-0" onclick={togglePermalinkMenu} title="Permalink actions">
+            <Share class="h-4 w-4" />
+          </Button>
+          {#if showPermalinkMenu}
+            <div class="absolute right-0 mt-1 z-10 w-44 rounded border bg-popover text-popover-foreground shadow-md" style="border-color: hsl(var(--border));">
+              <button class="w-full text-left px-3 py-2 hover:bg-secondary/50" onclick={copyLinkToLines}>Copy link to {selectedStart ? (selectedEnd ? `lines ${selectedStart}-${selectedEnd}` : `line ${selectedStart}`) : 'file'}</button>
+              <button class="w-full text-left px-3 py-2 hover:bg-secondary/50" onclick={createPermalink}>Create permalink</button>
+            </div>
+          {/if}
+        </div>
         <Button variant="ghost" size="sm" class="h-8 w-8 p-0" onclick={downloadFile}>
           <Download class="h-4 w-4" />
         </Button>
-        {#if fileTypeInfo?.canEdit !== false}
+        {#if editable && fileTypeInfo?.canEdit !== false}
           <Button variant="ghost" size="sm" class="h-8 w-8 p-0" onclick={copyContent}>
             <Copy class="h-4 w-4" />
           </Button>
         {/if}
       </div>
     {/if}
-  </button>
+  </div>
 
   {#if isExpanded && type === "file"}
     <div class="border-t" style="border-color: hsl(var(--border));">
@@ -196,7 +541,7 @@
         <div class="p-4">
           <Spinner>Fetching content...</Spinner>
         </div>
-      {:else if content && fileTypeInfo}
+      {:else if content}
         {#if fileTypeInfo.category === "image"}
           <div class="p-4">
             <ImageViewer content={content} filename={name} mimeType={fileTypeInfo.mimeType} />
@@ -227,13 +572,20 @@
                 </span>
               </div>
             </div>
-            <CodeMirror bind:value={content} />
+            <div class="relative" bind:this={editorHost} role="group" data-permalink-menu>
+              <CodeMirror bind:value={content} extensions={cmExtensions.length ? cmExtensions : [lineNumbers()]} />
+              {#if showGutterMenu}
+                <div class="absolute z-20 w-44 rounded border bg-popover text-popover-foreground shadow-md"
+                     style="left: {gutterMenuX}px; top: {gutterMenuY}px; border-color: hsl(var(--border));">
+                  <button class="w-full text-left px-3 py-2 hover:bg-secondary/50" onclick={copyLinkToLines}>
+                    Copy link to {selectedStart ? (selectedEnd ? `lines ${selectedStart}-${selectedEnd}` : `line ${selectedStart}`) : 'file'}
+                  </button>
+                  <button class="w-full text-left px-3 py-2 hover:bg-secondary/50" onclick={createPermalink}>Create permalink</button>
+                </div>
+              {/if}
+            </div>
           </div>
         {/if}
-      {:else if content}
-        <div class="p-4">
-          <CodeMirror bind:value={content} />
-        </div>
       {:else}
         <div class="p-4">
           <div class="text-center text-muted-foreground py-8">No content available</div>

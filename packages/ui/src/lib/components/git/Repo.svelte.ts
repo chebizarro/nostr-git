@@ -60,6 +60,7 @@ export class Repo {
   createdAt: string = $state("");
   clone: string[] = $state([]);
   web: string[] = $state([]);
+  address: string ="";
 
   repoEvent: RepoAnnouncementEvent | undefined = $state(undefined);
   #repo: RepoAnnouncement | undefined = $state(undefined);
@@ -260,6 +261,7 @@ export class Repo {
         this.relays = this.repo.relays;
         this.earliestUniqueCommit = this.repo.earliestUniqueCommit;
         this.createdAt = this.repo.createdAt;
+        this.address = this.repo.address;
       }
     });
 
@@ -1333,6 +1335,46 @@ export class Repo {
     this.fileManager?.dispose();
     this.workerManager?.dispose();
     console.log("Repo disposed");
+  }
+
+  // -------------------------
+  // Thin wrappers for file edit + commit and head lookup
+  // -------------------------
+  async writeFileLocal({ path, content }: { path: string; content: string }): Promise<void> {
+    if (!this.fileManager) throw new Error("FileManager unavailable");
+    // Prefer a dedicated write API if present; otherwise, fall back to a generic method
+    const anyFm: any = this.fileManager as any;
+    if (typeof anyFm.writeFileLocal === "function") {
+      await anyFm.writeFileLocal({ repoKey: this.key, path, content });
+      return;
+    }
+    if (typeof anyFm.writeFile === "function") {
+      await anyFm.writeFile({ repoKey: this.key, path, content });
+      return;
+    }
+    throw new Error("writeFileLocal not implemented in FileManager");
+  }
+
+  async commit({ message }: { message: string }): Promise<{ commitId: string }> {
+    if (!this.workerManager) throw new Error("WorkerManager unavailable");
+    const branch = this.selectedBranch || this.mainBranch;
+    const anyWm: any = this.workerManager as any;
+    if (typeof anyWm.commit === "function") {
+      const res = await anyWm.commit({ repoId: this.key, branch, message });
+      return { commitId: res?.commitId || res?.id || "" };
+    }
+    throw new Error("commit not implemented in WorkerManager");
+  }
+
+  async getHeadCommitId(branchName?: string): Promise<string> {
+    try {
+      const short = (branchName || this.selectedBranch || this.mainBranch || "").split("/").pop() || "";
+      const refs = await this.getAllRefsWithFallback();
+      const hit = refs.find(r => r.type === "heads" && r.name === short);
+      return hit?.commitId || "";
+    } catch {
+      return "";
+    }
   }
 
   // Perform background merge analysis for patches
