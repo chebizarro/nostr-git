@@ -93,7 +93,6 @@
     try {
       await editRepo.editRepository(currentAnnouncement, currentState, config, {
         token: "ghp_example_token_here", // Would come from token store
-        currentUser: "current-user", // Would come from user profile
         repoDir: "/repos/example-repo", // Would come from repo manager
         onSignEvent: signEvent,
         onPublishEvent: publishEvent,

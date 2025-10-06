@@ -62,9 +62,14 @@
   const parsed = parseIssueEvent(event);
 
   const { id, subject: title, content: description, labels, createdAt } = parsed;
-  const displayLabels = $derived.by(() =>
-    Array.from(new Set([...(labels || []), ...(extraLabels || [])]))
-  );
+  function naturalLabel(s: string): string {
+    const idx = s.lastIndexOf("/");
+    return idx >= 0 ? s.slice(idx + 1) : s.replace(/^#/, "");
+  }
+  const displayLabels = $derived.by(() => {
+    const merged = Array.from(new Set([...(labels || []), ...(extraLabels || [])]));
+    return merged.map(naturalLabel);
+  });
 
   const commentsOnThisIssue = $derived.by(() => {
     return comments?.filter((c) => getTagValue(c, "E") === id);

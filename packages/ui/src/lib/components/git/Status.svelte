@@ -30,6 +30,7 @@
     actorPubkey,
     compact = false,
     onPublish,
+    ProfileComponent = ProfileLink,
   }: {
     repo: Repo
     rootId: string
@@ -39,6 +40,7 @@
     actorPubkey?: string
     compact?: boolean
     onPublish?: (event: StatusEvent) => Promise<any>
+    ProfileComponent?: any
   } = $props()
 
   // Authority check
@@ -113,6 +115,10 @@
   const canPublish = $derived.by(() => {
     return Date.now() - lastPublishTime > COOLDOWN_MS
   })
+
+  // UI: show/hide history
+  let showHistory = $state(false)
+  const pastCount = $derived.by(() => Math.max(history.length - 1, 0))
 
   // Reset form when editor is closed
   $effect(() => {
@@ -339,7 +345,7 @@
             </Badge>
             {#if currentStatusEvent}
               <span class="text-xs text-muted-foreground">
-                by <ProfileLink pubkey={currentStatusEvent.pubkey} /> •
+                by <ProfileComponent pubkey={currentStatusEvent.pubkey} /> •
                 {new Date(currentStatusEvent.created_at * 1000).toLocaleString()}
               </span>
             {/if}
@@ -347,11 +353,21 @@
         {/snippet}
         {@render currentStatusBadge()}
 
-        {#if isAuthorized}
-          <Button size="sm" variant="outline" onclick={() => (showEditor = !showEditor)}>
-            {showEditor ? "Cancel" : "Change Status"}
+        <div class="flex items-center gap-2">
+          {#if isAuthorized}
+            <Button size="sm" variant="outline" onclick={() => (showEditor = !showEditor)}>
+              {showEditor ? "Cancel" : "Change Status"}
+            </Button>
+          {/if}
+          <Button
+            size="sm"
+            variant="outline"
+            onclick={() => (showHistory = !showHistory)}
+            disabled={pastCount === 0}
+          >
+            {pastCount === 0 ? "No History" : showHistory ? "Hide History" : `Show History (${pastCount})`}
           </Button>
-        {/if}
+        </div>
       </div>
 
       <!-- Editor -->
@@ -432,10 +448,9 @@
       {/if}
 
       <!-- History -->
-      {#if history.length > 1}
-        <div>
-          <Separator class="my-3" />
-          <h4 class="mb-2 text-sm font-medium">History</h4>
+      <div>
+        <Separator class="my-3" />
+        {#if showHistory && pastCount > 0}
           <div class="space-y-2">
             {#each history.slice(1) as event (event.id)}
               {#snippet historyItem()}
@@ -447,7 +462,7 @@
                     <div class="flex items-center gap-2">
                       <span class="font-medium">{state.charAt(0).toUpperCase() + state.slice(1)}</span>
                       <span class="text-muted-foreground">
-                        by <ProfileLink pubkey={event.pubkey} />
+                        by <ProfileComponent pubkey={event.pubkey} />
                       </span>
                       <span class="text-muted-foreground">
                         {new Date(event.created_at * 1000).toLocaleString()}
@@ -462,8 +477,8 @@
               {@render historyItem()}
             {/each}
           </div>
-        </div>
-      {/if}
+        {/if}
+      </div>
 
       <!-- Suggestions -->
       {#if suggestions.length > 0 && isAuthorized}
@@ -482,7 +497,7 @@
                       <div class="flex items-center gap-2">
                         <span class="font-medium">{state.charAt(0).toUpperCase() + state.slice(1)}</span>
                         <span class="text-muted-foreground">
-                          by <ProfileLink pubkey={event.pubkey} />
+                          by <ProfileComponent pubkey={event.pubkey} />
                         </span>
                         <span class="text-muted-foreground">
                           {new Date(event.created_at * 1000).toLocaleString()}
