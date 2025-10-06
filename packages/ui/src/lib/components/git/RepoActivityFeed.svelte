@@ -20,11 +20,6 @@
     activities?: ActivityItem[];
   } = $props();
 
-  let isExpanded = $state(false);
-
-  function toggleExpand() {
-    isExpanded = !isExpanded;
-  }
 </script>
 
 <div class="space-y-6">

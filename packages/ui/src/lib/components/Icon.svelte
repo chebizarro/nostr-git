@@ -1,8 +1,3 @@
-<!--
-  Icon.svelte
-  Placeholder Icon component for the nostr-git/ui package
-  This should be replaced with the actual Icon component from the main app
--->
 <script lang="ts">
   interface Props {
     name: string;

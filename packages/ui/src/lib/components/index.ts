@@ -36,7 +36,7 @@ export { default as MaintainerBadge } from "./git/MaintainerBadge.svelte";
 export { default as StatusChip } from "./git/StatusChip.svelte";
 export { default as Status } from "./git/Status.svelte";
 export { default as RepoHeader } from "./git/RepoHeader.svelte";
-
+export { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 // Media viewers
 export { default as ImageViewer } from "./git/viewers/ImageViewer.svelte";
 export { default as PDFViewer } from "./git/viewers/PDFViewer.svelte";

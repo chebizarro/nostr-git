@@ -4,10 +4,15 @@
   import TimeAgo from "../../TimeAgo.svelte";
   import RichText from "../RichText.svelte";
 
-  const props = $props();
-  const content: string = props.content;
-  const author: { name: string; avatar: string } = props.author;
-  const createdAt: string = props.createdAt;
+  const {
+    content,
+    author,
+    createdAt,
+  }: {
+    content: string;
+    author: { name: string; avatar: string };
+    createdAt: string;
+  } = $props();
 </script>
 
 <div class="flex gap-3 group py-2">

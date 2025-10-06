@@ -46,7 +46,7 @@
     const hosts = new Set<string>();
 
     // Extract from clone URLs
-    repository.repo?.clone?.forEach((url) => {
+    repository.clone?.forEach((url: string) => {
       try {
         const urlObj = new URL(url);
         hosts.add(urlObj.hostname);
@@ -56,7 +56,7 @@
     });
 
     // Extract from web URLs
-    repository.repo?.web?.forEach((url) => {
+    repository.web.forEach((url) => {
       try {
         const urlObj = new URL(url);
         hosts.add(urlObj.hostname);

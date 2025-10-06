@@ -1,12 +1,17 @@
 <script lang="ts">
   import { Badge } from "../ui/badge";
   import { AlertTriangle, GitBranch, Activity, XOctagon } from "@lucide/svelte";
-  const { hasGraspDelay = false, headChanged = false, relayHealth = "ok", healthTip = "" } = $props<{
+  const {
+    hasGraspDelay = false,
+    headChanged = false,
+    relayHealth = "ok",
+    healthTip = ""
+  }: {
     hasGraspDelay?: boolean;
     headChanged?: boolean;
     relayHealth?: "ok" | "restricted" | "down";
     healthTip?: string;
-  }>();
+  } = $props();
 </script>
 
 <div class="flex items-center gap-2">

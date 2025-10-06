@@ -2,7 +2,8 @@
   import { useRegistry } from "../../useRegistry";
   const { Avatar, AvatarFallback, AvatarImage } = useRegistry();
   import TimeAgo from "../../TimeAgo.svelte";
-  import PatchCard from "$lib/components/git/PatchCard.svelte";
+  import PatchCard from "../git/PatchCard.svelte";
+  import { Status } from "@nostr-git/shared-types";
 
   const {
     repoId,
@@ -20,7 +21,7 @@
       baseBranch: string;
       commitCount: number;
       commentCount: number;
-      status: "open" | "merged" | "closed";
+      status: Status;
     };
   } = $props();
 </script>
@@ -28,7 +29,7 @@
 <div class="flex gap-3 group py-2">
   <Avatar class="h-8 w-8 mt-0.5">
     <AvatarImage
-      src={author?.avatar ?? author?.picture ?? ""}
+      src={author?.picture ?? ""}
       alt={author?.name ?? author?.display_name ?? ""}
     />
     <AvatarFallback

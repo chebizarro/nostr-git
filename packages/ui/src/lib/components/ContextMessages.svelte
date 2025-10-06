@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { context, type ContextMessage } from "$lib/stores/context";
+  import { context } from "../stores/context";
   import { fade } from "svelte/transition";
   import { Check, AlertCircle, Loader2, AlertTriangle, Info } from "@lucide/svelte";
   import { derived } from "svelte/store";

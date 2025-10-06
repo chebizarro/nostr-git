@@ -1,11 +1,12 @@
 <script lang="ts">
   import { useRegistry } from "../../useRegistry";
   const { Separator } = useRegistry();
-  import ThreadMessage from "$lib/components/thread/ThreadMessage.svelte";
-  import ThreadCommit from "$lib/components/thread/ThreadCommit.svelte";
-  import ThreadPatch from "$lib/components/thread/ThreadPatch.svelte";
-  import ThreadIssue from "$lib/components/thread/ThreadIssue.svelte";
-  import ThreadComposer from "$lib/components/thread/ThreadComposer.svelte";
+  import ThreadMessage from "../thread/ThreadMessage.svelte";
+  import ThreadCommit from "../thread/ThreadCommit.svelte";
+  import ThreadPatch from "../thread/ThreadPatch.svelte";
+  import ThreadIssue from "../thread/ThreadIssue.svelte";
+  import ThreadComposer from "../thread/ThreadComposer.svelte";
+  import { Status } from "@nostr-git/shared-types";
 
   // Expect all props to be destructured at once (Svelte 5: only one $props() call allowed)
   const {
@@ -21,7 +22,7 @@
     id: string;
     type: "commit";
     content: string;
-    author: { name: string; avatar: string };
+    author: { name: string; avatar: string; pubkey: string; picture: string; display_name: string; };
     createdAt: string;
     metadata: { hash: string };
   };
@@ -30,7 +31,7 @@
     id: string;
     type: "patch";
     content: string;
-    author: { name: string; avatar: string };
+    author: { name: string; avatar: string; pubkey: string; picture: string; display_name: string; };
     createdAt: string;
     metadata: {
       patchId: string;
@@ -39,7 +40,7 @@
       baseBranch: string;
       commitCount: number;
       commentCount: number;
-      status: "open" | "merged" | "closed";
+      status: Status;
     };
   };
 
@@ -47,7 +48,7 @@
     id: string;
     type: "issue";
     content: string;
-    author: { name: string; avatar: string };
+    author: { name: string; avatar: string; pubkey: string; picture: string; display_name: string; };
     createdAt: string;
     metadata: {
       issueId: string;
@@ -55,7 +56,7 @@
       description: string;
       labels: string[];
       commentCount: number;
-      status: "open" | "closed" | "resolved";
+      status: Status;
     };
   };
 
@@ -63,7 +64,7 @@
     id: string;
     type: "message";
     content: string;
-    author: { name: string; avatar: string };
+    author: { name: string; avatar: string; pubkey: string; picture: string; display_name: string; };
     createdAt: string;
   };
 

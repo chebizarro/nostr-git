@@ -52,7 +52,7 @@
 
   // Extract current values from repo
   function extractCurrentValues(): FormData {
-    if (!repo.repo) {
+    if (!repo) {
       return {
         name: "",
         description: "",
@@ -67,27 +67,24 @@
       };
     }
 
-    // Use the parsed repo data from the Repo class instead of manually parsing tags
-    const repoData = repo.repo;
-
     // Get default branch from repo's mainBranch property (already resolved)
     const defaultBranch = repo.mainBranch || "";
 
     // Determine visibility from clone URL (basic heuristic)
-    const cloneUrl = repoData.clone?.[0] || "";
+    const cloneUrl = repo.clone?.[0] || "";
     const isPrivate = cloneUrl.includes("private") || false;
 
     return {
-      name: repoData.name || "",
-      description: repoData.description || "",
+      name: repo.name || "",
+      description: repo.description || "",
       visibility: isPrivate ? "private" : ("public" as "public" | "private"),
       defaultBranch,
-      maintainers: repoData.maintainers || [],
-      relays: repoData.relays || [],
-      webUrls: repoData.web || [],
-      cloneUrls: repoData.clone || [],
-      hashtags: repoData.hashtags || [],
-      earliestUniqueCommit: repoData.earliestUniqueCommit || "",
+      maintainers: repo.maintainers || [],
+      relays: repo.relays || [],
+      webUrls: repo.web || [],
+      cloneUrls: repo.clone || [],
+      hashtags: repo.hashtags || [],
+      earliestUniqueCommit: repo.earliestUniqueCommit || "",
     };
   }
 
@@ -331,11 +328,11 @@
 
       // Convert repo.state.refs to the expected format if available
       const refs =
-        repo.state?.refs?.map((ref) => ({
-          type: ref.ref.startsWith("refs/heads/") ? ("heads" as const) : ("tags" as const),
-          name: ref.ref.replace(/^refs\/(heads|tags)\//, ""),
-          commit: ref.commit,
-          ancestry: ref.lineage,
+        repo.refs?.map((ref) => ({
+          type: ref.fullRef.startsWith("refs/heads/") ? ("heads" as const) : ("tags" as const),
+          name: ref.fullRef.replace(/^refs\/(heads|tags)\//, ""),
+          commit: ref.commitId,
+          //ancestry: ref.lineage,
         })) || [];
 
       const updatedStateEvent = repo.createRepoStateEvent({

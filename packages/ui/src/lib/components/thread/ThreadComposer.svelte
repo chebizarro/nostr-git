@@ -2,7 +2,7 @@
   import { Plus, Send } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
   const { Button } = useRegistry();
-  import { Textarea } from "$lib/components/ui/textarea";
+  import { Textarea } from "../ui/textarea";
 
   const { onSubmit }: { onSubmit: (message: string) => void } = $props();
   let message = $state("");

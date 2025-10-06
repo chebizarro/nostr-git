@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
+  import { useRegistry } from "../../useRegistry";
+  const { Button } = useRegistry();
   import type { NostrEvent } from "nostr-tools";
 
   interface Props {
@@ -113,7 +114,7 @@
 
     try {
       // Import the clone hook dynamically to avoid circular dependencies
-      const { useCloneRepo } = await import("$lib/hooks/useCloneRepo.svelte");
+      const { useCloneRepo } = await import("../../hooks/useCloneRepo.svelte");
 
       const cloneHook = useCloneRepo({
         onProgress: (stage: string, pct: number = 0) => {

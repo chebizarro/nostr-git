@@ -3,7 +3,6 @@
   const { Avatar, AvatarFallback, AvatarImage } = useRegistry();
   import { GitCommit } from "@lucide/svelte";
   import TimeAgo from "../../TimeAgo.svelte";
-
   import type { Profile } from "@nostr-git/shared-types";
   const {
     content,
@@ -21,7 +20,7 @@
 <div class="flex gap-3 group py-2">
   <Avatar class="h-8 w-8 mt-0.5">
     <AvatarImage
-      src={author?.avatar ?? author?.picture ?? ""}
+      src={author?.picture ?? ""}
       alt={author?.name ?? author?.display_name ?? ""}
     />
     <AvatarFallback

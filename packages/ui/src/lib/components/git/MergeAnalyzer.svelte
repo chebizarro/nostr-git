@@ -1,5 +1,11 @@
 <script lang="ts">
-  import { FileText, TrendingUp, AlertTriangle, CheckCircle, GitMerge } from "@lucide/svelte";
+  import {
+    FileText,
+    TrendingUp,
+    AlertTriangle,
+    CheckCircle,
+    GitMerge,
+  } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
   const { Card, CardContent, CardHeader, CardTitle, Progress, Badge } = useRegistry();
   import DiffViewer from "./DiffViewer.svelte";

@@ -53,7 +53,6 @@
   }: Props = $props();
 
   // State for real-time repository name validation
-  let lastCheckedName = $state<string>("");
   let tokens = $state<Token[]>([]);
 
   // Subscribe to token store

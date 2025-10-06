@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { Repo } from "./Repo.svelte"
   import type { StatusEvent } from "@nostr-git/shared-types"
-  import { createStatusEvent } from "@nostr-git/shared-types"
   import {
     GIT_STATUS_OPEN,
     GIT_STATUS_DRAFT,
@@ -9,7 +8,7 @@
     GIT_STATUS_COMPLETE,
     Address,
   } from "@welshman/util"
-  import { CircleCheck, CircleDot, FileCode, X, Clock, GitMerge, AlertCircle } from "@lucide/svelte"
+  import { CircleCheck, CircleDot, X, Clock, GitMerge, AlertCircle } from "@lucide/svelte"
   import { Button } from "../ui/button"
   import { Textarea } from "../ui/textarea"
   import { Label } from "../ui/label"

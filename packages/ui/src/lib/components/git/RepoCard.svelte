@@ -3,31 +3,29 @@
   import { GitBranch, Star, BookOpen, Circle } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
   const { Avatar, Button, AvatarImage, AvatarFallback } = useRegistry();
-
-  import type { RepoAnnouncementEvent, Profile } from "@nostr-git/shared-types";
-  import { parseRepoAnnouncementEvent } from "@nostr-git/shared-types";
+  import type { Profile } from "@nostr-git/shared-types";
+  import type { Repo } from "./Repo.svelte";
   // Accept event and optional owner (Profile)
   const {
-    event,
+    repo,
     owner = {
       pubkey: "",
     },
     issueCount = 0,
     lastUpdated = undefined,
   }: {
-    event: RepoAnnouncementEvent;
+    repo: Repo;
     owner?: Profile;
     issueCount?: number;
     lastUpdated?: string;
   } = $props();
-  const parsed = parseRepoAnnouncementEvent(event);
   // Prefer owner for avatar/name if provided
   const repoOwner: Profile = { ...owner };
-  const id = parsed.repoId;
-  const name = parsed.name ?? "";
-  const description = parsed.description ?? "";
+  const id = repo.key;
+  const name = repo.name ?? "";
+  const description = repo.description ?? "";
   // Use event createdAt if lastUpdated not provided
-  const updated = lastUpdated ?? parsed.createdAt;
+  const updated = lastUpdated ?? repo.createdAt;
 </script>
 
 <div class="bg-card text-card-foreground rounded-lg border shadow-sm p-4">

@@ -54,8 +54,7 @@
   let initialFocusEl = $state<HTMLInputElement | null>(null);
 
   // Extract repository information from Repo instance
-  const repoData = repo.repo;
-  const cloneUrl = repoData?.clone?.[0] || "";
+  const cloneUrl = repo.clone?.[0] || "";
   let isOpen = $state(true);
 
   // Parse owner and repo name from clone URL
@@ -63,7 +62,7 @@
   const originalRepo = {
     owner: urlMatch?.[1] || "unknown",
     name: urlMatch?.[2] || "repository",
-    description: repoData?.description || "",
+    description: repo.description || "",
   };
   // Form state
   let forkName = $state(`${originalRepo.name}-fork`);

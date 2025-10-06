@@ -9,27 +9,20 @@
     selectedProvider?: string;
     onProviderChange: (provider: string) => void;
     disabledProviders?: string[];
-    tokens?: Token[];
     relayUrl?: string;
     onRelayUrlChange?: (url: string) => void;
     graspServerOptions?: string[];
   }
+  const {
+    selectedProvider,
+    onProviderChange,
+    disabledProviders,
+    relayUrl,
+    onRelayUrlChange,
+    graspServerOptions,
+  }: Props = $props();
 
-  // Svelte 5 runes: use $derived to keep props reactive
-  const __props = $props();
-  const selectedProvider = $derived(__props.selectedProvider as string | undefined);
-  const onProviderChange = $derived(__props.onProviderChange as (provider: string) => void);
-  const disabledProviders = $derived((__props.disabledProviders ?? []) as string[]);
-  const propTokens = $derived(__props.tokens as Token[] | undefined);
-  const relayUrl = $derived((__props.relayUrl ?? "") as string);
-  const onRelayUrlChange = $derived(
-    __props.onRelayUrlChange as ((url: string) => void) | undefined
-  );
-  const graspServerOptions = $derived((__props.graspServerOptions ?? []) as string[]);
-
-  // Token management
   let tokens = $state<Token[]>([]);
-  // Initialize empty; sync from relayUrl prop via $effect below
   let graspRelayUrl = $state<string>("");
   let availableProviders = $state<
     {
@@ -46,7 +39,7 @@
 
   // Subscribe to token store changes
   tokensStore.subscribe((t) => {
-    tokens = propTokens || t;
+    tokens = t;
     updateAvailableProviders();
   });
 

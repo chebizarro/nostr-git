@@ -7,14 +7,7 @@
   const props = $props();
   const watchers: number = props.watchers ?? 0;
   import type { Profile } from "@nostr-git/shared-types";
-  const contributors: Profile[] = props.contributors ?? [
-    { name: "Alice" },
-    { name: "Bob" },
-    { name: "Carol" },
-    { name: "Dave" },
-    { name: "Eve" },
-    { name: "Mallory" },
-  ];
+  const contributors: Profile[] = props.contributors ?? [];
 </script>
 
 <Card class="space-y-4">

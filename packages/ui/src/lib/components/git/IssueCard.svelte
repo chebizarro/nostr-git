@@ -9,8 +9,7 @@
     CircleCheck,
     FileCode,
   } from "@lucide/svelte";
-  // @ts-ignore monorepo alias resolution may not map $lib in this package during isolated lints
-  import { toast } from "$lib/stores/toast";
+  import { toast } from "../../stores/toast";
   import type { CommentEvent, IssueEvent, StatusEvent } from "@nostr-git/shared-types";
   import {
     getTagValue,

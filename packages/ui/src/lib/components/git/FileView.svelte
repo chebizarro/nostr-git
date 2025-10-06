@@ -2,7 +2,7 @@
   import { FileCode, Folder, Share, Download, Copy, Info } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
   const { Button, Spinner } = useRegistry();
-  import { toast } from "$lib/stores/toast";
+  import { toast } from "../../stores/toast";
   import type { FileEntry } from "@nostr-git/core";
   import CodeMirror from "svelte-codemirror-editor";
   import {

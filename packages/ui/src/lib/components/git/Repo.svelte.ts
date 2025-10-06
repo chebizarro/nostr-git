@@ -48,19 +48,20 @@ type EffectiveLabelsV2 = {
 export class Repo {
   name: string = $state("");
   description: string = $state("");
-
+  key: string = $state("");
   issues = $state<IssueEvent[]>([]);
   patches = $state<PatchEvent[]>([]);
-
+  hashtags = $state<string[]>([]);
   tokens = $state<Token[]>([]);
-
   refs: Array<{ name: string; type: "heads" | "tags"; fullRef: string; commitId: string }> = $state([]);
+  maintainers: string[] = $state([]);
+  relays: string[] = $state([]);
+  earliestUniqueCommit: string = $state("");
+  createdAt: string = $state("");
+  clone: string[] = $state([]);
+  web: string[] = $state([]);
 
-  // Stable, canonical key used for all UI caches and internal maps
-  key: string = $state("");
-
-
-  #repoEvent: RepoAnnouncementEvent | undefined = $state(undefined);
+  repoEvent: RepoAnnouncementEvent | undefined = $state(undefined);
   #repo: RepoAnnouncement | undefined = $state(undefined);
   #repoStateEvent: RepoStateEvent | undefined = $state(undefined);
   #state: RepoState | undefined = $state(undefined);
@@ -251,6 +252,14 @@ export class Repo {
         if (this.workerManager.isReady && !this.state) {
           this.#loadBranchesFromRepo(event);
         }
+
+        this.clone = this.repo.clone;
+        this.web = this.repo;
+        this.hashtags = this.repo.hashtags;
+        this.maintainers = this.repo.maintainers;
+        this.relays = this.repo.relays;
+        this.earliestUniqueCommit = this.repo.earliestUniqueCommit;
+        this.createdAt = this.repo.createdAt;
       }
     });
 

@@ -1,10 +1,10 @@
 <script lang="ts">
   import { cn } from "../../utils";
-  import { GitBranch, Eye, GitFork, RotateCcw, Settings, LayoutDashboard } from "@lucide/svelte";
+  import { GitBranch, GitFork, RotateCcw, Settings } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
   const { Button } = useRegistry();
   import { Repo } from "./Repo.svelte";
-  import { BranchSelector } from "..";
+  import BranchSelector from "./BranchSelector.svelte";
 
   const {
     repoClass,

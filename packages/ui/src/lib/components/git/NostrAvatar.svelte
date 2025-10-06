@@ -1,6 +1,6 @@
 <script lang="ts">
   import { User } from "@lucide/svelte";
-  import { gravatarUrl } from "$lib/utils/hash";
+  import { gravatarUrl } from "../../utils/hash";
   import { useRegistry } from "../../useRegistry";
 
   const { ProfileComponent } = useRegistry();

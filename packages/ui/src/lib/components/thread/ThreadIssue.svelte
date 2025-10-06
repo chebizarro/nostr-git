@@ -2,27 +2,34 @@
   import { useRegistry } from "../../useRegistry";
   const { Avatar, AvatarFallback, AvatarImage } = useRegistry();
   import TimeAgo from "../../TimeAgo.svelte";
-  import IssueCard from "$lib/components/git/IssueCard.svelte";
+  import IssueCard from "../git/IssueCard.svelte";
+  import { Profile, Status } from "@nostr-git/shared-types";
 
-  const props = $props();
-  const repoId: string = props.repoId;
-  import type { Profile } from "@nostr-git/shared-types";
-  const author: Profile = props.author;
-  const createdAt: string = props.createdAt;
-  const metadata: {
-    issueId: string;
-    title: string;
-    description: string;
-    labels: string[];
-    commentCount: number;
-    status: "open" | "closed" | "resolved";
-  } = props.metadata;
+  const {
+    repoId,
+    author,
+    createdAt,
+    metadata,
+  }: {
+    repoId: string;
+    author: Profile;
+    createdAt: string;
+    metadata: {
+      issueId: string;
+      title: string;
+      description: string;
+      labels: string[];
+      commentCount: number;
+      status: Status;
+    };
+  } = $props();
+
 </script>
 
 <div class="flex gap-3 group py-2">
   <Avatar class="h-8 w-8 mt-0.5">
     <AvatarImage
-      src={author?.avatar ?? author?.picture ?? ""}
+      src={author?.picture ?? ""}
       alt={author?.name ?? author?.display_name ?? ""}
     />
     <AvatarFallback

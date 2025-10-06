@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
-  import { useRegistry } from "$lib/useRegistry";
+  import { useRegistry } from "../../useRegistry";
   const { Button, Input, Label, Separator } = useRegistry();
   import { createGraspServersStore } from "../../stores/graspServers";
   import type { NostrEvent } from "@nostr-git/shared-types";

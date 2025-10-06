@@ -16,8 +16,7 @@
   } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
   const { Button, Card, ProfileComponent, EventActions, ReactionSummary } = useRegistry();
-  // @ts-ignore monorepo alias resolution may not map $lib in this package during isolated lints
-  import { toast } from "$lib/stores/toast";
+  import { toast } from "../../stores/toast";
   import {
     GIT_STATUS_APPLIED,
     GIT_STATUS_CLOSED,
