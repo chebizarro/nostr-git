@@ -4,6 +4,7 @@ export * from "./stores/tokens";
 export * from "./stores/graspServers";
 export * from "./stores/repositories";
 export { bookmarksStore } from "./stores/repositories";
+export { commonHashtags } from "./stores/hashtags";
 export * from "./components";
 export * from "./types/signer";
 export * from "./utils/signer-context";

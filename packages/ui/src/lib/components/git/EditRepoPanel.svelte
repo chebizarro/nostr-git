@@ -1,23 +1,25 @@
 <script lang="ts">
   import {
     Settings,
-    Save,
     X,
+    Save,
     AlertCircle,
-    CheckCircle2,
-    Loader2,
-    GitBranch,
+    Plus,
+    Trash2,
     Users,
     Globe,
     Link,
     Hash,
+    GitBranch,
     GitCommit,
-    Plus,
-    Trash2,
+    CheckCircle2,
+    Loader2,
   } from "@lucide/svelte";
-  import type { NostrEvent } from "nostr-tools";
-  import { nip19 } from "nostr-tools";
+  import type { NostrEvent } from "@nostr-git/shared-types";
   import { Repo } from "./Repo.svelte";
+  import UserProfile from "../UserProfile.svelte";
+  import { nip19 } from "nostr-tools";
+  import { commonHashtags } from "../../stores/hashtags";
 
   // Types for edit configuration and progress
   interface EditProgress {
@@ -46,9 +48,12 @@
     progress?: EditProgress;
     error?: string;
     isEditing?: boolean;
+    getProfile?: (pubkey: string) => Promise<{ name?: string; picture?: string; nip05?: string; display_name?: string } | null>;
+    searchProfiles?: (query: string) => Promise<Array<{ pubkey: string; name?: string; picture?: string; nip05?: string; display_name?: string }>>;
+    searchRelays?: (query: string) => Promise<string[]>;
   }
 
-  const { repo, onPublishEvent, progress, error, isEditing = false }: Props = $props();
+  const { repo, onPublishEvent, progress, error, isEditing = false, getProfile, searchProfiles, searchRelays }: Props = $props();
 
   // Extract current values from repo
   function extractCurrentValues(): FormData {
@@ -90,6 +95,139 @@
 
   // Form state - initialize with current values
   let formData = $state<FormData>(extractCurrentValues());
+  
+  // Maintainer profiles cache
+  let maintainerProfiles = $state<Map<string, { name?: string; picture?: string; nip05?: string; display_name?: string }>>(new Map());
+  
+  // Autocomplete state for maintainers
+  let maintainerSearchQuery = $state("");
+  let maintainerSearchResults = $state<Array<{ pubkey: string; name?: string; picture?: string; nip05?: string; display_name?: string }>>([]);
+  let showMaintainerAutocomplete = $state(false);
+  
+  // Autocomplete state for relays
+  let relaySearchQuery = $state("");
+  let relaySearchResults = $state<string[]>([]);
+  let showRelayAutocomplete = $state(false);
+  
+  // Autocomplete state for hashtags
+  let hashtagSearchQuery = $state("");
+  let hashtagSearchResults = $state<string[]>([]);
+  let showHashtagAutocomplete = $state(false);
+
+  // Helper to normalize pubkey (convert npub to hex if needed)
+  function normalizePubkey(pubkey: string): string {
+    if (!pubkey) return pubkey;
+    if (pubkey.startsWith('npub1')) {
+      try {
+        const decoded = nip19.decode(pubkey);
+        return decoded.type === 'npub' ? decoded.data : pubkey;
+      } catch (e) {
+        console.error('Failed to decode npub', pubkey, e);
+        return pubkey;
+      }
+    }
+    return pubkey;
+  }
+
+  // Load maintainer profiles
+  $effect(() => {
+    if (getProfile && formData.maintainers) {
+      console.log('[EditRepoPanel] Loading profiles for maintainers:', formData.maintainers);
+      formData.maintainers.forEach(async (maintainer) => {
+        if (maintainer) {
+          const hexPubkey = normalizePubkey(maintainer);
+          console.log('[EditRepoPanel] Normalized pubkey:', maintainer, '->', hexPubkey);
+          if (!maintainerProfiles.has(maintainer)) {
+            try {
+              const profile = await getProfile(hexPubkey);
+              console.log('[EditRepoPanel] Loaded profile for', hexPubkey, ':', profile);
+              if (profile) {
+                maintainerProfiles.set(maintainer, profile);
+                maintainerProfiles = new Map(maintainerProfiles); // Trigger reactivity
+              }
+            } catch (e) {
+              console.error('Failed to load profile for', hexPubkey, e);
+            }
+          }
+        }
+      });
+    }
+  });
+  
+  // Handle maintainer search with debounce
+  let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+  $effect(() => {
+    const query = maintainerSearchQuery;
+    
+    // Clear previous timeout
+    if (searchTimeout) clearTimeout(searchTimeout);
+    
+    if (query && searchProfiles) {
+      searchTimeout = setTimeout(async () => {
+        try {
+          const results = await searchProfiles(query);
+          maintainerSearchResults = results;
+          showMaintainerAutocomplete = results.length > 0;
+        } catch (e) {
+          console.error('Failed to search profiles', e);
+          maintainerSearchResults = [];
+        }
+      }, 300);
+    } else {
+      maintainerSearchResults = [];
+      showMaintainerAutocomplete = false;
+    }
+    
+    // Cleanup function
+    return () => {
+      if (searchTimeout) clearTimeout(searchTimeout);
+    };
+  });
+  
+  // Handle relay search with debounce
+  let relaySearchTimeout: ReturnType<typeof setTimeout> | null = null;
+  $effect(() => {
+    const query = relaySearchQuery;
+    
+    // Clear previous timeout
+    if (relaySearchTimeout) clearTimeout(relaySearchTimeout);
+    
+    if (query && searchRelays) {
+      relaySearchTimeout = setTimeout(async () => {
+        try {
+          const results = await searchRelays(query);
+          relaySearchResults = results;
+          showRelayAutocomplete = results.length > 0;
+        } catch (e) {
+          console.error('Failed to search relays', e);
+          relaySearchResults = [];
+        }
+      }, 300);
+    } else {
+      relaySearchResults = [];
+      showRelayAutocomplete = false;
+    }
+    
+    // Cleanup function
+    return () => {
+      if (relaySearchTimeout) clearTimeout(relaySearchTimeout);
+    };
+  });
+  
+  // Handle hashtag search (client-side filtering)
+  $effect(() => {
+    const query = hashtagSearchQuery;
+    
+    if (query) {
+      // Use the store's search method
+      const results = commonHashtags.search(query, 10);
+      hashtagSearchResults = results;
+      showHashtagAutocomplete = results.length > 0;
+    } else {
+      hashtagSearchResults = [];
+      showHashtagAutocomplete = false;
+    }
+  });
 
   // Load repository references with robust fallback logic
   let availableRefs: Array<{
@@ -99,6 +237,12 @@
     commitId: string;
   }> = [];
   let loadingRefs = $state(true);
+  
+  // Load commit history for earliest unique commit selection
+  let availableCommits: Array<{ oid: string; message: string; author: string; timestamp: number }> = [];
+  let loadingCommits = $state(false);
+  let commitSearchQuery = $state("");
+  let showCommitDropdown = $state(false);
 
   // Load refs when component mounts
   $effect(() => {
@@ -134,6 +278,60 @@
 
   // Get available branches for dropdown
   let availableBranches = $derived(availableRefs.filter((ref) => ref.type === "heads"));
+  
+  // Load commits when default branch changes
+  $effect(() => {
+    if (repo && formData.defaultBranch && !loadingRefs) {
+      console.log('[EditRepoPanel] Loading commits for branch:', formData.defaultBranch);
+      loadingCommits = true;
+      
+      // First try to get already loaded commits
+      const existingCommits = repo.commits;
+      console.log('[EditRepoPanel] Existing commits:', existingCommits?.length);
+      
+      if (existingCommits && existingCommits.length > 0) {
+        availableCommits = existingCommits;
+        loadingCommits = false;
+      } else {
+        // Try to load commits
+        repo.getCommitHistory({ branch: formData.defaultBranch, depth: 100 })
+          .then((commits) => {
+            console.log('[EditRepoPanel] Loaded commits from getCommitHistory:', commits?.length, commits);
+            availableCommits = commits || repo.commits || [];
+            loadingCommits = false;
+          })
+          .catch((error) => {
+            console.error("Failed to load commit history:", error);
+            // Fallback to repo.commits
+            availableCommits = repo.commits || [];
+            loadingCommits = false;
+          });
+      }
+    }
+  });
+  
+  // Filter commits based on search query
+  let filteredCommits = $derived.by(() => {
+    console.log('[EditRepoPanel] Filtering commits, query:', commitSearchQuery, 'available:', availableCommits.length);
+    if (!commitSearchQuery) {
+      const results = availableCommits.slice(0, 20);
+      console.log('[EditRepoPanel] No query, returning first 20:', results.length);
+      return results;
+    }
+    const query = commitSearchQuery.toLowerCase();
+    const results = availableCommits
+      .filter(c => {
+        const oid = c.oid || '';
+        const message = c.message || c.commit?.message || '';
+        const author = c.author || c.commit?.author?.name || '';
+        return oid.toLowerCase().includes(query) ||
+               message.toLowerCase().includes(query) ||
+               author.toLowerCase().includes(query);
+      })
+      .slice(0, 20);
+    console.log('[EditRepoPanel] Filtered results:', results.length);
+    return results;
+  });
 
   // Helper functions for multi-value fields
   function addArrayItem(
@@ -193,8 +391,8 @@
     }
 
     // Maintainers validation (accept npub or 64-char hex)
-    const invalidMaintainers = formData.maintainers.filter((m) => {
-      const v = m.trim();
+    const invalidMaintainers = (Array.isArray(formData.maintainers) ? formData.maintainers : []).filter((m) => {
+      const v = m?.trim?.();
       if (!v) return false;
       return !/^npub1[ac-hj-np-z02-9]{58}$/.test(v) && !/^[a-fA-F0-9]{64}$/.test(v);
     });
@@ -203,28 +401,28 @@
     }
 
     // Relays validation (wss:// URLs)
-    const invalidRelays = formData.relays.filter((r) => r.trim() && !r.match(/^wss?:\/\/.+/));
+    const invalidRelays = (Array.isArray(formData.relays) ? formData.relays : []).filter((r) => r?.trim?.() && !r.match(/^wss?:\/\/.+/));
     if (invalidRelays.length > 0) {
       errors.relays = "Relays must be valid WebSocket URLs (wss://...)";
     }
 
     // Web URLs validation
-    const invalidWebUrls = formData.webUrls.filter((w) => w.trim() && !w.match(/^https?:\/\/.+/));
+    const invalidWebUrls = (Array.isArray(formData.webUrls) ? formData.webUrls : []).filter((w) => w?.trim?.() && !w.match(/^https?:\/\/.+/));
     if (invalidWebUrls.length > 0) {
       errors.webUrls = "Web URLs must be valid HTTP/HTTPS URLs";
     }
 
     // Clone URLs validation
-    const invalidCloneUrls = formData.cloneUrls.filter(
-      (c) => c.trim() && !c.match(/^(https?:\/\/|git@).+/)
+    const invalidCloneUrls = (Array.isArray(formData.cloneUrls) ? formData.cloneUrls : []).filter(
+      (c) => c?.trim?.() && !c.match(/^(https?:\/\/|git@).+/)
     );
     if (invalidCloneUrls.length > 0) {
       errors.cloneUrls = "Clone URLs must be valid git URLs (https:// or git@...)";
     }
 
     // Hashtags validation (no spaces, alphanumeric + hyphens)
-    const invalidHashtags = formData.hashtags.filter(
-      (h) => h.trim() && !h.match(/^[a-zA-Z0-9-]+$/)
+    const invalidHashtags = (Array.isArray(formData.hashtags) ? formData.hashtags : []).filter(
+      (h) => h?.trim?.() && !h.match(/^[a-zA-Z0-9-]+$/)
     );
     if (invalidHashtags.length > 0) {
       errors.hashtags = "Hashtags can only contain letters, numbers, and hyphens";
@@ -310,8 +508,8 @@
       const updatedAnnouncementEvent = repo.createRepoAnnouncementEvent({
         name: formData.name,
         description: formData.description,
-        cloneUrl: cleanCloneUrls[0], // Primary clone URL
-        webUrl: cleanWebUrls[0], // Primary web URL
+        cloneUrl: cleanCloneUrls[0] ?? "", // Primary clone URL
+        webUrl: cleanWebUrls[0] ?? "", // Primary web URL
         defaultBranch: formData.defaultBranch,
         maintainers: normalizedMaintainers,
         relays: cleanRelays,
@@ -370,7 +568,11 @@
     const original = extractCurrentValues();
 
     // Normalize arrays by trimming empties for fair comparison (handleSave filters them out)
-    const norm = (arr: string[]) => arr.filter((v) => v.trim());
+    const norm = (arr: string[] | undefined | any) => {
+      if (!arr) return [];
+      if (!Array.isArray(arr)) return [];
+      return arr.filter((v) => v && typeof v === 'string' && v.trim());
+    };
 
     const basicChanged =
       formData.name !== original.name ||
@@ -565,36 +767,79 @@
           </label>
           <div class="space-y-2">
             {#each formData.maintainers as maintainer, index}
-              <div class="flex items-center space-x-2">
-                <input
-                  type="text"
-                  bind:value={formData.maintainers[index]}
-                  oninput={(e) =>
-                    updateArrayItem("maintainers", index, (e.target as HTMLInputElement).value)}
-                  disabled={isEditing}
-                  class="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-                  placeholder="npub1..."
-                />
+              <div class="flex items-center space-x-2 bg-gray-800/50 rounded-lg p-2">
+                {#if maintainerProfiles.has(maintainer)}
+                  <UserProfile 
+                    profile={maintainerProfiles.get(maintainer)} 
+                    pubkey={maintainer}
+                    class="flex-1"
+                  />
+                {:else}
+                  <input
+                    type="text"
+                    bind:value={formData.maintainers[index]}
+                    oninput={(e) =>
+                      updateArrayItem("maintainers", index, (e.target as HTMLInputElement).value)}
+                    disabled={isEditing}
+                    class="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                    placeholder="npub1..."
+                  />
+                {/if}
                 <button
                   type="button"
                   onclick={() => removeArrayItem("maintainers", index)}
                   disabled={isEditing}
-                  class="p-2 text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="p-2 text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
                   aria-label="Remove maintainer"
                 >
                   <Trash2 class="w-4 h-4" />
                 </button>
               </div>
             {/each}
-            <button
-              type="button"
-              onclick={() => addArrayItem("maintainers")}
-              disabled={isEditing}
-              class="flex items-center space-x-2 px-3 py-2 text-blue-400 hover:text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Plus class="w-4 h-4" />
-              <span>Add maintainer</span>
-            </button>
+            
+            <!-- Autocomplete input for adding maintainers -->
+            {#if searchProfiles}
+              <div class="relative">
+                <input
+                  type="text"
+                  bind:value={maintainerSearchQuery}
+                  onfocus={() => showMaintainerAutocomplete = maintainerSearchResults.length > 0}
+                  onblur={() => setTimeout(() => showMaintainerAutocomplete = false, 200)}
+                  disabled={isEditing}
+                  class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                  placeholder="Search by name, nip-05, or npub..."
+                />
+                {#if showMaintainerAutocomplete && maintainerSearchResults.length > 0}
+                  <div class="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {#each maintainerSearchResults as result}
+                      <button
+                        type="button"
+                        onclick={() => {
+                          if (!formData.maintainers.includes(result.pubkey)) {
+                            formData.maintainers = [...formData.maintainers, result.pubkey];
+                          }
+                          maintainerSearchQuery = "";
+                          showMaintainerAutocomplete = false;
+                        }}
+                        class="w-full p-2 hover:bg-gray-700 text-left"
+                      >
+                        <UserProfile profile={result} pubkey={result.pubkey} />
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {:else}
+              <button
+                type="button"
+                onclick={() => addArrayItem("maintainers")}
+                disabled={isEditing}
+                class="flex items-center space-x-2 px-3 py-2 text-blue-400 hover:text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Plus class="w-4 h-4" />
+                <span>Add maintainer</span>
+              </button>
+            {/if}
           </div>
           {#if validationErrors.maintainers}
             <p
@@ -637,15 +882,50 @@
                 </button>
               </div>
             {/each}
-            <button
-              type="button"
-              onclick={() => addArrayItem("relays")}
-              disabled={isEditing}
-              class="flex items-center space-x-2 px-3 py-2 text-blue-400 hover:text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Plus class="w-4 h-4" />
-              <span>Add relay</span>
-            </button>
+            
+            <!-- Autocomplete input for adding relays -->
+            {#if searchRelays}
+              <div class="relative">
+                <input
+                  type="text"
+                  bind:value={relaySearchQuery}
+                  onfocus={() => showRelayAutocomplete = relaySearchResults.length > 0}
+                  onblur={() => setTimeout(() => showRelayAutocomplete = false, 200)}
+                  disabled={isEditing}
+                  class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                  placeholder="Search for relays..."
+                />
+                {#if showRelayAutocomplete && relaySearchResults.length > 0}
+                  <div class="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {#each relaySearchResults as relayUrl}
+                      <button
+                        type="button"
+                        onclick={() => {
+                          if (!formData.relays.includes(relayUrl)) {
+                            formData.relays = [...formData.relays, relayUrl];
+                          }
+                          relaySearchQuery = "";
+                          showRelayAutocomplete = false;
+                        }}
+                        class="w-full text-left px-3 py-2 hover:bg-gray-700 text-sm font-mono"
+                      >
+                        {relayUrl}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {:else}
+              <button
+                type="button"
+                onclick={() => addArrayItem("relays")}
+                disabled={isEditing}
+                class="flex items-center space-x-2 px-3 py-2 text-blue-400 hover:text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Plus class="w-4 h-4" />
+                <span>Add relay</span>
+              </button>
+            {/if}
           </div>
           {#if validationErrors.relays}
             <p
@@ -790,15 +1070,39 @@
                 </button>
               </div>
             {/each}
-            <button
-              type="button"
-              onclick={() => addArrayItem("hashtags")}
-              disabled={isEditing}
-              class="flex items-center space-x-2 px-3 py-2 text-blue-400 hover:text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Plus class="w-4 h-4" />
-              <span>Add hashtag</span>
-            </button>
+            
+            <!-- Autocomplete input for adding hashtags -->
+            <div class="relative">
+              <input
+                type="text"
+                bind:value={hashtagSearchQuery}
+                onfocus={() => showHashtagAutocomplete = hashtagSearchResults.length > 0}
+                onblur={() => setTimeout(() => showHashtagAutocomplete = false, 200)}
+                disabled={isEditing}
+                class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                placeholder="Search hashtags..."
+              />
+              {#if showHashtagAutocomplete && hashtagSearchResults.length > 0}
+                <div class="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {#each hashtagSearchResults as tag}
+                    <button
+                      type="button"
+                      onclick={() => {
+                        if (!formData.hashtags.includes(tag)) {
+                          formData.hashtags = [...formData.hashtags, tag];
+                        }
+                        hashtagSearchQuery = "";
+                        showHashtagAutocomplete = false;
+                      }}
+                      class="w-full text-left px-3 py-2 hover:bg-gray-700 text-sm flex items-center gap-2"
+                    >
+                      <Hash class="w-3 h-3 text-gray-400" />
+                      {tag}
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
           </div>
           {#if validationErrors.hashtags}
             <p
@@ -816,21 +1120,69 @@
         <div>
           <label for="earliest-commit" class="block text-sm font-medium text-gray-300 mb-2">
             <GitCommit class="w-4 h-4 inline mr-1" />
-            Earliest Unique Commit
+            Earliest Unique Commit {loadingCommits ? "(loading...)" : ""}
           </label>
-          <input
-            id="earliest-commit"
-            type="text"
-            bind:value={formData.earliestUniqueCommit}
-            disabled={isEditing}
-            class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed font-mono text-sm"
-            class:border-red-500={validationErrors.earliestUniqueCommit}
-            placeholder="40-character commit hash (optional)"
-            aria-describedby={validationErrors.earliestUniqueCommit
-              ? "earliest-commit-error"
-              : undefined}
-            aria-invalid={validationErrors.earliestUniqueCommit ? "true" : "false"}
-          />
+          <div class="relative">
+            <input
+              id="earliest-commit"
+              type="text"
+              bind:value={commitSearchQuery}
+              onfocus={() => showCommitDropdown = availableCommits.length > 0}
+              onblur={() => setTimeout(() => showCommitDropdown = false, 200)}
+              disabled={isEditing || loadingCommits}
+              class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed font-mono text-sm"
+              class:border-red-500={validationErrors.earliestUniqueCommit}
+              placeholder={formData.earliestUniqueCommit || "Search commits or paste commit hash..."}
+              aria-describedby={validationErrors.earliestUniqueCommit
+                ? "earliest-commit-error"
+                : undefined}
+              aria-invalid={validationErrors.earliestUniqueCommit ? "true" : "false"}
+            />
+            {#if showCommitDropdown && filteredCommits.length > 0}
+              <div class="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-96 overflow-y-auto">
+                {#each filteredCommits as commit}
+                  <button
+                    type="button"
+                    onclick={() => {
+                      formData.earliestUniqueCommit = commit.oid;
+                      commitSearchQuery = "";
+                      showCommitDropdown = false;
+                    }}
+                    class="w-full text-left px-3 py-2 hover:bg-gray-700 border-b border-gray-700 last:border-b-0"
+                  >
+                    <div class="flex items-start gap-2">
+                      <GitCommit class="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                      <div class="flex-1 min-w-0">
+                        <div class="text-xs font-mono text-blue-400">{commit.oid?.slice(0, 7) || 'unknown'}</div>
+                        <div class="text-sm text-white truncate">{commit.message?.split('\n')[0] || commit.commit?.message?.split('\n')[0] || 'No message'}</div>
+                        <div class="text-xs text-gray-400 mt-0.5">
+                          {commit.author || commit.commit?.author?.name || 'Unknown'} · {new Date((commit.timestamp || commit.commit?.author?.timestamp || 0) * 1000).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+          {#if formData.earliestUniqueCommit}
+            <div class="mt-2 p-2 bg-gray-800/50 rounded text-xs font-mono text-gray-300 flex items-center justify-between">
+              <span class="truncate">{formData.earliestUniqueCommit}</span>
+              <button
+                type="button"
+                onclick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  formData.earliestUniqueCommit = "";
+                  console.log('[EditRepoPanel] Cleared earliest commit');
+                }}
+                class="ml-2 text-red-400 hover:text-red-300 flex-shrink-0"
+                aria-label="Clear commit"
+              >
+                <X class="w-4 h-4" />
+              </button>
+            </div>
+          {/if}
           {#if validationErrors.earliestUniqueCommit}
             <p
               id="earliest-commit-error"

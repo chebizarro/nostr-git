@@ -83,6 +83,10 @@ export { default as EventActions } from "./EventActions.svelte";
 export { default as ReactionSummary } from "./ReactionSummary.svelte";
 export { default as EventRenderer } from "./events/EventRenderer.svelte";
 
+// User profile components
+export { default as UserAvatar } from "./UserAvatar.svelte";
+export { default as UserProfile } from "./UserProfile.svelte";
+
 // Stores
 export { toast } from "../stores/toast";
 export { context } from "../stores/context";
