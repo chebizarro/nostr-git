@@ -85,25 +85,27 @@
   });
 </script>
 
-<!-- Backdrop -->
+<!-- Modal -->
 {#if isOpen}
+  <!-- Backdrop -->
   <div
-    class="absolute inset-0 bg-black/20 z-40"
+    class="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4"
     onclick={closePanel}
     role="button"
     tabindex="0"
     onkeydown={(e) => e.key === "Escape" && closePanel()}
-  ></div>
-{/if}
-
-<!-- Slide-in Panel -->
-<div
-  class="absolute top-0 right-0 h-full w-80 bg-background border-l shadow-lg transform transition-transform duration-300 ease-in-out z-50 {isOpen
-    ? 'translate-x-0'
-    : 'translate-x-full'}"
-  style="border-color: hsl(var(--border));"
->
-  <div class="flex flex-col h-full">
+  >
+    <!-- Modal Content -->
+    <div
+      class="bg-background border rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col z-50"
+      style="border-color: hsl(var(--border));"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => e.key === 'Escape' && closePanel()}
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+    >
+      <div class="flex flex-col h-full">
     <!-- Header -->
     <div
       class="flex items-center justify-between p-4 border-b"
@@ -192,5 +194,7 @@
         </div>
       {/if}
     </div>
+      </div>
+    </div>
   </div>
-</div>
+{/if}

@@ -61,6 +61,7 @@
   let isDraggingSelect = $state(false);
 
   let hasLoadedOnce = false;
+  let fileViewElement: HTMLElement | null = $state(null);
   
   $effect(() => {
     if (isExpanded && type === "file") {
@@ -70,6 +71,11 @@
         selectedStart = null;
         selectedEnd = null;
         hasLoadedOnce = true;
+        
+        // Scroll to the top of this file view
+        if (fileViewElement) {
+          fileViewElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
       }
       
       if (!content) {
@@ -666,7 +672,7 @@
   }
 </script>
 
-<div class="border" style="border-color: hsl(var(--border)); rounded-lg mb-2">
+<div class="border" style="border-color: hsl(var(--border)); rounded-lg mb-2" bind:this={fileViewElement}>
   <div
     role="button"
     tabindex="0"
@@ -754,7 +760,7 @@
                 </span>
               </div>
             </div>
-            <div class="relative" bind:this={editorHost} role="group" data-permalink-menu>
+            <div class="relative bg-background text-foreground rounded border mt-2" style="border-color: hsl(var(--border));" bind:this={editorHost} role="group" data-permalink-menu>
               <CodeMirror bind:value={content} extensions={cmExtensions.length ? cmExtensions : [lineNumbers()]} />
               {#if showGutterMenu}
                 <div class="permalink-menu-popup absolute z-20 w-44 rounded border bg-popover text-popover-foreground shadow-md"
@@ -784,3 +790,29 @@
     metadata={metadata}
   />
 </div>
+
+<style>
+  /* Ensure CodeMirror has proper contrast */
+  :global(.cm-editor) {
+    background-color: hsl(var(--background)) !important;
+    color: hsl(var(--foreground)) !important;
+  }
+  
+  :global(.cm-gutters) {
+    background-color: hsl(var(--muted)) !important;
+    color: hsl(var(--muted-foreground)) !important;
+    border-right: 1px solid hsl(var(--border)) !important;
+  }
+  
+  :global(.cm-activeLineGutter) {
+    background-color: hsl(var(--accent)) !important;
+  }
+  
+  :global(.cm-line) {
+    color: hsl(var(--foreground)) !important;
+  }
+  
+  :global(.cm-content) {
+    caret-color: hsl(var(--foreground)) !important;
+  }
+</style>
