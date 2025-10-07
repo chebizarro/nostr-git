@@ -9,12 +9,18 @@
   import GitCommentComponent from "./GitCommentComponent.svelte";
   import GitStatusComponent from "./GitStatusComponent.svelte";
   import UnknownEventComponent from "./UnknownEventComponent.svelte";
+  
+  // New unified feed components
+  import GitStatusFeed from "../feed/GitStatusFeed.svelte";
+  import GitCommentFeed from "../feed/GitCommentFeed.svelte";
 
   interface Props {
     event: NostrEvent;
+    useFeedStyle?: boolean; // Toggle between old and new style
+    compact?: boolean; // Skip FeedItem wrapper (for when already in a container)
   }
 
-  let { event }: Props = $props();
+  let { event, useFeedStyle = true, compact = false }: Props = $props();
 
   let componentType = $state<string>("unknown");
   let isKnownEvent = $state(false);
@@ -74,22 +80,42 @@
 </script>
 
 <!-- Route to appropriate component based on event kind -->
-{#if componentType === "git-repo"}
-  <GitRepoComponent event={event} />
-{:else if componentType === "git-repo-state"}
-  <GitRepoStateComponent event={event} />
-{:else if componentType === "git-issue"}
-  <GitIssueComponent event={event} />
-{:else if componentType === "git-patch"}
-  <GitPatchComponent event={event} />
-{:else if componentType === "git-comment"}
-  <GitCommentComponent event={event} />
-{:else if componentType === "git-status"}
-  <GitStatusComponent event={event} />
-{:else if isKnownEvent}
-  <!-- For other known events that don't have dedicated components yet -->
-  <UnknownEventComponent event={event} />
+{#if useFeedStyle}
+  <!-- New unified feed style components -->
+  {#if componentType === "git-issue"}
+    <GitIssueComponent event={event} />
+  {:else if componentType === "git-patch"}
+    <GitPatchComponent event={event} />
+  {:else if componentType === "git-comment"}
+    <GitCommentFeed event={event} />
+  {:else if componentType === "git-status"}
+    <GitStatusFeed event={event} />
+  {:else if componentType === "git-repo"}
+    <GitRepoComponent event={event} />
+  {:else if componentType === "git-repo-state"}
+    <GitRepoStateComponent event={event} />
+  {:else if isKnownEvent}
+    <UnknownEventComponent event={event} />
+  {:else}
+    <UnknownEventComponent event={event} />
+  {/if}
 {:else}
-  <!-- Fallback for truly unknown events -->
-  <UnknownEventComponent event={event} />
+  <!-- Legacy components -->
+  {#if componentType === "git-repo"}
+    <GitRepoComponent event={event} />
+  {:else if componentType === "git-repo-state"}
+    <GitRepoStateComponent event={event} />
+  {:else if componentType === "git-issue"}
+    <GitIssueComponent event={event} />
+  {:else if componentType === "git-patch"}
+    <GitPatchComponent event={event} />
+  {:else if componentType === "git-comment"}
+    <GitCommentComponent event={event} />
+  {:else if componentType === "git-status"}
+    <GitStatusComponent event={event} />
+  {:else if isKnownEvent}
+    <UnknownEventComponent event={event} />
+  {:else}
+    <UnknownEventComponent event={event} />
+  {/if}
 {/if}
