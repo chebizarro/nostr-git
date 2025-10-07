@@ -25,7 +25,6 @@
     isActive ? "bg-background text-foreground" : "text-muted-foreground"
   )}
   data-state={isActive ? "active" : undefined}
-  data-sveltekit-noscroll
   aria-current={isActive ? "page" : undefined}
   tabindex="0"
 >
