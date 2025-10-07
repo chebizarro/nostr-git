@@ -115,8 +115,10 @@
   $effect(() => {
     const handler = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
+      // Close both menus if clicking outside
       if (!target.closest?.('[data-permalink-menu]')) {
         showPermalinkMenu = false;
+        showGutterMenu = false;
       }
     };
     window.addEventListener('click', handler);
@@ -157,17 +159,56 @@
       showGutterMenu = true;
     };
 
+    // Get line numbers from browser's text selection
+    const getLinesFromSelection = (): { start: number; end: number } | null => {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return null;
+      const range = sel.getRangeAt(0);
+      if (range.collapsed) return null;
+      
+      // startContainer/endContainer can be text nodes, so we need to get their parent element
+      const getLineElement = (node: Node): HTMLElement | null => {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          return (node as HTMLElement).closest('.cm-line');
+        } else if (node.parentElement) {
+          return node.parentElement.closest('.cm-line');
+        }
+        return null;
+      };
+      
+      const startLine = getLineElement(range.startContainer);
+      const endLine = getLineElement(range.endContainer);
+      
+      if (!startLine || !endLine) return null;
+      
+      // Get all lines in the editor
+      const allLines = Array.from(editorHost!.querySelectorAll('.cm-line')) as HTMLElement[];
+      const startIdx = allLines.indexOf(startLine);
+      const endIdx = allLines.indexOf(endLine);
+      
+      if (startIdx === -1 || endIdx === -1) return null;
+      
+      // Convert to 1-based line numbers
+      return {
+        start: Math.min(startIdx, endIdx) + 1,
+        end: Math.max(startIdx, endIdx) + 1
+      };
+    };
+
     const handleMouseDown = (e: MouseEvent) => {
       const el = e.target as HTMLElement;
       const gutterEl = el?.closest?.('.cm-gutterElement') as HTMLElement | null;
-      if (!gutterEl) return;
-      const n = getLineFromGutter(gutterEl);
-      if (n == null) return;
-      isDraggingSelect = true;
-      selectedStart = n;
-      selectedEnd = null;
-      showGutterMenu = false;
-      e.preventDefault();
+      // Allow starting selection from gutter or content
+      if (!gutterEl && !el.closest?.('.cm-content')) return;
+      const n = gutterEl ? getLineFromGutter(gutterEl) : null;
+      if (n == null && gutterEl) return; // Gutter click but no line number
+      if (n != null) {
+        isDraggingSelect = true;
+        selectedStart = n;
+        selectedEnd = null;
+        showGutterMenu = false;
+        if (gutterEl) e.preventDefault();
+      }
     };
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDraggingSelect) return;
@@ -177,26 +218,48 @@
       if (n != null) {
         selectedEnd = n;
       }
+      // Update hash during drag so user sees the range
+      if (selectedStart && selectedEnd) {
+        syncHashFromSelection();
+      }
     };
     const handleMouseUp = (e: MouseEvent) => {
-      if (!isDraggingSelect) return;
-      isDraggingSelect = false;
-      syncHashFromSelection();
-      const rect = editorHost!.getBoundingClientRect();
-      gutterMenuX = Math.max(8, e.clientX - rect.left + editorHost!.scrollLeft);
-      gutterMenuY = Math.max(8, e.clientY - rect.top + editorHost!.scrollTop);
-      showPermalinkMenu = false;
-      showGutterMenu = true;
+      if (isDraggingSelect) {
+        isDraggingSelect = false;
+        syncHashFromSelection();
+        // Don't open menu on mouseup - wait for contextmenu
+      }
+    };
+    
+    const handleContentContextMenu = (e: MouseEvent) => {
+      // Check if this is a right-click on selected text in content
+      const el = e.target as HTMLElement;
+      if (!el.closest?.('.cm-content')) return;
+      
+      const lines = getLinesFromSelection();
+      if (lines && lines.start !== lines.end) {
+        e.preventDefault();
+        selectedStart = lines.start;
+        selectedEnd = lines.end;
+        syncHashFromSelection();
+        const rect = editorHost!.getBoundingClientRect();
+        gutterMenuX = Math.max(8, e.clientX - rect.left + editorHost!.scrollLeft);
+        gutterMenuY = Math.max(8, e.clientY - rect.top + editorHost!.scrollTop);
+        showPermalinkMenu = false;
+        showGutterMenu = true;
+      }
     };
 
     editorHost.addEventListener('click', handleClickOrContext, { capture: true } as any);
     editorHost.addEventListener('contextmenu', handleClickOrContext, { capture: true } as any);
+    editorHost.addEventListener('contextmenu', handleContentContextMenu, { capture: true } as any);
     editorHost.addEventListener('mousedown', handleMouseDown, { capture: true } as any);
     window.addEventListener('mousemove', handleMouseMove, { capture: true } as any);
     window.addEventListener('mouseup', handleMouseUp, { capture: true } as any);
     return () => {
       editorHost?.removeEventListener('click', handleClickOrContext, { capture: true } as any);
       editorHost?.removeEventListener('contextmenu', handleClickOrContext, { capture: true } as any);
+      editorHost?.removeEventListener('contextmenu', handleContentContextMenu, { capture: true } as any);
       editorHost?.removeEventListener('mousedown', handleMouseDown, { capture: true } as any);
       window.removeEventListener('mousemove', handleMouseMove, { capture: true } as any);
       window.removeEventListener('mouseup', handleMouseUp, { capture: true } as any);
@@ -257,11 +320,19 @@
       ? `#L${selectedStart}${selectedEnd ? `-L${selectedEnd}` : ""}`
       : "";
     const shareUrl = `${location.origin}/git/repo/${path}${hash}`;
-    navigator.clipboard.writeText(shareUrl);
-    toast.push({
-      title: "Link copied",
-      description: "Permalink copied to clipboard.",
-    });
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(shareUrl);
+      toast.push({
+        title: "Link copied",
+        description: "Permalink copied to clipboard.",
+      });
+    } else {
+      toast.push({
+        title: "Error",
+        description: "Clipboard not available",
+        variant: "destructive",
+      });
+    }
   }
 
   function showMetadata(event?: MouseEvent) {
@@ -575,7 +646,7 @@
             <div class="relative" bind:this={editorHost} role="group" data-permalink-menu>
               <CodeMirror bind:value={content} extensions={cmExtensions.length ? cmExtensions : [lineNumbers()]} />
               {#if showGutterMenu}
-                <div class="absolute z-20 w-44 rounded border bg-popover text-popover-foreground shadow-md"
+                <div class="absolute z-20 w-44 rounded border bg-popover text-popover-foreground shadow-md" data-permalink-menu
                      style="left: {gutterMenuX}px; top: {gutterMenuY}px; border-color: hsl(var(--border));">
                   <button class="w-full text-left px-3 py-2 hover:bg-secondary/50" onclick={copyLinkToLines}>
                     Copy link to {selectedStart ? (selectedEnd ? `lines ${selectedStart}-${selectedEnd}` : `line ${selectedStart}`) : 'file'}
