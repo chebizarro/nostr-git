@@ -7,6 +7,7 @@
     Loader2,
     ChevronDown,
     ExternalLink,
+    GitCommit,
   } from "@lucide/svelte";
   import { Repo } from "./Repo.svelte";
   import { useForkRepo } from "../../hooks/useForkRepo.svelte";
@@ -78,6 +79,13 @@
   // GRASP-specific state
   let relayUrl = $state("");
   let relayUrlError = $state<string | undefined>();
+  
+  // Commit selection state
+  let earliestUniqueCommit = $state("");
+  let availableCommits: Array<any> = [];
+  let loadingCommits = $state(false);
+  let commitSearchQuery = $state("");
+  let showCommitDropdown = $state(false);
 
   // Local reactive list of GRASP servers. Seed from prop, keep updated from profile and prop changes.
   let graspServerUrlsLocal = $state<string[]>([...(graspServerUrls || [])]);
@@ -98,6 +106,45 @@
   const knownGraspServers = $derived.by(() =>
     (graspServerUrlsLocal || []).map((u) => u.trim()).filter(Boolean)
   );
+  
+  // Load commits on mount
+  $effect(() => {
+    if (repo) {
+      loadingCommits = true;
+      const existingCommits = repo.commits;
+      if (existingCommits && existingCommits.length > 0) {
+        availableCommits = existingCommits;
+        loadingCommits = false;
+      } else {
+        repo.getCommitHistory({ depth: 100 })
+          .then((commits) => {
+            availableCommits = commits || repo.commits || [];
+            loadingCommits = false;
+          })
+          .catch((error) => {
+            console.error("Failed to load commit history:", error);
+            availableCommits = repo.commits || [];
+            loadingCommits = false;
+          });
+      }
+    }
+  });
+  
+  // Filter commits based on search query
+  let filteredCommits = $derived.by(() => {
+    if (!commitSearchQuery) return availableCommits.slice(0, 20);
+    const query = commitSearchQuery.toLowerCase();
+    return availableCommits
+      .filter(c => {
+        const oid = c.oid || '';
+        const message = c.message || c.commit?.message || '';
+        const author = c.author || c.commit?.author?.name || '';
+        return oid.toLowerCase().includes(query) ||
+               message.toLowerCase().includes(query) ||
+               author.toLowerCase().includes(query);
+      })
+      .slice(0, 20);
+  });
 
   // Get available git services from tokens
   let tokenList = $state<Token[]>([]);
@@ -456,6 +503,7 @@
                     ? "grasp"
                     : "github",
         relayUrl: relayParam,
+        earliestUniqueCommit: earliestUniqueCommit || undefined,
       });
 
       if (result) {
@@ -698,6 +746,73 @@
                   <span>{validationError}</span>
                 </p>
               {/if}
+            </div>
+
+            <!-- Earliest Unique Commit -->
+            <div>
+              <label for="earliest-commit" class="block text-sm font-medium text-gray-300 mb-2">
+                <GitCommit class="w-4 h-4 inline mr-1" />
+                Earliest Unique Commit {loadingCommits ? "(loading...)" : ""}
+              </label>
+              <div class="relative">
+                <input
+                  id="earliest-commit"
+                  type="text"
+                  bind:value={commitSearchQuery}
+                  onfocus={() => showCommitDropdown = availableCommits.length > 0}
+                  onblur={() => setTimeout(() => showCommitDropdown = false, 200)}
+                  disabled={loadingCommits}
+                  autocomplete="off"
+                  class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed font-mono text-sm"
+                  placeholder={earliestUniqueCommit || "Search commits or paste commit hash..."}
+                />
+                {#if showCommitDropdown && filteredCommits.length > 0}
+                  <div class="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-96 overflow-y-auto">
+                    {#each filteredCommits as commit}
+                      <button
+                        type="button"
+                        onclick={() => {
+                          earliestUniqueCommit = commit.oid;
+                          commitSearchQuery = "";
+                          showCommitDropdown = false;
+                        }}
+                        class="w-full text-left px-3 py-2 hover:bg-gray-700 border-b border-gray-700 last:border-b-0"
+                      >
+                        <div class="flex items-start gap-2">
+                          <GitCommit class="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                          <div class="flex-1 min-w-0">
+                            <div class="text-xs font-mono text-blue-400">{commit.oid?.slice(0, 7) || 'unknown'}</div>
+                            <div class="text-sm text-white truncate">{commit.message?.split('\n')[0] || commit.commit?.message?.split('\n')[0] || 'No message'}</div>
+                            <div class="text-xs text-gray-400 mt-0.5">
+                              {commit.author || commit.commit?.author?.name || 'Unknown'} · {new Date((commit.timestamp || commit.commit?.author?.timestamp || 0) * 1000).toLocaleDateString()}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+              {#if earliestUniqueCommit}
+                <div class="mt-2 p-2 bg-gray-800/50 rounded text-xs font-mono text-gray-300 flex items-center justify-between">
+                  <span class="truncate">{earliestUniqueCommit}</span>
+                  <button
+                    type="button"
+                    onclick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      earliestUniqueCommit = "";
+                    }}
+                    class="ml-2 text-red-400 hover:text-red-300 flex-shrink-0"
+                    aria-label="Clear commit"
+                  >
+                    <X class="w-4 h-4" />
+                  </button>
+                </div>
+              {/if}
+              <p class="text-gray-400 text-xs mt-1">
+                The commit ID of the earliest unique commit to identify this fork among other forks
+              </p>
             </div>
 
             <!-- Existing Fork Status -->

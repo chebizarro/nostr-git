@@ -510,6 +510,12 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
 
       // Step 3: Push to remote (if remote exists)
       if (remoteRepo) {
+        // For GRASP, wait for the relay to process the announcement event
+        if (config.provider === "grasp") {
+          updateProgress("push", "Waiting for GRASP server to process announcement...", "running");
+          await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+        }
+        
         updateProgress("push", "Pushing to remote repository...", "running");
         console.log("🚀 About to push with config:", {
           name: config.name,

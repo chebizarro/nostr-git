@@ -806,6 +806,7 @@
                   onfocus={() => showMaintainerAutocomplete = maintainerSearchResults.length > 0}
                   onblur={() => setTimeout(() => showMaintainerAutocomplete = false, 200)}
                   disabled={isEditing}
+                  autocomplete="off"
                   class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                   placeholder="Search by name, nip-05, or npub..."
                 />
@@ -892,6 +893,7 @@
                   onfocus={() => showRelayAutocomplete = relaySearchResults.length > 0}
                   onblur={() => setTimeout(() => showRelayAutocomplete = false, 200)}
                   disabled={isEditing}
+                  autocomplete="off"
                   class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                   placeholder="Search for relays..."
                 />
@@ -1079,6 +1081,7 @@
                 onfocus={() => showHashtagAutocomplete = hashtagSearchResults.length > 0}
                 onblur={() => setTimeout(() => showHashtagAutocomplete = false, 200)}
                 disabled={isEditing}
+                autocomplete="off"
                 class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                 placeholder="Search hashtags..."
               />
@@ -1130,6 +1133,7 @@
               onfocus={() => showCommitDropdown = availableCommits.length > 0}
               onblur={() => setTimeout(() => showCommitDropdown = false, 200)}
               disabled={isEditing || loadingCommits}
+              autocomplete="off"
               class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed font-mono text-sm"
               class:border-red-500={validationErrors.earliestUniqueCommit}
               placeholder={formData.earliestUniqueCommit || "Search commits or paste commit hash..."}

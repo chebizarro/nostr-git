@@ -13,6 +13,7 @@ export interface ForkConfig {
   visibility?: "public" | "private"; // Optional since NIP-34 doesn't support private/public repos yet
   provider?: "github" | "gitlab" | "gitea" | "bitbucket" | "grasp";
   relayUrl?: string; // Required for GRASP
+  earliestUniqueCommit?: string; // Optional commit hash to identify the fork
 }
 
 export interface ForkProgress {
@@ -256,6 +257,7 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
         web: [workerResult.forkUrl.replace(/\.git$/, "")],
         maintainers: [currentUser],
         ...(relays ? { relays } : {}),
+        ...(config.earliestUniqueCommit ? { earliestUniqueCommit: config.earliestUniqueCommit } : {}),
       });
 
       // Create Repository State event (kind 30618)

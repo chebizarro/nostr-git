@@ -66,6 +66,12 @@
     { value: "python", label: "Python" },
     { value: "web", label: "Web Development" },
     { value: "svelte", label: "Svelte" },
+    { value: "java", label: "Java" },
+    { value: "android", label: "Android" },
+    { value: "ios", label: "iOS (Swift/Objective-C)" },
+    { value: "flutter", label: "Flutter/Dart" },
+    { value: "cpp", label: "C/C++" },
+    { value: "go", label: "Go" },
   ];
 
   const licenseOptions = [

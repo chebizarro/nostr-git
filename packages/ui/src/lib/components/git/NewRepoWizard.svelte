@@ -23,7 +23,10 @@
       event: Omit<NostrEvent, "id" | "sig" | "pubkey" | "created_at">
     ) => Promise<void>;
     graspServerUrls?: string[]; // optional: preloaded grasp server options
-    defaultRelays?: string[]; // optional: default relays for Advanced Settings
+    defaultRelays?: string[];
+    getProfile?: (pubkey: string) => Promise<{ name?: string; picture?: string; nip05?: string; display_name?: string } | null>;
+    searchProfiles?: (query: string) => Promise<Array<{ pubkey: string; name?: string; picture?: string; nip05?: string; display_name?: string }>>;
+    searchRelays?: (query: string) => Promise<string[]>;
   }
 
   const {
@@ -32,6 +35,9 @@
     onPublishEvent,
     graspServerUrls = [],
     defaultRelays = [],
+    getProfile,
+    searchProfiles,
+    searchRelays,
   }: Props = $props();
 
   console.log("graspServerUrls", graspServerUrls);
@@ -650,6 +656,9 @@
         onRelaysChange={handleRelaysChange}
         onTagsChange={handleTagsChange}
         onWebUrlsChange={handleWebUrlsChange}
+        getProfile={getProfile}
+        searchProfiles={searchProfiles}
+        searchRelays={searchRelays}
         onCloneUrlsChange={handleCloneUrlsChange}
       />
     {:else if currentStep === 4}

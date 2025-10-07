@@ -1,4 +1,8 @@
 <script lang="ts">
+  import { commonHashtags } from "../../stores/hashtags";
+  import UserProfile from "../UserProfile.svelte";
+  import { Plus, Trash2, X, Hash, Globe, Users } from "@lucide/svelte";
+  
   interface Props {
     gitignoreTemplate: string;
     licenseTemplate: string;
@@ -20,6 +24,9 @@
     onTagsChange: (tags: string[]) => void;
     onWebUrlsChange: (urls: string[]) => void;
     onCloneUrlsChange: (urls: string[]) => void;
+    getProfile?: (pubkey: string) => Promise<{ name?: string; picture?: string; nip05?: string; display_name?: string } | null>;
+    searchProfiles?: (query: string) => Promise<Array<{ pubkey: string; name?: string; picture?: string; nip05?: string; display_name?: string }>>;
+    searchRelays?: (query: string) => Promise<string[]>;
   }
 
   const {
@@ -43,7 +50,26 @@
     onTagsChange,
     onWebUrlsChange,
     onCloneUrlsChange,
+    getProfile,
+    searchProfiles,
+    searchRelays,
   }: Props = $props();
+  
+  // Autocomplete state for maintainers
+  let maintainerSearchQuery = $state("");
+  let maintainerSearchResults = $state<Array<{ pubkey: string; name?: string; picture?: string; nip05?: string; display_name?: string }>>([]);
+  let showMaintainerAutocomplete = $state(false);
+  let maintainerProfiles = $state(new Map<string, any>());
+  
+  // Autocomplete state for relays
+  let relaySearchQuery = $state("");
+  let relaySearchResults = $state<string[]>([]);
+  let showRelayAutocomplete = $state(false);
+  
+  // Autocomplete state for hashtags
+  let hashtagSearchQuery = $state("");
+  let hashtagSearchResults = $state<string[]>([]);
+  let showHashtagAutocomplete = $state(false);
 
   const gitignoreOptions = [
     { value: "", label: "None" },
@@ -58,6 +84,93 @@
     { value: "mit", label: "MIT License" },
     { value: "apache-2.0", label: "Apache License 2.0" },
   ];
+  
+  // Load maintainer profiles
+  $effect(() => {
+    if (getProfile && maintainers) {
+      maintainers.forEach(async (maintainer) => {
+        if (maintainer && !maintainerProfiles.has(maintainer)) {
+          try {
+            const profile = await getProfile(maintainer);
+            if (profile) {
+              maintainerProfiles.set(maintainer, profile);
+              maintainerProfiles = new Map(maintainerProfiles);
+            }
+          } catch (e) {
+            console.error('Failed to load profile for', maintainer, e);
+          }
+        }
+      });
+    }
+  });
+  
+  // Handle maintainer search with debounce
+  let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+  $effect(() => {
+    const query = maintainerSearchQuery;
+    if (searchTimeout) clearTimeout(searchTimeout);
+    
+    if (query && searchProfiles) {
+      searchTimeout = setTimeout(async () => {
+        try {
+          const results = await searchProfiles(query);
+          maintainerSearchResults = results;
+          showMaintainerAutocomplete = results.length > 0;
+        } catch (e) {
+          console.error('Failed to search profiles', e);
+          maintainerSearchResults = [];
+        }
+      }, 300);
+    } else {
+      maintainerSearchResults = [];
+      showMaintainerAutocomplete = false;
+    }
+    
+    return () => {
+      if (searchTimeout) clearTimeout(searchTimeout);
+    };
+  });
+  
+  // Handle relay search with debounce
+  let relaySearchTimeout: ReturnType<typeof setTimeout> | null = null;
+  $effect(() => {
+    const query = relaySearchQuery;
+    if (relaySearchTimeout) clearTimeout(relaySearchTimeout);
+    
+    if (query && searchRelays) {
+      relaySearchTimeout = setTimeout(async () => {
+        try {
+          const results = await searchRelays(query);
+          relaySearchResults = results;
+          showRelayAutocomplete = results.length > 0;
+        } catch (e) {
+          console.error('Failed to search relays', e);
+          relaySearchResults = [];
+        }
+      }, 300);
+    } else {
+      relaySearchResults = [];
+      showRelayAutocomplete = false;
+    }
+    
+    return () => {
+      if (relaySearchTimeout) clearTimeout(relaySearchTimeout);
+    };
+  });
+  
+  // Handle hashtag search (client-side filtering)
+  $effect(() => {
+    const query = hashtagSearchQuery;
+    
+    if (query) {
+      const results = commonHashtags.search(query, 10);
+      hashtagSearchResults = results;
+      showHashtagAutocomplete = results.length > 0;
+    } else {
+      hashtagSearchResults = [];
+      showHashtagAutocomplete = false;
+    }
+  });
 
   function handleGitignoreChange(event: Event) {
     const target = event.target as HTMLSelectElement;
@@ -222,7 +335,10 @@
 
         <!-- Tags -->
         <fieldset>
-          <legend class="block text-sm font-medium text-gray-300 mb-2"> Tags/Topics </legend>
+          <legend class="block text-sm font-medium text-gray-300 mb-2">
+            <Hash class="w-4 h-4 inline mr-1" />
+            Tags/Topics
+          </legend>
           <div class="space-y-2">
             {#each tags as tag, index}
               <div class="flex items-center space-x-2">
@@ -240,17 +356,43 @@
                   aria-label="Remove tag"
                   onclick={() => removeItem(tags, index, onTagsChange)}
                 >
-                  Remove
+                  <Trash2 class="w-4 h-4" />
                 </button>
               </div>
             {/each}
-            <button
-              type="button"
-              class="px-3 py-2 text-blue-400 hover:text-blue-300"
-              onclick={() => addItem(tags, onTagsChange)}
-            >
-              Add tag
-            </button>
+            
+            <!-- Autocomplete input for adding hashtags -->
+            <div class="relative">
+              <input
+                type="text"
+                bind:value={hashtagSearchQuery}
+                onfocus={() => showHashtagAutocomplete = hashtagSearchResults.length > 0}
+                onblur={() => setTimeout(() => showHashtagAutocomplete = false, 200)}
+                autocomplete="off"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
+                placeholder="Search hashtags..."
+              />
+              {#if showHashtagAutocomplete && hashtagSearchResults.length > 0}
+                <div class="fixed z-50 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto" style="width: {document.activeElement?.getBoundingClientRect().width}px; left: {document.activeElement?.getBoundingClientRect().left}px; top: {(document.activeElement?.getBoundingClientRect().bottom || 0) + 4}px;">
+                  {#each hashtagSearchResults as tag}
+                    <button
+                      type="button"
+                      onclick={() => {
+                        if (!tags.includes(tag)) {
+                          onTagsChange([...tags, tag]);
+                        }
+                        hashtagSearchQuery = "";
+                        showHashtagAutocomplete = false;
+                      }}
+                      class="w-full text-left px-3 py-2 hover:bg-gray-700 text-sm flex items-center gap-2"
+                    >
+                      <Hash class="w-3 h-3 text-gray-400" />
+                      {tag}
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
           </div>
           <p class="mt-1 text-sm text-gray-400">Add tags or topics for this repository</p>
         </fieldset>
@@ -258,48 +400,94 @@
         <!-- Maintainers -->
         <fieldset>
           <legend class="block text-sm font-medium text-gray-300 mb-2">
+            <Users class="w-4 h-4 inline mr-1" />
             Additional Maintainers
           </legend>
           <div class="space-y-2">
             {#each maintainers as m, index}
               <div class="flex items-center space-x-2">
-                <input
-                  type="text"
-                  value={maintainers[index]}
-                  oninput={(e) =>
-                    updateItem(
-                      maintainers,
-                      index,
-                      (e.target as HTMLInputElement).value,
-                      onMaintainersChange
-                    )}
-                  placeholder="npub1..."
-                  class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
-                />
+                {#if getProfile && maintainerProfiles.has(m)}
+                  <div class="flex-1 flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700">
+                    <UserProfile profile={maintainerProfiles.get(m)} pubkey={m} />
+                  </div>
+                {:else}
+                  <input
+                    type="text"
+                    value={maintainers[index]}
+                    oninput={(e) =>
+                      updateItem(
+                        maintainers,
+                        index,
+                        (e.target as HTMLInputElement).value,
+                        onMaintainersChange
+                      )}
+                    placeholder="npub1..."
+                    class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
+                  />
+                {/if}
                 <button
                   type="button"
                   class="p-2 text-red-400 hover:text-red-300"
                   aria-label="Remove maintainer"
                   onclick={() => removeItem(maintainers, index, onMaintainersChange)}
                 >
-                  Remove
+                  <Trash2 class="w-4 h-4" />
                 </button>
               </div>
             {/each}
-            <button
-              type="button"
-              class="px-3 py-2 text-blue-400 hover:text-blue-300"
-              onclick={() => addItem(maintainers, onMaintainersChange)}
-            >
-              Add maintainer
-            </button>
+            
+            <!-- Autocomplete input for adding maintainers -->
+            {#if searchProfiles}
+              <div class="relative">
+                <input
+                  type="text"
+                  bind:value={maintainerSearchQuery}
+                  onfocus={() => showMaintainerAutocomplete = maintainerSearchResults.length > 0}
+                  onblur={() => setTimeout(() => showMaintainerAutocomplete = false, 200)}
+                  autocomplete="off"
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
+                  placeholder="Search by name, nip-05, or npub..."
+                />
+                {#if showMaintainerAutocomplete && maintainerSearchResults.length > 0}
+                  <div class="fixed z-50 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto" style="width: {document.activeElement?.getBoundingClientRect().width}px; left: {document.activeElement?.getBoundingClientRect().left}px; top: {(document.activeElement?.getBoundingClientRect().bottom || 0) + 4}px;">
+                    {#each maintainerSearchResults as result}
+                      <button
+                        type="button"
+                        onclick={() => {
+                          if (!maintainers.includes(result.pubkey)) {
+                            onMaintainersChange([...maintainers, result.pubkey]);
+                          }
+                          maintainerSearchQuery = "";
+                          showMaintainerAutocomplete = false;
+                        }}
+                        class="w-full p-2 hover:bg-gray-700 text-left"
+                      >
+                        <UserProfile profile={result} pubkey={result.pubkey} />
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {:else}
+              <button
+                type="button"
+                class="px-3 py-2 text-blue-400 hover:text-blue-300"
+                onclick={() => addItem(maintainers, onMaintainersChange)}
+              >
+                <Plus class="w-4 h-4 inline mr-1" />
+                Add maintainer
+              </button>
+            {/if}
           </div>
           <p class="mt-1 text-sm text-gray-400">Maintainer public keys (npub or hex)</p>
         </fieldset>
 
         <!-- Relays -->
         <fieldset>
-          <legend class="block text-sm font-medium text-gray-300 mb-2"> Preferred Relays </legend>
+          <legend class="block text-sm font-medium text-gray-300 mb-2">
+            <Globe class="w-4 h-4 inline mr-1" />
+            Preferred Relays
+          </legend>
           <div class="space-y-2">
             {#each relays as r, index}
               <div class="flex items-center space-x-2">
@@ -317,17 +505,53 @@
                   aria-label="Remove relay"
                   onclick={() => removeItem(relays, index, onRelaysChange)}
                 >
-                  Remove
+                  <Trash2 class="w-4 h-4" />
                 </button>
               </div>
             {/each}
-            <button
-              type="button"
-              class="px-3 py-2 text-blue-400 hover:text-blue-300"
-              onclick={() => addItem(relays, onRelaysChange)}
-            >
-              Add relay
-            </button>
+            
+            <!-- Autocomplete input for adding relays -->
+            {#if searchRelays}
+              <div class="relative">
+                <input
+                  type="text"
+                  bind:value={relaySearchQuery}
+                  onfocus={() => showRelayAutocomplete = relaySearchResults.length > 0}
+                  onblur={() => setTimeout(() => showRelayAutocomplete = false, 200)}
+                  autocomplete="off"
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
+                  placeholder="Search for relays..."
+                />
+                {#if showRelayAutocomplete && relaySearchResults.length > 0}
+                  <div class="fixed z-50 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto" style="width: {document.activeElement?.getBoundingClientRect().width}px; left: {document.activeElement?.getBoundingClientRect().left}px; top: {(document.activeElement?.getBoundingClientRect().bottom || 0) + 4}px;">
+                    {#each relaySearchResults as relayUrl}
+                      <button
+                        type="button"
+                        onclick={() => {
+                          if (!relays.includes(relayUrl)) {
+                            onRelaysChange([...relays, relayUrl]);
+                          }
+                          relaySearchQuery = "";
+                          showRelayAutocomplete = false;
+                        }}
+                        class="w-full text-left px-3 py-2 hover:bg-gray-700 text-sm font-mono"
+                      >
+                        {relayUrl}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {:else}
+              <button
+                type="button"
+                class="px-3 py-2 text-blue-400 hover:text-blue-300"
+                onclick={() => addItem(relays, onRelaysChange)}
+              >
+                <Plus class="w-4 h-4 inline mr-1" />
+                Add relay
+              </button>
+            {/if}
           </div>
           <p class="mt-1 text-sm text-gray-400">Preferred relay URLs (wss://)</p>
         </fieldset>
