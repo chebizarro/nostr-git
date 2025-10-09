@@ -208,6 +208,7 @@
   // Watch for text selection changes in the editor
   $effect(() => {
     if (!editorHost) return;
+    const editor = editorHost; // Capture for closure
     
     const handleSelectionChange = () => {
       // Only process if the selection is within our editor
@@ -219,7 +220,7 @@
       const endNode = range.endContainer;
       
       // Check if selection is within our editor
-      if (!editorHost.contains(startNode) || !editorHost.contains(endNode)) return;
+      if (!editor.contains(startNode) || !editor.contains(endNode)) return;
       
       // Get the selected lines
       const lines = getLinesFromSelection();
@@ -434,12 +435,13 @@
       content = await getFileContent(path);
     }
 
-    const mimeType = fileTypeInfo?.mimeType || "text/plain";
+    // Use application/octet-stream for binary files to prevent extension changes
+    const mimeType = fileTypeInfo?.mimeType || "application/octet-stream";
     const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = name;
+    a.download = name; // Use the original filename with its extension
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -467,8 +469,20 @@
     }
   }
 
-  function showMetadata(event?: MouseEvent) {
+  async function showMetadata(event?: MouseEvent) {
     event?.stopPropagation();
+    
+    // Ensure fileTypeInfo is populated
+    if (!fileTypeInfo) {
+      // If content is already loaded, detect type from it
+      if (content) {
+        fileTypeInfo = detectFileType(name, content);
+      } else {
+        // Otherwise, detect from filename only
+        fileTypeInfo = detectFileType(name, "");
+      }
+    }
+    
     isMetadataPanelOpen = true;
   }
 
@@ -730,37 +744,29 @@
           <Spinner>Fetching content...</Spinner>
         </div>
       {:else if content}
-        {#if fileTypeInfo.category === "image"}
+        {#if fileTypeInfo?.category === "image"}
           <div class="p-4">
             <ImageViewer content={content} filename={name} mimeType={fileTypeInfo.mimeType} />
           </div>
-        {:else if fileTypeInfo.category === "pdf"}
+        {:else if fileTypeInfo?.category === "pdf"}
           <div class="p-4">
             <PDFViewer content={content} filename={name} />
           </div>
-        {:else if fileTypeInfo.category === "video"}
+        {:else if fileTypeInfo?.category === "video"}
           <div class="p-4">
             <VideoViewer content={content} filename={name} mimeType={fileTypeInfo.mimeType} />
           </div>
-        {:else if fileTypeInfo.category === "audio"}
+        {:else if fileTypeInfo?.category === "audio"}
           <div class="p-4">
             <AudioViewer content={content} filename={name} mimeType={fileTypeInfo.mimeType} />
           </div>
-        {:else if fileTypeInfo.category === "binary" || fileTypeInfo.category === "archive"}
+        {:else if fileTypeInfo?.category === "binary" || fileTypeInfo?.category === "archive"}
           <div class="p-4">
             <BinaryViewer content={content} filename={name} />
           </div>
         {:else}
           <div class="p-4 border-t" style="border-color: hsl(var(--border));">
-            <div class="mb-2 flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <span class="text-sm font-medium text-muted-foreground">Language:</span>
-                <span class="text-sm px-2 py-1 bg-secondary rounded text-secondary-foreground">
-                  {fileTypeInfo?.language || "text"}
-                </span>
-              </div>
-            </div>
-            <div class="relative bg-background text-foreground rounded border mt-2" style="border-color: hsl(var(--border));" bind:this={editorHost} role="group" data-permalink-menu>
+            <div class="relative bg-background text-foreground rounded border" style="border-color: hsl(var(--border));" bind:this={editorHost} role="group" data-permalink-menu>
               <CodeMirror bind:value={content} extensions={cmExtensions.length ? cmExtensions : [lineNumbers()]} />
               {#if showGutterMenu}
                 <div class="permalink-menu-popup absolute z-20 w-44 rounded border bg-popover text-popover-foreground shadow-md"

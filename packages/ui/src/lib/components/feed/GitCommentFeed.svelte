@@ -33,7 +33,7 @@
 </script>
 
 <FeedItem
-  author={author || { name: "Unknown", picture: "" }}
+  author={author || { name: "Unknown", picture: "", pubkey: "" }}
   createdAt={createdDate}
   eventId={event.id}
   onReply={onReply}

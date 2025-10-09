@@ -3,6 +3,7 @@
   import { useRegistry } from "../../useRegistry";
   const { Button } = useRegistry();
   import { formatFileSize, type FileTypeInfo } from "../../utils/fileTypeDetection";
+  import type { FileEntry } from "@nostr-git/core";
 
   let {
     isOpen = $bindable(),
@@ -12,9 +13,9 @@
     metadata,
   }: {
     isOpen: boolean;
-    file: any;
+    file: FileEntry;
     content?: string;
-    typeInfo?: FileTypeInfo;
+    typeInfo?: FileTypeInfo | null;
     metadata?: Record<string, string>;
   } = $props();
 
@@ -23,7 +24,7 @@
   }
 
   // Enhanced metadata with computed values
-  const enhancedMetadata = $derived(() => {
+  const enhancedMetadata = $derived.by(() => {
     const base = metadata || {};
     const enhanced: Record<string, string> = { ...base };
 
@@ -31,7 +32,7 @@
     if (file) {
       enhanced["Name"] = file.name || "Unknown";
       enhanced["Path"] = file.path || "";
-      enhanced["File Size"] = formatFileSize(file.size || 0);
+      enhanced["Type"] = file.type || "file";
     }
 
     if (content) {
@@ -61,7 +62,7 @@
   });
 
   // Group metadata by category
-  const groupedMetadata = $derived(() => {
+  const groupedMetadata = $derived.by(() => {
     const groups: Record<string, Record<string, string>> = {
       "File Information": {},
       "Content Analysis": {},
@@ -69,7 +70,7 @@
     };
 
     Object.entries(enhancedMetadata).forEach(([key, value]) => {
-      if (["Name", "Path", "File Size", "Category"].includes(key)) {
+      if (["Name", "Path", "Type", "Category", "Language"].includes(key)) {
         groups["File Information"][key] = value;
       } else if (["Lines", "Characters", "Words", "Est. Reading Time"].includes(key)) {
         groups["Content Analysis"][key] = value;
@@ -89,7 +90,7 @@
 {#if isOpen}
   <!-- Backdrop -->
   <div
-    class="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4"
+    class="fixed inset-0 bg-black/50 z-[9998] flex items-center justify-center p-4"
     onclick={closePanel}
     role="button"
     tabindex="0"
@@ -97,7 +98,7 @@
   >
     <!-- Modal Content -->
     <div
-      class="bg-background border rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col z-50"
+      class="bg-background border rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col z-[9999]"
       style="border-color: hsl(var(--border));"
       onclick={(e) => e.stopPropagation()}
       onkeydown={(e) => e.key === 'Escape' && closePanel()}

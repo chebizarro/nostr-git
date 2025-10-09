@@ -1,11 +1,10 @@
 <script lang="ts">
-  import { type NostrEvent } from "nostr-tools";
-  import { GitMerge, GitPullRequest, X, CheckCircle2, GitBranch, Clock, CircleDot } from "@lucide/svelte";
+  import { GitMerge, GitPullRequest, X, CheckCircle2, Clock, CircleDot } from "@lucide/svelte";
   import FeedItem from "./FeedItem.svelte";
-  import type { Profile } from "@nostr-git/shared-types";
+  import type { Profile, StatusEvent } from "@nostr-git/shared-types";
 
   interface Props {
-    event: NostrEvent;
+    event: StatusEvent;
     author?: Profile;
     onReply?: () => void;
     onReact?: () => void;
@@ -113,7 +112,7 @@
 </script>
 
 <FeedItem
-  author={author || { name: "Unknown", picture: "" }}
+  author={author || { name: "Unknown", picture: "", pubkey: "" }}
   createdAt={createdDate}
   eventId={event.id}
   showQuickActions={false}
