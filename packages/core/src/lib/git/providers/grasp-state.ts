@@ -7,7 +7,7 @@
 
 import { nip19 } from 'nostr-tools';
 import type { EventTemplate, NostrEvent } from 'nostr-tools';
-import { getTagValue, getTags } from '@nostr-git/shared-types';
+import { getTagValue, getTags, type NostrTag } from '@nostr-git/shared-types';
 
 export interface RepoState {
   address: string;    // e.g., "npub1abc...:myrepo"
@@ -59,16 +59,16 @@ export function parseRepoStateFromEvent(event: NostrEvent): RepoState | null {
     return null;
   }
 
-  const address = getTagValue(event, 'a');
+  const address = getTagValue(event as unknown as {tags: NostrTag[]}, 'a');
   if (!address) {
     return null;
   }
 
-  const head = getTagValue(event, 'HEAD') || 'refs/heads/main';
+  const head = getTagValue(event as unknown as {tags: NostrTag[]}, 'HEAD') || 'refs/heads/main';
   
   // Parse ref tags - ngit uses custom tag names for refs
   const refs: Record<string, string> = {};
-  const refTags = getTags(event, 'ref');
+  const refTags = getTags(event as unknown as {tags: NostrTag[]}, 'ref');
   
   for (const tag of refTags) {
     if (tag.length >= 3) {
@@ -92,7 +92,7 @@ export function parseRepoStateFromEvent(event: NostrEvent): RepoState | null {
 
   // Parse nostr-ref tags for nostr event IDs being tracked
   const nostrRefs: string[] = [];
-  const nostrRefTags = getTags(event, 'nostr-ref');
+  const nostrRefTags = getTags(event as unknown as {tags: NostrTag[]}, 'nostr-ref');
   for (const tag of nostrRefTags) {
     if (tag.length >= 2) {
       nostrRefs.push(tag[1]);

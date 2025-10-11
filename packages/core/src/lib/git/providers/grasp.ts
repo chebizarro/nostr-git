@@ -40,6 +40,7 @@ import {
 } from './grasp-state.js';
 import { createMemFs } from './grasp-fs.js';
 import * as git from 'isomorphic-git';
+// @ts-ignore - isomorphic-git/http/web has type issues
 import http from 'isomorphic-git/http/web';
 
 // Import or declare the requestEventSigning function
@@ -102,7 +103,7 @@ export class GraspApi implements GitServiceApi {
       // Mirrors ngit client.rs: uses NIP-11 to get relay info and advertise smart_http endpoints
       const info = await fetchRelayInfo(this.relayUrl);
       this.capabilities = detectCapabilities(info, this.relayUrl);
-      this.httpBase = this.capabilities.httpOrigins?.[0] ?? normalizeHttpOrigin(this.relayUrl);
+      this.httpBase = this.capabilities.httpOrigins?.[0] || normalizeHttpOrigin(this.relayUrl);
       this.relayInfo = info;
     } catch (err) {
       console.warn('Failed to ensure capabilities:', err);
@@ -129,34 +130,6 @@ export class GraspApi implements GitServiceApi {
     }
   }
 
-  /**
-   * Get relay information via NIP-11
-   */
-  private async getRelayInfo(): Promise<RelayInfo> {
-    if (this.relayInfo) {
-      return this.relayInfo;
-    }
-
-    try {
-      const infoUrl = this.relayUrl.replace('ws://', 'http://').replace('wss://', 'https://');
-      const response = await fetch(infoUrl, {
-        headers: {
-          Accept: 'application/nostr+json'
-        }
-      });
-
-      if (response.ok) {
-        this.relayInfo = await response.json();
-        return this.relayInfo!;
-      }
-    } catch (error) {
-      console.warn('Failed to fetch relay info:', error);
-    }
-
-    // Fallback to empty info
-    this.relayInfo = {};
-    return this.relayInfo;
-  }
 
   /**
    * Check if GRASP is supported by the relay
@@ -176,7 +149,7 @@ export class GraspApi implements GitServiceApi {
     options: RequestInit = {}
   ): Promise<Response> {
     await this.ensureCapabilities();
-    const httpOrigin = this.httpBase ?? normalizeHttpOrigin(this.relayUrl);
+    const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl);
     const gitUrl = `${httpOrigin}/${npub}/${repo}.git${endpoint}`;
 
     return fetch(gitUrl, {
@@ -277,9 +250,9 @@ export class GraspApi implements GitServiceApi {
     const webTag = announceEvent ? getTagValue(announceEvent as any, 'web') || '' : '';
 
     // Default branch comes from state HEAD if present
-    const defaultBranch = getDefaultBranchFromHead(state?.head) ?? 'main';
+    const defaultBranch = state?.head ? getDefaultBranchFromHead(state.head) : 'main';
 
-    const httpOrigin = this.httpBase ?? normalizeHttpOrigin(this.relayUrl);
+    const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl);
 
     return {
       id: announceEvent?.id ?? stateEvent?.id ?? '',
@@ -308,7 +281,7 @@ export class GraspApi implements GitServiceApi {
       return null;
     }
     const npub = nip19.npubEncode(owner);
-    const httpOrigin = this.httpBase ?? normalizeHttpOrigin(this.relayUrl);
+    const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl);
     const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`;
     try {
       // Mirrors ngit repo_state.rs: build HEAD refs, collect branch/tag refs, and include nostr refs
@@ -606,7 +579,7 @@ export class GraspApi implements GitServiceApi {
   async listCommits(owner: string, repo: string, options?: ListCommitsOptions): Promise<Commit[]> {
     await this.ensureCapabilities();
     const npub = nip19.npubEncode(owner);
-    const httpOrigin = this.httpBase ?? normalizeHttpOrigin(this.relayUrl);
+    const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl);
     const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`;
     try {
       // Smart HTTP fetch logic parallels ngit’s use of libgit2 fetch mechanism
@@ -627,12 +600,10 @@ export class GraspApi implements GitServiceApi {
       return commits.map((c) => ({
         sha: c.oid,
         url: `${remoteUrl}/commit/${c.oid}`,
-        author: { login: c.commit.author.name, avatarUrl: undefined },
-        committer: { login: c.commit.committer.name, avatarUrl: undefined },
+        author: { name: c.commit.author.name, email: c.commit.author.email, date: new Date(c.commit.author.timestamp * 1000).toISOString() },
+        committer: { name: c.commit.committer.name, email: c.commit.committer.email, date: new Date(c.commit.committer.timestamp * 1000).toISOString() },
         message: c.commit.message,
         parents: (c.commit.parent ?? []).map((p: string) => ({ sha: p, url: `${remoteUrl}/commit/${p}` })),
-        tree: { sha: c.commit.tree, url: `${remoteUrl}/tree/${c.commit.tree}` },
-        verification: { verified: false },
         htmlUrl: `${remoteUrl}/commit/${c.oid}`,
         commit: {
           message: c.commit.message,
@@ -657,7 +628,7 @@ export class GraspApi implements GitServiceApi {
   async getCommit(owner: string, repo: string, sha: string): Promise<Commit> {
     await this.ensureCapabilities();
     const npub = nip19.npubEncode(owner);
-    const httpOrigin = this.httpBase ?? normalizeHttpOrigin(this.relayUrl);
+    const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl);
     const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`;
     try {
       const fs = createMemFs();
@@ -669,26 +640,11 @@ export class GraspApi implements GitServiceApi {
       return {
         sha,
         url: `${remoteUrl}/commit/${sha}`,
-        author: { login: commit.author.name, avatarUrl: undefined },
-        committer: { login: commit.committer.name, avatarUrl: undefined },
+        author: { name: commit.author.name, email: commit.author.email, date: new Date(commit.author.timestamp * 1000).toISOString() },
+        committer: { name: commit.committer.name, email: commit.committer.email, date: new Date(commit.committer.timestamp * 1000).toISOString() },
         message: commit.message,
         parents: (commit.parent ?? []).map((p: string) => ({ sha: p, url: `${remoteUrl}/commit/${p}` })),
-        tree: { sha: commit.tree, url: `${remoteUrl}/tree/${commit.tree}` },
-        verification: { verified: false },
-        htmlUrl: `${remoteUrl}/commit/${sha}`,
-        commit: {
-          message: commit.message,
-          committer: {
-            name: commit.committer.name,
-            email: commit.committer.email,
-            date: new Date(commit.committer.timestamp * 1000).toISOString()
-          },
-          author: {
-            name: commit.author.name,
-            email: commit.author.email,
-            date: new Date(commit.author.timestamp * 1000).toISOString()
-          }
-        }
+        htmlUrl: `${remoteUrl}/commit/${sha}`
       };
     } catch (err) {
       console.error('getCommit failed', err);

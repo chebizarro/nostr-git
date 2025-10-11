@@ -367,6 +367,8 @@ export class NostrGitProvider {
         // Sign the event
         const signedEvent = {
           ...patchEvent,
+          pubkey: await this.nostrConfig.signer.getPublicKey(),
+          id: 'mock-event-id',
           sig: await this.nostrConfig.signer.signEvent(patchEvent)
         };
 
