@@ -17,6 +17,8 @@
   const { Button } = useRegistry();
 
   interface Props {
+    workerApi?: any; // Git worker API instance (optional for backward compatibility)
+    workerInstance?: Worker; // Worker instance for event signing
     onRepoCreated?: (repoData: NewRepoResult) => void;
     onCancel?: () => void;
     onPublishEvent?: (
@@ -30,6 +32,8 @@
   }
 
   const {
+    workerApi,
+    workerInstance,
     onRepoCreated,
     onCancel,
     onPublishEvent,
@@ -45,6 +49,8 @@
 
   // Initialize the useNewRepo hook
   const { createRepository, isCreating, progress, error, reset } = useNewRepo({
+    workerApi, // Pass the worker API from props
+    workerInstance, // Pass the worker instance from props
     onProgress: (steps) => {
       // Transform status to completed boolean for RepoProgressStep
       progressSteps = steps.map((step) => ({

@@ -41,3 +41,6 @@ export * from './errors/index.js';
 export * from './retry/index.js';
 export * from './retry/timeout.js';
 export * from './trace/index.js';
+
+// Re-export Comlink proxy for worker communication
+export { proxy } from 'comlink';

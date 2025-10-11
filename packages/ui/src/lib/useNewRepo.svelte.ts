@@ -52,9 +52,11 @@ export async function checkGitHubRepoAvailability(
       throw error;
     }
   } catch (error) {
-    // Network error or other issue - proceed anyway
-    console.warn("Error checking repo availability:", error);
-    return { available: true };
+    console.error("Error checking repo availability:", error);
+    return { 
+      available: false, 
+      reason: `Failed to check availability: ${error instanceof Error ? error.message : String(error)}`
+    };
   }
 }
 
@@ -361,6 +363,7 @@ export interface NewRepoProgress {
 
 export interface UseNewRepoOptions {
   workerApi?: any; // Git worker API instance (optional for backward compatibility)
+  workerInstance?: Worker; // Worker instance for event signing (required for GRASP)
   onProgress?: (progress: NewRepoProgress[]) => void;
   onRepoCreated?: (result: NewRepoResult) => void;
   onPublishEvent?: (
@@ -725,23 +728,30 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
         throw error;
       }
     } catch (error) {
-      // Network error or other issue - proceed anyway
-      console.warn(`Error checking repo availability on ${config.provider}:`, error);
-      return { available: true };
+      console.error(`Error checking repo availability on ${config.provider}:`, error);
+      return { 
+        available: false, 
+        reason: `Failed to check availability: ${error instanceof Error ? error.message : String(error)}`
+      };
     }
   }
 
   async function createRemoteRepo(config: NewRepoConfig) {
     console.log("🚀 Starting createRemoteRepo function...");
     try {
-      // Use passed workerApi if available, otherwise create new worker
+      // Use passed workerApi if available, otherwise use singleton worker
       let api: any;
       if (options.workerApi) {
+        console.log("🚀 Using provided workerApi");
         api = options.workerApi;
       } else {
+        console.log("🚀 No workerApi provided, falling back to new worker");
+        // Note: Cannot auto-import singleton from library context
+        // The app must pass workerApi explicitly
         const { getGitWorker } = await import("@nostr-git/core");
         const workerInstance = getGitWorker();
         api = workerInstance.api;
+        console.log("🚀 Created new worker (workerApi not provided)");
       }
       console.log("🚀 Git worker obtained successfully");
 
@@ -860,15 +870,14 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
 
         // Get the Git worker - IMPORTANT: We need to use the same worker instance for both API calls and event signing
         let api: any, worker: Worker;
-        if (options.workerApi) {
-          // If workerApi is passed, we need to get the worker instance too
-          // For now, we'll use the passed API and create a temporary worker for signing
-          // This is a limitation - ideally the worker should be passed along with the API
+        if (options.workerApi && options.workerInstance) {
+          // Use the passed worker API and instance (already configured with EventIO)
           api = options.workerApi;
-          const { getGitWorker } = await import("@nostr-git/core");
-          const workerInstance = getGitWorker();
-          worker = workerInstance.worker;
+          worker = options.workerInstance;
+          console.log("🔐 Using provided worker API and instance");
         } else {
+          // Fallback: create new worker (won't have EventIO configured)
+          console.warn("🔐 No workerApi/workerInstance provided, creating new worker (EventIO may not be configured)");
           const { getGitWorker } = await import("@nostr-git/core");
           const workerInstance = getGitWorker();
           api = workerInstance.api;
@@ -972,15 +981,16 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
 
   async function pushToRemote(config: NewRepoConfig, remoteRepo: any, canonicalKey?: string) {
     console.log("🚀 Starting pushToRemote function...");
-    // Use passed workerApi if available, otherwise create new worker
+    // Use passed workerApi and workerInstance if available, otherwise create new worker
     let api: any, worker: Worker;
-    if (options.workerApi) {
+    if (options.workerApi && options.workerInstance) {
+      // Use the provided worker API and instance (already configured with EventIO)
       api = options.workerApi;
-      // Need worker for GRASP signing - create temporary one if not available
-      const { getGitWorker } = await import("@nostr-git/core");
-      const workerInstance = getGitWorker();
-      worker = workerInstance.worker;
+      worker = options.workerInstance;
+      console.log("🔐 Using provided worker API and instance for push");
     } else {
+      // Fallback: create new worker (won't have EventIO configured)
+      console.warn("🔐 No workerApi/workerInstance provided for push, creating new worker (EventIO may not be configured)");
       const { getGitWorker } = await import("@nostr-git/core");
       const workerInstance = getGitWorker();
       api = workerInstance.api;

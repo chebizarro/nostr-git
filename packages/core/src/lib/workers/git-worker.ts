@@ -125,7 +125,9 @@ function toPlain<T>(val: T): T {
 const cacheManager = new RepoCacheManager();
 
 // Initialize cache cleanup on worker start
-cacheManager.clearOldCache().catch(console.warn);
+cacheManager.clearOldCache().catch((err) => {
+  console.error('[git-worker] Failed to clear old cache on startup:', err);
+});
 
 // ----------------------
 // Safety/Preflight Utils
@@ -1411,7 +1413,8 @@ const pushToRemote = async ({
             commit: branchCommit
           });
         } catch (error) {
-          console.warn(`Failed to resolve commit for branch ${branchName}:`, error);
+          console.error(`Failed to resolve commit for branch ${branchName}:`, error);
+          // Continue with other branches, but track failure
         }
       }
 
@@ -1434,7 +1437,8 @@ const pushToRemote = async ({
           }
         }
       } catch (error) {
-        console.warn('Failed to determine current branch from HEAD:', error);
+        console.error('Failed to determine current branch from HEAD:', error);
+        throw new Error(`Cannot determine repository HEAD: ${error instanceof Error ? error.message : String(error)}`);
       }
 
       // Create the repository state event
@@ -1475,16 +1479,21 @@ const pushToRemote = async ({
       
       console.log('Successfully published repository state event to GRASP relay');
 
-      // Also push actual Git objects to the HTTPS remote so the repo is not empty
+      // Push actual Git objects to the HTTPS remote
       try {
         // Ensure remote exists (idempotent)
         try {
           await git.addRemote({ dir, remote: 'origin', url: remoteUrl });
-        } catch (_) {
-          // Remote may already exist; ignore
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          if (!errMsg.includes('already exists') && !errMsg.includes('Remote named')) {
+            throw new Error(`Failed to add remote 'origin': ${errMsg}`);
+          }
         }
 
         console.log(`[GRASP] Pushing packfiles over HTTPS to ${remoteUrl} (ref=${branch})`);
+        
+        // Try push WITHOUT specifying corsProxy - let it use the default
         await git.push({
           dir,
           url: remoteUrl,
@@ -1493,8 +1502,8 @@ const pushToRemote = async ({
         });
         console.log('[GRASP] Git objects pushed successfully');
       } catch (pushErr) {
-        console.warn('[GRASP] Failed to push packfiles over HTTPS:', pushErr);
-        // We still return success because state event was published; caller may choose to sync and retry push
+        console.error('[GRASP] Failed to push packfiles over HTTPS:', pushErr);
+        throw new Error(`Failed to push packfiles to GRASP relay: ${pushErr}`);
       }
 
       // Return success result

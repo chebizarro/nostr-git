@@ -133,7 +133,10 @@ export async function safePushToRemoteUtil(
       provider
     });
     const ok = (pushRes as any)?.success;
-    return { success: ok === undefined ? true : !!ok, pushed: true };
+    if (ok === undefined) {
+      return { success: false, error: 'Push operation returned invalid response (no success field)' };
+    }
+    return { success: !!ok, pushed: ok };
   } catch (error: any) {
     return { success: false, error: error?.message || String(error) };
   }
