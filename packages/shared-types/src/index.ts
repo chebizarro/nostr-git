@@ -133,3 +133,11 @@ export type {
   LabelNamespace as Nip32LabelNamespace,
   LabelValue as Nip32LabelValue,
 } from "./nip32.js"
+
+// Nostr I/O adapter types (framework-agnostic)
+export type {
+  NostrFilter,
+  PublishResult,
+  EventIO,
+  SignEvent,
+} from "./io-types.js"

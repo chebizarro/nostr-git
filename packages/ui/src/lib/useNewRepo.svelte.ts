@@ -1,13 +1,16 @@
 import { type Event as NostrEvent } from "nostr-tools";
-import { tokens as tokensStore, type Token } from "./stores/tokens.js";
 import { getGitServiceApi, canonicalRepoKey } from "@nostr-git/core";
 import { signer as signerStore } from "./stores/signer";
 import { toast } from "./stores/toast.js";
 import type { Signer as NostrGitSigner } from "./stores/signer";
+import { tokens as tokensStore, type Token } from "./stores/tokens.js";
 import {
   createRepoAnnouncementEvent as createAnnouncementEventShared,
   createRepoStateEvent as createStateEventShared,
 } from "@nostr-git/shared-types";
+
+const workerSigningHandlers = new WeakSet<Worker>();
+const workerPushSigningHandlers = new WeakSet<Worker>();
 
 /**
  * Check if a repository name is available on GitHub
@@ -736,8 +739,8 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
         grasp: "grasp.relay",
       };
 
-      let providerHost;
-      let finalToken;
+      let providerHost: string | null = null;
+      let finalToken: string | null = null;
       let nostrSigner: NostrGitSigner | null = null;
 
       if (config.provider === "grasp") {
@@ -851,36 +854,41 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
 
         // We'll set up a message handler directly instead of using a separate function
 
+        const handleWorkerEvent = async (event: MessageEvent) => {
+          if (event.data.type !== "request-event-signing") return;
+          try {
+            if (!nostrSigner) throw new Error("Missing signer for event signing");
+            console.log("🔐 Received event signing request:", event.data);
+            const signedEvent = await (nostrSigner as NostrGitSigner).sign(event.data.event);
+            console.log("🔐 Event signed successfully");
+            worker.postMessage({
+              type: "event-signed",
+              requestId: event.data.requestId,
+              signedEvent,
+            });
+          } catch (error) {
+            console.error("🔐 Error signing event:", error);
+            worker.postMessage({
+              type: "event-signing-error",
+              requestId: event.data.requestId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        };
+
         try {
           if (!signingSetupDone) {
-            // Set up a message handler for event signing requests (once)
             console.log("🔐 Setting up event signing message handler");
-            worker.addEventListener("message", async (event) => {
-              if (event.data.type === "request-event-signing") {
-                try {
-                  if (!nostrSigner) throw new Error("Missing signer for event signing");
-                  console.log("🔐 Received event signing request:", event.data);
-                  const signedEvent = await (nostrSigner as NostrGitSigner).sign(event.data.event);
-                  console.log("🔐 Event signed successfully");
-                  worker.postMessage({
-                    type: "event-signed",
-                    requestId: event.data.requestId,
-                    signedEvent,
-                  });
-                } catch (error) {
-                  console.error("🔐 Error signing event:", error);
-                  worker.postMessage({
-                    type: "event-signing-error",
-                    requestId: event.data.requestId,
-                    error: error instanceof Error ? error.message : String(error),
-                  });
-                }
-              }
-            });
-            // Tell the worker that event signing is available
-            worker.postMessage({ type: "register-event-signer" });
+            worker.addEventListener("message", handleWorkerEvent);
+            worker.postMessage({type: "register-event-signer"});
+            workerSigningHandlers.add(worker);
             signingSetupDone = true;
             console.log("🔐 Event signing setup complete");
+          } else if (!workerSigningHandlers.has(worker)) {
+            worker.addEventListener("message", handleWorkerEvent);
+            worker.postMessage({type: "register-event-signer"});
+            workerSigningHandlers.add(worker);
+            console.log("🔐 Event signing handler attached for new worker instance");
           } else {
             console.log("🔐 Event signing already set up; skipping duplicate registration");
           }
@@ -966,36 +974,33 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       // Set up message-based signing for GRASP
       console.log("🔐 Setting up event signing message handler for GRASP push");
 
-      // Set up a message handler for event signing requests
-      worker.addEventListener("message", async (event) => {
-        if (event.data.type === "request-event-signing") {
-          try {
-            if (!nostrSigner) throw new Error("Missing signer for push signing");
-            console.log("🔐 Received event signing request for push:", event.data);
-            const signedEvent = await (nostrSigner as NostrGitSigner).sign(event.data.event);
-            console.log("🔐 Event signed successfully for push");
-
-            // Send the signed event back to the worker
-            worker.postMessage({
-              type: "event-signed",
-              requestId: event.data.requestId,
-              signedEvent,
-            });
-          } catch (error) {
-            console.error("🔐 Error signing event for push:", error);
-
-            // Send the error back to the worker
-            worker.postMessage({
-              type: "event-signing-error",
-              requestId: event.data.requestId,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
+      const handlePushEvent = async (event: MessageEvent) => {
+        if (event.data.type !== "request-event-signing") return;
+        try {
+          if (!nostrSigner) throw new Error("Missing signer for push signing");
+          console.log("🔐 Received event signing request for push:", event.data);
+          const signedEvent = await (nostrSigner as NostrGitSigner).sign(event.data.event);
+          console.log("🔐 Event signed successfully for push");
+          worker.postMessage({
+            type: "event-signed",
+            requestId: event.data.requestId,
+            signedEvent,
+          });
+        } catch (error) {
+          console.error("🔐 Error signing event for push:", error);
+          worker.postMessage({
+            type: "event-signing-error",
+            requestId: event.data.requestId,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
-      });
+      };
 
-      // Tell the worker that event signing is available
-      worker.postMessage({ type: "register-event-signer" });
+      if (!workerPushSigningHandlers.has(worker)) {
+        worker.addEventListener("message", handlePushEvent);
+        worker.postMessage({type: "register-event-signer"});
+        workerPushSigningHandlers.add(worker);
+      }
 
       console.log("🔐 Event signing setup complete for GRASP push");
     } else {

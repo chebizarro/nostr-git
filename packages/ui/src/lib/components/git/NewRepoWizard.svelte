@@ -75,6 +75,11 @@
     graspServerOptions = s.urls;
   });
 
+  $effect(() => {
+    const normalized = Array.from(new Set((graspServerUrls || []).map((url) => url.trim()).filter(Boolean)));
+    graspServerStore.urls.set(normalized);
+  });
+
   // Repository name availability tracking
   let nameAvailabilityResults = $state<{
     results: Array<{
