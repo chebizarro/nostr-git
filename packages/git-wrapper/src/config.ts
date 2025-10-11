@@ -3,9 +3,10 @@ import type {GitProvider} from "./provider.js"
 export type CacheMode = "off" | "per-session" | "per-repo-batch"
 
 export interface GitWrapperConfig {
-  compatMode: boolean // maps to LIBGIT2_COMPAT
+  compatMode: boolean
   cacheMode: CacheMode
-  cacheMaxAgeMs: number // TTL/idle expiry for per-session caches
+  cacheMaxAgeMs: number
+  defaultCorsProxy?: string | null
 }
 
 const defaultConfig: GitWrapperConfig = {
@@ -15,7 +16,6 @@ const defaultConfig: GitWrapperConfig = {
 }
 
 export function loadConfig(overrides?: Partial<GitWrapperConfig>): GitWrapperConfig {
-  // Read from process.env if available (ambient declaration provided for portability)
   const env =
     typeof process !== "undefined" && (process as any).env ? (process as any).env : ({} as any)
 
@@ -30,7 +30,14 @@ export function loadConfig(overrides?: Partial<GitWrapperConfig>): GitWrapperCon
     overrides?.cacheMaxAgeMs ??
     (env.GIT_CACHE_TTL_MS ? Number(env.GIT_CACHE_TTL_MS) : defaultConfig.cacheMaxAgeMs)
 
-  return {compatMode, cacheMode, cacheMaxAgeMs}
+  // New: read default CORS proxy configuration
+  const defaultCorsProxyEnv = env.GIT_DEFAULT_CORS_PROXY
+  const defaultCorsProxy =
+    defaultCorsProxyEnv === "none"
+      ? null
+      : defaultCorsProxyEnv ?? "https://cors.isomorphic-git.org"
+
+  return { compatMode, cacheMode, cacheMaxAgeMs, defaultCorsProxy }
 }
 
 export type {GitProvider}

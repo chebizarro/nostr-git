@@ -10,8 +10,14 @@ TypeScript wrapper that bridges a Git backend with Nostr NIP-34 collaboration ev
 - Default PR patch content with unified diff (isomorphic-git)
 - Status events after push/merge with participant enrichment
 - Collaboration subscriptions filtered by repo address
+- **nostr:// URI Support**: Clone repositories using nostr:// URIs (e.g., `nostr://npub1.../repo-name`)
+- **NIP-05 Resolution**: Resolve NIP-05 identifiers to public keys (e.g., `alice@example.com`)
+- **GRASP Integration**: Full support for GRASP relay-based Git operations
+- **ngit Compatibility**: Methods and patterns matching the ngit Rust implementation
 
 ## Quick start
+
+### Basic Usage
 
 ````ts
 import { NostrGitProvider } from './src/nostr-git-provider.js';
@@ -72,6 +78,84 @@ await provider.merge({
 });
 
 ## Usage
+
+### nostr:// URI Support
+
+Clone repositories using nostr:// URIs, just like ngit:
+
+````ts
+// Clone using nostr:// URI
+await provider.clone({
+  dir: '/tmp/repo',
+  url: 'nostr://npub1abc123.../my-repo',
+  timeoutMs: 2500
+});
+
+// Clone using naddr format
+await provider.clone({
+  dir: '/tmp/repo',
+  url: 'nostr://naddr1abc123...',
+  timeoutMs: 2500
+});
+
+// Clone with protocol specification
+await provider.clone({
+  dir: '/tmp/repo',
+  url: 'nostr://ssh/npub1abc123.../relay.damus.io/my-repo',
+  timeoutMs: 2500
+});
+````
+
+### NIP-05 Resolution
+
+Resolve NIP-05 identifiers to public keys:
+
+````ts
+import { resolveNip05Cached } from '@nostr-git/git-wrapper';
+
+// Resolve NIP-05 identifier
+const publicKey = await resolveNip05Cached('alice@example.com');
+console.log(publicKey); // hex public key
+
+// Use in nostr:// URIs
+await provider.clone({
+  dir: '/tmp/repo',
+  url: 'nostr://alice@example.com/my-repo',
+  timeoutMs: 2500
+});
+````
+
+### ngit-style Methods
+
+Use ngit-compatible methods for repository collaboration:
+
+````ts
+// List all proposals for a repository
+const proposals = await provider.listProposals(repoAddr, { timeoutMs: 5000 });
+
+// Send commits as patch proposals
+const result = await provider.sendProposal({
+  repoAddr,
+  commits: ['abc123', 'def456'],
+  coverLetter: 'This patch series adds new features',
+  coverLetterTitle: 'Add new features',
+  recipients: ['npub1...', 'npub2...'],
+  includeState: true, // Publish GRASP state after sending
+  ownerPubkey: 'f'.repeat(64),
+  repoId: 'my-repo'
+});
+
+// Get ahead/behind commit information
+const { ahead, behind } = await provider.getAheadBehind({
+  base: 'refs/heads/main',
+  compare: 'refs/heads/feature-x'
+});
+
+// Check repository state
+const hasChanges = await provider.hasOutstandingChanges();
+const rootCommit = await provider.getRootCommit();
+const branches = await provider.getAllBranches();
+````
 
 ### Factory + caching
 
@@ -212,6 +296,145 @@ node packages/git-wrapper/examples/clone-and-pr.ts
 - `merge({ ..., nostrStatus? })` emits `GIT_STATUS_APPLIED`, optional `GIT_STATUS_CLOSED`.
 - `configureProtocolPrefsStore(store)` for persistence.
 - `subscribeToCollaborationEvents(repoId, onEvent)`.
+
+## GRASP Integration
+
+The Git Wrapper can integrate with **GRASP relay endpoints** using the new optional GRASP support available in `NostrGitProvider`.
+This integration enables smart discovery, state publishing, and direct communication with GRASP-based Smart HTTP endpoints, mirroring
+functionality from the `ngit` Rust implementation.
+
+### Configuring GRASP Support
+
+To enable GRASP integration, wire your existing `NostrGitProvider` with a `GraspApi` instance from `@nostr-git/core` or any compatible
+object implementing the minimal `GraspLike` interface.
+
+```ts
+import { NostrGitProvider } from "@nostr-git/git-wrapper"
+import { GraspApi } from "@nostr-git/core"
+import { getGitProvider } from "@nostr-git/git-wrapper"
+
+const git = getGitProvider()
+const nostr = /* your Nostr client */
+const provider = new NostrGitProvider(git, nostr)
+
+// Initialize the GRASP API (for example, using Nostr relay info and signer)
+const grasp = new GraspApi("wss://relay.example.com", ownerPubkey, io, signEvent)
+
+// Connect the GRASP layer to the NostrGitProvider
+provider.configureGrasp(grasp)
+```
+
+This call enables the provider to intelligently talk to GRASP relay endpoints for repository state updates and smart HTTP operations.
+
+### Disabling CORS Proxy for GRASP Endpoints
+
+GRASP relay URLs often require **no proxy routing**.
+You can disable the CORS proxy per call by passing `corsProxy: null` in your Git operation options or globally via environment variables.
+
+```ts
+await git.clone({ url: "https://relay.example.com/owner/repo.git", corsProxy: null })
+await git.push({ dir, url: "https://relay.example.com/owner/repo.git", corsProxy: null })
+```
+
+This ensures direct HTTP/S requests are made instead of going through the default CORS proxy.
+
+#### Environment Variable Configuration
+
+To disable the proxy globally, use:
+
+```bash
+export GIT_DEFAULT_CORS_PROXY=none
+```
+
+Supported values for `GIT_DEFAULT_CORS_PROXY`:
+
+- `"none"` — disables any CORS proxy globally
+- custom URL — sets your own proxy endpoint (e.g., `https://my-proxy.example.com`)
+- unset — fallback to default `https://cors.isomorphic-git.org`
+
+### Publishing Repository State via GRASP
+
+The new `publishRepoStateFromLocal` option allows GRASP-compatible repository state events
+to be published after successful operations such as push or merge.
+
+```ts
+await provider.push({
+  dir: "/tmp/repo",
+  fs,
+  refspecs: ["refs/heads/main"],
+  graspDisableCorsProxy: true, // optional
+  publishRepoStateFromLocal: true, // triggers GRASP state publish
+  ownerPubkey: ownerHex,
+  repoId: "repo-name",
+})
+```
+
+In this example:
+
+- The push occurs directly to the GRASP Smart HTTP endpoint.
+- After push success, a GRASP-style repository state event (kind 31990) is published using `grasp.publishStateFromLocal()`.
+
+You can also publish manually:
+
+```ts
+await grasp.publishStateFromLocal(ownerHex, "repo-name", { includeTags: true })
+```
+
+### GRASP-Specific Options
+
+`push()` and `merge()` now accept additional optional fields for GRASP integration:
+
+| Option | Description |
+|--------|--------------|
+| `graspDisableCorsProxy` | When `true`, forces direct HTTP connection, skipping the proxy. |
+| `publishRepoStateFromLocal` | Publishes a GRASP-compatible state event after operation success. |
+| `ownerPubkey` | 64-character hex public key used for identifying repository owner. |
+| `repoStateIncludeTags` | If `true`, includes tag refs when publishing GRASP state. |
+| `prevRepoStateEventId` | Optionally links the new state event as an update to the previous one. |
+
+### Example: Full GRASP Workflow
+
+```ts
+import { NostrGitProvider } from "@nostr-git/git-wrapper"
+import { getGitProvider } from "@nostr-git/git-wrapper"
+import { GraspApi } from "@nostr-git/core"
+import fs from "node:fs"
+
+const git = getGitProvider()
+const nostrClient = /* your Nostr implementation */
+const provider = new NostrGitProvider(git, nostrClient)
+
+// Setup GRASP
+const ownerPubkey = "f".repeat(64)
+const grasp = new GraspApi("wss://relay.example.com", ownerPubkey, io, signEvent)
+provider.configureGrasp(grasp)
+
+// Clone directly from GRASP endpoint (no proxy)
+await provider.clone({ dir: "/tmp/repo", url: "https://relay.example.com/owner/repo.git", corsProxy: null })
+
+// Push to GRASP endpoint with state publishing
+await provider.push({
+  dir: "/tmp/repo",
+  fs,
+  refspecs: ["refs/heads/main"],
+  ownerPubkey,
+  repoId: "repo-name",
+  graspDisableCorsProxy: true,
+  publishRepoStateFromLocal: true,
+})
+```
+
+---
+
+These GRASP features provide seamless compatibility between `@nostr-git/git-wrapper` and GRASP relay networks,
+enabling smarter Git operations and real-time collaboration driven by Nostr events.
+
+### Summary
+
+- Use `configureGrasp()` to attach GRASP capability
+- Disable proxy via `corsProxy: null` or `GIT_DEFAULT_CORS_PROXY=none`
+- Set `publishRepoStateFromLocal: true` to emit repository state automatically
+- Maintain full compatibility with existing Git and Nostr workflows
 
 ## Helpers
 

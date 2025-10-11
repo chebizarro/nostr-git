@@ -1,6 +1,16 @@
-import {GitFetchResult, GitMergeResult, GitProvider} from "./provider.js"
-import {NostrClient, NostrEvent} from "./nostr-client.js"
-import {defaultGetPatchContent} from "./git-patch-content.js"
+import { GitFetchResult, GitMergeResult, GitProvider } from "./provider.js"
+import { NostrClient, NostrEvent } from "./nostr-client.js"
+import { defaultGetPatchContent } from "./git-patch-content.js"
+import { parseAndResolveNostrUrl } from "./nostr-url.js"
+import {
+  getCommitInfo,
+  getAllBranches,
+  hasOutstandingChanges,
+  getRootCommit,
+  createPatchFromCommit,
+  areCommitsTooBigForPatches,
+  getCommitMessageSummary
+} from "./git-utils.js"
 import {
   GIT_REPO_ANNOUNCEMENT,
   GIT_REPO_STATE,
@@ -20,17 +30,44 @@ import {
   validatePatchEvent,
   validateIssueEvent,
   validateStatusEvent,
+  PatchTag,
 } from "@nostr-git/shared-types"
+
+interface GraspLike {
+  publishStateFromLocal(
+    owner: string,
+    repo: string,
+    opts?: { includeTags?: boolean; prevEventId?: string },
+  ): Promise<any>
+}
 
 /**
  * A GitProvider implementation that coordinates between an underlying git backend
  * (isomorphic-git, wasm-git, etc) and the Nostr protocol for collaboration, PRs, issues, etc.
  */
 export class NostrGitProvider implements GitProvider {
+  private grasp?: GraspLike
+
+  configureGrasp(grasp: GraspLike): void {
+    this.grasp = grasp
+  }
+
+  private async parseNostrUrl(url: string): Promise<{ repoId?: string; relay?: string }> {
+    try {
+      const parsed = await parseAndResolveNostrUrl(url)
+      if (!parsed || !parsed.coordinate?.identifier) {
+        throw new Error(`Invalid nostr:// repository URL: ${url}`)
+      }
+      return { repoId: parsed.coordinate.identifier, relay: parsed.coordinate.relays?.[0] }
+    } catch (err) {
+      throw new Error(`Failed to parse nostr:// URI '${url}': ${(err as Error).message}`)
+    }
+  }
+
   constructor(
     private git: GitProvider, // underlying git backend
     private nostr: NostrClient, // nostr relay client abstraction
-  ) {}
+  ) { }
 
   // Simple in-memory protocol preference store (repoId -> preferred clone/push URL)
   private protocolPrefs = new Map<string, string>()
@@ -39,11 +76,11 @@ export class NostrGitProvider implements GitProvider {
     get: (repoId: string) => string | undefined
     set: (repoId: string, url: string) => void
   } = {
-    get: id => this.protocolPrefs.get(id),
-    set: (id, url) => {
-      this.protocolPrefs.set(id, url)
-    },
-  }
+      get: id => this.protocolPrefs.get(id),
+      set: (id, url) => {
+        this.protocolPrefs.set(id, url)
+      },
+    }
 
   // Allow host app to provide a persistent store (e.g., localStorage, file, DB)
   configureProtocolPrefsStore(store: {
@@ -63,7 +100,7 @@ export class NostrGitProvider implements GitProvider {
     try {
       if (!repoAddr || !rootId) return []
       const participants = new Set<string>()
-      const filter: any = {"#a": [repoAddr], "#e": [rootId]}
+      const filter: any = { "#a": [repoAddr], "#e": [rootId] }
       const subId = this.nostr.subscribe(filter, (evt: NostrEvent) => {
         if (!evt) return
         if (evt.pubkey) participants.add(evt.pubkey)
@@ -98,7 +135,7 @@ export class NostrGitProvider implements GitProvider {
       ) {
         return (globalThis as any).NOSTR_GIT_VALIDATE_EVENTS !== false
       }
-    } catch {}
+    } catch { }
     // Default: enabled in dev, disabled in production
     try {
       return (process as any)?.env?.NODE_ENV !== "production"
@@ -126,7 +163,7 @@ export class NostrGitProvider implements GitProvider {
         if (typeof v === "string") state[k] = v
       }
     }
-    return {identifier, state}
+    return { identifier, state }
   }
 
   private ensureHeadInState(state: Record<string, string>): Record<string, string> {
@@ -147,7 +184,7 @@ export class NostrGitProvider implements GitProvider {
   }
 
   private buildRepoStateTags(identifier: string, state: Record<string, string>): string[][] {
-    const s = this.ensureHeadInState({...state})
+    const s = this.ensureHeadInState({ ...state })
     const tags: string[][] = []
     tags.push(["d", identifier])
     for (const [name, value] of Object.entries(s)) {
@@ -157,17 +194,34 @@ export class NostrGitProvider implements GitProvider {
   }
 
   // --- GitProvider methods ---
-  TREE(options: {ref: string}) {
+  TREE(options: { ref: string }) {
     return this.git.TREE(options)
   }
+
   async clone(options: any): Promise<any> {
-    // If no URL provided, try Nostr discovery to obtain clone endpoints.
-    // Expected options: { dir, fs?, url?, repoId?, allowedPubkeys?, timeoutMs? }
+    if (options?.url && typeof options.url === "string" && options.url.startsWith("nostr://")) {
+      const nostrUrlInfo = await this.parseNostrUrl(options.url)
+      if (!nostrUrlInfo.repoId) {
+        throw new Error(`Invalid nostr:// URL, cannot determine repoId: ${options.url}`)
+      }
+      const repoId = nostrUrlInfo.repoId
+      const discovery = await this.discoverRepo(repoId, {
+        allowedPubkeys: options?.allowedPubkeys,
+        timeoutMs: options?.timeoutMs,
+      })
+      if (!discovery?.urls?.length) {
+        throw new Error(`No clone URLs found for nostr:// repo '${repoId}'`)
+      }
+      const chosenUrl = discovery.urls[0]
+      options = { ...options, url: chosenUrl, repoId }
+    }
+
+    // existing clone logic follows
     if (!options?.url) {
       if (!options?.repoId) {
         throw new Error("clone: either url or repoId must be provided")
       }
-      const {urls} = await this.discoverRepo(options.repoId, {
+      const { urls } = await this.discoverRepo(options.repoId, {
         allowedPubkeys: options?.allowedPubkeys,
         timeoutMs: options?.timeoutMs,
         stateKind: options?.stateKind,
@@ -182,7 +236,7 @@ export class NostrGitProvider implements GitProvider {
         return ssh || list[0]
       }
       const chosen = pref && urls.includes(pref) ? pref : chooseByHeuristic(urls)
-      options = {...options, url: chosen}
+      options = { ...options, url: chosen }
     }
     const res = await this.git.clone(options)
     // Store preference on success
@@ -205,26 +259,21 @@ export class NostrGitProvider implements GitProvider {
   }
   async merge(options: any): Promise<GitMergeResult> {
     const result = await this.git.merge(options)
-    // Optionally emit a status event after merge if configured
     const s = options?.nostrStatus
     if (s?.repoAddr && s?.rootId) {
-      // Default kind selection: APPLIED when fast-forward or merge commit happened
       const kind =
         s.kind ??
         (result.fastForward || result.mergeCommit || result.alreadyMerged
           ? GIT_STATUS_APPLIED
           : GIT_STATUS_OPEN)
       const content = s.content ?? "Merge operation completed"
-      const tags: any[] = []
-      // Coordinate tag for repo
-      tags.push(["a", s.repoAddr])
+      const tags: any[] = [["a", s.repoAddr]]
       if (s.appliedCommits && s.appliedCommits.length) {
         tags.push(["applied-as-commits", ...s.appliedCommits])
       }
       if (result.oid) {
         tags.push(["merge-commit", result.oid])
       }
-      // Enrich participants from the existing thread
       try {
         const participants = await this.collectParticipants(
           s.repoAddr,
@@ -232,7 +281,7 @@ export class NostrGitProvider implements GitProvider {
           s?.timeoutMs ?? options?.timeoutMs,
         )
         for (const p of participants) tags.push(["p", p])
-      } catch {}
+      } catch { }
       if (Array.isArray(s.tags)) {
         for (const t of s.tags) tags.push(t)
       }
@@ -247,7 +296,6 @@ export class NostrGitProvider implements GitProvider {
         created_at: s.created_at,
       })
       await this.nostr.publish(evt as unknown as NostrEvent)
-      // Optional close event
       if (s.close === true) {
         const closeEvt = createStatusEvent({
           kind: GIT_STATUS_CLOSED,
@@ -260,6 +308,25 @@ export class NostrGitProvider implements GitProvider {
         await this.nostr.publish(closeEvt as unknown as NostrEvent)
       }
     }
+
+    // Publish GRASP repo state if configured and available
+    if (options?.publishRepoStateFromLocal && this.grasp) {
+      if (!options.ownerPubkey || !options.repoId) {
+        console.warn(
+          "publishRepoStateFromLocal requires ownerPubkey and repoId; skipping GRASP state publish",
+        )
+      } else {
+        try {
+          await this.grasp.publishStateFromLocal(options.ownerPubkey, options.repoId, {
+            includeTags: options.repoStateIncludeTags,
+            prevEventId: options.prevRepoStateEventId,
+          })
+        } catch (err) {
+          console.error("Error publishing GRASP state after merge:", err)
+        }
+      }
+    }
+
     return result
   }
   async pull(options: any): Promise<any> {
@@ -275,11 +342,11 @@ export class NostrGitProvider implements GitProvider {
 
     const parseSpec = (spec: string) => {
       const [src, dst] = spec.split(":")
-      return {src, dst: dst || undefined}
+      return { src, dst: dst || undefined }
     }
 
-    const prSpecs: {src: string; dst?: string}[] = []
-    const normalSpecs: {src: string; dst?: string}[] = []
+    const prSpecs: { src: string; dst?: string }[] = []
+    const normalSpecs: { src: string; dst?: string }[] = []
 
     for (const spec of refspecs) {
       const parsed = parseSpec(spec)
@@ -287,68 +354,68 @@ export class NostrGitProvider implements GitProvider {
       else normalSpecs.push(parsed)
     }
 
-    const results: {server?: any; patchEventIds?: string[]; stateEventId?: string} = {}
+    const results: { server?: any; patchEventIds?: string[]; stateEventId?: string } = {}
+
+    // Add support for GRASP-specific corsProxy disable flag
+    const delegated = options?.graspDisableCorsProxy ? { ...options, corsProxy: null } : { ...options }
 
     // 1) Publish patch events for PR specs
     if (prSpecs.length) {
-      if (!options?.repoAddr) {
+      if (!delegated?.repoAddr) {
         throw new Error("push: repoAddr is required to publish PR patch events")
       }
-      const baseBranch: string = options?.baseBranch || "main"
+      const baseBranch: string = delegated?.baseBranch || "main"
       const patchIds: string[] = []
       // Try to discover announcement to collect recipients (owner + maintainers)
       let recipients: string[] | undefined
-      if (options?.repoId) {
+      if (delegated?.repoId) {
         try {
-          const disc = await this.discoverRepo(options.repoId, {timeoutMs: options?.timeoutMs})
+          const disc = await this.discoverRepo(delegated.repoId, { timeoutMs: delegated?.timeoutMs })
           const ann = disc.event
           if (ann) {
             const maints = ann.tags.filter(t => t[0] === "maintainers").flatMap(t => t.slice(1))
             recipients = [ann.pubkey, ...maints].filter(Boolean) as string[]
           }
-        } catch {}
+        } catch { }
       }
-      for (const {src} of prSpecs) {
+      for (const { src } of prSpecs) {
         let commit: string | undefined
         let parentCommit: string | undefined
         let committerTag: [string, string, string, string, string] | undefined
         try {
-          // Best-effort resolve src to oid
-          const oid = await this.git.resolveRef?.({ref: src})
+          const oid = await this.git.resolveRef?.({ ref: src })
           if (typeof oid === "string") commit = oid
           else if (oid?.oid) commit = oid.oid
-          // Read commit to enrich metadata
           if (commit && this.git.readCommit) {
-            const rc = await this.git.readCommit({oid: commit})
+            const rc = await this.git.readCommit({ oid: commit })
             const c = rc?.commit || rc
             const parent = c?.parent?.[0]
             if (typeof parent === "string") parentCommit = parent
             const name = c?.committer?.name || c?.author?.name
             const email = c?.committer?.email || c?.author?.email
-            // isomorphic-git returns timestamp (seconds) and timezoneOffset (minutes)
             const ts = c?.committer?.timestamp || c?.author?.timestamp
             const tz = c?.committer?.timezoneOffset ?? c?.author?.timezoneOffset
             if (name && email && ts != null && tz != null) {
               committerTag = ["committer", String(name), String(email), String(ts), String(tz)]
             }
           }
-        } catch {}
+        } catch { }
 
         const title = `PR ${src.replace("refs/heads/", "")}`
-        let content: string | undefined = options?.patchContent
-        if (!content && typeof options?.getPatchContent === "function") {
+        let content: string | undefined = delegated?.patchContent
+        if (!content && typeof delegated?.getPatchContent === "function") {
           try {
-            content = await options.getPatchContent({
+            content = await delegated.getPatchContent({
               src,
               commit,
               parentCommit,
               baseBranch,
-              repoAddr: options.repoAddr,
-              repoId: options.repoId,
-              dir: options.dir,
-              fs: options.fs,
+              repoAddr: delegated.repoAddr,
+              repoId: delegated.repoId,
+              dir: delegated.dir,
+              fs: delegated.fs,
             })
-          } catch {}
+          } catch { }
         }
         if (!content) {
           try {
@@ -357,12 +424,12 @@ export class NostrGitProvider implements GitProvider {
               commit,
               parentCommit,
               baseBranch,
-              repoAddr: options.repoAddr,
-              repoId: options.repoId,
-              dir: options.dir,
-              fs: options.fs,
+              repoAddr: delegated.repoAddr,
+              repoId: delegated.repoId,
+              dir: delegated.dir,
+              fs: delegated.fs,
             })
-          } catch {}
+          } catch { }
         }
         if (!content) content = title
         const extraTags: Array<[string, ...string[]]> = [["t", `base:${baseBranch}`]]
@@ -373,11 +440,11 @@ export class NostrGitProvider implements GitProvider {
         }
         const evt = createPatchEvent({
           content,
-          repoAddr: options.repoAddr,
+          repoAddr: delegated.repoAddr,
           commit,
           recipients,
           tags: extraTags as any,
-          created_at: options?.created_at,
+          created_at: delegated?.created_at,
         })
         const id = await this.nostr.publish(evt as unknown as NostrEvent)
         patchIds.push(id)
@@ -387,29 +454,26 @@ export class NostrGitProvider implements GitProvider {
 
     // 2) Delegate normal refs to server push
     if (normalSpecs.length || !refspecs.length) {
-      const delegated = {...options}
-      if (normalSpecs.length) {
+      try {
         const specs = normalSpecs.map(s => (s.dst ? `${s.src}:${s.dst}` : s.src))
         delegated.refspecs = specs
-        // Clear single ref to avoid conflicts
         delete delegated.ref
-      }
-      try {
         results.server = await this.git.push(delegated)
       } catch (err) {
-        // Fallback: try alternate URL if discoverable
         if (delegated?.repoId) {
           try {
-            const disc = await this.discoverRepo(delegated.repoId, {timeoutMs: options?.timeoutMs})
+            const disc = await this.discoverRepo(delegated.repoId, { timeoutMs: delegated?.timeoutMs })
             const urls = disc.urls || []
             const current = delegated.url
             const alt = urls.find(u => u !== current)
             if (alt) {
-              const retry = {...delegated, url: alt}
+              const retry = { ...delegated, url: alt }
               results.server = await this.git.push(retry)
               this.prefsStore.set(delegated.repoId, alt)
             } else {
-              throw err
+              throw new Error(
+                `push: failed for ${delegated.url}; no alternate URL discovered for repoId '${delegated.repoId}'`,
+              )
             }
           } catch {
             throw err
@@ -418,12 +482,13 @@ export class NostrGitProvider implements GitProvider {
           throw err
         }
       }
-      // Store protocol preference if provided
+
       if (delegated?.repoId && delegated?.url) {
         this.prefsStore.set(delegated.repoId, delegated.url)
       }
+
       // Emit status after successful push if requested
-      const s = options?.nostrStatus
+      const s = delegated?.nostrStatus
       if (s?.repoAddr && s?.rootId) {
         const kind = s.kind ?? GIT_STATUS_APPLIED
         const content = s.content ?? "Push applied"
@@ -434,10 +499,10 @@ export class NostrGitProvider implements GitProvider {
           const participants = await this.collectParticipants(
             s.repoAddr,
             s.rootId,
-            s?.timeoutMs ?? options?.timeoutMs,
+            s?.timeoutMs ?? delegated?.timeoutMs,
           )
           for (const p of participants) tags.push(["p", p])
-        } catch {}
+        } catch { }
         if (Array.isArray(s.tags)) {
           for (const t of s.tags) tags.push(t)
         }
@@ -466,16 +531,22 @@ export class NostrGitProvider implements GitProvider {
       }
     }
 
-    // 3) Optionally publish repo state
-    if (options?.publishRepoState && options?.repoState && options?.repoStateKind) {
-      const stateEventId = await this.announceRepoState({
-        identifier: options.repoId || options.identifier,
-        state: options.repoState,
-        kind: options.repoStateKind,
-        content: options.repoStateContent || "",
-        created_at: options?.created_at,
-      })
-      results.stateEventId = stateEventId
+    // GRASP state publishing if configured
+    if (delegated?.publishRepoStateFromLocal && this.grasp) {
+      if (!delegated.ownerPubkey || !delegated.repoId) {
+        console.warn(
+          "publishRepoStateFromLocal requires ownerPubkey and repoId; skipping GRASP state publish",
+        )
+      } else {
+        try {
+          await this.grasp.publishStateFromLocal(delegated.ownerPubkey, delegated.repoId, {
+            includeTags: delegated.repoStateIncludeTags,
+            prevEventId: delegated.prevRepoStateEventId,
+          })
+        } catch (err) {
+          console.error("Error publishing GRASP state:", err)
+        }
+      }
     }
 
     return results
@@ -665,26 +736,26 @@ export class NostrGitProvider implements GitProvider {
    */
   async discoverRepo(
     repoId: string,
-    opts: {allowedPubkeys?: string[]; timeoutMs?: number; stateKind?: number} = {},
+    opts: { allowedPubkeys?: string[]; timeoutMs?: number; stateKind?: number } = {},
   ): Promise<{
     urls: string[]
-    branches: {name: string; hash: string}[]
-    tags: {name: string; hash: string}[]
+    branches: { name: string; hash: string }[]
+    tags: { name: string; hash: string }[]
     event?: NostrEvent
-    state?: {identifier: string; state: Record<string, string>; event?: NostrEvent}
+    state?: { identifier: string; state: Record<string, string>; event?: NostrEvent }
   }> {
-    const {allowedPubkeys, timeoutMs = 5000} = opts
+    const { allowedPubkeys, timeoutMs = 5000 } = opts
     const stateKind = opts.stateKind ?? GIT_REPO_STATE
 
     // 1) Try to get RepoState if kind provided (latest by created_at)
     let stateResult:
-      | {identifier: string; state: Record<string, string>; event?: NostrEvent}
+      | { identifier: string; state: Record<string, string>; event?: NostrEvent }
       | undefined
     if (stateKind !== undefined) {
       try {
-        const st = await this.getRepoState(repoId, {kind: stateKind, timeoutMs})
+        const st = await this.getRepoState(repoId, { kind: stateKind, timeoutMs })
         stateResult = st
-      } catch {}
+      } catch { }
     }
 
     // 2) Discover URL endpoints via NIP-34 (repo announcement)
@@ -692,7 +763,7 @@ export class NostrGitProvider implements GitProvider {
       let latest: NostrEvent | undefined
       let latestTime = 0
       const subId = this.nostr.subscribe(
-        {kinds: [GIT_REPO_ANNOUNCEMENT], "#d": [repoId]},
+        { kinds: [GIT_REPO_ANNOUNCEMENT], "#d": [repoId] },
         (event: NostrEvent) => {
           if (allowedPubkeys && !allowedPubkeys.includes(event.pubkey)) return
           if (this.shouldValidate()) {
@@ -712,8 +783,8 @@ export class NostrGitProvider implements GitProvider {
     })
 
     const urls: string[] = []
-    const branches: {name: string; hash: string}[] = []
-    const tags: {name: string; hash: string}[] = []
+    const branches: { name: string; hash: string }[] = []
+    const tags: { name: string; hash: string }[] = []
 
     if (announcement) {
       const cloneTags = getTags(announcement as any, "clone") as [string, ...string[]][]
@@ -727,11 +798,11 @@ export class NostrGitProvider implements GitProvider {
       for (const [name, value] of Object.entries(stateResult.state)) {
         if (name.startsWith("refs/heads/") && value && !value.startsWith("ref: ")) {
           const short = name.substring("refs/heads/".length)
-          if (!branches.find(b => b.name === short)) branches.push({name: short, hash: value})
+          if (!branches.find(b => b.name === short)) branches.push({ name: short, hash: value })
         }
         if (name.startsWith("refs/tags/") && value && !name.endsWith("^{}")) {
           const short = name.substring("refs/tags/".length)
-          if (!tags.find(t => t.name === short)) tags.push({name: short, hash: value})
+          if (!tags.find(t => t.name === short)) tags.push({ name: short, hash: value })
         }
       }
     }
@@ -740,7 +811,7 @@ export class NostrGitProvider implements GitProvider {
       throw new Error(`No repo discovery data found for '${repoId}'`)
     }
 
-    return {urls, branches, tags, event: announcement, state: stateResult}
+    return { urls, branches, tags, event: announcement, state: stateResult }
   }
 
   /**
@@ -753,7 +824,7 @@ export class NostrGitProvider implements GitProvider {
     content?: string // default ""
     created_at?: number // optional override
   }): Promise<string> {
-    const {identifier, state, kind, content = "", created_at} = options
+    const { identifier, state, kind, content = "", created_at } = options
     // Convert internal map to RepoStateEvent using shared helper
     const refs = Object.entries(state)
       .filter(([name]) => name.startsWith("refs/"))
@@ -774,10 +845,162 @@ export class NostrGitProvider implements GitProvider {
       head: headRef?.startsWith("refs/heads/") ? headRef.replace("refs/heads/", "") : undefined,
       created_at,
     }) as RepoStateEvent
-    // Allow overriding kind/content if needed (should match constant by default)
-    ;(evt as any).kind = kind
-    ;(evt as any).content = content
+      // Allow overriding kind/content if needed (should match constant by default)
+      ; (evt as any).kind = kind
+      ; (evt as any).content = content
     return this.nostr.publish(evt as unknown as NostrEvent)
+  }
+
+  /**
+   * List all patch proposals for a repository (ngit-style list command)
+   * Scans GIT_PATCH events with matching repoAddr.
+   */
+  async listProposals(repoAddr: string, opts: { timeoutMs?: number } = {}): Promise<NostrEvent[]> {
+    const timeoutMs = opts.timeoutMs ?? 4000
+    const results: NostrEvent[] = []
+    return await new Promise(resolve => {
+      const subId = this.nostr.subscribe(
+        { kinds: [GIT_PATCH], "#a": [repoAddr] },
+        (event: NostrEvent) => {
+          if (this.shouldValidate()) {
+            const v = validatePatchEvent(event as any)
+            if (!v.success) return
+          }
+          results.push(event)
+        },
+      )
+      setTimeout(() => {
+        this.nostr.unsubscribe(subId)
+        resolve(results.sort((a, b) => b.created_at - a.created_at))
+      }, timeoutMs)
+    })
+  }
+
+  /**
+   * Send commits as patch proposals (ngit-style send command)
+   * Supports cover letter and patch series.
+   */
+  async sendProposal(options: {
+    repoAddr: string
+    repoId?: string
+    baseBranch?: string
+    commits: string[]
+    coverLetter?: string
+    coverLetterTitle?: string
+    series?: { commit: string; title?: string; content?: string }[]
+    recipients?: string[]
+    includeState?: boolean
+    ownerPubkey?: string
+  }): Promise<{ patchIds: string[]; coverLetterId?: string }> {
+    const { repoAddr, commits, baseBranch = "main", recipients, repoId } = options
+    if (!repoAddr || !Array.isArray(commits) || !commits.length) {
+      throw new Error("sendProposal requires repoAddr and at least one commit")
+    }
+
+    const patchIds: string[] = []
+    // 1) Publish optional cover letter
+    let coverLetterId: string | undefined
+    if (options.coverLetter) {
+      const tags: PatchTag[] = [["a", repoAddr], ["t", "cover-letter"], ["t", `base:${baseBranch}`]]
+      if (Array.isArray(recipients)) {
+        for (const p of recipients) {
+          if (typeof p === "string") tags.push(["p", p] as any)
+        }
+      }
+      const evt = createPatchEvent({
+        content: options.coverLetter,
+        repoAddr,
+        recipients,
+        tags: tags as PatchTag[],
+        created_at: Math.floor(Date.now() / 1000),
+      })
+      coverLetterId = await this.nostr.publish(evt as unknown as NostrEvent)
+    }
+
+    // 2) Publish patch or series
+    const series = options.series ?? commits.map(commit => ({ commit, title: undefined, content: undefined }))
+    for (const item of series) {
+      if (!item.commit) continue
+      const title = item.title || `Patch for ${item.commit.substring(0, 8)}`
+      const content = item.content || title
+      const tags: PatchTag[] = [["a", repoAddr], ["t", `base:${baseBranch}`]]
+      if (coverLetterId) tags.push(["in-reply-to", coverLetterId] as any)
+      if (Array.isArray(recipients)) {
+        for (const p of recipients) {
+          if (typeof p === "string") tags.push(["p", p] as any)
+        }
+      }
+      const evt = createPatchEvent({
+        content,
+        repoAddr,
+        commit: item.commit,
+        recipients,
+        tags: tags as PatchTag[],
+        created_at: Math.floor(Date.now() / 1000),
+      })
+      const id = await this.nostr.publish(evt as unknown as NostrEvent)
+      patchIds.push(id)
+    }
+
+    // 3) Optionally publish GRASP repo state from local
+    if (options.includeState && this.grasp && options.ownerPubkey && repoId) {
+      try {
+        await this.grasp.publishStateFromLocal(options.ownerPubkey, repoId, { includeTags: true })
+      } catch (err) {
+        console.error("Error publishing GRASP state after sending proposal:", err)
+      }
+    }
+
+    return { patchIds, coverLetterId }
+  }
+
+  /**
+   * Check if repository has outstanding changes (ngit style)
+   */
+  async hasOutstandingChanges(): Promise<boolean> {
+    return await hasOutstandingChanges(this.git)
+  }
+
+  /**
+   * Get the root commit of the repository
+   */
+  async getRootCommit(): Promise<string> {
+    return await getRootCommit(this.git)
+  }
+
+  /**
+   * Get detailed commit information
+   */
+  async getCommitInfo(oid: string): Promise<any> {
+    return await getCommitInfo(this.git, oid)
+  }
+
+  /**
+   * Get all branches (local and remote)
+   */
+  async getAllBranches(): Promise<any[]> {
+    return await getAllBranches(this.git)
+  }
+
+  /**
+   * Create a patch from a commit
+   */
+  async createPatchFromCommit(oid: string, seriesCount?: { n: number, total: number }): Promise<string> {
+    return await createPatchFromCommit(this.git, oid, seriesCount)
+  }
+
+  /**
+   * Check if commits are too big for patches
+   */
+  async areCommitsTooBigForPatches(commits: string[]): Promise<boolean> {
+    return await areCommitsTooBigForPatches(this.git, commits)
+  }
+
+  /**
+   * Get commit message summary (first line)
+   */
+  async getCommitMessageSummary(oid: string): Promise<string> {
+    return await getCommitMessageSummary(this.git, oid)
   }
 
   /**
@@ -803,7 +1026,7 @@ export class NostrGitProvider implements GitProvider {
       GIT_STATUS_CLOSED,
       GIT_STATUS_DRAFT,
     ]
-    const subId = this.nostr.subscribe({kinds}, (event: NostrEvent) => {
+    const subId = this.nostr.subscribe({ kinds }, (event: NostrEvent) => {
       // Post-filter: ensure there's an 'a' tag whose value ends with `:${repoId}`
       const matchesRepo = event.tags.some(
         t => t[0] === "a" && typeof t[1] === "string" && t[1].endsWith(`:${repoId}`),
@@ -840,19 +1063,19 @@ export class NostrGitProvider implements GitProvider {
    */
   async getRepoState(
     identifier: string,
-    opts: {kind: number; timeoutMs?: number; allowedPubkeys?: string[]},
-  ): Promise<{identifier: string; state: Record<string, string>; event?: NostrEvent}> {
-    const {kind, timeoutMs = 4000, allowedPubkeys} = opts
+    opts: { kind: number; timeoutMs?: number; allowedPubkeys?: string[] },
+  ): Promise<{ identifier: string; state: Record<string, string>; event?: NostrEvent }> {
+    const { kind, timeoutMs = 4000, allowedPubkeys } = opts
     return await new Promise((resolve, reject) => {
       let latest: NostrEvent | undefined
       let latestTime = 0
       const subId = this.nostr.subscribe(
-        {kinds: [kind], "#d": [identifier]},
+        { kinds: [kind], "#d": [identifier] },
         (event: NostrEvent) => {
           if (allowedPubkeys && !allowedPubkeys.includes(event.pubkey)) return
-          if (this.shouldValidate()) {
+          if (this.shouldValidate() && kind === GIT_REPO_STATE) {
             const v = validateRepoStateEvent(event as any)
-            if (!v.success) return // ignore invalid
+            if (!v.success) return
           }
           if (event.created_at > latestTime) {
             latest = event
@@ -863,17 +1086,17 @@ export class NostrGitProvider implements GitProvider {
       setTimeout(() => {
         this.nostr.unsubscribe(subId)
         if (!latest) return reject(new Error(`No RepoState event for '${identifier}'`))
-        if (this.shouldValidate()) {
+        if (this.shouldValidate() && kind === GIT_REPO_STATE) {
           const v = validateRepoStateEvent(latest as any)
           if (!v.success)
             return reject(
               new Error(`Invalid RepoState event for '${identifier}': ${v.error.message}`),
             )
         }
-        const parsed = this.parseRepoStateEvent(latest)
+        const parsed = kind === 31990 ? { identifier, state: {} } : this.parseRepoStateEvent(latest)
         const id = parsed.identifier ?? identifier
         const state = this.ensureHeadInState(parsed.state)
-        resolve({identifier: id, state, event: latest})
+        resolve({ identifier: id, state, event: latest })
       }, timeoutMs)
     })
   }

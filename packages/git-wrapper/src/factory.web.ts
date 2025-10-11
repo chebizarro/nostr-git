@@ -17,7 +17,7 @@ export function getGitProvider(overrides?: Partial<GitWrapperConfig>): GitProvid
   const provider = new IsomorphicGitProvider({
     fs,
     http,
-    corsProxy: "https://cors.isomorphic-git.org",
+    corsProxy: cfg.defaultCorsProxy ?? "https://cors.isomorphic-git.org",
   })
 
   if (cfg.cacheMode === "off") {

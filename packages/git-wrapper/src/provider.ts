@@ -1,7 +1,17 @@
 // Defines the interface for a pluggable Git provider
 
 export interface GitProvider {
-  // Return a tree walker for the given ref (commit-ish)
+  /**
+   * Remote and network operations that use Smart HTTP (e.g., clone, fetch, pull, push)
+   * now accept an optional `corsProxy` field in their options.
+   * If specified, it overrides the provider’s default CORS proxy for that call.
+   *
+   * This enables interoperability with GRASP relay endpoints that usually require
+   * direct requests (no CORS proxy). Pass `corsProxy: null` to disable the proxy.
+   *
+   * @example
+   * await git.push({ url, corsProxy: null }) // Direct push to GRASP endpoint
+   */
   TREE(options: {ref: string}): any
   // Repository
   clone(options: any): Promise<void>
@@ -99,4 +109,13 @@ export type GitFetchResult = {
   fetchHeadDescription: string | null // a textual description of the branch that was fetched
   headers?: Map<string, string> // The HTTP response headers returned by the git server
   pruned?: Array<string> // A list of branches that were pruned, if you provided the `prune` parameter
+}
+
+/**
+ * Optional per-call HTTP override type used for GRASP and
+ * other proxy-control integrations.
+ */
+export type HttpOverrides = {
+  /** Optional CORS proxy override. Use `null` to disable globally/default. */
+  corsProxy?: string | null
 }
