@@ -34,6 +34,7 @@ export interface ForkResult {
 }
 
 export interface UseForkRepoOptions {
+  workerApi?: any; // Git worker API instance (optional for backward compatibility)
   onProgress?: (progress: ForkProgress[]) => void;
   onForkCompleted?: (result: ForkResult) => void;
   onPublishEvent?: (event: RepoAnnouncementEvent | RepoStateEvent) => Promise<void>;
@@ -181,8 +182,21 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
 
       // Step 3: Fork and clone repository using git-worker
       updateProgress("fork", "Creating fork and cloning repository...", "running");
-      const { getGitWorker } = await import("@nostr-git/core");
-      const { api: gitWorkerApi, worker } = getGitWorker();
+      
+      // Use passed workerApi if available, otherwise create new worker
+      let gitWorkerApi: any, worker: Worker;
+      if (options.workerApi) {
+        gitWorkerApi = options.workerApi;
+        // Need worker for GRASP - create temporary one if not available
+        const { getGitWorker } = await import("@nostr-git/core");
+        const workerInstance = getGitWorker();
+        worker = workerInstance.worker;
+      } else {
+        const { getGitWorker } = await import("@nostr-git/core");
+        const workerInstance = getGitWorker();
+        gitWorkerApi = workerInstance.api;
+        worker = workerInstance.worker;
+      }
 
       // Use just the fork name as directory path (browser virtual file system)
       const destinationPath = config.forkName;

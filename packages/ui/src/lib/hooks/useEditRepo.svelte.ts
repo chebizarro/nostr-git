@@ -31,11 +31,15 @@ interface EditResult {
   error?: string;
 }
 
+interface UseEditRepoOptions {
+  workerApi?: any; // Git worker API instance (optional for backward compatibility)
+}
+
 /**
  * Svelte 5 composable for managing edit repository workflow
  * Handles git-worker integration, progress tracking, and NIP-34 event emission
  */
-export function useEditRepo() {
+export function useEditRepo(hookOptions: UseEditRepoOptions = {}) {
   // Reactive state using Svelte 5 runes
   let progress = $state<EditProgress | undefined>();
   let error = $state<string | undefined>();
@@ -52,7 +56,7 @@ export function useEditRepo() {
     currentAnnouncement: RepoAnnouncementEvent,
     currentState: RepoStateEvent,
     config: EditConfig,
-    options: {
+    editOptions: {
       token: string;
       repoDir: string;
       onSignEvent: (event: Partial<Event>) => Promise<Event>;
@@ -60,7 +64,7 @@ export function useEditRepo() {
       onUpdateStore?: (repoId: string, updates: any) => Promise<void>;
     }
   ): Promise<void> {
-    const { token, repoDir, onSignEvent, onPublishEvent, onUpdateStore } = options;
+    const { token, repoDir, onSignEvent, onPublishEvent, onUpdateStore } = editOptions;
 
     // Reset state
     error = undefined;
@@ -73,8 +77,13 @@ export function useEditRepo() {
 
     try {
       // Get the git worker instance using dynamic import
-      const { getGitWorker } = await import("@nostr-git/core");
-      const gitWorker = getGitWorker();
+      let gitWorker: any;
+      if (hookOptions.workerApi) {
+        gitWorker = { api: hookOptions.workerApi };
+      } else {
+        const { getGitWorker } = await import("@nostr-git/core");
+        gitWorker = getGitWorker();
+      }
 
       // Extract current repository info
       const repoId = getTagValue(currentAnnouncement as any, "d") || "";

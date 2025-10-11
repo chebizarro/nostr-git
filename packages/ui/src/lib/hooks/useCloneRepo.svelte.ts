@@ -5,6 +5,7 @@ import { GIT_REPO_STATE, type RepoStateTag } from "@nostr-git/shared-types";
 // For now, we'll use a dynamic import in the function
 
 interface CloneRepoOptions {
+  workerApi?: any; // Git worker API instance (optional for backward compatibility)
   onProgress?: (stage: string, percentage?: number) => void;
   onSignEvent: (evt: NostrEvent) => Promise<NostrEvent>;
   onPublishEvent: (signed: NostrEvent) => Promise<void>;
@@ -46,8 +47,14 @@ export function useCloneRepo(options: CloneRepoOptions): CloneRepoHook {
 
       // Get the git worker instance using dynamic import
       // This avoids circular dependency issues
-      const { getGitWorker } = await import("@nostr-git/core");
-      const { api } = getGitWorker();
+      let api: any;
+      if (options.workerApi) {
+        api = options.workerApi;
+      } else {
+        const { getGitWorker } = await import("@nostr-git/core");
+        const workerInstance = getGitWorker();
+        api = workerInstance.api;
+      }
 
       // Validate inputs
       if (!url.trim()) {

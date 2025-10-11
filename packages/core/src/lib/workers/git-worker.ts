@@ -60,6 +60,28 @@ function getEventIO(): EventIO {
 }
 
 /**
+ * Create GRASP signer and EventIO for worker operations.
+ * Helper to avoid code duplication.
+ */
+function createGraspHelpers(token: string) {
+  const io = getEventIO();
+  
+  const signEvent = async (event: any) => {
+    if (!requestEventSigning) {
+      throw new Error('Event signing function not registered. Call setEventSigner first.');
+    }
+    return await requestEventSigning(event);
+  };
+  
+  const signer = {
+    signEvent,
+    getPublicKey: async () => token
+  };
+  
+  return { io, signEvent, signer };
+}
+
+/**
  * List tree entries at a specific commit (supports tag browsing via commit OID)
  * Returns a JSON-safe array of entries { name, path, type, size?, mode?, oid? }
  */
@@ -1275,21 +1297,9 @@ const createRemoteRepo = async ({
         throw new Error('GRASP provider requires a relay URL as baseUrl parameter');
       }
 
-      // For GRASP, we need to create a special signer that uses our message-based protocol
-      const messageSigner = {
-        signEvent: async (event: any) => {
-          if (!requestEventSigning) {
-            throw new Error('Event signing function not registered. Call setEventSigner first.');
-          }
-          return await requestEventSigning(event);
-        },
-        getPublicKey: async () => {
-          // For GRASP, the token is the pubkey
-          return token;
-        }
-      };
-
-      api = getGitServiceApi(provider, token, baseUrl, messageSigner);
+      // For GRASP, we need EventIO and SignEvent
+      const { io, signEvent, signer } = createGraspHelpers(token);
+      api = getGitServiceApi(provider, token, baseUrl, io, signEvent, signer);
     } else {
       // Standard Git providers
       api = getGitServiceApi(provider, token, baseUrl);
@@ -1353,19 +1363,8 @@ const pushToRemote = async ({
         throw new Error('GRASP provider requires a pubkey token');
       }
 
-      // For GRASP, we need to create a special signer that uses our message-based protocol
-      const messageSigner = {
-        signEvent: async (event: any) => {
-          if (typeof requestEventSigning !== 'function') {
-            throw new Error('Event signing function not registered. Call setEventSigner first.');
-          }
-          return await requestEventSigning(event);
-        },
-        getPublicKey: async () => {
-          // For GRASP, the token is the pubkey
-          return token;
-        }
-      };
+      // For GRASP, we need EventIO and SignEvent
+      const graspHelpers = createGraspHelpers(token);
 
       // For GRASP, we use the GraspApi instead of isomorphic-git
       // The GraspApi handles the Git Smart HTTP protocol and event signing
@@ -1387,7 +1386,9 @@ const pushToRemote = async ({
       }
 
       console.log(`[GRASP] Using relay base URL for API:`, relayBaseUrl);
-      const graspApi = getGitServiceApi('grasp', token, relayBaseUrl, messageSigner);
+      
+      const { io, signEvent, signer } = graspHelpers;
+      const graspApi = getGitServiceApi('grasp', token, relayBaseUrl, io, signEvent, signer);
 
       // For GRASP push operations, we need to create and publish repository state events
       // First, read the repository state (branches, HEAD, etc.)
@@ -1445,7 +1446,7 @@ const pushToRemote = async ({
       });
 
       // Sign the event using the message-based signing protocol
-      const signedEvent = await messageSigner.signEvent(repoStateEvent);
+      const signedEvent = await signer.signEvent(repoStateEvent);
 
       // Publish the event to the relay
       // Derive the relay base ws(s) origin from remoteUrl
@@ -1464,7 +1465,7 @@ const pushToRemote = async ({
       console.log(`[GRASP] Publishing repo state to relay:`, relayUrl);
       
       // Use EventIO to publish (delegates to app's Welshman infrastructure)
-      const io = getEventIO();
+      // io is already available from graspHelpers destructuring above
       const result = await io.publishEvent(signedEvent);
       
       if (!result.ok) {
@@ -1926,19 +1927,8 @@ async function updateAndPushFiles(options: {
         throw new Error('GRASP provider requires a pubkey token');
       }
 
-      // For GRASP, we need to create a special signer that uses our message-based protocol
-      const messageSigner = {
-        signEvent: async (event: any) => {
-          if (typeof requestEventSigning !== 'function') {
-            throw new Error('Event signing function not registered. Call setEventSigner first.');
-          }
-          return await requestEventSigning(event);
-        },
-        getPublicKey: async () => {
-          // For GRASP, the token is the pubkey
-          return token;
-        }
-      };
+      // For GRASP, we need EventIO and SignEvent
+      const graspHelpersForUpdate = createGraspHelpers(token);
 
       // For GRASP, we need to use the Git Smart HTTP protocol
       // The signing is handled automatically by the git operations

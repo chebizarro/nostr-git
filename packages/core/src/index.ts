@@ -34,3 +34,10 @@ export { mergeEffectiveLabels as mergeEffectiveLabels32 } from './lib/labels32.j
 export * from './lib/grasp.js';
 export * from './lib/utils/groupByRepoIdentity.js';
 export * from './lib/repo-list.js';
+
+// Git Interface Hardening - New modules
+export * from './keys/index.js';
+export * from './errors/index.js';
+export * from './retry/index.js';
+export * from './retry/timeout.js';
+export * from './trace/index.js';
