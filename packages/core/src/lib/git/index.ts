@@ -36,6 +36,16 @@ export { GitHubApi } from './providers/github.js';
 export { GitLabApi } from './providers/gitlab.js';
 export { GiteaApi } from './providers/gitea.js';
 export { BitbucketApi } from './providers/bitbucket.js';
+export { NostrGitProvider } from './providers/nostr-git-provider.js';
+export { GraspApi } from './providers/grasp-api.js';
+export {
+  createNostrGitProvider,
+  createNostrGitProviderFromEnv,
+  createNostrGitProviderFromGitConfig,
+  selectProvider,
+  createProviderForUrl,
+  DEFAULT_RELAYS
+} from './providers/nostr-git-factory.js';
 
 import * as files from '../files.js';
 import * as core from '../git.js';
@@ -54,6 +64,16 @@ import { GitHubApi } from './providers/github.js';
 import { GitLabApi } from './providers/gitlab.js';
 import { GiteaApi } from './providers/gitea.js';
 import { BitbucketApi } from './providers/bitbucket.js';
+import { NostrGitProvider } from './providers/nostr-git-provider.js';
+import { GraspApi } from './providers/grasp-api.js';
+import {
+  createNostrGitProvider,
+  createNostrGitProviderFromEnv,
+  createNostrGitProviderFromGitConfig,
+  selectProvider,
+  createProviderForUrl,
+  DEFAULT_RELAYS
+} from './providers/nostr-git-factory.js';
 import { detectVendorFromUrl } from '../vendor-providers.js';
 
 export const git = {
@@ -73,7 +93,15 @@ export const git = {
     GitHubApi,
     GitLabApi,
     GiteaApi,
-    BitbucketApi
+    BitbucketApi,
+    NostrGitProvider,
+    GraspApi,
+    createNostrGitProvider,
+    createNostrGitProviderFromEnv,
+    createNostrGitProviderFromGitConfig,
+    selectProvider,
+    createProviderForUrl,
+    DEFAULT_RELAYS
   },
   detectVendorFromUrl
 };

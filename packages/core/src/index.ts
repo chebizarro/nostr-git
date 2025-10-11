@@ -44,3 +44,23 @@ export * from './trace/index.js';
 
 // Re-export Comlink proxy for worker communication
 export { proxy } from 'comlink';
+
+// NostrGitProvider and GRASP Integration exports
+export {
+  NostrGitProvider,
+  type NostrGitConfig,
+  type RepoDiscovery,
+  type NostrPushResult
+} from './lib/git/providers/nostr-git-provider.js';
+export {
+  GraspApi,
+  type GraspApiConfig
+} from './lib/git/providers/grasp-api.js';
+export {
+  createNostrGitProvider,
+  createNostrGitProviderFromEnv,
+  createNostrGitProviderFromGitConfig,
+  selectProvider,
+  createProviderForUrl,
+  DEFAULT_RELAYS
+} from './lib/git/providers/nostr-git-factory.js';
