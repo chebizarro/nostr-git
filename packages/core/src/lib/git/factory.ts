@@ -7,6 +7,7 @@
 
 import type { GitServiceApi } from './api.js';
 import type { GitVendor } from '../vendor-providers.js';
+import type { EventIO, SignEvent } from '@nostr-git/shared-types';
 import { GitHubApi } from './providers/github.js';
 import { GitLabApi } from './providers/gitlab.js';
 import { GiteaApi } from './providers/gitea.js';
@@ -19,6 +20,8 @@ import { GraspApi, type Signer } from './providers/grasp.js';
  * @param provider - The Git service provider ('github', 'gitlab', 'gitea', 'bitbucket', 'grasp')
  * @param token - Authentication token for the provider (or pubkey for GRASP)
  * @param baseUrl - Optional custom base URL (for self-hosted instances) or relay URL for GRASP
+ * @param io - EventIO instance for Nostr operations (required for GRASP)
+ * @param signEvent - SignEvent function for signing events (required for GRASP)
  * @param signer - Optional Nostr signer (for direct signing in UI thread; not required when using message-based signing)
  * @returns GitServiceApi implementation for the provider
  *
@@ -30,14 +33,16 @@ import { GraspApi, type Signer } from './providers/grasp.js';
  * // Self-hosted GitLab
  * const gitlabApi = getGitServiceApi('gitlab', 'glpat-xxxxxxxxxxxx', 'https://gitlab.example.com');
  *
- * // GRASP relay
- * const graspApi = getGitServiceApi('grasp', pubkey, 'wss://relay.example.com', signer);
+ * // GRASP relay (requires EventIO and SignEvent)
+ * const graspApi = getGitServiceApi('grasp', pubkey, 'wss://relay.example.com', io, signEvent, signer);
  * ```
  */
 export function getGitServiceApi(
   provider: GitVendor,
   token: string,
   baseUrl?: string,
+  io?: EventIO,
+  signEvent?: SignEvent,
   signer?: Signer
 ): GitServiceApi {
   switch (provider) {
@@ -57,8 +62,14 @@ export function getGitServiceApi(
       if (!baseUrl) {
         throw new Error('GRASP provider requires a relay URL as baseUrl parameter');
       }
+      if (!io) {
+        throw new Error('GRASP provider requires an EventIO instance');
+      }
+      if (!signEvent) {
+        throw new Error('GRASP provider requires a SignEvent function');
+      }
       // signer is optional when using message-based signing across worker boundary
-      return new GraspApi(baseUrl, token, signer);
+      return new GraspApi(baseUrl, token, io, signEvent, signer);
 
     case 'generic':
       throw new Error(

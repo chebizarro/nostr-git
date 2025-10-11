@@ -9,7 +9,24 @@ const useStubs = process.env.USE_STUBS === 'true';
 
 export default defineConfig({
   test: {
-    environment: 'node'
+    environment: 'node',
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      thresholds: {
+        lines: 90,
+        functions: 90,
+        branches: 90,
+        statements: 90
+      },
+      exclude: [
+        'test/**',
+        'dist/**',
+        '**/*.spec.ts',
+        '**/__stubs__/**',
+        '**/node_modules/**'
+      ]
+    }
   },
   // Ensure Vite transforms git-wrapper so our aliases apply to its imports
   ssr: {

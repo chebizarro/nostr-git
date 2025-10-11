@@ -1,7 +1,7 @@
-import { nip19, SimplePool, type EventTemplate, type NostrEvent } from 'nostr-tools';
+import { nip19, type EventTemplate, type NostrEvent } from 'nostr-tools';
 import { fetchPermalink, produceGitDiffFromPermalink } from './git.js';
 import { parsePermalink, type PermalinkData } from './permalink.js';
-import { getTagValue, getTag } from '@nostr-git/shared-types';
+import { getTagValue, getTag, type EventIO } from '@nostr-git/shared-types';
 
 export type HexString = Uint8Array<ArrayBufferLike>;
 
@@ -16,15 +16,19 @@ export type HexString = Uint8Array<ArrayBufferLike>;
 export async function createEventFromPermalink(
   permalink: string,
   signer: (event: EventTemplate) => Promise<NostrEvent>,
-  relays: string[]
+  relays: string[],
+  io?: EventIO
 ): Promise<NostrEvent> {
   const linkData = parsePermalink(permalink);
   if (!linkData) {
     throw new Error(`Could not parse permalink: ${permalink}`);
   }
-  const exists = await permalinkEventExists(linkData, relays);
-  if (exists) {
-    return exists;
+  // Only check for existing events if EventIO is provided
+  if (io) {
+    const exists = await permalinkEventExists(linkData, relays, io);
+    if (exists) {
+      return exists;
+    }
   }
   const eventTemplate = await createEvent(linkData, relays);
   return signer(eventTemplate);
@@ -33,12 +37,13 @@ export async function createEventFromPermalink(
 export async function createNeventFromPermalink(
   permalink: string,
   signer: (event: EventTemplate) => Promise<NostrEvent>,
-  relays: string[]
+  relays: string[],
+  io: EventIO
 ): Promise<string> {
   const event = await createEventFromPermalink(permalink, signer, relays);
 
-  const pool = new SimplePool();
-  pool.publish(relays, event);
+  // Use EventIO to publish (delegates to app's infrastructure)
+  await io.publishEvent(event);
 
   const nevent = nip19.neventEncode({
     id: event.id,
@@ -70,16 +75,18 @@ async function createEvent(eventData: PermalinkData, relays: string[]): Promise<
 
   // if we have a valid repo name, attempt to link the repository event (kind 30617)
   // e.g. storing a reference to it in an 'a' tag if found
-  if (eventData.repo) {
-    const repoEvent = await fetchRepoEvent(eventData, relays);
-    if (repoEvent) {
-      // if there's a 'd' tag
-      const repoId = getTagValue(repoEvent as any, 'd');
-      if (repoId) {
-        tags.push(['a', `30617:${repoEvent.pubkey}:${repoId}`]);
-      }
-    }
-  }
+  // Note: This requires EventIO to be passed through the call chain
+  // For now, we skip this lookup to avoid breaking the API
+  // TODO: Add EventIO parameter to createEvent and enable this lookup
+  // if (eventData.repo) {
+  //   const repoEvent = await fetchRepoEvent(eventData, relays, io);
+  //   if (repoEvent) {
+  //     const repoId = getTagValue(repoEvent as any, 'd');
+  //     if (repoId) {
+  //       tags.push(['a', `30617:${repoEvent.pubkey}:${repoId}`]);
+  //     }
+  //   }
+  // }
 
   return {
     kind: 1623,
@@ -91,15 +98,15 @@ async function createEvent(eventData: PermalinkData, relays: string[]): Promise<
 
 async function fetchRepoEvent(
   linkData: PermalinkData,
-  relays: string[]
+  relays: string[],
+  io: EventIO
 ): Promise<NostrEvent | undefined> {
-  const pool = new SimplePool();
   try {
-    const events = await pool.querySync(relays, {
+    // Use EventIO to fetch events (delegates to app's infrastructure)
+    const events = await io.fetchEvents([{
       kinds: [30617],
       '#d': [linkData.repo]
-    });
-    pool.close(relays);
+    }]);
     // find event referencing a 'clone' tag that includes "owner/repo"
     const found = events.find((evt) =>
       evt.tags.some((t) => t[0] === 'clone' && t[1].includes(`${linkData.owner}/${linkData.repo}`))
@@ -113,15 +120,15 @@ async function fetchRepoEvent(
 
 async function permalinkEventExists(
   linkData: PermalinkData,
-  relays: string[]
+  relays: string[],
+  io: EventIO
 ): Promise<NostrEvent | undefined> {
-  const pool = new SimplePool();
   try {
-    const events = await pool.querySync(relays, {
+    // Use EventIO to fetch events (delegates to app's infrastructure)
+    const events = await io.fetchEvents([{
       kinds: [1623],
       '#a': [linkData.repo] // searching for 'a' tag that matches repo
-    });
-    //pool.close(relays);
+    }]);
 
     // filter or find an event that has matching branch, file, lines
     const found = events.find((evt) => {

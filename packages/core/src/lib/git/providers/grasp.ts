@@ -22,8 +22,8 @@ import type {
   User,
   GitForkOptions
 } from '../api.js';
-import { SimplePool, type EventTemplate, type NostrEvent, nip19, Filter } from 'nostr-tools';
-import { getTagValue, getTags } from '@nostr-git/shared-types';
+import { type EventTemplate, type NostrEvent, nip19, Filter } from 'nostr-tools';
+import { getTagValue, getTags, type EventIO, type SignEvent } from '@nostr-git/shared-types';
 
 // Import or declare the requestEventSigning function
 declare const requestEventSigning: ((event: EventTemplate) => Promise<NostrEvent>) | undefined;
@@ -57,10 +57,17 @@ export class GraspApi implements GitServiceApi {
   private readonly relayUrl: string;
   private readonly pubkey: string;
   private readonly signer?: Signer;
-  private readonly pool: SimplePool;
+  private readonly io: EventIO;
+  private readonly signEvent: SignEvent;
   private relayInfo?: RelayInfo;
 
-  constructor(relayUrl: string, pubkey: string, signer?: Signer) {
+  constructor(
+    relayUrl: string,
+    pubkey: string,
+    io: EventIO,
+    signEvent: SignEvent,
+    signer?: Signer
+  ) {
     // Normalize to base ws(s) origin with no path
     let normalized = relayUrl.replace(/\/$/, '');
     try {
@@ -77,7 +84,8 @@ export class GraspApi implements GitServiceApi {
     this.relayUrl = normalized; // Base relay URL for Nostr operations
     this.pubkey = pubkey;
     this.signer = signer;
-    this.pool = new SimplePool();
+    this.io = io;
+    this.signEvent = signEvent;
   }
 
   /** Determine if a relay URL is suitable for Nostr relay connections */
@@ -183,9 +191,12 @@ export class GraspApi implements GitServiceApi {
       signedEvent = await this.signer.signEvent(event);
     }
 
-    // Simplified approach using the pool directly
+    // Use EventIO to publish (delegates to app's Welshman infrastructure)
     try {
-      await this.pool.publish([this.relayUrl], signedEvent);
+      const result = await this.io.publishEvent(signedEvent);
+      if (!result.ok) {
+        throw new Error(result.error || 'Failed to publish event');
+      }
       return signedEvent;
     } catch (error) {
       throw new Error(`Failed to publish event: ${error}`);
@@ -193,27 +204,17 @@ export class GraspApi implements GitServiceApi {
   }
 
   /**
-   * Query Nostr events from relay
+   * Query Nostr events from relay using EventIO
    */
   private async queryEvents(filters: Filter[]): Promise<NostrEvent[]> {
-    return new Promise((resolve) => {
-      const events: NostrEvent[] = [];
-      const sub = this.pool.subscribeMany([this.relayUrl], filters as any, {
-        onevent: (event: NostrEvent) => {
-          events.push(event);
-        },
-        oneose: () => {
-          sub.close();
-          resolve(events);
-        }
-      });
-
-      // Timeout after 5 seconds
-      setTimeout(() => {
-        sub.close();
-        resolve(events);
-      }, 5000);
-    });
+    try {
+      // Use EventIO to fetch events (delegates to app's Welshman infrastructure)
+      const events = await this.io.fetchEvents(filters as any);
+      return events;
+    } catch (error) {
+      console.error('Failed to query events:', error);
+      return [];
+    }
   }
 
   /**

@@ -1,12 +1,12 @@
 import { expose } from 'comlink';
-import { finalizeEvent, SimplePool } from 'nostr-tools';
+import { finalizeEvent } from 'nostr-tools';
 import { GitProvider, getGitProvider } from '@nostr-git/git-wrapper';
 import { rootDir } from '../git.js';
 import { Buffer } from 'buffer';
 import { analyzePatchMergeability, type MergeAnalysisResult } from '../merge-analysis.js';
 import { getGitServiceApi } from '../git/factory.js';
 import type { GitVendor } from '../vendor-providers.js';
-import { createRepoStateEvent } from '@nostr-git/shared-types';
+import { createRepoStateEvent, type EventIO } from '@nostr-git/shared-types';
 import { canonicalRepoKey } from '../utils/canonicalRepoKey.js';
 import { listRepoFilesFromEvent } from '../files.js';
 
@@ -28,6 +28,35 @@ import { analyzePatchMergeUtil, applyPatchAndPushUtil } from './patches.js';
 
 if (typeof globalThis.Buffer === 'undefined') {
   (globalThis as any).Buffer = Buffer;
+}
+
+/**
+ * Global EventIO instance (set by main thread via setEventIO)
+ * Used for all Nostr event publishing operations in the worker.
+ */
+let workerEventIO: EventIO | null = null;
+
+/**
+ * Set the EventIO instance for this worker.
+ * Must be called from the main thread before performing any Nostr operations.
+ * 
+ * @param io - EventIO instance from the main thread
+ */
+const setEventIO = (io: EventIO) => {
+  workerEventIO = io;
+  console.log('[git-worker] EventIO configured');
+};
+
+/**
+ * Get the EventIO instance, throwing if not configured.
+ */
+function getEventIO(): EventIO {
+  if (!workerEventIO) {
+    throw new Error(
+      '[git-worker] EventIO not configured. Call setEventIO() from main thread before performing Nostr operations.'
+    );
+  }
+  return workerEventIO;
 }
 
 /**
@@ -806,9 +835,16 @@ const cloneAndFork = async ({
     nostrPrivateKey
   );
 
-  const pool = new SimplePool();
-  await Promise.all(pool.publish(relays, event));
-
+  // Use EventIO to publish (delegates to app's Welshman infrastructure)
+  const io = getEventIO();
+  const result = await io.publishEvent(event);
+  
+  if (!result.ok) {
+    console.error('[git-worker] Failed to publish fork event:', result.error);
+    throw new Error(`Failed to publish fork event: ${result.error}`);
+  }
+  
+  console.log('[git-worker] Fork event published successfully');
   return remoteUrl;
 };
 
@@ -1426,9 +1462,16 @@ const pushToRemote = async ({
           .replace(/(ws[s]?:\/\/[^/]+).*/, '$1');
       }
       console.log(`[GRASP] Publishing repo state to relay:`, relayUrl);
-      const pool = new SimplePool();
-      await Promise.all(pool.publish([relayUrl], signedEvent));
-
+      
+      // Use EventIO to publish (delegates to app's Welshman infrastructure)
+      const io = getEventIO();
+      const result = await io.publishEvent(signedEvent);
+      
+      if (!result.ok) {
+        console.error('[GRASP] Failed to publish repo state:', result.error);
+        throw new Error(`Failed to publish repo state: ${result.error}`);
+      }
+      
       console.log('Successfully published repository state event to GRASP relay');
 
       // Also push actual Git objects to the HTTPS remote so the repo is not empty
@@ -2398,5 +2441,6 @@ expose({
   listTreeAtCommit,
   setEventSigner, // Flag to indicate signing is available
   requestEventSigning, // Function to request event signing from UI thread
-  setRequestEventSigningHandler // Function to register the event signing handler
+  setRequestEventSigningHandler, // Function to register the event signing handler
+  setEventIO // Function to configure EventIO from main thread
 });
