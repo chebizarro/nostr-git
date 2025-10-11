@@ -22,8 +22,25 @@ import type {
   User,
   GitForkOptions
 } from '../api.js';
-import { type EventTemplate, type NostrEvent, nip19, Filter } from 'nostr-tools';
+import { nip19, type EventTemplate, type Filter as NostrFilter, type Event as NostrEvent } from 'nostr-tools';
 import { getTagValue, getTags, type EventIO, type SignEvent } from '@nostr-git/shared-types';
+import {
+  fetchRelayInfo,
+  graspCapabilities as detectCapabilities,
+  normalizeHttpOrigin,
+  type GraspCapabilities,
+  type RelayInfo
+} from './grasp-capabilities.js';
+import {
+  encodeRepoAddress,
+  parseRepoStateFromEvent,
+  getDefaultBranchFromHead,
+  buildStateEventTemplate,
+  type RepoState
+} from './grasp-state.js';
+import { createMemFs } from './grasp-fs.js';
+import * as git from 'isomorphic-git';
+import http from 'isomorphic-git/http/web';
 
 // Import or declare the requestEventSigning function
 declare const requestEventSigning: ((event: EventTemplate) => Promise<NostrEvent>) | undefined;
@@ -37,23 +54,11 @@ export interface Signer {
 }
 
 /**
- * NIP-11 relay information
- */
-interface RelayInfo {
-  name?: string;
-  description?: string;
-  pubkey?: string;
-  contact?: string;
-  supported_nips?: number[];
-  supported_grasps?: string[];
-  software?: string;
-  version?: string;
-}
-
-/**
  * GRASP API client implementing GitServiceApi
  */
 export class GraspApi implements GitServiceApi {
+  private capabilities?: GraspCapabilities;
+  private httpBase?: string;
   private readonly relayUrl: string;
   private readonly pubkey: string;
   private readonly signer?: Signer;
@@ -74,18 +79,37 @@ export class GraspApi implements GitServiceApi {
       const u = new URL(relayUrl);
       const origin = `${u.protocol}//${u.host}`;
       normalized = origin.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://');
-    } catch (_) {
-      // Fallback: convert protocol and strip any path after host
+    } catch {
       normalized = relayUrl
         .replace(/^http:\/\//, 'ws://')
         .replace(/^https:\/\//, 'wss://')
         .replace(/(ws[s]?:\/\/[^/]+).*/, '$1');
     }
-    this.relayUrl = normalized; // Base relay URL for Nostr operations
+    this.relayUrl = normalized;
     this.pubkey = pubkey;
     this.signer = signer;
     this.io = io;
     this.signEvent = signEvent;
+  }
+
+  /**
+   * Load NIP-11 info and capability metadata for relay, caching results.
+   * Mirrors logic from ngit to establish smart-HTTP and GRASP support.
+   */
+  private async ensureCapabilities(force = false): Promise<void> {
+    if (this.capabilities && this.httpBase && !force) return;
+    try {
+      // Mirrors ngit client.rs: uses NIP-11 to get relay info and advertise smart_http endpoints
+      const info = await fetchRelayInfo(this.relayUrl);
+      this.capabilities = detectCapabilities(info, this.relayUrl);
+      this.httpBase = this.capabilities.httpOrigins?.[0] ?? normalizeHttpOrigin(this.relayUrl);
+      this.relayInfo = info;
+    } catch (err) {
+      console.warn('Failed to ensure capabilities:', err);
+      if (!this.httpBase) {
+        this.httpBase = normalizeHttpOrigin(this.relayUrl);
+      }
+    }
   }
 
   /** Determine if a relay URL is suitable for Nostr relay connections */
@@ -138,8 +162,8 @@ export class GraspApi implements GitServiceApi {
    * Check if GRASP is supported by the relay
    */
   private async isGraspSupported(): Promise<boolean> {
-    const info = await this.getRelayInfo();
-    return info.supported_grasps?.includes('GRASP-01') || false;
+    await this.ensureCapabilities();
+    return this.relayInfo?.supported_grasps?.includes('GRASP-01') || false;
   }
 
   /**
@@ -151,14 +175,15 @@ export class GraspApi implements GitServiceApi {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<Response> {
-    const gitUrl = `${this.relayUrl.replace('ws://', 'http://').replace('wss://', 'https://')}/${npub}/${repo}.git${endpoint}`;
+    await this.ensureCapabilities();
+    const httpOrigin = this.httpBase ?? normalizeHttpOrigin(this.relayUrl);
+    const gitUrl = `${httpOrigin}/${npub}/${repo}.git${endpoint}`;
 
     return fetch(gitUrl, {
       ...options,
+      mode: 'cors',
+      credentials: 'omit',
       headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST',
-        'Access-Control-Allow-Headers': 'Content-Type',
         'User-Agent': 'nostr-git-grasp-client',
         ...options.headers
       }
@@ -170,33 +195,20 @@ export class GraspApi implements GitServiceApi {
    */
   private async publishEvent(event: EventTemplate): Promise<NostrEvent> {
     let signedEvent;
-
-    // Check if we're in a worker context and need to use the message-based signing protocol
     if (typeof requestEventSigning === 'function') {
-      console.log('Using message-based signing protocol for GRASP event');
-      try {
-        // Request signing from the UI thread
-        signedEvent = await requestEventSigning(event);
-      } catch (error) {
-        throw new Error(`Failed to sign event via message protocol: ${error}`);
-      }
+      // Worker-based signing mechanism mirrors ngit’s message-based signer interface
+      signedEvent = await requestEventSigning(event);
     } else {
-      // Direct signing when not in worker context or for backward compatibility
-      console.log('Using direct signing for GRASP event');
       if (!this.signer) {
-        throw new Error(
-          'No signer available for direct signing and message-based signing not configured'
-        );
+        throw new Error('No signer available for direct signing');
       }
+      // Direct signing matches ngit’s Ed25519 signing abstraction
       signedEvent = await this.signer.signEvent(event);
     }
-
-    // Use EventIO to publish (delegates to app's Welshman infrastructure)
     try {
+      // Mirrors event publication pipeline from ngit git_events.rs::publish_event()
       const result = await this.io.publishEvent(signedEvent);
-      if (!result.ok) {
-        throw new Error(result.error || 'Failed to publish event');
-      }
+      if (!result.ok) throw new Error(result.error || 'publish failed');
       return signedEvent;
     } catch (error) {
       throw new Error(`Failed to publish event: ${error}`);
@@ -206,7 +218,7 @@ export class GraspApi implements GitServiceApi {
   /**
    * Query Nostr events from relay using EventIO
    */
-  private async queryEvents(filters: Filter[]): Promise<NostrEvent[]> {
+  private async queryEvents(filters: NostrFilter[]): Promise<NostrEvent[]> {
     try {
       // Use EventIO to fetch events (delegates to app's Welshman infrastructure)
       const events = await this.io.fetchEvents(filters as any);
@@ -218,45 +230,141 @@ export class GraspApi implements GitServiceApi {
   }
 
   /**
+   * Get current GRASP capabilities of the relay
+   */
+  public async getCapabilities(): Promise<GraspCapabilities> {
+    await this.ensureCapabilities();
+    return this.capabilities!;
+  }
+
+  /**
+   * Get relay information via NIP-11
+   */
+  public async getRelayInfo(): Promise<RelayInfo> {
+    await this.ensureCapabilities();
+    return this.relayInfo ?? {};
+  }
+
+  /**
    * Repository Operations
    */
   async getRepo(owner: string, repo: string): Promise<RepoMetadata> {
-    // Query for repository announcement event (NIP-34 kind 30617)
-    const events = await this.queryEvents([
-      {
-        kinds: [30617],
-        authors: [owner],
-        '#d': [repo],
-        limit: 1
-      }
+    await this.ensureCapabilities();
+
+    // Query both announcement and state events in parallel
+    const repoAddr = encodeRepoAddress(owner, repo);
+    const [announceEvents, stateEvents] = await Promise.all([
+      this.queryEvents([
+        { kinds: [30617], authors: [owner], '#d': [repo], limit: 1 }
+      ]),
+      this.queryEvents([
+        { kinds: [31990], '#a': [repoAddr], limit: 1 }
+      ])
     ]);
 
-    if (events.length === 0) {
+    if (announceEvents.length === 0 && stateEvents.length === 0) {
       throw new Error(`Repository ${owner}/${repo} not found`);
     }
 
-    const event = events[0];
-    const nameTag = getTagValue(event as any, 'name') || repo;
-    const descTag = getTagValue(event as any, 'description') || '';
-    const cloneTag = getTagValue(event as any, 'clone') || '';
-    const webTag = getTagValue(event as any, 'web') || '';
+    const announceEvent = announceEvents[0];
+    const stateEvent = stateEvents[0];
+    const state: RepoState | null = stateEvent ? parseRepoStateFromEvent(stateEvent) : null;
 
     const npub = nip19.npubEncode(owner);
+    const nameTag = announceEvent ? getTagValue(announceEvent as any, 'name') || repo : repo;
+    const descTag = announceEvent ? getTagValue(announceEvent as any, 'description') || '' : '';
+    const cloneTag = announceEvent ? getTagValue(announceEvent as any, 'clone') || '' : '';
+    const webTag = announceEvent ? getTagValue(announceEvent as any, 'web') || '' : '';
+
+    // Default branch comes from state HEAD if present
+    const defaultBranch = getDefaultBranchFromHead(state?.head) ?? 'main';
+
+    const httpOrigin = this.httpBase ?? normalizeHttpOrigin(this.relayUrl);
 
     return {
-      id: event.id,
+      id: announceEvent?.id ?? stateEvent?.id ?? '',
       name: nameTag,
       fullName: `${npub}/${nameTag}`,
       description: descTag,
-      defaultBranch: 'main', // TODO: Extract from repo state event
-      isPrivate: false, // GRASP repos are typically public
-      cloneUrl: cloneTag || `${this.relayUrl}/${npub}/${repo}.git`,
-      htmlUrl: webTag || `${this.relayUrl}/${npub}/${repo}`,
+      defaultBranch,
+      isPrivate: false,
+      cloneUrl: cloneTag || `${httpOrigin}/${npub}/${repo}.git`,
+      htmlUrl: webTag || `${httpOrigin}/${npub}/${repo}`,
       owner: {
         login: npub,
         type: 'User'
       }
     };
+  }
+
+  async publishStateFromLocal(
+    owner: string,
+    repo: string,
+    opts?: { includeTags?: boolean; prevEventId?: string }
+  ): Promise<NostrEvent | null> {
+    await this.ensureCapabilities();
+    if (!this.capabilities?.grasp01) {
+      console.warn('Relay does not support GRASP-01');
+      return null;
+    }
+    const npub = nip19.npubEncode(owner);
+    const httpOrigin = this.httpBase ?? normalizeHttpOrigin(this.relayUrl);
+    const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`;
+    try {
+      // Mirrors ngit repo_state.rs: build HEAD refs, collect branch/tag refs, and include nostr refs
+      const fs = createMemFs();
+      const dir = '/grasp';
+      await git.fetch({ fs, http, dir, url: remoteUrl, depth: 1 });
+      // construct state from fetched refs - consistent with ngit repo_state.rs::build_state_event
+      const branches = await git.listBranches({ fs, dir });
+      const tags = opts?.includeTags ? await git.listTags({ fs, dir }) : [];
+      const refs: Record<string, string> = {};
+      for (const b of branches) {
+        try {
+          const sha = await git.resolveRef({ fs, dir, ref: `refs/heads/${b}` });
+          refs[`refs/heads/${b}`] = sha;
+        } catch {}
+      }
+      if (opts?.includeTags) {
+        for (const t of tags) {
+          try {
+            const sha = await git.resolveRef({ fs, dir, ref: `refs/tags/${t}` });
+            refs[`refs/tags/${t}`] = sha;
+          } catch {}
+        }
+      }
+      // HEAD management matches ngit logic that prioritizes HEAD ref resolution
+      let headRef = 'refs/heads/main';
+      try {
+        const resolvedHead = await git.resolveRef({ fs, dir, ref: 'HEAD' });
+        headRef = resolvedHead.startsWith('refs/')
+          ? resolvedHead
+          : `refs/heads/${resolvedHead}`;
+      } catch {}
+      const nostrRefs: string[] = [];
+      for (const key of Object.keys(refs)) {
+        if (key.startsWith('refs/nostr/')) {
+          nostrRefs.push(key.replace('refs/nostr/', ''));
+        }
+      }
+      const state: RepoState = {
+        address: encodeRepoAddress(owner, repo),
+        head: headRef,
+        refs,
+        nostrRefs,
+        updatedAt: Math.floor(Date.now() / 1000)
+      };
+      const event = buildStateEventTemplate(state);
+      if (opts?.prevEventId) {
+        event.tags.push(['prev', opts.prevEventId]);
+      }
+      // Event publication mirrors ngit git_events.rs::emit_repo_state_event
+      const published = await this.publishEvent(event);
+      return published;
+    } catch (err) {
+      console.error('publishStateFromLocal failed:', err);
+      throw new Error(`Failed to publish state event: ${err}`);
+    }
   }
 
   async createRepo(options: {
@@ -496,23 +604,96 @@ export class GraspApi implements GitServiceApi {
    * Commit Operations
    */
   async listCommits(owner: string, repo: string, options?: ListCommitsOptions): Promise<Commit[]> {
-    // For GRASP, we need to use Git Smart HTTP to fetch commits
+    await this.ensureCapabilities();
     const npub = nip19.npubEncode(owner);
-
+    const httpOrigin = this.httpBase ?? normalizeHttpOrigin(this.relayUrl);
+    const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`;
     try {
-      // This would require implementing Git Smart HTTP protocol parsing
-      // For now, return empty array as fallback
-      console.warn('GRASP listCommits not fully implemented - requires Git Smart HTTP parsing');
-      return [];
-    } catch (error) {
-      console.error('Failed to list commits:', error);
+      // Smart HTTP fetch logic parallels ngit’s use of libgit2 fetch mechanism
+      const fs = createMemFs();
+      const dir = '/grasp';
+      await git.fetch({
+        fs,
+        http,
+        dir,
+        url: remoteUrl,
+        depth: options?.per_page ?? 20,
+        singleBranch: true,
+        ref: options?.sha ?? 'main'
+      });
+      const ref = options?.sha ?? 'main';
+      // Equivalent to ngit git/mod.rs::list_commits constructing head log traversal
+      const commits = await git.log({ fs, dir, ref, depth: options?.per_page ?? 20 });
+      return commits.map((c) => ({
+        sha: c.oid,
+        url: `${remoteUrl}/commit/${c.oid}`,
+        author: { login: c.commit.author.name, avatarUrl: undefined },
+        committer: { login: c.commit.committer.name, avatarUrl: undefined },
+        message: c.commit.message,
+        parents: (c.commit.parent ?? []).map((p: string) => ({ sha: p, url: `${remoteUrl}/commit/${p}` })),
+        tree: { sha: c.commit.tree, url: `${remoteUrl}/tree/${c.commit.tree}` },
+        verification: { verified: false },
+        htmlUrl: `${remoteUrl}/commit/${c.oid}`,
+        commit: {
+          message: c.commit.message,
+          committer: {
+            name: c.commit.committer.name,
+            email: c.commit.committer.email,
+            date: new Date(c.commit.committer.timestamp * 1000).toISOString()
+          },
+          author: {
+            name: c.commit.author.name,
+            email: c.commit.author.email,
+            date: new Date(c.commit.author.timestamp * 1000).toISOString()
+          }
+        }
+      }));
+    } catch (err) {
+      console.error('listCommits failed', err);
       return [];
     }
   }
 
   async getCommit(owner: string, repo: string, sha: string): Promise<Commit> {
-    // Similar to listCommits, would require Git Smart HTTP implementation
-    throw new Error('GRASP getCommit not implemented - requires Git Smart HTTP parsing');
+    await this.ensureCapabilities();
+    const npub = nip19.npubEncode(owner);
+    const httpOrigin = this.httpBase ?? normalizeHttpOrigin(this.relayUrl);
+    const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`;
+    try {
+      const fs = createMemFs();
+      const dir = '/grasp';
+      // Mirrors ngit git/mod.rs::fetch_commit pattern using libgit2 shallow fetch
+      await git.fetch({ fs, http, dir, url: remoteUrl, depth: 1 });
+      const { commit } = await git.readCommit({ fs, dir, oid: sha });
+      // Commit parsing consistent with ngit commit_to_event representation
+      return {
+        sha,
+        url: `${remoteUrl}/commit/${sha}`,
+        author: { login: commit.author.name, avatarUrl: undefined },
+        committer: { login: commit.committer.name, avatarUrl: undefined },
+        message: commit.message,
+        parents: (commit.parent ?? []).map((p: string) => ({ sha: p, url: `${remoteUrl}/commit/${p}` })),
+        tree: { sha: commit.tree, url: `${remoteUrl}/tree/${commit.tree}` },
+        verification: { verified: false },
+        htmlUrl: `${remoteUrl}/commit/${sha}`,
+        commit: {
+          message: commit.message,
+          committer: {
+            name: commit.committer.name,
+            email: commit.committer.email,
+            date: new Date(commit.committer.timestamp * 1000).toISOString()
+          },
+          author: {
+            name: commit.author.name,
+            email: commit.author.email,
+            date: new Date(commit.author.timestamp * 1000).toISOString()
+          }
+        }
+      };
+    } catch (err) {
+      console.error('getCommit failed', err);
+      throw new Error(`Failed to get commit: ${err}`);
+    }
   }
 
   /**
