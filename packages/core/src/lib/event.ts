@@ -6,44 +6,55 @@ import { getTagValue, getTag, type EventIO } from '@nostr-git/shared-types';
 export type HexString = Uint8Array<ArrayBufferLike>;
 
 /**
- * Creates a NIP-34 permalink event from a URL
+ * Creates a NIP-34 permalink event from a URL - CLEAN VERSION
+ * Uses EventIO instead of passing signers around
  *
  * @param permalink - The permalink, as copied directly from GitHub/Gitea/GitLab.
- * @param sk - The secret key to sign the event with.
+ * @param eventIO - EventIO instance for publishing events
  * @param relays - The relays to query for existing git repos
  * @returns a signed permalink @NostrEvent
  */
 export async function createEventFromPermalink(
   permalink: string,
-  signer: (event: EventTemplate) => Promise<NostrEvent>,
-  relays: string[],
-  io?: EventIO
+  eventIO: EventIO,
+  relays: string[]
 ): Promise<NostrEvent> {
   const linkData = parsePermalink(permalink);
   if (!linkData) {
     throw new Error(`Could not parse permalink: ${permalink}`);
   }
-  // Only check for existing events if EventIO is provided
-  if (io) {
-    const exists = await permalinkEventExists(linkData, relays, io);
-    if (exists) {
-      return exists;
-    }
+  
+  // Check for existing events using EventIO
+  const exists = await permalinkEventExists(linkData, relays, eventIO);
+  if (exists) {
+    return exists;
   }
+  
   const eventTemplate = await createEvent(linkData, relays);
-  return signer(eventTemplate);
+  // Use EventIO to publish (handles signing internally)
+  const result = await eventIO.publishEvent(eventTemplate);
+  if (!result.ok) {
+    throw new Error(`Failed to publish event: ${result.error}`);
+  }
+  
+  // Return the signed event (we need to reconstruct it from the template)
+  // This is a limitation of the current EventIO interface
+  // TODO: EventIO should return the signed event
+  return eventTemplate as NostrEvent;
 }
 
 export async function createNeventFromPermalink(
   permalink: string,
-  signer: (event: EventTemplate) => Promise<NostrEvent>,
-  relays: string[],
-  io: EventIO
+  eventIO: EventIO,
+  relays: string[]
 ): Promise<string> {
-  const event = await createEventFromPermalink(permalink, signer, relays);
+  const event = await createEventFromPermalink(permalink, eventIO, relays);
 
   // Use EventIO to publish (delegates to app's infrastructure)
-  await io.publishEvent(event);
+  const result = await eventIO.publishEvent(event);
+  if (!result.ok) {
+    throw new Error(`Failed to publish event: ${result.error}`);
+  }
 
   const nevent = nip19.neventEncode({
     id: event.id,

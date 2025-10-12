@@ -1,4 +1,5 @@
 import { type EventTemplate, type NostrEvent } from 'nostr-tools';
+import { type EventIO } from '@nostr-git/shared-types';
 export type HexString = Uint8Array<ArrayBufferLike>;
 /**
  * Creates a NIP-34 permalink event from a URL
@@ -10,11 +11,11 @@ export type HexString = Uint8Array<ArrayBufferLike>;
  */
 export declare function createEventFromPermalink(
   permalink: string,
-  signer: (event: EventTemplate) => Promise<NostrEvent>,
+  eventIO: EventIO,
   relays: string[]
 ): Promise<NostrEvent>;
 export declare function createNeventFromPermalink(
   permalink: string,
-  signer: (event: EventTemplate) => Promise<NostrEvent>,
+  eventIO: EventIO,
   relays: string[]
 ): Promise<string>;

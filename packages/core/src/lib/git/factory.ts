@@ -1,18 +1,20 @@
 /**
- * Git Service API Factory
+ * Git Service API Factory - CLEAN VERSION
  *
  * Factory function to create the appropriate GitServiceApi implementation
  * based on the Git provider type and authentication token.
+ * 
+ * IMPORTANT: This uses EventIO instead of the cursed SignEvent passing pattern.
  */
 
 import type { GitServiceApi } from './api.js';
 import type { GitVendor } from '../vendor-providers.js';
-import type { EventIO, SignEvent } from '@nostr-git/shared-types';
+import type { EventIO } from '@nostr-git/shared-types';
 import { GitHubApi } from './providers/github.js';
 import { GitLabApi } from './providers/gitlab.js';
 import { GiteaApi } from './providers/gitea.js';
 import { BitbucketApi } from './providers/bitbucket.js';
-import { GraspApi, type Signer } from './providers/grasp.js';
+import { GraspApi } from './providers/grasp.js';
 
 /**
  * Create a GitServiceApi instance for the specified provider
@@ -20,9 +22,7 @@ import { GraspApi, type Signer } from './providers/grasp.js';
  * @param provider - The Git service provider ('github', 'gitlab', 'gitea', 'bitbucket', 'grasp')
  * @param token - Authentication token for the provider (or pubkey for GRASP)
  * @param baseUrl - Optional custom base URL (for self-hosted instances) or relay URL for GRASP
- * @param io - EventIO instance for Nostr operations (required for GRASP)
- * @param signEvent - SignEvent function for signing events (required for GRASP)
- * @param signer - Optional Nostr signer (for direct signing in UI thread; not required when using message-based signing)
+ * @param eventIO - EventIO instance for Nostr operations (required for GRASP)
  * @returns GitServiceApi implementation for the provider
  *
  * @example
@@ -33,17 +33,15 @@ import { GraspApi, type Signer } from './providers/grasp.js';
  * // Self-hosted GitLab
  * const gitlabApi = getGitServiceApi('gitlab', 'glpat-xxxxxxxxxxxx', 'https://gitlab.example.com');
  *
- * // GRASP relay (requires EventIO and SignEvent)
- * const graspApi = getGitServiceApi('grasp', pubkey, 'wss://relay.example.com', io, signEvent, signer);
+ * // GRASP relay (uses EventIO - no more signer passing!)
+ * const graspApi = getGitServiceApi('grasp', pubkey, 'wss://relay.example.com', eventIO);
  * ```
  */
 export function getGitServiceApi(
   provider: GitVendor,
   token: string,
   baseUrl?: string,
-  io?: EventIO,
-  signEvent?: SignEvent,
-  signer?: Signer
+  eventIO?: EventIO
 ): GitServiceApi {
   switch (provider) {
     case 'github':
@@ -62,14 +60,11 @@ export function getGitServiceApi(
       if (!baseUrl) {
         throw new Error('GRASP provider requires a relay URL as baseUrl parameter');
       }
-      if (!io) {
-        throw new Error('GRASP provider requires an EventIO instance');
+      if (!eventIO) {
+        throw new Error('GRASP provider requires a EventIO instance');
       }
-      if (!signEvent) {
-        throw new Error('GRASP provider requires a SignEvent function');
-      }
-      // signer is optional when using message-based signing across worker boundary
-      return new GraspApi(baseUrl, token, io, signEvent, signer);
+      // Clean approach - no more signer passing!
+      return new GraspApi(baseUrl, token, eventIO);
 
     case 'generic':
       throw new Error(
@@ -88,6 +83,7 @@ export function getGitServiceApi(
  *
  * @param url - Git repository URL or service base URL
  * @param token - Authentication token for the provider
+ * @param eventIO - Optional EventIO instance (required for GRASP)
  * @returns GitServiceApi implementation for the detected provider
  *
  * @example
@@ -97,9 +93,12 @@ export function getGitServiceApi(
  *
  * // Auto-detect self-hosted GitLab
  * const api = getGitServiceApiFromUrl('https://gitlab.example.com/owner/repo', 'glpat-xxxxxxxxxxxx');
+ *
+ * // Auto-detect GRASP relay
+ * const api = getGitServiceApiFromUrl('wss://relay.example.com', pubkey, eventIO);
  * ```
  */
-export function getGitServiceApiFromUrl(url: string, token: string): GitServiceApi {
+export function getGitServiceApiFromUrl(url: string, token: string, eventIO?: EventIO): GitServiceApi {
   const normalizedUrl = url.toLowerCase();
 
   // Detect provider from URL
@@ -135,7 +134,7 @@ export function getGitServiceApiFromUrl(url: string, token: string): GitServiceA
     );
   }
 
-  return getGitServiceApi(provider, token, baseUrl);
+  return getGitServiceApi(provider, token, baseUrl, eventIO);
 }
 
 /**

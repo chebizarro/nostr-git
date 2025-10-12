@@ -7,6 +7,21 @@ export * from './lib/event.js';
 export * from './lib/fork-handler.js';
 export * from './lib/git-provider.js';
 export * from './lib/git-worker-client.js';
+
+// Clean event publishing interfaces
+export { 
+  createEventPublisher, 
+  createBatchEventPublisher, 
+  createRetryEventPublisher,
+  type EventPublisher 
+} from './lib/event-publisher.js';
+
+export { 
+  createEventIO, 
+  createLegacyEventIOAdapter,
+  type EventIO,
+  type LegacyEventIO 
+} from './lib/eventio.js';
 export * from './lib/files.js';
 export * from './lib/repo.js';
 export * from './lib/workers/git-worker.js';

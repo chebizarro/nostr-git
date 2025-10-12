@@ -9,11 +9,6 @@
 
 import type { EventIO } from '@nostr-git/shared-types';
 
-// Define Signer interface locally
-interface Signer {
-  signEvent(event: any): Promise<any>;
-  getPublicKey(): Promise<string>;
-}
 import { NostrGitProvider, type NostrGitConfig } from './nostr-git-provider.js';
 import { GraspApi, type GraspApiConfig } from './grasp-api.js';
 
@@ -21,10 +16,8 @@ import { GraspApi, type GraspApiConfig } from './grasp-api.js';
  * Factory configuration options
  */
 export interface NostrGitFactoryOptions {
-  /** Nostr event I/O interface */
+  /** Clean Event I/O interface - no more signer passing! */
   eventIO: EventIO;
-  /** Nostr signer for creating events */
-  signer: Signer;
   /** Default relay URLs */
   defaultRelays?: string[];
   /** Fallback relay URLs */
@@ -73,7 +66,6 @@ export const DEFAULT_RELAYS = {
 export function createNostrGitProvider(options: NostrGitFactoryOptions): NostrGitProvider {
   const {
     eventIO,
-    signer,
     defaultRelays = DEFAULT_RELAYS.default,
     fallbackRelays = DEFAULT_RELAYS.fallback,
     graspRelays = DEFAULT_RELAYS.grasp,
@@ -89,7 +81,6 @@ export function createNostrGitProvider(options: NostrGitFactoryOptions): NostrGi
   if (enableGrasp) {
     const graspConfig: GraspApiConfig = {
       eventIO,
-      signer,
       relays: graspRelays,
       timeoutMs
     };
@@ -99,7 +90,6 @@ export function createNostrGitProvider(options: NostrGitFactoryOptions): NostrGi
   // Create NostrGitProvider configuration
   const config: NostrGitConfig = {
     eventIO,
-    signer,
     grasp: graspApi,
     defaultRelays,
     fallbackRelays,
@@ -120,11 +110,9 @@ export function createNostrGitProvider(options: NostrGitFactoryOptions): NostrGi
  */
 export function createNostrGitProviderFromEnv(options: {
   eventIO: EventIO;
-  signer: Signer;
 }): NostrGitProvider {
   const {
-    eventIO,
-    signer
+    eventIO
   } = options;
 
   // Read configuration from environment variables
@@ -139,7 +127,6 @@ export function createNostrGitProviderFromEnv(options: {
 
   return createNostrGitProvider({
     eventIO,
-    signer,
     defaultRelays,
     fallbackRelays,
     graspRelays,
@@ -158,12 +145,10 @@ export function createNostrGitProviderFromEnv(options: {
  */
 export async function createNostrGitProviderFromGitConfig(options: {
   eventIO: EventIO;
-  signer: Signer;
   gitDir?: string;
 }): Promise<NostrGitProvider> {
   const {
     eventIO,
-    signer,
     gitDir
   } = options;
 
@@ -202,7 +187,6 @@ export async function createNostrGitProviderFromGitConfig(options: {
 
   return createNostrGitProvider({
     eventIO,
-    signer,
     ...config
   });
 }
@@ -250,7 +234,6 @@ export function createProviderForUrl(
   url: string,
   options: {
     eventIO: EventIO;
-    signer: Signer;
     preferNostr?: boolean;
     enableGrasp?: boolean;
   }
@@ -263,7 +246,6 @@ export function createProviderForUrl(
   if (providerType === 'nostr') {
     return createNostrGitProvider({
       eventIO: options.eventIO,
-      signer: options.signer,
       enableGrasp: options.enableGrasp ?? true
     });
   }

@@ -23,15 +23,8 @@ import {
   createRepoAnnouncementEvent
 } from '@nostr-git/shared-types';
 
-// Local Signer interface since it's not exported from shared-types
-interface Signer {
-  getPublicKey(): Promise<string>;
-  signEvent(event: any): Promise<string>;
-}
-
 export interface NostrGitConfig {
   eventIO: EventIO;
-  signer: Signer;
   grasp?: GraspLike;
   defaultRelays?: string[];
   fallbackRelays?: string[];
@@ -204,36 +197,15 @@ export class NostrGitProvider {
         created_at: Math.floor(Date.now() / 1000)
       });
 
-      // Sign the event
-      const signedEvent = {
-        ...stateEvent,
-        sig: await this.nostrConfig.signer.signEvent(stateEvent)
-      };
-
-      // Publish to relays
-      const targetRelays = relays || this.nostrConfig.defaultRelays || [];
-      const publishPromises = targetRelays.map(async (relay) => {
-        try {
-          // Mock publish for now - in real implementation this would use eventIO.publishEvent
-          return `published-to-${relay}`;
-        } catch (error) {
-          console.warn(`Failed to publish to relay ${relay}:`, error);
-          return null;
-        }
-      });
-
-      const results = await Promise.allSettled(publishPromises);
-      const successful = results
-        .filter((result): result is PromiseFulfilledResult<string> => 
-          result.status === 'fulfilled' && result.value !== null
-        )
-        .map(result => result.value);
-
-      if (successful.length === 0) {
-        throw new Error('Failed to publish to any relay');
+      // Publish the event using EventIO (handles signing internally - no more signer passing!)
+      const publishResult = await this.nostrConfig.eventIO.publishEvent(stateEvent);
+      
+      if (!publishResult.ok) {
+        throw new Error(`Failed to publish repository state: ${publishResult.error}`);
       }
-
-      return successful[0];
+      
+      console.log('[NostrGitProvider] Repository state published successfully');
+      return publishResult.relays?.[0] || 'published';
     } catch (error) {
       console.error('Failed to publish repo state:', error);
       throw error;
@@ -264,36 +236,15 @@ export class NostrGitProvider {
         created_at: Math.floor(Date.now() / 1000)
       });
 
-      // Sign the event
-      const signedEvent = {
-        ...announcementEvent,
-        sig: await this.nostrConfig.signer.signEvent(announcementEvent)
-      };
-
-      // Publish to relays
-      const targetRelays = relays || this.nostrConfig.defaultRelays || [];
-      const publishPromises = targetRelays.map(async (relay) => {
-        try {
-          // Mock publish for now - in real implementation this would use eventIO.publishEvent
-          return `published-to-${relay}`;
-        } catch (error) {
-          console.warn(`Failed to publish to relay ${relay}:`, error);
-          return null;
-        }
-      });
-
-      const results = await Promise.allSettled(publishPromises);
-      const successful = results
-        .filter((result): result is PromiseFulfilledResult<string> => 
-          result.status === 'fulfilled' && result.value !== null
-        )
-        .map(result => result.value);
-
-      if (successful.length === 0) {
-        throw new Error('Failed to publish to any relay');
+      // Publish the event using EventIO (handles signing internally - no more signer passing!)
+      const publishResult = await this.nostrConfig.eventIO.publishEvent(announcementEvent);
+      
+      if (!publishResult.ok) {
+        throw new Error(`Failed to publish repository announcement: ${publishResult.error}`);
       }
-
-      return successful[0];
+      
+      console.log('[NostrGitProvider] Repository announcement published successfully');
+      return publishResult.relays?.[0] || 'published';
     } catch (error) {
       console.error('Failed to publish repo announcement:', error);
       throw error;
@@ -364,17 +315,14 @@ export class NostrGitProvider {
           created_at: Math.floor(Date.now() / 1000)
         };
 
-        // Sign the event
-        const signedEvent = {
-          ...patchEvent,
-          pubkey: await this.nostrConfig.signer.getPublicKey(),
-          id: 'mock-event-id',
-          sig: await this.nostrConfig.signer.signEvent(patchEvent)
-        };
-
-        // Publish the event
-        await this.nostrConfig.eventIO.publishEvent(signedEvent);
-        patchEvents.push('mock-patch-id');
+        // Publish the event using EventIO (handles signing internally - no more signer passing!)
+        const publishResult = await this.nostrConfig.eventIO.publishEvent(patchEvent);
+        
+        if (publishResult.ok) {
+          patchEvents.push('mock-patch-id');
+        } else {
+          console.warn('Failed to publish patch event:', publishResult.error);
+        }
       }
 
       return patchEvents;

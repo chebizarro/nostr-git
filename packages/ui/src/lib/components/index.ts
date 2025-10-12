@@ -92,6 +92,7 @@ export { toast } from "../stores/toast";
 export { context } from "../stores/context";
 export { tokens } from "../stores/tokens";
 export { signer } from "../stores/signer";
+// EventIO handles signing internally - no more signer exports needed
 
 // Providers
 export { default as ConfigProvider } from "../ConfigProvider.svelte";

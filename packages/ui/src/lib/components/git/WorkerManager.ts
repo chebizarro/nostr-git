@@ -1,4 +1,5 @@
-import { getGitWorker, registerEventSigner } from "@nostr-git/core";
+import { getGitWorker } from "@nostr-git/core";
+import type { EventIO } from "@nostr-git/shared-types";
 import {
   listBranchesFromEvent,
   listRepoFilesFromEvent,
@@ -9,7 +10,6 @@ import {
   getCommitHistory,
 } from "@nostr-git/core";
 import { RepoAnnouncementEvent } from "@nostr-git/shared-types";
-import { signer as signerStore, type Signer } from "../../stores/signer";
 
 export interface WorkerProgressEvent {
   repoId: string;
@@ -46,7 +46,6 @@ export class WorkerManager {
   private isInitialized = false;
   private progressCallback?: WorkerProgressCallback;
   private authConfig: AuthConfig = { tokens: [] };
-  private currentSigner: Signer | null = null;
   // Throttle repeated initialize() calls and avoid duplicate work
   private initInFlight: Promise<void> | null = null;
   private lastInitAt = 0;
@@ -55,15 +54,7 @@ export class WorkerManager {
   private lastAuthConfigJson = "";
   constructor(progressCallback?: WorkerProgressCallback) {
     this.progressCallback = progressCallback;
-    // Track latest signer from the store
-    try {
-      signerStore.subscribe((s) => {
-        this.currentSigner = s;
-      });
-    } catch (e) {
-      // Non-fatal if store subscription fails in non-Svelte contexts
-      console.warn("WorkerManager: signer store subscription failed", e);
-    }
+    // Clean architecture - worker handles EventIO internally
   }
 
   /**
@@ -82,16 +73,9 @@ export class WorkerManager {
       this.api = api as any;
       this.isInitialized = true;
       try {
-        // Register UI event signer so worker can request Nostr event signatures (e.g., GRASP push)
+        // Worker is initialized - EventIO will be handled internally by the worker
         if (this.worker) {
-          registerEventSigner(this.worker, async (event: any) => {
-            const s = this.currentSigner;
-            if (!s || typeof s.sign !== "function") {
-              throw new Error("No signer available");
-            }
-            const signed = await s.sign(event);
-            return signed;
-          });
+          // EventIO configuration removed - worker handles its own EventIO internally
         }
 
         // Set authentication configuration in the worker (dedup)

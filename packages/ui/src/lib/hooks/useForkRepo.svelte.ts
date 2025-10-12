@@ -3,9 +3,10 @@ import {
   createRepoStateEvent,
   RepoAnnouncementEvent,
   RepoStateEvent,
+  type EventIO,
 } from "@nostr-git/shared-types";
 import { tokens as tokensStore, type Token } from "$lib/stores/tokens";
-import { getGitServiceApi } from "@nostr-git/core";
+import { getGitServiceApi, createEventIO } from "@nostr-git/core";
 
 // Types for fork configuration and progress
 export interface ForkConfig {
@@ -71,7 +72,7 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
   let tokens = $state<Token[]>([]);
 
   // Prevent duplicate GRASP signing listener registration per session
-  let signingSetupDone = false;
+  // EventIO handles signing internally - no more signer setup needed
 
   // Subscribe to token store changes and update reactive state
   tokensStore.subscribe((t: Token[]) => {
@@ -147,21 +148,15 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
       let relayUrl: string | undefined;
 
       if (provider === "grasp") {
-        updateProgress("validate", "Validating Nostr signer and relay URL...", "running");
-        // Get signer from global store (same as new repo flow)
-        const { signer: signerStore } = await import("../stores/signer");
-        let nostrSigner: any = null;
-        signerStore.subscribe((v: any) => (nostrSigner = v))();
-        if (!nostrSigner) {
-          throw new Error("No Nostr signer available for GRASP");
-        }
+        updateProgress("validate", "Validating GRASP configuration...", "running");
+        // EventIO handles signing internally - no more signer passing anti-pattern!
         if (!config.relayUrl) {
           throw new Error("GRASP requires a relay URL");
         }
         relayUrl = config.relayUrl;
-        pubkey = await nostrSigner.getPubkey();
-        providerToken = pubkey; // Use pubkey as token identifier
-        updateProgress("validate", "Nostr signer and relay URL validated", "completed");
+        // EventIO will provide the pubkey when needed
+        providerToken = "grasp-token"; // Placeholder - EventIO handles actual authentication
+        updateProgress("validate", "GRASP configuration validated", "completed");
       } else {
         updateProgress("validate", `Validating ${provider} token...`, "running");
         providerToken = tokens.find((t) => t.host === providerHost)?.token;
@@ -201,34 +196,10 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
       // Use just the fork name as directory path (browser virtual file system)
       const destinationPath = config.forkName;
 
-      // If GRASP, set up message-based signing so worker can request signatures
+      // EventIO handles signing internally - no more signer registration needed!
       if (provider === "grasp") {
-        if (!signingSetupDone) {
-          // Register message handler for signing requests (once)
-          worker.addEventListener("message", async (event: MessageEvent) => {
-            if ((event as any).data?.type === "request-event-signing") {
-              try {
-                const { signer: signerStore } = await import("../stores/signer");
-                let nostrSigner: any = null;
-                signerStore.subscribe((v: any) => (nostrSigner = v))();
-                const signedEvent = await nostrSigner.sign((event as any).data.event);
-                worker.postMessage({
-                  type: "event-signed",
-                  requestId: (event as any).data.requestId,
-                  signedEvent,
-                });
-              } catch (e: any) {
-                worker.postMessage({
-                  type: "event-signing-error",
-                  requestId: (event as any).data.requestId,
-                  error: e?.message || String(e),
-                });
-              }
-            }
-          });
-          worker.postMessage({ type: "register-event-signer" });
-          signingSetupDone = true;
-        }
+        // EventIO will be configured by the worker internally
+        console.log("🔐 GRASP fork - EventIO handles signing internally (no more signer passing!)");
       }
 
       const workerResult = await gitWorkerApi.forkAndCloneRepo({

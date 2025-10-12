@@ -139,5 +139,6 @@ export type {
   NostrFilter,
   PublishResult,
   EventIO,
+  LegacyEventIO,
   SignEvent,
 } from "./io-types.js"

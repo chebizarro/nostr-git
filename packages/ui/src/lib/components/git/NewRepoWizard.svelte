@@ -3,7 +3,7 @@
   import AdvancedSettingsStep from "./AdvancedSettingsStep.svelte";
   import RepoProgressStep from "./RepoProgressStep.svelte";
   import StepChooseService from "./steps/StepChooseService.svelte";
-  import { type Event as NostrEvent, nip19 } from "nostr-tools";
+  import { type Event as NostrEvent } from "nostr-tools";
   import { useRegistry } from "../../useRegistry";
   import {
     useNewRepo,
@@ -12,9 +12,26 @@
   } from "../../useNewRepo.svelte";
   import { tokens as tokensStore, type Token } from "../../stores/tokens.js";
   import { createGraspServersStore } from "../../stores/graspServers.js";
-  import { signer as signerStore } from "../../stores/signer";
 
   const { Button } = useRegistry();
+
+  function deriveOrigins(input: string): { wsOrigin: string; httpOrigin: string } {
+    try {
+      if (!input) return { wsOrigin: "", httpOrigin: "" };
+      const normalized = input.trim();
+      const prefixed = /^(https?:\/\/|wss?:\/\/)/i.test(normalized) ? normalized : `https://${normalized}`;
+      const url = new URL(prefixed);
+      const isSecure = typeof window !== "undefined" && window.location?.protocol === "https:";
+      const protocol = url.protocol.replace(":", "");
+      const host = url.host;
+      const httpScheme =
+        isSecure ? "https" : protocol === "http" || protocol === "https" ? protocol : "http";
+      const wsScheme = isSecure ? "wss" : protocol.startsWith("ws") ? protocol : "ws";
+      return { wsOrigin: `${wsScheme}://${host}`, httpOrigin: `${httpScheme}://${host}` };
+    } catch {
+      return { wsOrigin: "", httpOrigin: "" };
+    }
+  }
 
   interface Props {
     workerApi?: any; // Git worker API instance (optional for backward compatibility)
@@ -70,8 +87,6 @@
   let tokens = $state<Token[]>([]);
   let selectedProvider = $state<string | undefined>(undefined);
   let graspRelayUrl = $state<string>("");
-  let cachedNpub = $state<string | null>(null);
-  let hasSigner = $state(false);
   let userEditedWebUrl = $state(false);
   let userEditedCloneUrl = $state(false);
   // Grasp server options derived from store
@@ -83,7 +98,7 @@
 
   $effect(() => {
     const normalized = Array.from(new Set((graspServerUrls || []).map((url) => url.trim()).filter(Boolean)));
-    graspServerStore.urls.set(normalized);
+    graspServerStore.setUrls(normalized);
   });
 
   // Repository name availability tracking
@@ -107,22 +122,7 @@
     tokens = t;
   });
 
-  // Resolve npub from signer store (cached)
-  async function ensureNpub(): Promise<string | null> {
-    if (cachedNpub) return cachedNpub;
-    let s: any = null;
-    signerStore.subscribe((v) => (s = v))();
-    try {
-      const pubkey: string = await s?.getPubkey?.();
-      if (pubkey) {
-        cachedNpub = nip19.npubEncode(pubkey);
-        hasSigner = true;
-        return cachedNpub;
-      }
-    } catch {}
-    hasSigner = false;
-    return null;
-  }
+  // EventIO handles signing internally - no more signer checks needed
 
   // Compute sensible defaults for Advanced Settings
   function providerHost(p?: string): string | undefined {
@@ -139,7 +139,7 @@
   async function updateAdvancedDefaults() {
     const name = repoDetails.name?.trim();
     if (!name) return;
-    const npub = await ensureNpub();
+    // EventIO handles signing internally - no need to get npub here
 
     // Derive username and host from availability results for the selected provider
     const providerResult =
@@ -155,8 +155,8 @@
     ) {
       let url = "";
       if (selectedProvider === "grasp") {
-        // Use gitworkshop.dev for GRASP
-        url = npub ? `https://gitworkshop.dev/${npub}/${name}` : "";
+        // For GRASP, use a placeholder URL - EventIO will handle the actual pubkey
+        url = `https://gitworkshop.dev/[pubkey]/${name}`;
       } else if (selectedProvider) {
         const host = availabilityHost || providerHost(selectedProvider);
         if (host && username) {
@@ -175,13 +175,13 @@
       const host = availabilityHost || providerHost(selectedProvider);
 
       if (selectedProvider === "grasp") {
-        // For GRASP, use only nostr as the auto-generated default
-        const nostrUrl = npub ? `nostr://${npub}/${name}` : undefined;
-        advancedSettings.cloneUrls = nostrUrl ? [nostrUrl] : [];
+        // For GRASP, use nostr URL with placeholder - EventIO will handle actual pubkey
+        const nostrUrl = `nostr://[pubkey]/${name}`;
+        advancedSettings.cloneUrls = [nostrUrl];
       } else {
         // For non-GRASP: prefer HTTPS primary (when derivable), plus nostr secondary
         const httpsUrl = host && username ? `https://${host}/${username}/${name}.git` : undefined;
-        const nostrUrl = npub ? `nostr://${npub}/${name}` : undefined;
+        const nostrUrl = `nostr://[pubkey]/${name}`; // EventIO will handle actual pubkey
 
         if (httpsUrl) {
           advancedSettings.cloneUrls = nostrUrl ? [httpsUrl, nostrUrl] : [httpsUrl];
@@ -360,6 +360,12 @@
   // Provider selection handler
   function handleProviderChange(provider: string) {
     selectedProvider = provider;
+    if (provider !== "grasp") {
+      try {
+        window.dispatchEvent(new Event("nostr-git:clear-relay-override"));
+        console.info("Cleared relay override (non-GRASP provider)");
+      } catch {}
+    }
     // Clear previous availability results when provider changes
     nameAvailabilityResults = null;
     // Reset web/clone URL state so they reflect the new service
@@ -378,31 +384,26 @@
   // GRASP relay URL handler
   function handleRelayUrlChange(url: string) {
     graspRelayUrl = url;
-    // For GRASP, re-check availability when relay changes and name is present
+    const { wsOrigin } = deriveOrigins(url);
+    const relayTarget = wsOrigin || url;
+    if (selectedProvider === "grasp") {
+      try {
+        window.dispatchEvent(
+          new CustomEvent("nostr-git:set-relay-override", { detail: { relays: [relayTarget] } })
+        );
+        console.info("Relay override set to", relayTarget);
+      } catch (err) {
+        console.warn("Failed to dispatch relay override event", err);
+      }
+    }
     if (selectedProvider === "grasp" && repoDetails.name && repoDetails.name.trim().length > 0) {
       debouncedNameCheck(repoDetails.name);
     }
   }
 
-  // Track signer presence reactively
-  $effect(() => {
-    void selectedProvider;
-    // Attempt to refresh signer state when provider changes
-    ensureNpub();
-  });
+  // EventIO handles signing internally - no more signer tracking needed
 
-  function connectSignerCTA() {
-    // Host app can listen to this to open signer settings UI
-    try {
-      window.dispatchEvent(new CustomEvent("nostr-git:open-signer-settings"));
-    } catch {}
-    // Fallback: try navigating to a conventional settings route if present
-    try {
-      if (location && typeof location.assign === "function") {
-        location.assign("/settings#nostr");
-      }
-    } catch {}
-  }
+  // EventIO handles signing internally - no more signer CTA needed
 
   // Validate relay URL for GRASP provider
   function isValidGraspConfig(): boolean {
@@ -523,6 +524,15 @@
     void nameAvailabilityResults;
     updateAdvancedDefaults();
   });
+
+  $effect(() => {
+    return () => {
+      try {
+        window.dispatchEvent(new Event("nostr-git:clear-relay-override"));
+        console.info("Relay override cleared on wizard unmount");
+      } catch {}
+    };
+  });
 </script>
 
 <div
@@ -600,24 +610,7 @@
     class="bg-card text-card-foreground rounded-lg border shadow-sm p-6 max-h-[70vh] overflow-auto"
   >
     {#if currentStep === 1}
-      <!-- Inline signer CTA for GRASP when no signer is detected -->
-      {#if selectedProvider === "grasp" && !hasSigner}
-        <div
-          class="mb-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-destructive"
-        >
-          <div class="flex items-center justify-between gap-3">
-            <div>
-              <div class="font-medium">Nostr signer required</div>
-              <div class="text-sm opacity-80">
-                Connect a Nostr signer to create a GRASP repository.
-              </div>
-            </div>
-            <Button size="sm" variant="destructive" onclick={connectSignerCTA}
-              >Connect Signer</Button
-            >
-          </div>
-        </div>
-      {/if}
+      <!-- EventIO handles signing internally - no signer CTA needed -->
 
       <StepChooseService
         tokens={tokens}
@@ -710,7 +703,7 @@
           onclick={nextStep}
           disabled={(currentStep === 1 &&
             (!selectedProvider ||
-              (selectedProvider === "grasp" && (!isValidGraspConfig() || !hasSigner)))) ||
+              (selectedProvider === "grasp" && !isValidGraspConfig()))) ||
             (currentStep === 2 && !validateStep1())}
           variant="git"
           size="sm"

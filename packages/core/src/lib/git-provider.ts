@@ -5,12 +5,6 @@ import { NostrGitProvider } from './git/providers/nostr-git-provider.js';
 import { createNostrGitProviderFromEnv } from './git/providers/nostr-git-factory.js';
 import type { EventIO } from '@nostr-git/shared-types';
 
-// Define Signer interface locally
-interface Signer {
-  signEvent(event: any): Promise<any>;
-  getPublicKey(): Promise<string>;
-}
-
 // Create the multi-vendor GitProvider instance using git-wrapper factory
 let gitProvider: GitProvider = new MultiVendorGitProvider({
   baseProvider: getBaseGitProvider()
@@ -53,14 +47,15 @@ export function setGitTokens(tokens: Array<{ host: string; token: string }>) {
 }
 
 /**
- * Initialize NostrGitProvider with EventIO and Signer
+ * Initialize NostrGitProvider with EventIO - CLEAN VERSION
  *
  * This sets up the NostrGitProvider for Nostr-based Git operations.
  * Must be called before using any Nostr-specific functionality.
+ * 
+ * IMPORTANT: No more Signer passing - EventIO handles signing internally!
  */
 export function initializeNostrGitProvider(options: {
   eventIO: EventIO;
-  signer: Signer;
 }): NostrGitProvider {
   nostrGitProvider = createNostrGitProviderFromEnv(options);
   return nostrGitProvider;

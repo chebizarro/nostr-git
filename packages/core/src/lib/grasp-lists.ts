@@ -42,6 +42,7 @@ export function makeGraspServersUnsignedEvent(opts: {
 // Parse a GRASP servers set event content into validated, normalized URLs
 export function parseGraspServersEvent(evt: NostrEvent): string[] {
   try {
+    if (!evt || !evt.content) return [];
     const parsed = JSON.parse(evt.content);
     const urls: string[] = Array.isArray(parsed?.urls) ? parsed.urls : [];
     return urls.map(normalizeGraspServerUrl).filter(validateGraspServerUrl);
