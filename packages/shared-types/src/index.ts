@@ -161,6 +161,6 @@ export {
   BookmarkedRepo,
   validateGraspServerUrl,
   normalizeGraspServerUrl,
-  makeGraspServersUnsignedEvent,
+  createGraspServersEvent,
   parseGraspServersEvent,
 } from "./nip51-utils.js"

@@ -6,7 +6,6 @@
  *
  * GRASP Specification: https://github.com/nostr-protocol/nips/pull/XXX
  */
-
 import type {
   GitServiceApi,
   RepoMetadata,
@@ -22,8 +21,8 @@ import type {
   User,
   GitForkOptions
 } from '../api.js';
-import { nip19 } from 'nostr-tools';
-import { getTagValue, getTags } from '@nostr-git/shared-types';
+import { nip19, SimplePool } from 'nostr-tools';
+import { NostrFilter, createRepoStateEvent, getTagValue, getTags } from '@nostr-git/shared-types';
 import {
   fetchRelayInfo,
   graspCapabilities as detectCapabilities,
@@ -33,24 +32,20 @@ import {
 } from './grasp-capabilities.js';
 import {
   encodeRepoAddress,
-  parseRepoStateFromEvent,
   getDefaultBranchFromHead,
-  buildStateEventTemplate,
-  type RepoState
 } from './grasp-state.js';
 import { createMemFs } from './grasp-fs.js';
 import * as git from 'isomorphic-git';
 // @ts-ignore - isomorphic-git/http/web has type issues
 import http from 'isomorphic-git/http/web';
+import { type NostrEvent, type RepoState } from '@nostr-git/shared-types';
 
 /**
- * GRASP Git Relay API Implementation - CLEAN VERSION
+ * GRASP Git Relay API Implementation
  *
  * Implements the GitServiceApi interface for GRASP (Git Relays Authorized via Signed-Nostr Proofs).
  * Uses Nostr for authorization and coordination, with Git repositories hosted over Smart HTTP.
  *
- * IMPORTANT: This uses EventIO instead of the cursed SignEvent passing pattern.
- * The Signer interface has been completely vaporized!
  */
 
 /**
@@ -62,7 +57,8 @@ export class GraspApi implements GitServiceApi {
   private readonly relayUrl: string;
   private readonly pubkey: string;
   private relayInfo?: RelayInfo;
-
+  private pool: SimplePool = new SimplePool();
+  
   constructor(
     relayUrl: string,
     pubkey: string
@@ -232,16 +228,16 @@ export class GraspApi implements GitServiceApi {
           nostrRefs.push(key.replace('refs/nostr/', ''));
         }
       }
-      const state: RepoState = {
-        address: encodeRepoAddress(owner, repo),
-        head: headRef,
-        refs,
-        nostrRefs,
-        updatedAt: Math.floor(Date.now() / 1000)
-      };
-      const event = buildStateEventTemplate(state);
+      const event = createRepoStateEvent({
+        repoId: encodeRepoAddress(owner, repo),
+        refs: Object.entries(refs).map(([ref, commit]) => ({
+          type: ref.startsWith('refs/heads/') ? 'heads' : 'tags',
+          name: ref.replace('refs/', ''),
+          commit,
+        })),
+      });
       if (opts?.prevEventId) {
-        event.tags.push(['prev', opts.prevEventId]);
+        event.tags.push(['refs/heads/main', opts.prevEventId]);
       }
       // NOTE: Event publication moved to UI layer. This method now throws an error.
       throw new Error('publishStateFromLocal not supported without external EventIO. Publish state events via UI layer.');
@@ -681,5 +677,10 @@ export class GraspApi implements GitServiceApi {
     tarballUrl: string;
   }> {
     throw new Error('GRASP getTag not implemented - requires Git Smart HTTP parsing');
+  }
+
+  async queryEvents(filters: NostrFilter[]): Promise<NostrEvent[]> {
+    const events = await this.pool.querySync([this.relayUrl], filters[0]);
+    return events;
   }
 }

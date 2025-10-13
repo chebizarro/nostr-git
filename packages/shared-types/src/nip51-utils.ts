@@ -1,4 +1,4 @@
-import type { NostrEvent } from '@nostr-git/shared-types';
+import type { GraspSetEvent, GraspSetTag, NostrEvent } from '@nostr-git/shared-types';
 import { DEFAULT_GRASP_SET_ID, GRASP_SET_KIND } from './nip51.js';
 
 // Bookmark entry for a single repo
@@ -23,25 +23,21 @@ export function normalizeGraspServerUrl(url: string): string {
     return url.trim().replace(/\/$/, '');
 }
 
-export function makeGraspServersUnsignedEvent(opts: {
+export function createGraspServersEvent(opts: {
     pubkey: string;
     urls: string[];
-    identifier?: string; // NIP-51 d-tag value
-    created_at?: number;
-}): { kind: number; created_at: number; tags: string[][]; content: string } {
-    const { pubkey, urls, identifier = DEFAULT_GRASP_SET_ID } = opts;
-    const created_at = opts.created_at ?? Math.floor(Date.now() / 1000);
+}): GraspSetEvent {
+    const { pubkey, urls } = opts;
+    const created_at = Math.floor(Date.now() / 1000);
 
     const clean = Array.from(new Set(urls.map(normalizeGraspServerUrl))).filter(
         validateGraspServerUrl
     );
     const content = JSON.stringify({ urls: clean });
-    const tags: string[][] = [
-        ['d', identifier],
-        // Optional: include owner for clarity (not required for parameterized replaceable)
-        ['author', pubkey]
+    const tags: GraspSetTag[] = [
+        ['d', DEFAULT_GRASP_SET_ID],
     ];
-    return { kind: GRASP_SET_KIND, created_at, tags, content };
+    return { kind: GRASP_SET_KIND, created_at, tags, content, pubkey } as GraspSetEvent;
 }
 
 // Parse a GRASP servers set event content into validated, normalized URLs

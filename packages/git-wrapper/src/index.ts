@@ -14,6 +14,7 @@ export * from "./config.js"
 export * from "./nostr-url.js"
 export * from "./nip05.js"
 export * from "./git-utils.js"
+export * from "./factory.node.js"
 
 /**
  * Minimal lightweight interface representing the required GRASP API methods.
