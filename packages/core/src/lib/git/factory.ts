@@ -4,12 +4,12 @@
  * Factory function to create the appropriate GitServiceApi implementation
  * based on the Git provider type and authentication token.
  * 
- * IMPORTANT: This uses EventIO instead of the cursed SignEvent passing pattern.
+ * Note: GRASP event publishing is handled in the UI layer (e.g., useNewRepo.svelte.ts).
+ * The GraspApi here is a pure Smart HTTP client and does not take EventIO.
  */
 
 import type { GitServiceApi } from './api.js';
 import type { GitVendor } from '../vendor-providers.js';
-import type { EventIO } from '@nostr-git/shared-types';
 import { GitHubApi } from './providers/github.js';
 import { GitLabApi } from './providers/gitlab.js';
 import { GiteaApi } from './providers/gitea.js';
@@ -22,7 +22,6 @@ import { GraspApi } from './providers/grasp.js';
  * @param provider - The Git service provider ('github', 'gitlab', 'gitea', 'bitbucket', 'grasp')
  * @param token - Authentication token for the provider (or pubkey for GRASP)
  * @param baseUrl - Optional custom base URL (for self-hosted instances) or relay URL for GRASP
- * @param eventIO - EventIO instance for Nostr operations (required for GRASP)
  * @returns GitServiceApi implementation for the provider
  *
  * @example
@@ -33,15 +32,14 @@ import { GraspApi } from './providers/grasp.js';
  * // Self-hosted GitLab
  * const gitlabApi = getGitServiceApi('gitlab', 'glpat-xxxxxxxxxxxx', 'https://gitlab.example.com');
  *
- * // GRASP relay (uses EventIO - no more signer passing!)
- * const graspApi = getGitServiceApi('grasp', pubkey, 'wss://relay.example.com', eventIO);
+ * // GRASP relay (event publishing handled in UI layer)
+ * const graspApi = getGitServiceApi('grasp', pubkey, 'wss://relay.example.com');
  * ```
  */
 export function getGitServiceApi(
   provider: GitVendor,
   token: string,
-  baseUrl?: string,
-  eventIO?: EventIO
+  baseUrl?: string
 ): GitServiceApi {
   switch (provider) {
     case 'github':
@@ -60,11 +58,9 @@ export function getGitServiceApi(
       if (!baseUrl) {
         throw new Error('GRASP provider requires a relay URL as baseUrl parameter');
       }
-      if (!eventIO) {
-        throw new Error('GRASP provider requires a EventIO instance');
-      }
-      // Clean approach - no more signer passing!
-      return new GraspApi(baseUrl, token, eventIO);
+      // Note: GRASP no longer takes EventIO. Event publishing moved to the UI layer (useNewRepo.svelte.ts).
+      // This GraspApi instance only handles Smart HTTP Git operations.
+      return new GraspApi(baseUrl, token);
 
     case 'generic':
       throw new Error(
@@ -83,7 +79,6 @@ export function getGitServiceApi(
  *
  * @param url - Git repository URL or service base URL
  * @param token - Authentication token for the provider
- * @param eventIO - Optional EventIO instance (required for GRASP)
  * @returns GitServiceApi implementation for the detected provider
  *
  * @example
@@ -94,11 +89,11 @@ export function getGitServiceApi(
  * // Auto-detect self-hosted GitLab
  * const api = getGitServiceApiFromUrl('https://gitlab.example.com/owner/repo', 'glpat-xxxxxxxxxxxx');
  *
- * // Auto-detect GRASP relay
- * const api = getGitServiceApiFromUrl('wss://relay.example.com', pubkey, eventIO);
+ * // Auto-detect GRASP relay (event publishing handled in UI layer)
+ * const api = getGitServiceApiFromUrl('wss://relay.example.com', pubkey);
  * ```
  */
-export function getGitServiceApiFromUrl(url: string, token: string, eventIO?: EventIO): GitServiceApi {
+export function getGitServiceApiFromUrl(url: string, token: string): GitServiceApi {
   const normalizedUrl = url.toLowerCase();
 
   // Detect provider from URL
@@ -134,7 +129,7 @@ export function getGitServiceApiFromUrl(url: string, token: string, eventIO?: Ev
     );
   }
 
-  return getGitServiceApi(provider, token, baseUrl, eventIO);
+  return getGitServiceApi(provider, token, baseUrl);
 }
 
 /**

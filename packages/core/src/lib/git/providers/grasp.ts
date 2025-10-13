@@ -22,8 +22,8 @@ import type {
   User,
   GitForkOptions
 } from '../api.js';
-import { nip19, type EventTemplate, type Filter as NostrFilter, type Event as NostrEvent } from 'nostr-tools';
-import { getTagValue, getTags, type EventIO } from '@nostr-git/shared-types';
+import { nip19 } from 'nostr-tools';
+import { getTagValue, getTags } from '@nostr-git/shared-types';
 import {
   fetchRelayInfo,
   graspCapabilities as detectCapabilities,
@@ -43,10 +43,6 @@ import * as git from 'isomorphic-git';
 // @ts-ignore - isomorphic-git/http/web has type issues
 import http from 'isomorphic-git/http/web';
 
-// Import or declare the requestEventSigning function - DEPRECATED
-// This is no longer needed with EventIO
-declare const requestEventSigning: ((event: EventTemplate) => Promise<NostrEvent>) | undefined;
-
 /**
  * GRASP Git Relay API Implementation - CLEAN VERSION
  *
@@ -65,13 +61,11 @@ export class GraspApi implements GitServiceApi {
   private httpBase?: string;
   private readonly relayUrl: string;
   private readonly pubkey: string;
-  private readonly eventIO: EventIO;
   private relayInfo?: RelayInfo;
 
   constructor(
     relayUrl: string,
-    pubkey: string,
-    eventIO: EventIO
+    pubkey: string
   ) {
     // Normalize to base ws(s) origin with no path
     let normalized = relayUrl.replace(/\/$/, '');
@@ -87,7 +81,6 @@ export class GraspApi implements GitServiceApi {
     }
     this.relayUrl = normalized;
     this.pubkey = pubkey;
-    this.eventIO = eventIO;
   }
 
   /**
@@ -164,35 +157,6 @@ export class GraspApi implements GitServiceApi {
    * Publish Nostr event to relay - CLEAN VERSION
    * Uses EventIO which handles signing internally - no more signer passing!
    */
-  private async publishEvent(event: EventTemplate): Promise<NostrEvent> {
-    try {
-      // Clean approach - just pass the unsigned event, EventIO handles signing internally
-      const result = await this.eventIO.publishEvent(event);
-      if (!result.ok) throw new Error(result.error || 'publish failed');
-      
-      // Return the event with the ID from the result
-      // Note: EventIO doesn't return the signed event, so we reconstruct it
-      // This is a limitation we'll need to address in the EventIO interface
-      return event as NostrEvent; // TODO: EventIO should return the signed event
-    } catch (error) {
-      throw new Error(`Failed to publish event: ${error}`);
-    }
-  }
-
-  /**
-   * Query Nostr events from relay using EventIO
-   */
-  private async queryEvents(filters: NostrFilter[]): Promise<NostrEvent[]> {
-    try {
-      // Use EventIO to fetch events (delegates to app's Welshman infrastructure)
-      const events = await this.eventIO.fetchEvents(filters as any);
-      return events;
-    } catch (error) {
-      console.error('Failed to query events:', error);
-      return [];
-    }
-  }
-
   /**
    * Get current GRASP capabilities of the relay
    */
@@ -213,52 +177,9 @@ export class GraspApi implements GitServiceApi {
    * Repository Operations
    */
   async getRepo(owner: string, repo: string): Promise<RepoMetadata> {
-    await this.ensureCapabilities();
-
-    // Query both announcement and state events in parallel
-    const repoAddr = encodeRepoAddress(owner, repo);
-    const [announceEvents, stateEvents] = await Promise.all([
-      this.queryEvents([
-        { kinds: [30617], authors: [owner], '#d': [repo], limit: 1 }
-      ]),
-      this.queryEvents([
-        { kinds: [31990], '#a': [repoAddr], limit: 1 }
-      ])
-    ]);
-
-    if (announceEvents.length === 0 && stateEvents.length === 0) {
-      throw new Error(`Repository ${owner}/${repo} not found`);
-    }
-
-    const announceEvent = announceEvents[0];
-    const stateEvent = stateEvents[0];
-    const state: RepoState | null = stateEvent ? parseRepoStateFromEvent(stateEvent) : null;
-
-    const npub = nip19.npubEncode(owner);
-    const nameTag = announceEvent ? getTagValue(announceEvent as any, 'name') || repo : repo;
-    const descTag = announceEvent ? getTagValue(announceEvent as any, 'description') || '' : '';
-    const cloneTag = announceEvent ? getTagValue(announceEvent as any, 'clone') || '' : '';
-    const webTag = announceEvent ? getTagValue(announceEvent as any, 'web') || '' : '';
-
-    // Default branch comes from state HEAD if present
-    const defaultBranch = state?.head ? getDefaultBranchFromHead(state.head) : 'main';
-
-    const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl);
-
-    return {
-      id: announceEvent?.id ?? stateEvent?.id ?? '',
-      name: nameTag,
-      fullName: `${npub}/${nameTag}`,
-      description: descTag,
-      defaultBranch,
-      isPrivate: false,
-      cloneUrl: cloneTag || `${httpOrigin}/${npub}/${repo}.git`,
-      htmlUrl: webTag || `${httpOrigin}/${npub}/${repo}`,
-      owner: {
-        login: npub,
-        type: 'User'
-      }
-    };
+    // NOTE: Event querying moved to UI layer. This method now throws an error.
+    // For GRASP repos, metadata should be computed from relay URL + pubkey or fetched via external EventIO.
+    throw new Error('GRASP getRepo() not supported without external event data. Query events via EventIO in UI layer.');
   }
 
   async publishStateFromLocal(
@@ -322,9 +243,8 @@ export class GraspApi implements GitServiceApi {
       if (opts?.prevEventId) {
         event.tags.push(['prev', opts.prevEventId]);
       }
-      // Event publication mirrors ngit git_events.rs::emit_repo_state_event
-      const published = await this.publishEvent(event);
-      return published;
+      // NOTE: Event publication moved to UI layer. This method now throws an error.
+      throw new Error('publishStateFromLocal not supported without external EventIO. Publish state events via UI layer.');
     } catch (err) {
       console.error('publishStateFromLocal failed:', err);
       throw new Error(`Failed to publish state event: ${err}`);
@@ -337,7 +257,10 @@ export class GraspApi implements GitServiceApi {
     private?: boolean;
     autoInit?: boolean;
   }): Promise<RepoMetadata> {
-    // Publish repository announcement event (NIP-34 kind 30617)
+    // NOTE: Event publishing moved to UI layer (useNewRepo.svelte.ts).
+    // This method now only constructs metadata and Smart HTTP URLs.
+    // The UI layer must publish RepoAnnouncementEvent and RepoStateEvent before calling this.
+    
     console.log('[GraspApi] createRepo - pubkey:', this.pubkey);
     console.log('[GraspApi] createRepo - pubkey length:', this.pubkey.length);
     console.log('[GraspApi] createRepo - pubkey type:', typeof this.pubkey);
@@ -356,31 +279,6 @@ export class GraspApi implements GitServiceApi {
     const aliases: string[] = [];
     // base ws(s) relay
     aliases.push(this.relayUrl);
-    // from env (comma-separated)
-    try {
-      // Vite style
-      const viteAliases = (import.meta as any)?.env?.VITE_GRASP_RELAY_ALIASES as string | undefined;
-      if (viteAliases) {
-        viteAliases
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean)
-          .forEach((a) => aliases.push(a));
-      }
-    } catch {}
-    try {
-      // Node style
-      const nodeAliases = (globalThis as any)?.process?.env?.VITE_GRASP_RELAY_ALIASES as
-        | string
-        | undefined;
-      if (nodeAliases) {
-        nodeAliases
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean)
-          .forEach((a) => aliases.push(a));
-      }
-    } catch {}
     // add ngit-relay:<port> alias derived from current relay
     try {
       const u = new URL(this.relayUrl);
@@ -397,27 +295,13 @@ export class GraspApi implements GitServiceApi {
       return this.isValidNostrRelayUrl(a);
     });
 
-    const event: EventTemplate = {
-      kind: 30617,
-      created_at: Math.floor(Date.now() / 1000),
-      tags: [
-        ['d', options.name],
-        ['name', options.name],
-        ['description', options.description || ''],
-        ['clone', cloneUrl, ...relayAliases],
-        ['web', webUrl],
-        ['relays', ...relayAliases]
-      ],
-      content: options.description || ''
-    };
 
-    await this.publishEvent(event);
     const result = {
       id: '', // Will be set after event is published
       name: options.name,
       fullName: `${npub}/${options.name}`,
       description: options.description || '',
-      defaultBranch: 'main',
+      defaultBranch: 'master',
       isPrivate: options.private || false,
       cloneUrl: cloneUrl,
       htmlUrl: webUrl,
@@ -435,145 +319,13 @@ export class GraspApi implements GitServiceApi {
     repo: string,
     updates: { name?: string; description?: string; private?: boolean }
   ): Promise<RepoMetadata> {
-    // Update repository announcement event
-    const currentRepo = await this.getRepo(owner, repo);
-
-    const httpBase = this.relayUrl.replace(/^ws:\/\//, 'http://').replace(/^wss:\/\//, 'https://');
-    const npub = nip19.npubEncode(this.pubkey);
-    const targetName = updates.name || repo;
-    const webUrl = `${httpBase}/${npub}/${targetName}`;
-    const cloneUrl = `${webUrl}.git`;
-    // Reuse alias logic
-    const aliasSeen = new Set<string>();
-    const aliasList: string[] = [];
-    aliasList.push(this.relayUrl);
-    try {
-      const viteAliases = (import.meta as any)?.env?.VITE_GRASP_RELAY_ALIASES as string | undefined;
-      if (viteAliases)
-        viteAliases
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean)
-          .forEach((a) => aliasList.push(a));
-    } catch {}
-    try {
-      const nodeAliases = (globalThis as any)?.process?.env?.VITE_GRASP_RELAY_ALIASES as
-        | string
-        | undefined;
-      if (nodeAliases)
-        nodeAliases
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean)
-          .forEach((a) => aliasList.push(a));
-    } catch {}
-    try {
-      const u = new URL(this.relayUrl);
-      const port = u.port ? `:${u.port}` : '';
-      aliasList.push(`${u.protocol}//ngit-relay${port}`);
-    } catch {}
-    const relayAliases = aliasList.filter((a) => {
-      if (aliasSeen.has(a)) return false;
-      aliasSeen.add(a);
-      return this.isValidNostrRelayUrl(a);
-    });
-
-    const event: EventTemplate = {
-      kind: 30617,
-      created_at: Math.floor(Date.now() / 1000),
-      tags: [
-        ['d', targetName],
-        ['name', updates.name || currentRepo.name],
-        ['description', updates.description || currentRepo.description || ''],
-        ['clone', cloneUrl, ...relayAliases],
-        ['web', webUrl],
-        ['relays', ...relayAliases]
-      ],
-      content: updates.description || currentRepo.description || ''
-    };
-
-    await this.publishEvent(event);
-
-    return {
-      ...currentRepo,
-      name: updates.name || currentRepo.name,
-      description: updates.description || currentRepo.description
-    };
+    // NOTE: Event publishing moved to UI layer. This method requires external event data.
+    throw new Error('GRASP updateRepo() not supported without external EventIO. Update events via UI layer.');
   }
 
   async forkRepo(owner: string, repo: string, options?: GitForkOptions): Promise<RepoMetadata> {
-    // For GRASP, forking means creating a new repo announcement that references the original
-    const originalRepo = await this.getRepo(owner, repo);
-    const forkName = options?.name || `${repo}-fork`;
-
-    const npub = nip19.npubEncode(this.pubkey);
-    const httpBase = this.relayUrl.replace(/^ws:\/\//, 'http://').replace(/^wss:\/\//, 'https://');
-    const webUrl = `${httpBase}/${npub}/${forkName}`;
-    const cloneUrl = `${webUrl}.git`;
-    const aliasDedup = new Set<string>();
-    const aliasList: string[] = [this.relayUrl];
-    try {
-      const viteAliases = (import.meta as any)?.env?.VITE_GRASP_RELAY_ALIASES as string | undefined;
-      if (viteAliases)
-        viteAliases
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean)
-          .forEach((a) => aliasList.push(a));
-    } catch {}
-    try {
-      const nodeAliases = (globalThis as any)?.process?.env?.VITE_GRASP_RELAY_ALIASES as
-        | string
-        | undefined;
-      if (nodeAliases)
-        nodeAliases
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean)
-          .forEach((a) => aliasList.push(a));
-    } catch {}
-    try {
-      const u = new URL(this.relayUrl);
-      const port = u.port ? `:${u.port}` : '';
-      aliasList.push(`${u.protocol}//ngit-relay${port}`);
-    } catch {}
-    const relayAliases = aliasList.filter((a) => {
-      if (aliasDedup.has(a)) return false;
-      aliasDedup.add(a);
-      return this.isValidNostrRelayUrl(a);
-    });
-
-    const event: EventTemplate = {
-      kind: 30617,
-      created_at: Math.floor(Date.now() / 1000),
-      tags: [
-        ['d', forkName],
-        ['name', forkName],
-        ['description', `Fork of ${originalRepo.fullName}`],
-        ['clone', cloneUrl, ...relayAliases],
-        ['web', webUrl],
-        ['relays', ...relayAliases],
-        ['fork', originalRepo.cloneUrl] // Reference to original
-      ],
-      content: `Fork of ${originalRepo.fullName}`
-    };
-
-    await this.publishEvent(event);
-
-    return {
-      id: '',
-      name: forkName,
-      fullName: `${npub}/${forkName}`,
-      description: `Fork of ${originalRepo.fullName}`,
-      defaultBranch: originalRepo.defaultBranch,
-      isPrivate: false,
-      cloneUrl: `${this.relayUrl}/${npub}/${forkName}.git`,
-      htmlUrl: `${this.relayUrl}/${npub}/${forkName}`,
-      owner: {
-        login: npub,
-        type: 'User'
-      }
-    };
+    // NOTE: Event publishing moved to UI layer. This method requires external event data.
+    throw new Error('GRASP forkRepo() not supported without external EventIO. Fork repos and publish events via UI layer.');
   }
 
   /**
@@ -659,38 +411,8 @@ export class GraspApi implements GitServiceApi {
    * Issue Operations
    */
   async listIssues(owner: string, repo: string, options?: ListIssuesOptions): Promise<Issue[]> {
-    // Query for issue events (NIP-34 kind 1621)
-    const repoId = `${nip19.npubEncode(owner)}:${repo}`;
-    const events = await this.queryEvents([
-      {
-        kinds: [1621],
-        '#a': [repoId],
-        limit: options?.per_page || 30
-      }
-    ]);
-
-    return events.map((event) => ({
-      id: parseInt(event.id.slice(-8), 16), // Use last 8 chars of event ID as number
-      number: parseInt(event.id.slice(-8), 16),
-      title: getTagValue(event as any, 'subject') || 'Untitled',
-      body: event.content,
-      state: getTagValue(event as any, 'closed') ? 'closed' : 'open',
-      author: {
-        login: nip19.npubEncode(event.pubkey),
-        avatarUrl: undefined
-      },
-      assignees: [],
-      labels: getTags(event as any, 'label').map((t) => ({
-        name: t[1],
-        color: '#000000',
-        description: undefined
-      })),
-      createdAt: new Date(event.created_at * 1000).toISOString(),
-      updatedAt: new Date(event.created_at * 1000).toISOString(),
-      closedAt: getTagValue(event as any, 'closed'),
-      url: `nostr:${nip19.neventEncode({ id: event.id, relays: [this.relayUrl] })}`,
-      htmlUrl: `${this.relayUrl}/issues/${event.id}`
-    }));
+    // NOTE: Nostr-based issues require external EventIO for querying.
+    throw new Error('GRASP listIssues() not supported without external EventIO. Query issue events via UI layer.');
   }
 
   async getIssue(owner: string, repo: string, issueNumber: number): Promise<Issue> {
@@ -705,44 +427,8 @@ export class GraspApi implements GitServiceApi {
   }
 
   async createIssue(owner: string, repo: string, issue: NewIssue): Promise<Issue> {
-    const repoId = `${nip19.npubEncode(owner)}:${repo}`;
-
-    const event: EventTemplate = {
-      kind: 1621,
-      created_at: Math.floor(Date.now() / 1000),
-      tags: [
-        ['a', repoId],
-        ['subject', issue.title],
-        ...(issue.labels?.map((label: string) => ['label', label]) || [])
-      ],
-      content: issue.body || ''
-    };
-
-    const publishedEvent = await this.publishEvent(event);
-
-    return {
-      id: parseInt(publishedEvent.id.slice(-8), 16),
-      number: parseInt(publishedEvent.id.slice(-8), 16),
-      title: issue.title,
-      body: issue.body || '',
-      state: 'open',
-      author: {
-        login: nip19.npubEncode(this.pubkey),
-        avatarUrl: undefined
-      },
-      assignees: [],
-      labels:
-        issue.labels?.map((label: string) => ({
-          name: label,
-          color: '#000000',
-          description: undefined
-        })) || [],
-      createdAt: new Date(publishedEvent.created_at * 1000).toISOString(),
-      updatedAt: new Date(publishedEvent.created_at * 1000).toISOString(),
-      closedAt: undefined,
-      url: `nostr:${nip19.neventEncode({ id: publishedEvent.id, relays: [this.relayUrl] })}`,
-      htmlUrl: `${this.relayUrl}/issues/${publishedEvent.id}`
-    };
+    // NOTE: Event publishing moved to UI layer.
+    throw new Error('GRASP createIssue() not supported without external EventIO. Publish issue events via UI layer.');
   }
 
   async updateIssue(
@@ -845,29 +531,8 @@ export class GraspApi implements GitServiceApi {
    * Patch Operations (native to GRASP/NIP-34)
    */
   async listPatches(owner: string, repo: string): Promise<Patch[]> {
-    // Query for patch events (NIP-34 kind 1617)
-    const repoId = `${nip19.npubEncode(owner)}:${repo}`;
-    const events = await this.queryEvents([
-      {
-        kinds: [1617],
-        '#a': [repoId],
-        limit: 50
-      }
-    ]);
-
-    return events.map((event) => ({
-      id: event.id,
-      title: getTagValue(event as any, 'subject') || 'Untitled Patch',
-      description: event.content,
-      author: {
-        login: nip19.npubEncode(event.pubkey),
-        avatarUrl: undefined
-      },
-      commits: [], // Would need to parse from patch content
-      files: [], // Would need to parse from patch content
-      createdAt: new Date(event.created_at * 1000).toISOString(),
-      updatedAt: new Date(event.created_at * 1000).toISOString()
-    }));
+    // NOTE: Nostr-based patches require external EventIO for querying.
+    throw new Error('GRASP listPatches() not supported without external EventIO. Query patch events via UI layer.');
   }
 
   async getPatch(owner: string, repo: string, patchId: string): Promise<Patch> {

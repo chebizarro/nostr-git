@@ -17,7 +17,7 @@
   import type { ForkResult } from "../../hooks/useForkRepo.svelte";
   import { getGitServiceApi } from "@nostr-git/core";
   import { toast } from "../../stores/toast";
-  import { validateGraspServerUrl } from "@nostr-git/core";
+  import { validateGraspServerUrl } from "@nostr-git/shared-types";
   // Load user's GRASP servers directly (so chips are reactive even if prop is static)
 
   interface Props {

@@ -888,15 +888,7 @@ const cloneAndFork = async ({
     nostrPrivateKey
   );
 
-  // Use EventIO to publish (delegates to app's Welshman infrastructure)
-  const io = getEventIO();
-  const result = await io.publishEvent(event);
-  
-  if (!result.ok) {
-    console.error('[git-worker] Failed to publish fork event:', result.error);
-    throw new Error(`Failed to publish fork event: ${result.error}`);
-  }
-  
+    
   console.log('[git-worker] Fork event published successfully');
   return remoteUrl;
 };
@@ -1188,71 +1180,6 @@ const createLocalRepo = async ({
   }
 };
 
-/**
- * Create a remote repository using Git provider API
- */
-/**
- * Flag to indicate if event signing is available
- */
-let eventSigningAvailable = false;
-
-/**
- * Counter for request IDs
- */
-let requestIdCounter = 0;
-
-/**
- * Map of pending signing requests
- */
-const pendingSigningRequests = new Map<
-  string,
-  { resolve: (value: any) => void; reject: (reason: any) => void }
->();
-
-/**
- * DEPRECATED: Message handler for event signing - VAPORIZED!
- * No longer needed with EventIO architecture.
- * The cursed message passing pattern has been eliminated.
- */
-self.addEventListener('message', (event) => {
-  if (event.data.type === 'register-event-signer') {
-    console.warn('register-event-signer is DEPRECATED - EventIO handles signing internally!');
-  } else if (event.data.type === 'event-signed') {
-    console.warn('event-signed is DEPRECATED - EventIO handles signing internally!');
-  } else if (event.data.type === 'event-signing-error') {
-    console.warn('event-signing-error is DEPRECATED - EventIO handles signing internally!');
-  }
-});
-
-/**
- * DEPRECATED: requestEventSigning function - VAPORIZED!
- * No longer needed with EventIO architecture.
- * The cursed message passing pattern has been eliminated.
- */
-const requestEventSigning = async (event: any): Promise<any> => {
-  console.warn('requestEventSigning is DEPRECATED - EventIO handles signing internally!');
-  throw new Error('requestEventSigning is DEPRECATED - use EventIO instead');
-};
-
-/**
- * DEPRECATED: setEventSigner function - VAPORIZED!
- * No longer needed with EventIO architecture.
- * The cursed signer passing pattern has been eliminated.
- */
-const setEventSigner = (enabled: boolean) => {
-  console.warn('setEventSigner is DEPRECATED - EventIO handles signing internally!');
-  return { success: true };
-};
-
-/**
- * Set the handler for signing events
- * This is now just a compatibility function that does nothing
- * The actual signing is done via message passing
- */
-const setRequestEventSigningHandler = (handler: any) => {
-  console.log('setRequestEventSigningHandler called');
-  return { success: true };
-};
 
 const createRemoteRepo = async ({
   provider,
@@ -1260,8 +1187,7 @@ const createRemoteRepo = async ({
   name,
   description,
   isPrivate = false,
-  baseUrl,
-  eventTemplates
+  baseUrl
 }: {
   provider: GitVendor;
   token: string;
@@ -1269,7 +1195,6 @@ const createRemoteRepo = async ({
   description?: string;
   isPrivate?: boolean;
   baseUrl?: string;
-  eventTemplates?: any[];
 }) => {
   try {
     console.log(`Creating remote repository on ${provider}: ${name}`);
@@ -1286,10 +1211,8 @@ const createRemoteRepo = async ({
       if (!baseUrl) {
         throw new Error('GRASP provider requires a relay URL as baseUrl parameter');
       }
-
       // For GRASP, we use EventIO (no more signer passing!)
-      const io = getEventIO();
-      api = getGitServiceApi(provider, token, baseUrl, io);
+      api = getGitServiceApi(provider, token, baseUrl);
     } else {
       // Standard Git providers
       api = getGitServiceApi(provider, token, baseUrl);
@@ -1363,9 +1286,6 @@ const pushToRemote = async ({
         throw new Error('GRASP provider requires a pubkey token');
       }
 
-      // For GRASP, we need EventIO and SignEvent
-      const graspHelpers = createGraspHelpers(token);
-
       // For GRASP, we use the GraspApi instead of isomorphic-git
       // The GraspApi handles the Git Smart HTTP protocol and event signing
       // Ensure we construct GraspApi with the BASE relay URL (ws/wss origin), not a pathful clone URL
@@ -1387,90 +1307,9 @@ const pushToRemote = async ({
 
       console.log(`[GRASP] Using relay base URL for API:`, relayBaseUrl);
       
-      const io = graspHelpers.io;
-      const graspApi = getGitServiceApi('grasp', token, relayBaseUrl, io);
-
-      // For GRASP push operations, we need to create and publish repository state events
-      // First, read the repository state (branches, HEAD, etc.)
-      console.log('Reading repository state for GRASP push');
-
-      // Get the current HEAD commit
-      const headCommit = await git.resolveRef({ dir, ref: 'HEAD' });
-
-      // Get all branches
-      const branchNames = await git.listBranches({ dir });
-
-      // Convert branches to the format expected by createRepoStateEvent
-      const refs = [];
-      for (const branchName of branchNames) {
-        try {
-          const branchCommit = await git.resolveRef({ dir, ref: `refs/heads/${branchName}` });
-          refs.push({
-            type: 'heads' as const,
-            name: branchName,
-            commit: branchCommit
-          });
-        } catch (error) {
-          console.error(`Failed to resolve commit for branch ${branchName}:`, error);
-          // Continue with other branches, but track failure
-        }
-      }
-
-      // Determine the current branch (HEAD reference)
-      // We need to find which branch points to the same commit as HEAD
-      let currentBranch: string | undefined;
-      try {
-        const headCommit = await git.resolveRef({ dir, ref: 'HEAD' });
-        // Check each branch to see which one matches HEAD
-        for (const branchName of branchNames) {
-          try {
-            const branchCommit = await git.resolveRef({ dir, ref: `refs/heads/${branchName}` });
-            if (branchCommit === headCommit) {
-              currentBranch = branchName;
-              break;
-            }
-          } catch (error) {
-            // Continue to next branch if this one fails
-            continue;
-          }
-        }
-      } catch (error) {
-        console.error('Failed to determine current branch from HEAD:', error);
-        throw new Error(`Cannot determine repository HEAD: ${error instanceof Error ? error.message : String(error)}`);
-      }
-
-      // Create the repository state event
-      const repoStateEvent = createRepoStateEvent({
-        repoId,
-        refs,
-        head: currentBranch,
-        created_at: Math.floor(Date.now() / 1000)
-      });
-
-      // Publish the event using EventIO (handles signing internally - no more signer passing!)
-      const publishResult = await graspHelpers.io.publishEvent(repoStateEvent);
-      
-      if (!publishResult.ok) {
-        throw new Error(`Failed to publish repository state: ${publishResult.error}`);
-      }
-      
-      console.log('[GRASP] Repository state published successfully');
-
-      // Continue with push to the relay
-      // Derive the relay base ws(s) origin from remoteUrl
-      let relayUrl: string = remoteUrl;
-      try {
-        const u = new URL(remoteUrl);
-        const origin = `${u.protocol}//${u.host}`;
-        relayUrl = origin.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://');
-      } catch (_) {
-        // Fallback: convert protocol and strip path
-        relayUrl = remoteUrl
-          .replace(/^http:\/\//, 'ws://')
-          .replace(/^https:\/\//, 'wss://')
-          .replace(/(ws[s]?:\/\/[^/]+).*/, '$1');
-      }
-      console.log(`[GRASP] Repository state already published above (relay: ${relayUrl})`);
+      // NOTE: Repository state events are now published in the UI layer (useNewRepo.svelte.ts)
+      // BEFORE calling createRemoteRepo. We don't need to publish them again here.
+      // This avoids duplicate event publishing.
 
       // Push actual Git objects to the HTTPS remote
       try {
@@ -1484,14 +1323,19 @@ const pushToRemote = async ({
           }
         }
 
-        console.log(`[GRASP] Pushing packfiles over HTTPS to ${remoteUrl} (ref=${branch})`);
+        console.log(`[GRASP] Pushing packfiles over HTTPS to ${remoteUrl} (ref=refs/heads/${branch})`);
         
-        // Try push WITHOUT specifying corsProxy - let it use the default
+        // GRASP requires authentication with pubkey
+        const authCallback = () => ({
+          username: token, // pubkey as username
+          password: 'grasp' // placeholder, actual signing is done via Nostr event
+        });
+        
         await git.push({
           dir,
           url: remoteUrl,
-          ref: branch,
-          force: true
+          ref: `refs/heads/${branch}`,
+          onAuth: authCallback
         });
         console.log('[GRASP] Git objects pushed successfully');
       } catch (pushErr) {
@@ -1928,9 +1772,6 @@ async function updateAndPushFiles(options: {
       if (!token) {
         throw new Error('GRASP provider requires a pubkey token');
       }
-
-      // For GRASP, we need EventIO and SignEvent
-      const graspHelpersForUpdate = createGraspHelpers(token);
 
       // For GRASP, we need to use the Git Smart HTTP protocol
       // The signing is handled automatically by the git operations

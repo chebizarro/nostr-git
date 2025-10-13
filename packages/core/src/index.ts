@@ -30,7 +30,6 @@ export * from './lib/patches.js';
 export * from './lib/merge-analysis.js';
 export * from './lib/merge.js';
 export * from './lib/git/index.js';
-export * from './lib/grasp-lists.js';
 export * from './lib/utils/binaryUtils.js';
 export * from './lib/validation.js';
 // NIP-34 alignment scaffolding exports
@@ -48,7 +47,6 @@ export type { LabelNS } from './lib/labels32.js';
 export { mergeEffectiveLabels as mergeEffectiveLabels32 } from './lib/labels32.js';
 export * from './lib/grasp.js';
 export * from './lib/utils/groupByRepoIdentity.js';
-export * from './lib/repo-list.js';
 
 // Git Interface Hardening - New modules
 export * from './keys/index.js';

@@ -58,8 +58,8 @@ export {
   parseRepoAnnouncementEvent,
   parseRepoStateEvent,
   parseStatusEvent,
-} from "./utils.js"
-export type {Patch, Issue, RepoAnnouncement, RepoState, Status} from "./utils.js"
+} from "./nip34-utils.js"
+export type {Patch, Issue, RepoAnnouncement, RepoState, Status} from "./nip34-utils.js"
 
 export {
   GIT_COMMENT,
@@ -70,7 +70,7 @@ export type {
   CommentEvent,
   CreateCommentOpts,
 } from "./nip22.js"
-export {parseCommentEvent} from "./utils-comment.js"
+export {parseCommentEvent} from "./nip22-utils.js"
 export {createCommentEvent} from "./nip22.js"
 
 // Core git types
@@ -142,3 +142,25 @@ export type {
   LegacyEventIO,
   SignEvent,
 } from "./io-types.js"
+
+// NIP-51
+export {
+  GRASP_SET_KIND,
+  DEFAULT_GRASP_SET_ID,
+  GIT_REPO_BOOKMARK_SET,
+  GIT_REPO_BOOKMARK_DTAG,
+} from "./nip51.js"
+export type {
+  GraspSetTag,
+  GraspSetEvent,
+  GitRepoBookmarkSetTag,
+  GitRepoBookmarkSetEvent,
+} from "./nip51.js"
+
+export {
+  BookmarkedRepo,
+  validateGraspServerUrl,
+  normalizeGraspServerUrl,
+  makeGraspServersUnsignedEvent,
+  parseGraspServersEvent,
+} from "./nip51-utils.js"

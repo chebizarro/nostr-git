@@ -79,6 +79,7 @@ export type PatchTag =
   | ["parent-commit", string]
   | ["commit-pgp-sig", string]
   | ["committer", string, string, string, string]
+  | ["in-reply-to", string]
 
 export interface PatchEvent extends NostrEvent {
   kind: typeof GIT_PATCH

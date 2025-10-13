@@ -5,11 +5,7 @@ import { tokens as tokensStore, type Token } from "./stores/tokens.js";
 import {
   createRepoAnnouncementEvent as createAnnouncementEventShared,
   createRepoStateEvent as createStateEventShared,
-  type EventIO,
 } from "@nostr-git/shared-types";
-
-// Clean event publishing - no more signer passing anti-pattern!
-// All signing is now handled internally by EventIO closures.
 
 /**
  * Normalize GRASP URLs to ensure proper protocol handling.
@@ -20,31 +16,31 @@ function normalizeGraspOrigins(input: string): { wsOrigin: string; httpOrigin: s
     // Parse the input URL
     const url = new URL(input);
     const host = url.host;
-    
-    // Determine if we're in a secure context (https page)
-    const isSecureContext = typeof window !== 'undefined' && window.isSecureContext;
-    
-    // Build origins with proper protocols
-    const wsOrigin = isSecureContext ? `wss://${host}` : `ws://${host}`;
-    const httpOrigin = isSecureContext ? `https://${host}` : `http://${host}`;
-    
+
+    // Check if the input uses secure protocol (wss:// or https://)
+    const isSecure = url.protocol === 'wss:' || url.protocol === 'https:';
+
+    // Build origins with proper protocols based on input
+    const wsOrigin = isSecure ? `wss://${host}` : `ws://${host}`;
+    const httpOrigin = isSecure ? `https://${host}` : `http://${host}`;
+
     return { wsOrigin, httpOrigin };
   } catch (error) {
     // Fallback for malformed URLs - try to extract host with regex
     const hostMatch = input.match(/(?:ws|wss|http|https):\/\/([^\/]+)/);
     if (hostMatch) {
       const host = hostMatch[1];
-      const isSecureContext = typeof window !== 'undefined' && window.isSecureContext;
-      const wsOrigin = isSecureContext ? `wss://${host}` : `ws://${host}`;
-      const httpOrigin = isSecureContext ? `https://${host}` : `http://${host}`;
+      // Check if input starts with secure protocol
+      const isSecure = input.startsWith('wss://') || input.startsWith('https://');
+      const wsOrigin = isSecure ? `wss://${host}` : `ws://${host}`;
+      const httpOrigin = isSecure ? `https://${host}` : `http://${host}`;
       return { wsOrigin, httpOrigin };
     }
-    
-    // Last resort - assume it's a hostname
+
+    // Last resort - assume it's a hostname, default to secure
     const host = input.replace(/^\/\//, '');
-    const isSecureContext = typeof window !== 'undefined' && window.isSecureContext;
-    const wsOrigin = isSecureContext ? `wss://${host}` : `ws://${host}`;
-    const httpOrigin = isSecureContext ? `https://${host}` : `http://${host}`;
+    const wsOrigin = `wss://${host}`;
+    const httpOrigin = `https://${host}`;
     return { wsOrigin, httpOrigin };
   }
 }
@@ -90,8 +86,8 @@ export async function checkGitHubRepoAvailability(
     }
   } catch (error) {
     console.error("Error checking repo availability:", error);
-    return { 
-      available: false, 
+    return {
+      available: false,
       reason: `Failed to check availability: ${error instanceof Error ? error.message : String(error)}`
     };
   }
@@ -364,6 +360,7 @@ export interface NewRepoConfig {
   licenseTemplate?: string;
   authorName?: string;
   authorEmail?: string;
+  authorPubkey?: string;
   provider: string; // Git provider (github, gitlab, gitea, etc.)
   relayUrl?: string; // For GRASP provider
   // Author information
@@ -406,6 +403,7 @@ export interface UseNewRepoOptions {
   onPublishEvent?: (
     event: Omit<NostrEvent, "id" | "sig" | "pubkey" | "created_at">
   ) => Promise<void>;
+  userPubkey?: string; // User's nostr pubkey (required for GRASP repos)
 }
 
 /**
@@ -437,9 +435,6 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
 
   let tokens = $state<Token[]>([]);
 
-  // Ensure we only register the GRASP signing event handler once per worker/session
-  // Clean event publishing - no more signer passing anti-pattern!
-
   // Subscribe to token store changes and update reactive state
   tokensStore.subscribe((t) => {
     tokens = t;
@@ -447,6 +442,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
   });
 
   const { onProgress, onRepoCreated, onPublishEvent } = options;
+  const userPubkey = options.userPubkey;
 
   function updateProgress(
     step: string,
@@ -467,44 +463,12 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
   }
 
   // Resolve the canonical repo key for this creation flow
-  async function computeCanonicalKey(config: NewRepoConfig, eventIO?: any): Promise<string> {
-    let owner = "";
-    if (config.provider === "grasp") {
-      // For GRASP, we need the pubkey to create the canonical key
-      // Since we're using EventIO, we can get the pubkey from it
-      if (eventIO && eventIO.getCurrentPubkey) {
-        const pubkey = eventIO.getCurrentPubkey();
-        if (pubkey) {
-          // Use "owner:name" form which canonicalRepoKey will normalize
-          return canonicalRepoKey(`${pubkey}:${config.name}`);
-        }
-      }
-      
-      // Fallback: if we can't get the pubkey, use a placeholder
-      // This will be resolved later when the actual pubkey is available
-      console.warn("Could not get pubkey for GRASP canonical key, using placeholder");
-      return canonicalRepoKey(`placeholder:${config.name}`);
+  async function computeCanonicalKey(config: NewRepoConfig): Promise<string> {
+    if (config.authorPubkey) {
+      // Use "owner:name" form which canonicalRepoKey will normalize
+      return canonicalRepoKey(`${config.authorPubkey}:${config.name}`);
     }
-    // Standard Git providers: resolve owner via provider API
-    // Try to find a token for the selected provider
-    let tokens: Token[] = [];
-    {
-      const unsub = tokensStore.subscribe((v) => (tokens = v));
-      unsub();
-    }
-    const providerHosts: Record<string, string> = {
-      github: "github.com",
-      gitlab: "gitlab.com",
-      gitea: "gitea.com",
-      bitbucket: "bitbucket.org",
-    };
-    const host = providerHosts[config.provider] || config.provider;
-    const token = tokens.find((t: Token) => t.host === host)?.token;
-    if (!token) throw new Error(`No ${config.provider} token found to resolve owner`);
-    const api = getGitServiceApi(config.provider as any, token);
-    const currentUser = await api.getCurrentUser();
-    owner = currentUser.login;
-    return canonicalRepoKey(`${owner}/${config.name}`);
+    throw new Error("Could not get pubkey for GRASP canonical key");
   }
 
   async function createRepository(config: NewRepoConfig): Promise<NewRepoResult | null> {
@@ -517,13 +481,6 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       error = null;
       progress = [];
 
-      // Precheck: GRASP no longer requires explicit signer passing
-      // The EventIO interface handles signing internally via closures
-      if (config.provider === "grasp") {
-        // No signer check needed - EventIO handles signing internally
-        console.log("🔐 GRASP provider selected - EventIO will handle signing internally");
-      }
-
       // Compute canonical key up-front so all subsequent steps use it
       const canonicalKey = await computeCanonicalKey(config);
 
@@ -531,8 +488,92 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       updateProgress("local", "Creating local repository...", "running");
       const localRepo = await createLocalRepo({ ...config }, canonicalKey);
       updateProgress("local", "Local repository created successfully", "completed");
+      // Step 4: Create NIP-34 events (use shared-types helpers)
+      // For GRASP, skip this since we already published events before remote creation
+      let announcementEvent: any = undefined;
+      let stateEvent: any = undefined;
 
-      // Step 2: Create remote repository (optional)
+      // Step 1.5: For GRASP only - publish events BEFORE creating remote
+      if (config.provider === "grasp") {
+        updateProgress("grasp-events", "Publishing GRASP announcement events...", "running");
+
+        // Compute GRASP-specific URLs and relays
+        const { wsOrigin, httpOrigin } = normalizeGraspOrigins(config.relayUrl || "");
+
+        // Get pubkey for GRASP (from options)
+        const graspPubkey = userPubkey;
+
+        // Build clone and web URLs if we have pubkey
+        let cloneUrl: string | undefined;
+        let webUrl: string | undefined;
+        if (graspPubkey) {
+          const npub = (await import("nostr-tools")).nip19.npubEncode(graspPubkey);
+          webUrl = `${httpOrigin}/${npub}/${config.name}`;
+          cloneUrl = `${webUrl}.git`;
+        }
+
+        // Build relay aliases (same logic as existing code)
+        const aliases: string[] = [];
+        if (wsOrigin) {
+          aliases.push(wsOrigin);
+          try {
+            const u = new URL(wsOrigin);
+            const port = u.port ? `:${u.port}` : "";
+            aliases.push(`${u.protocol}//ngit-relay${port}`);
+          } catch { }
+        }
+        
+        // Include default repo relays for discoverability
+        const defaultRepoRelays = ['wss://nos.lol/', 'wss://relay.damus.io/'];
+        aliases.push(...defaultRepoRelays);
+        
+        const seen = new Set<string>();
+        const relays = aliases.filter((a) => {
+          if (seen.has(a)) return false;
+          seen.add(a);
+          return true;
+        });
+        // Create announcement event
+        announcementEvent = createAnnouncementEventShared({
+          repoId: config.name,
+          name: config.name,
+          description: config.description || "",
+          web: webUrl ? [webUrl] : undefined,
+          clone: cloneUrl ? [cloneUrl] : undefined,
+          relays,
+          maintainers: config.maintainers && config.maintainers.length > 0 ? config.maintainers : undefined,
+          hashtags: config.tags && config.tags.length > 0 ? config.tags : undefined,
+          earliestUniqueCommit: localRepo?.initialCommit || undefined,
+        });
+        // Create state event
+        const refs = localRepo?.initialCommit
+          ? [
+            {
+              type: "heads" as const,
+              name: config.defaultBranch || "main",
+              commit: localRepo.initialCommit,
+            },
+          ]
+          : undefined;
+        stateEvent = createStateEventShared({
+          repoId: config.name,
+          refs,
+          head: config.defaultBranch,
+        });
+        // Publish both events (if handler provided)
+        if (onPublishEvent) {
+          console.log("🔐 publishing announcementEvent", announcementEvent);
+          await onPublishEvent(announcementEvent);
+          await onPublishEvent(stateEvent);
+          updateProgress("grasp-events", "GRASP events published successfully", "completed");
+          console.log("🔐 announcementEvent", announcementEvent);
+        } else {
+          console.warn("⚠️ No onPublishEvent callback provided; GRASP events not published");
+          updateProgress("grasp-events", "Skipped event publishing (no callback)", "completed");
+        }
+      }
+
+      // Step 2: Create remote repository
       updateProgress("remote", "Creating remote repository...", "running");
       const remoteRepo = await createRemoteRepo(config);
       if (remoteRepo) {
@@ -546,9 +587,9 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
         // For GRASP, wait for the relay to process the announcement event
         if (config.provider === "grasp") {
           updateProgress("push", "Waiting for GRASP server to process announcement...", "running");
-          await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+          await new Promise(resolve => setTimeout(resolve, 10000)); // 10 second delay
         }
-        
+
         updateProgress("push", "Pushing to remote repository...", "running");
         console.log("🚀 About to push with config:", {
           name: config.name,
@@ -559,105 +600,88 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
         updateProgress("push", "Successfully pushed to remote repository", "completed");
       }
 
-      // Step 4: Create NIP-34 events (use shared-types helpers)
-      updateProgress("events", "Creating Nostr events...", "running");
-      // Derive clone and web URLs
-      const ensureNoGitSuffix = (url: string) => url?.replace(/\.git$/, "");
-      const cloneUrl = (() => {
-        const raw = remoteRepo?.url || config.cloneUrl || "";
-        if (config.provider === "grasp") {
-          return raw.replace(/^ws:\/\//, "http://").replace(/^wss:\/\//, "https://");
-        }
-        return raw;
-      })();
-      const webUrl = ensureNoGitSuffix(remoteRepo?.webUrl || config.webUrl || cloneUrl);
-
-      // Build GRASP relay aliases if applicable
-      let relays: string[] | undefined = undefined;
-      if (config.provider === "grasp") {
-        const normalizeRelayWsOrigin = (u: string) => {
-          if (!u) return "";
-          try {
-            const url = new URL(u);
-            const origin = `${url.protocol}//${url.host}`;
-            return origin.replace(/^http:\/\//, "ws://").replace(/^https:\/\//, "wss://");
-          } catch {
-            return u
-              .replace(/^http:\/\//, "ws://")
-              .replace(/^https:\/\//, "wss://")
-              .replace(/(ws[s]?:\/\/[^/]+).*/, "$1");
+      if (config.provider !== "grasp") {
+        updateProgress("events", "Creating Nostr events...", "running");
+        // Derive clone and web URLs
+        const ensureNoGitSuffix = (url: string) => url?.replace(/\.git$/, "");
+        const cloneUrl = (() => {
+          const raw = remoteRepo?.url || config.cloneUrl || "";
+          if (config.provider === "grasp") {
+            return raw.replace(/^ws:\/\//, "http://").replace(/^wss:\/\//, "https://");
           }
-        };
-        const baseRelay = normalizeRelayWsOrigin(config.relayUrl || "");
-        const aliases: string[] = [];
-        if (baseRelay) aliases.push(baseRelay);
-        const viteAliases = (import.meta as any)?.env?.VITE_GRASP_RELAY_ALIASES as
-          | string
-          | undefined;
-        if (viteAliases)
-          viteAliases
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean)
-            .forEach((a) => aliases.push(a));
-        const nodeAliases = (globalThis as any)?.process?.env?.VITE_GRASP_RELAY_ALIASES as
-          | string
-          | undefined;
-        if (nodeAliases)
-          nodeAliases
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean)
-            .forEach((a) => aliases.push(a));
-        if (baseRelay) {
-          const u = new URL(baseRelay);
-          const port = u.port ? `:${u.port}` : "";
-          aliases.push(`${u.protocol}//ngit-relay${port}`);
+          return raw;
+        })();
+        const webUrl = ensureNoGitSuffix(remoteRepo?.webUrl || config.webUrl || cloneUrl);
+
+        // Build GRASP relay aliases if applicable
+        let relays: string[] | undefined = undefined;
+        if (config.provider === "grasp") {
+          const normalizeRelayWsOrigin = (u: string) => {
+            if (!u) return "";
+            try {
+              const url = new URL(u);
+              const origin = `${url.protocol}//${url.host}`;
+              return origin.replace(/^http:\/\//, "ws://").replace(/^https:\/\//, "wss://");
+            } catch {
+              return u
+                .replace(/^http:\/\//, "ws://")
+                .replace(/^https:\/\//, "wss://")
+                .replace(/(ws[s]?:\/\/[^/]+).*/, "$1");
+            }
+          };
+          const baseRelay = normalizeRelayWsOrigin(config.relayUrl || "");
+          const aliases: string[] = [];
+          if (baseRelay) {
+            aliases.push(baseRelay);
+            const u = new URL(baseRelay);
+            const port = u.port ? `:${u.port}` : "";
+            aliases.push(`${u.protocol}//ngit-relay${port}`);
+          }
+          const seen = new Set<string>();
+          relays = aliases.filter((a) => {
+            if (seen.has(a)) return false;
+            seen.add(a);
+            return true;
+          });
         }
-        const seen = new Set<string>();
-        relays = aliases.filter((a) => {
-          if (seen.has(a)) return false;
-          seen.add(a);
-          return true;
+
+        announcementEvent = createAnnouncementEventShared({
+          repoId: config.name,
+          name: config.name,
+          description: config.description || "",
+          web: webUrl ? [webUrl] : undefined,
+          clone: cloneUrl ? [cloneUrl] : undefined,
+          relays,
+          maintainers:
+            config.maintainers && config.maintainers.length > 0 ? config.maintainers : undefined,
+          hashtags: config.tags && config.tags.length > 0 ? config.tags : undefined,
+          earliestUniqueCommit: localRepo?.initialCommit || undefined,
         });
-      }
 
-      const announcementEvent = createAnnouncementEventShared({
-        repoId: config.name,
-        name: config.name,
-        description: config.description || "",
-        web: webUrl ? [webUrl] : undefined,
-        clone: cloneUrl ? [cloneUrl] : undefined,
-        relays,
-        maintainers:
-          config.maintainers && config.maintainers.length > 0 ? config.maintainers : undefined,
-        hashtags: config.tags && config.tags.length > 0 ? config.tags : undefined,
-        earliestUniqueCommit: localRepo?.initialCommit || undefined,
-      });
-
-      const refs = localRepo?.initialCommit
-        ? [
+        const refs = localRepo?.initialCommit
+          ? [
             {
               type: "heads" as const,
               name: config.defaultBranch || "master",
               commit: localRepo.initialCommit,
             },
           ]
-        : undefined;
-      const stateEvent = createStateEventShared({
-        repoId: config.name,
-        refs,
-        head: config.defaultBranch,
-      });
-      updateProgress("events", "Nostr events created successfully", "completed");
+          : undefined;
+        stateEvent = createStateEventShared({
+          repoId: config.name,
+          refs,
+          head: config.defaultBranch,
+        });
+        updateProgress("events", "Nostr events created successfully", "completed");
 
-      // Step 5: Publish events (if handler provided)
-      if (onPublishEvent) {
-        updateProgress("publish", "Publishing to Nostr relays...", "running");
-        await onPublishEvent(announcementEvent);
-        await onPublishEvent(stateEvent);
-        updateProgress("publish", "Successfully published to Nostr relays", "completed");
-      }
+        // Step 5: Publish events (if handler provided)
+        if (onPublishEvent) {
+          updateProgress("publish", "Publishing to Nostr relays...", "running");
+          await onPublishEvent(announcementEvent);
+          await onPublishEvent(stateEvent);
+          updateProgress("publish", "Successfully published to Nostr relays", "completed");
+        }
+      } // End of non-GRASP event handling
 
       const result: NewRepoResult = {
         localRepo,
@@ -689,7 +713,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
     console.log("🏗️ Starting createLocalRepo function...");
     console.log("🏗️ createLocalRepo canonicalKey:", canonicalKey);
     console.log("🏗️ createLocalRepo config:", config);
-    
+
     // Use passed workerApi if available, otherwise create new worker
     let api: any;
     if (options.workerApi) {
@@ -712,7 +736,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       authorEmail: config.authorEmail,
     };
     console.log("🏗️ createLocalRepo params:", createLocalRepoParams);
-    
+
     const result = await api.createLocalRepo(createLocalRepoParams);
     console.log("🏗️ createLocalRepo result:", result);
 
@@ -763,8 +787,8 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       }
     } catch (error) {
       console.error(`Error checking repo availability on ${config.provider}:`, error);
-      return { 
-        available: false, 
+      return {
+        available: false,
         reason: `Failed to check availability: ${error instanceof Error ? error.message : String(error)}`
       };
     }
@@ -802,16 +826,12 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       let finalToken: string | null = null;
 
       if (config.provider === "grasp") {
-        // For GRASP, we use EventIO instead of explicit signer passing
-        console.log("🔐 Setting up GRASP with EventIO (no more signer passing!)");
-
         if (!config.relayUrl) {
           throw new Error("GRASP provider requires a relay URL");
         }
 
         // For GRASP, we'll use a placeholder token for now
-        // The actual pubkey will be resolved by EventIO when needed
-        finalToken = "grasp-placeholder-token";
+        finalToken = config.authorPubkey || null;
         providerHost = config.relayUrl;
       } else {
         // For standard Git providers, use the host mapping
@@ -832,12 +852,12 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
         "🔐 Provider token found:",
         finalToken
           ? "YES (length: " +
-              finalToken.length +
-              ", starts: " +
-              finalToken.substring(0, 8) +
-              ", ends: " +
-              finalToken.substring(finalToken.length - 8) +
-              ")"
+          finalToken.length +
+          ", starts: " +
+          finalToken.substring(0, 8) +
+          ", ends: " +
+          finalToken.substring(finalToken.length - 8) +
+          ")"
           : "NO"
       );
 
@@ -914,12 +934,6 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
           worker = workerInstance.worker;
         }
 
-        // NOTE: No more registerEventSigner needed!
-        // The new EventIO interface uses closures instead of passing signers around.
-        // The worker will use the EventIO instance passed via configureWorkerEventIO.
-
-        // Now we can use the worker API for GRASP repository creation
-        // This maintains our API abstraction and keeps all Git operations in the worker
         result = await api.createRemoteRepo({
           provider: config.provider as any,
           token: finalToken, // This is the pubkey for GRASP
@@ -928,8 +942,6 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
           isPrivate: false,
           baseUrl: wsOrigin, // Use normalized WebSocket origin for GRASP API
         });
-
-        console.log("🔐 GRASP repository created successfully:", result);
       } else {
         // Standard Git providers
         result = await api.createRemoteRepo({
@@ -964,7 +976,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
     console.log("🚀 Starting pushToRemote function...");
     console.log("🚀 pushToRemote canonicalKey:", canonicalKey);
     console.log("🚀 pushToRemote config:", config);
-    
+
     // Use passed workerApi and workerInstance if available, otherwise create new worker
     let api: any, worker: Worker;
     if (options.workerApi && options.workerInstance) {
@@ -989,29 +1001,26 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       bitbucket: "bitbucket.org",
     };
 
-    let providerToken;
+    let providerToken: string;
 
     if (config.provider === "grasp") {
       // For GRASP, we use EventIO instead of explicit signer passing
       console.log("🔐 GRASP push - EventIO handles signing internally (no more signer passing!)");
-      
-      // For GRASP, we'll use a placeholder token for now
-      // The actual pubkey will be resolved by EventIO when needed
-      providerToken = "grasp-placeholder-token";
+      providerToken = config.authorPubkey || "";
 
       // NOTE: No more registerEventSigner needed!
       // The new EventIO interface uses closures instead of passing signers around.
       // The worker will use the EventIO instance passed via configureWorkerEventIO.
     } else {
       const providerHost = providerHosts[config.provider] || config.provider;
-      providerToken = tokens.find((t: Token) => t.host === providerHost)?.token;
+      providerToken = tokens.find((t: Token) => t.host === providerHost)?.token || "";
     }
 
     // For GRASP, ensure we use HTTP(S) endpoint for push operations
     let pushUrl: string;
     if (config.provider === "grasp") {
       // Use the URL from the GRASP API which already has the correct npub format
-      pushUrl = remoteRepo.remoteUrl;
+      pushUrl = remoteRepo.url;  // Fixed: use .url not .remoteUrl
       console.log("🔐 Using GRASP API URL for push:", { pushUrl });
     } else {
       pushUrl = remoteRepo.url;
@@ -1038,7 +1047,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       tokenLength: providerToken ? providerToken.length : "No token",
       provider: config.provider,
     });
-    
+
     let pushResult;
     if (config.provider === "grasp") {
       // For GRASP, use direct push since we just created the local repo
@@ -1078,8 +1087,6 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
 
     return remoteRepo;
   }
-
-  // Removed local event creator helpers in favor of shared-types implementations
 
   function reset() {
     isCreating = false;

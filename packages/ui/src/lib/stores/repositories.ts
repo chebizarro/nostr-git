@@ -1,154 +1,273 @@
-import { writable, type Readable } from "svelte/store";
-import type { ThunkFunction } from "../internal/function-registry";
+import { writable } from "svelte/store";
+import type { BookmarkedRepo } from "@nostr-git/shared-types";
 
-// Bookmark entry for a single repo
-export type BookmarkedRepo = {
-  address: string;  // kind:pubkey:identifier
-  event: any;       // The repo announcement event
-  relayHint: string;
-};
-
-// Singleton writable store for bookmarked repositories
+// Singleton store for bookmarked repositories
 function createBookmarksStore() {
-  const { subscribe, set, update } = writable<BookmarkedRepo[]>([]);
-  
+  const subscribers = new Set<(v: BookmarkedRepo[]) => void>();
+  let value: BookmarkedRepo[] = [];
+
+  function notify() {
+    for (const run of subscribers) run(value);
+  }
+
+  function subscribe(run: (v: BookmarkedRepo[]) => void) {
+    run(value);
+    subscribers.add(run);
+    return () => subscribers.delete(run);
+  }
+
+  function set(next: BookmarkedRepo[]) {
+    value = Array.isArray(next) ? next : [];
+    notify();
+  }
+
+  function update(fn: (v: BookmarkedRepo[]) => BookmarkedRepo[]) {
+    value = fn(value);
+    notify();
+  }
+
   return {
     subscribe,
     set,
     update,
-    add: (repo: BookmarkedRepo) => update(repos => {
-      // Don't add duplicates
-      if (repos.some(r => r.address === repo.address)) {
-        return repos;
-      }
-      return [...repos, repo];
-    }),
-    remove: (address: string) => update(repos => 
-      repos.filter(r => r.address !== address)
-    ),
-    clear: () => set([])
+    add: (repo: BookmarkedRepo) =>
+      update((repos) => (repos.some((r) => r.address === repo.address) ? repos : [...repos, repo])),
+    remove: (address: string) => update((repos) => repos.filter((r) => r.address !== address)),
+    clear: () => set([]),
   };
 }
 
 // Export singleton instance
 export const bookmarksStore = createBookmarksStore();
 
-// Legacy types for backward compatibility
-export type RepoGroup = {
+export type RepoCard = {
   euc: string;
-  repos: any[];
-  handles: string[];
   web: string[];
   clone: string[];
-  relays: string[];
   maintainers: string[];
-  name: string;
+  refs: any;
+  rootsCount: number;
+  revisionsCount: number;
+  title: string;
+  description: string;
+  first: any;
+  principal: string;
+  repoNaddr: string;
 };
 
-export type IO = {
-  fetchEvents: (filters: any[]) => Promise<any[]>;
-  publishEvent?: (evt: any) => Promise<any>;
+export type LoadedBookmarkedRepo = {
+  address: string;
+  event: any;
+  relayHint: string;
 };
 
-export type RepositoriesStore = Readonly<Readable<RepoGroup[]>> & {
-  refresh: () => Promise<void>;
-  setIO: (io: IO) => void;
-  isLoading: Readable<boolean>;
-  error: Readable<Error | null>;
+export type ComputeCardsOptions = {
+  deriveMaintainersForEuc: (euc: string) => { get: () => Set<string> | null };
+  deriveRepoRefState: (euc: string) => { get: () => any };
+  derivePatchGraph: (address: string) => { get: () => any };
+  parseRepoAnnouncementEvent: (event: any) => any;
+  Router: any;
+  nip19: any;
+  Address: any;
 };
 
-// Event payload understood by the injected thunk
-export type RepoFetchEvent = {
-  filters: any[];
-  onResult: (events: any[]) => void;
-};
+// Minimal singleton repositories store that holds RepoCard[]
+function createRepositoriesStore() {
+  const subscribers = new Set<(v: RepoCard[]) => void>();
+  let value: RepoCard[] = [];
 
-export function createRepositoriesStore(
-  initialIO: IO,
-  loaderThunk: ThunkFunction<RepoFetchEvent>
-): RepositoriesStore {
-  let io = initialIO;
-  const data = writable<RepoGroup[]>([]);
-  const loading = writable<boolean>(false);
-  const error = writable<Error | null>(null);
+  // Caches for derived stores (same as in the page component)
+  const refStateStoreByEuc = new Map<string, any>();
+  const maintainersStoreByEuc = new Map<string, any>();
+  const patchDagStoreByAddr = new Map<string, any>();
 
-  async function refresh() {
-    loading.set(true);
-    error.set(null);
-    try {
-      // Wrap the thunk callback in a promise so callers can await refresh()
-      const groups = await new Promise<RepoGroup[]>((resolve, reject) => {
-        let done = false;
-        const controller = loaderThunk({
-          filters: [{ kinds: [30617] }],
-          onResult: (events: any[]) => {
-            if (done) return;
-            done = true;
-            try {
-              // Group events by EUC using the same shape expected by RepoGroup
-              const by: Record<string, RepoGroup> = {};
-              for (const evt of events || []) {
-                const tags: string[][] = (evt.tags || []) as string[][];
-                const euc = tags.find((t) => t[0] === "r" && t[2] === "euc")?.[1];
-                if (!euc) continue;
-                const d = tags.find((t) => t[0] === "d")?.[1];
-                const web = tags.filter((t) => t[0] === "web").flatMap((t) => t.slice(1));
-                const clone = tags.filter((t) => t[0] === "clone").flatMap((t) => t.slice(1));
-                const relays = tags.filter((t) => t[0] === "relays").flatMap((t) => t.slice(1));
-                const maint = tags.find((t) => t[0] === "maintainers") || [];
-                const maintainers = maint.slice(1);
-                if (evt.pubkey && !maintainers.includes(evt.pubkey)) maintainers.push(evt.pubkey);
-                const name = tags.find((t) => t[0] === "name")?.[1] || "";
+  function notify() {
+    for (const run of subscribers) run(value);
+  }
 
-                if (!by[euc]) by[euc] = { euc, repos: [], handles: [], web: [], clone: [], relays: [], maintainers: [], name };
-                const g = by[euc];
-                g.repos.push(evt);
-                if (d) g.handles.push(d);
-                g.web.push(...web);
-                g.clone.push(...clone);
-                g.relays.push(...relays);
-                g.maintainers.push(...maintainers);
-              }
-              const out = Object.values(by).map((g) => ({
-                ...g,
-                handles: Array.from(new Set(g.handles)),
-                web: Array.from(new Set(g.web)),
-                clone: Array.from(new Set(g.clone)),
-                relays: Array.from(new Set(g.relays)),
-                maintainers: Array.from(new Set(g.maintainers)),
-              }));
-              resolve(out);
-            } catch (e) {
-              reject(e);
-            }
-          },
-        });
-        // If the thunk gives us an AbortController, auto-timeout as safety (optional)
-        if (controller?.controller instanceof AbortController) {
-          const to = setTimeout(() => {
-            try { controller.controller.abort("repositories: timeout"); } catch {}
-            if (!done) reject(new Error("repositories: fetch timeout"));
-          }, 15000);
-          // Best-effort cleanup if already resolved
-          (controller.controller.signal as any)?.addEventListener?.("abort", () => clearTimeout(to));
+  function subscribe(run: (v: RepoCard[]) => void) {
+    run(value);
+    subscribers.add(run);
+    return () => subscribers.delete(run);
+  }
+
+  function set(next: RepoCard[]) {
+    value = Array.isArray(next) ? next : [];
+    notify();
+  }
+
+  function update(fn: (v: RepoCard[]) => RepoCard[]) {
+    value = fn(value);
+    notify();
+  }
+
+  // Helper to create composite key for proper fork/duplicate distinction
+  function createRepoKey(event: any): string {
+    const euc = (event.tags || []).find((t: string[]) => t[0] === "r" && t[2] === "euc")?.[1] || "";
+    const d = (event.tags || []).find((t: string[]) => t[0] === "d")?.[1] || "";
+    const name = (event.tags || []).find((t: string[]) => t[0] === "name")?.[1] || d || "";
+
+    // Normalize clone URLs by:
+    // 1. Remove .git suffix
+    // 2. Remove trailing slashes
+    // 3. Replace npub-specific paths with placeholder (for gitnostr.com, relay.ngit.dev, etc.)
+    // 4. Lowercase and sort
+    const cloneUrls = (event.tags || [])
+      .filter((t: string[]) => t[0] === "clone")
+      .flatMap((t: string[]) => t.slice(1))
+      .map((url: string) => {
+        let normalized = url
+          .trim()
+          .toLowerCase()
+          .replace(/\.git$/, "")
+          .replace(/\/$/, "");
+        // Replace npub paths with generic placeholder to group by repo name only
+        normalized = normalized.replace(/\/npub1[a-z0-9]+\//g, "/{npub}/");
+        return normalized;
+      })
+      .sort()
+      .join("|");
+    return `${euc}:${name}:${cloneUrls}`;
+  }
+
+  function computeCards(
+    loadedBookmarkedRepos: LoadedBookmarkedRepo[],
+    options: ComputeCardsOptions
+  ): RepoCard[] {
+    const {
+      deriveMaintainersForEuc,
+      deriveRepoRefState,
+      derivePatchGraph,
+      parseRepoAnnouncementEvent,
+      Router,
+      nip19,
+      Address,
+    } = options;
+
+    const bookmarked = loadedBookmarkedRepos || [];
+    const byCompositeKey = new Map<string, RepoCard>();
+
+    for (const { event, relayHint } of bookmarked) {
+      // Try to find EUC tag, fall back to any r tag, or use event ID as last resort
+      const eucTag = (event.tags || []).find((t: string[]) => t[0] === "r" && t[2] === "euc");
+      const anyRTag = (event.tags || []).find((t: string[]) => t[0] === "r");
+      const euc = eucTag?.[1] || anyRTag?.[1] || event.id || "";
+
+      if (!euc) {
+        continue;
+      }
+
+      // Use composite key to distinguish forks from duplicates
+      const compositeKey = createRepoKey(event);
+      const d = (event.tags || []).find((t: string[]) => t[0] === "d")?.[1] || "";
+      const name = (event.tags || []).find((t: string[]) => t[0] === "name")?.[1] || "";
+      const cloneUrls = (event.tags || []).filter((t: string[]) => t[0] === "clone").map((t: string[]) => t[1]);
+
+      // Extract event data
+      const web = (event.tags || [])
+        .filter((t: string[]) => t[0] === "web")
+        .flatMap((t: string[]) => t.slice(1));
+      const clone = (event.tags || [])
+        .filter((t: string[]) => t[0] === "clone")
+        .flatMap((t: string[]) => t.slice(1));
+
+      // If we already have this repo, merge maintainers (duplicate announcement)
+      if (byCompositeKey.has(compositeKey)) {
+        const existing = byCompositeKey.get(compositeKey)!;
+        // Add this event's author as maintainer if not already present
+        if (event.pubkey && !existing.maintainers.includes(event.pubkey)) {
+          existing.maintainers.push(event.pubkey);
         }
-      });
-      data.set(groups);
-    } catch (e: any) {
-      error.set(e instanceof Error ? e : new Error(String(e)));
-    } finally {
-      loading.set(false);
+        // Merge web/clone URLs
+        existing.web = Array.from(new Set([...existing.web, ...web]));
+        existing.clone = Array.from(new Set([...existing.clone, ...clone]));
+        continue;
+      }
+
+      let mStore = maintainersStoreByEuc.get(euc);
+      if (!mStore) {
+        mStore = deriveMaintainersForEuc(euc);
+        maintainersStoreByEuc.set(euc, mStore);
+      }
+      const maintainers = Array.from(mStore.get() || []);
+      let rStore = refStateStoreByEuc.get(euc);
+      if (!rStore) {
+        rStore = deriveRepoRefState(euc);
+        refStateStoreByEuc.set(euc, rStore);
+      }
+      const refs = rStore.get() || {};
+      const first = event;
+      let title = euc;
+      let description = "";
+      try {
+        if (first) {
+          const parsed = parseRepoAnnouncementEvent(first);
+          if (parsed?.name) title = parsed.name;
+          if (parsed?.description) description = parsed.description;
+        }
+      } catch {}
+      // Compute principal maintainer and naddr for navigation
+      const principal = maintainers[0] || (first as any)?.pubkey || "";
+      const repoNaddr = (() => {
+        try {
+          if (!principal || !title) return "";
+          const relays = Router.get().FromPubkeys([principal]).getUrls();
+          return nip19.naddrEncode({ pubkey: principal, kind: 30617, identifier: title, relays });
+        } catch {
+          return "";
+        }
+      })();
+
+      let rootsCount = 0;
+      let revisionsCount = 0;
+      try {
+        if (first) {
+          const addrA = Address.fromEvent(first).toString();
+          let dStore = patchDagStoreByAddr.get(addrA);
+          if (!dStore) {
+            dStore = derivePatchGraph(addrA);
+            patchDagStoreByAddr.set(addrA, dStore);
+          }
+          const dag: any = dStore.get();
+          rootsCount = Array.isArray(dag?.roots)
+            ? dag.roots.length
+            : typeof dag?.nodeCount === "number"
+              ? Math.min(1, dag.nodeCount)
+              : 0;
+          revisionsCount = Array.isArray(dag?.rootRevisions)
+            ? dag.rootRevisions.length
+            : typeof dag?.edgesCount === "number"
+              ? dag.edgesCount
+              : 0;
+        }
+      } catch {}
+      const card: RepoCard = {
+        euc,
+        web: Array.from(new Set(web)) as string[],
+        clone: Array.from(new Set(clone)) as string[],
+        maintainers: maintainers as string[],
+        refs,
+        rootsCount,
+        revisionsCount,
+        title,
+        description,
+        first,
+        principal,
+        repoNaddr,
+      };
+      byCompositeKey.set(compositeKey, card);
     }
+
+    return Array.from(byCompositeKey.values());
   }
 
-  function setIO(next: IO) {
-    io = next;
-  }
-
-  return Object.assign(data, {
-    refresh,
-    setIO,
-    isLoading: loading,
-    error,
-  });
+  return {
+    subscribe,
+    set,
+    update,
+    clear: () => set([]),
+    computeCards,
+  };
 }
+
+export const repositoriesStore = createRepositoriesStore();

@@ -11,21 +11,25 @@
     checkProviderRepoAvailability,
   } from "../../useNewRepo.svelte";
   import { tokens as tokensStore, type Token } from "../../stores/tokens.js";
-  import { createGraspServersStore } from "../../stores/graspServers.js";
-
+  import { graspServersStore } from "../../stores/graspServers.js";
   const { Button } = useRegistry();
 
   function deriveOrigins(input: string): { wsOrigin: string; httpOrigin: string } {
     try {
       if (!input) return { wsOrigin: "", httpOrigin: "" };
       const normalized = input.trim();
-      const prefixed = /^(https?:\/\/|wss?:\/\/)/i.test(normalized) ? normalized : `https://${normalized}`;
+      const prefixed = /^(https?:\/\/|wss?:\/\/)/i.test(normalized)
+        ? normalized
+        : `https://${normalized}`;
       const url = new URL(prefixed);
       const isSecure = typeof window !== "undefined" && window.location?.protocol === "https:";
       const protocol = url.protocol.replace(":", "");
       const host = url.host;
-      const httpScheme =
-        isSecure ? "https" : protocol === "http" || protocol === "https" ? protocol : "http";
+      const httpScheme = isSecure
+        ? "https"
+        : protocol === "http" || protocol === "https"
+          ? protocol
+          : "http";
       const wsScheme = isSecure ? "wss" : protocol.startsWith("ws") ? protocol : "ws";
       return { wsOrigin: `${wsScheme}://${host}`, httpOrigin: `${httpScheme}://${host}` };
     } catch {
@@ -41,10 +45,22 @@
     onPublishEvent?: (
       event: Omit<NostrEvent, "id" | "sig" | "pubkey" | "created_at">
     ) => Promise<void>;
-    graspServerUrls?: string[]; // optional: preloaded grasp server options
     defaultRelays?: string[];
-    getProfile?: (pubkey: string) => Promise<{ name?: string; picture?: string; nip05?: string; display_name?: string } | null>;
-    searchProfiles?: (query: string) => Promise<Array<{ pubkey: string; name?: string; picture?: string; nip05?: string; display_name?: string }>>;
+    userPubkey?: string; // User's nostr pubkey (required for GRASP repos)
+    getProfile?: (
+      pubkey: string
+    ) => Promise<{ name?: string; picture?: string; nip05?: string; display_name?: string } | null>;
+    searchProfiles?: (
+      query: string
+    ) => Promise<
+      Array<{
+        pubkey: string;
+        name?: string;
+        picture?: string;
+        nip05?: string;
+        display_name?: string;
+      }>
+    >;
     searchRelays?: (query: string) => Promise<string[]>;
   }
 
@@ -54,14 +70,13 @@
     onRepoCreated,
     onCancel,
     onPublishEvent,
-    graspServerUrls = [],
     defaultRelays = [],
+    userPubkey,
     getProfile,
     searchProfiles,
     searchRelays,
   }: Props = $props();
 
-  console.log("graspServerUrls", graspServerUrls);
   console.log("defaultRelays", defaultRelays);
 
   // Initialize the useNewRepo hook
@@ -73,14 +88,16 @@
       progressSteps = steps.map((step) => ({
         step: step.step,
         message: step.message,
+        description: step.message,
         completed: step.status === "completed",
-        error: step.error,
+        status: step.status,
       }));
     },
     onRepoCreated: (result) => {
       onRepoCreated?.(result);
     },
     onPublishEvent: onPublishEvent,
+    userPubkey, // Pass user pubkey for GRASP repos
   });
 
   // Token management
@@ -89,16 +106,11 @@
   let graspRelayUrl = $state<string>("");
   let userEditedWebUrl = $state(false);
   let userEditedCloneUrl = $state(false);
-  // Grasp server options derived from store
-  const graspServerStore = createGraspServersStore(graspServerUrls);
-  let graspServerOptions = $state<string[]>(graspServerUrls);
-  graspServerStore.subscribe((s) => {
-    graspServerOptions = s.urls;
-  });
 
-  $effect(() => {
-    const normalized = Array.from(new Set((graspServerUrls || []).map((url) => url.trim()).filter(Boolean)));
-    graspServerStore.setUrls(normalized);
+  // Grasp server options sourced from global singleton store
+  let graspServerOptions = $state<string[]>([]);
+  graspServersStore.subscribe((urls) => {
+    graspServerOptions = urls;
   });
 
   // Repository name availability tracking
@@ -122,8 +134,6 @@
     tokens = t;
   });
 
-  // EventIO handles signing internally - no more signer checks needed
-
   // Compute sensible defaults for Advanced Settings
   function providerHost(p?: string): string | undefined {
     if (!p) return undefined;
@@ -139,8 +149,6 @@
   async function updateAdvancedDefaults() {
     const name = repoDetails.name?.trim();
     if (!name) return;
-    // EventIO handles signing internally - no need to get npub here
-
     // Derive username and host from availability results for the selected provider
     const providerResult =
       nameAvailabilityResults?.results?.find((r) => r.provider === selectedProvider) ||
@@ -195,7 +203,6 @@
 
   // Step management (1: Choose Service, 2: Repo Details, 3: Advanced, 4: Create)
   let currentStep = $state(1);
-  const totalSteps = 4;
 
   // Repository details (Step 1)
   let repoDetails = $state({
@@ -294,10 +301,6 @@
     if (!/^[a-zA-Z0-9._-]+$/.test(name)) {
       return "Repository name can only contain letters, numbers, dots, hyphens, and underscores";
     }
-
-    // Note: We no longer block form progression for name conflicts
-    // This allows users to proceed even with conflicts, but we'll disable those providers later
-
     return undefined;
   }
 
@@ -401,10 +404,6 @@
     }
   }
 
-  // EventIO handles signing internally - no more signer tracking needed
-
-  // EventIO handles signing internally - no more signer CTA needed
-
   // Validate relay URL for GRASP provider
   function isValidGraspConfig(): boolean {
     if (selectedProvider !== "grasp") return true;
@@ -430,6 +429,7 @@
         relayUrl: selectedProvider === "grasp" ? graspRelayUrl : undefined, // Pass relay URL for GRASP
         authorName: advancedSettings.authorName,
         authorEmail: advancedSettings.authorEmail,
+        authorPubkey: userPubkey,
         maintainers: advancedSettings.maintainers,
         relays: advancedSettings.relays,
         tags: advancedSettings.tags,
@@ -678,11 +678,9 @@
   <!-- Navigation Buttons -->
   {#if currentStep < 4}
     <div class="flex justify-between pt-4">
-      <Button
-        onclick={onCancel}
-        variant="outline"
-        size="sm"
-        class="h-8 px-3 py-0 text-xs font-medium rounded-md border bg-background hover:bg-muted transition"
+      <Button onclick={onCancel}
+        variant="outline" 
+        class="btn btn-secondary"
       >
         Cancel
       </Button>
@@ -692,8 +690,7 @@
           <Button
             onclick={prevStep}
             variant="outline"
-            size="sm"
-            class="h-8 px-3 py-0 text-xs font-medium rounded-md border bg-background hover:bg-muted transition"
+            class="btn btn-secondary"
           >
             Previous
           </Button>
@@ -702,13 +699,11 @@
         <Button
           onclick={nextStep}
           disabled={(currentStep === 1 &&
-            (!selectedProvider ||
-              (selectedProvider === "grasp" && !isValidGraspConfig()))) ||
+            (!selectedProvider || (selectedProvider === "grasp" && !isValidGraspConfig()))) ||
             (currentStep === 2 && !validateStep1())}
           variant="git"
-          size="sm"
-          class="h-8 px-3 py-0 text-xs font-medium rounded-md transition"
-        >
+          class="btn btn-primary"
+          >
           {currentStep === 3 ? "Create Repository" : "Next"}
         </Button>
       </div>
