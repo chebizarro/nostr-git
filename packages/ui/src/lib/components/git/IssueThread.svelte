@@ -57,7 +57,7 @@
   <Card class="p-2 border-none shadow-none">
     <div class="space-y-4">
       {#each commentsParsed as c (c.id)}
-        <div class="w-full flex-col gap-3 group animate-fade-in">
+        <div class="w-full mt-4 flex-col gap-3 group animate-fade-in">
           <div class="w-full grid grid-cols-[1fr_auto] space-x-2">
             <ProfileComponent pubkey={c.author.pubkey} hideDetails={false}></ProfileComponent>
             <div class="text-sm text-muted-foreground">

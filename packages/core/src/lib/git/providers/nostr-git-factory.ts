@@ -83,7 +83,7 @@ export function createNostrGitProvider(options: NostrGitFactoryOptions): NostrGi
       relays: graspRelays,
       timeoutMs,
       publishEvent: (event: NostrEvent) => {
-        return publishEventToRelays(event, graspRelays);
+        return eventIO.publishEvent(event);
       }
     };
     graspApi = new GraspApi(graspConfig);

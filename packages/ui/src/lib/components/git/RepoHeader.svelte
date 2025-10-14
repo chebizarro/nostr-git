@@ -12,6 +12,7 @@
     children,
     refreshRepo,
     isRefreshing = false,
+    userPubkey,
     forkRepo,
     settingsRepo,
     overviewRepo,
@@ -24,9 +25,16 @@
     overviewRepo?: () => void;
     isRefreshing?: boolean;
     settingsRepo?: () => void;
+    userPubkey?: string;
   } = $props();
-  const name = repoClass.name;
-  const description = repoClass.description;
+  const name = $state(repoClass.name);
+  const description = $state(repoClass.description);
+  let isAuthorized = $state(false);
+  $effect(() => {
+    if (userPubkey) {
+      isAuthorized = repoClass.isAuthorized(userPubkey);
+    }
+  });
 </script>
 
 <div class="border-b border-border pb-4">
@@ -55,25 +63,21 @@
       >
         <RotateCcw class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''}" />
       </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        class="gap-1 sm:gap-2 px-2 sm:px-3"
-        onclick={settingsRepo}
-        title="Settings"
-      >
-        <Settings class="h-4 w-4" />
-      </Button>
+      {#if isAuthorized}
+        <Button
+          variant="outline"
+          size="sm"
+          class="gap-1 sm:gap-2 px-2 sm:px-3"
+          onclick={settingsRepo}
+          title="Settings"
+        >
+          <Settings class="h-4 w-4" />
+        </Button>
+      {/if}
       <BranchSelector repo={repoClass} />
     </div>
   </div>
   <p class="text-muted-foreground mb-4">{description}</p>
-
-  <!-- Authentication Status Indicator
-  <div class="mb-4">
-    <AuthStatusIndicator repository={repoClass} pubkey={pubkey} />
-  </div>
- -->
   <nav class={cn("bg-muted text-muted-foreground rounded-md w-full")}>
     <div class="flex overflow-x-auto scrollbar-hide">
       <div class="w-full flex justify-evenly gap-1 m-1 min-w-max">

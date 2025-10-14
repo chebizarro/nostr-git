@@ -453,16 +453,16 @@ export class Repo {
   // -------------------------
   // Trust policy
   // -------------------------
-  private isTrusted(pubkey?: string): boolean {
+  public isAuthorized(pubkey?: string): boolean {
     if (!pubkey) return false;
     const owner = this.getOwnerPubkey();
     if (pubkey === owner) return true;
-    return (this.repo?.maintainers || []).includes(pubkey);
+    return (this.#repo?.maintainers || []).includes(pubkey);
   }
 
   /** Return unique list of trusted maintainers including owner. */
   get trustedMaintainers(): string[] {
-    const out = new Set<string>(this.repo?.maintainers || []);
+    const out = new Set<string>(this.#repo?.maintainers || []);
     const owner = this.getOwnerPubkey();
     if (owner) out.add(owner);
     return Array.from(out);
