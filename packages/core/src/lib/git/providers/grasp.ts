@@ -22,7 +22,7 @@ import type {
   GitForkOptions
 } from '../api.js';
 import { nip19, SimplePool } from 'nostr-tools';
-import { NostrFilter, createRepoStateEvent, getTagValue, getTags } from '@nostr-git/shared-types';
+import { NostrFilter, createRepoStateEvent, getTagValue, getTags, type EventIO } from '@nostr-git/shared-types';
 import {
   fetchRelayInfo,
   graspCapabilities as detectCapabilities,
@@ -58,10 +58,12 @@ export class GraspApi implements GitServiceApi {
   private readonly pubkey: string;
   private relayInfo?: RelayInfo;
   private pool: SimplePool = new SimplePool();
-  
+  private eventIO?: EventIO;
+
   constructor(
     relayUrl: string,
-    pubkey: string
+    pubkey: string,
+    io?: EventIO
   ) {
     // Normalize to base ws(s) origin with no path
     let normalized = relayUrl.replace(/\/$/, '');
@@ -77,6 +79,7 @@ export class GraspApi implements GitServiceApi {
     }
     this.relayUrl = normalized;
     this.pubkey = pubkey;
+    this.eventIO = io;
   }
 
   /**
@@ -89,13 +92,20 @@ export class GraspApi implements GitServiceApi {
       // Mirrors ngit client.rs: uses NIP-11 to get relay info and advertise smart_http endpoints
       const info = await fetchRelayInfo(this.relayUrl);
       this.capabilities = detectCapabilities(info, this.relayUrl);
-      this.httpBase = this.capabilities.httpOrigins?.[0] || normalizeHttpOrigin(this.relayUrl);
+      // Prefer spec root origin (no path) first; use pathful as fallback only
+      const origins = this.capabilities.httpOrigins || [];
+      const root = origins.find(o => { try { const u = new URL(o); return (!u.pathname || u.pathname === '/'); } catch { return false } });
+      const pathful = origins.find(o => { try { const u = new URL(o); return (u.pathname && u.pathname !== '/'); } catch { return false } });
+      this.httpBase = root || pathful || origins[0] || normalizeHttpOrigin(this.relayUrl);
       this.relayInfo = info;
     } catch (err) {
       console.warn('Failed to ensure capabilities:', err);
-      if (!this.httpBase) {
-        this.httpBase = normalizeHttpOrigin(this.relayUrl);
-      }
+      // Fallback: derive capabilities heuristically from relay URL
+      this.capabilities = detectCapabilities({} as any, this.relayUrl);
+      const origins = this.capabilities.httpOrigins || [];
+      const root = origins.find(o => { try { const u = new URL(o); return (!u.pathname || u.pathname === '/'); } catch { return false } });
+      const pathful = origins.find(o => { try { const u = new URL(o); return (u.pathname && u.pathname !== '/'); } catch { return false } });
+      this.httpBase = root || pathful || origins[0] || normalizeHttpOrigin(this.relayUrl);
     }
   }
 
@@ -142,9 +152,10 @@ export class GraspApi implements GitServiceApi {
       ...options,
       mode: 'cors',
       credentials: 'omit',
+      // Mirrors ngit (fetch.rs/push.rs) which relies on server CORS and does not set forbidden headers
+      // Do not set User-Agent header in browsers.
       headers: {
-        'User-Agent': 'nostr-git-grasp-client',
-        ...options.headers
+        ...(options.headers || {})
       }
     });
   }
@@ -172,10 +183,69 @@ export class GraspApi implements GitServiceApi {
   /**
    * Repository Operations
    */
+  // Parse kind 31990 repo state event into head + refs
+  // Mirrors ngit repo_state.rs::try_from
+  private parseRepoStateFromEvent(ev: NostrEvent | any): { head?: string; refs: Record<string, string> } {
+    const tags: string[][] = ev?.tags || [];
+    const refs: Record<string, string> = {};
+    let head: string | undefined;
+    for (const t of tags) {
+      if (t[0] === 'HEAD' && t[1]) head = t[1];
+      if (t[0] === 'ref' && t[1] && t[2]) refs[t[1]] = t[2];
+    }
+    return { head, refs };
+  }
+
+  // Fetch latest repo state via nostr
+  // Mirrors ngit client.rs::get_state_from_cache with network fallback
+  // NOTE: ngit uses STATE_KIND = 30618
+  private async fetchLatestState(owner: string, repo: string): Promise<{ head?: string; refs: Record<string, string> } | null> {
+    const npub = nip19.npubEncode(owner);
+    const addr = `${npub}:${repo}`;
+    try {
+      const events = await this.queryEvents([{ kinds: [30618], '#a': [addr], limit: 1 }]);
+      const ev = events?.[0];
+      if (!ev) return null;
+      return this.parseRepoStateFromEvent(ev);
+    } catch {
+      return null;
+    }
+  }
+
   async getRepo(owner: string, repo: string): Promise<RepoMetadata> {
-    // NOTE: Event querying moved to UI layer. This method now throws an error.
-    // For GRASP repos, metadata should be computed from relay URL + pubkey or fetched via external EventIO.
-    throw new Error('GRASP getRepo() not supported without external event data. Query events via EventIO in UI layer.');
+    // Mirrors ngit repo_ref.rs::get_repo_coordinates_when_remote_unknown + repo_state.rs
+    await this.ensureCapabilities();
+    const npub = nip19.npubEncode(owner);
+    const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl);
+    const webUrl = `${httpOrigin}/${npub}/${repo}`;
+    const cloneUrl = `${webUrl}.git`;
+
+    // Fetch announcement and state in parallel
+    const [ann, st] = await Promise.all([
+      (async () => {
+        try {
+          const evs = await this.queryEvents([{ kinds: [30617], authors: [owner], '#d': [repo], limit: 1 }]);
+          return evs?.[0] ?? null;
+        } catch { return null }
+      })(),
+      this.fetchLatestState(owner, repo),
+    ]);
+
+    const description = ann ? (() => { try { return JSON.parse(ann.content)?.description ?? undefined } catch { return undefined } })() : undefined;
+    const defaultBranch = getDefaultBranchFromHead(st?.head || '');
+
+    return {
+      id: `${npub}/${repo}`,
+      name: repo,
+      fullName: `${npub}/${repo}`,
+      description,
+      // Do not hardcode a default branch; only set if present in state
+      defaultBranch: defaultBranch || '',
+      isPrivate: false,
+      cloneUrl,
+      htmlUrl: webUrl,
+      owner: { login: npub, type: 'User' }
+    };
   }
 
   async publishStateFromLocal(
@@ -185,6 +255,7 @@ export class GraspApi implements GitServiceApi {
   ): Promise<NostrEvent | null> {
     await this.ensureCapabilities();
     if (!this.capabilities?.grasp01) {
+      // Mirrors ngit client.rs::supported_grasps behavior
       console.warn('Relay does not support GRASP-01');
       return null;
     }
@@ -192,58 +263,56 @@ export class GraspApi implements GitServiceApi {
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl);
     const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`;
     try {
-      // Mirrors ngit repo_state.rs: build HEAD refs, collect branch/tag refs, and include nostr refs
+      // Mirrors ngit repo_state.rs::build - collect refs and HEAD
       const fs = createMemFs();
       const dir = '/grasp';
       await git.fetch({ fs, http, dir, url: remoteUrl, depth: 1 });
-      // construct state from fetched refs - consistent with ngit repo_state.rs::build_state_event
       const branches = await git.listBranches({ fs, dir });
       const tags = opts?.includeTags ? await git.listTags({ fs, dir }) : [];
       const refs: Record<string, string> = {};
       for (const b of branches) {
-        try {
-          const sha = await git.resolveRef({ fs, dir, ref: `refs/heads/${b}` });
-          refs[`refs/heads/${b}`] = sha;
-        } catch {}
+        try { refs[`refs/heads/${b}`] = await git.resolveRef({ fs, dir, ref: `refs/heads/${b}` }); } catch { }
       }
       if (opts?.includeTags) {
         for (const t of tags) {
-          try {
-            const sha = await git.resolveRef({ fs, dir, ref: `refs/tags/${t}` });
-            refs[`refs/tags/${t}`] = sha;
-          } catch {}
+          try { refs[`refs/tags/${t}`] = await git.resolveRef({ fs, dir, ref: `refs/tags/${t}` }); } catch { }
         }
       }
-      // HEAD management matches ngit logic that prioritizes HEAD ref resolution
-      let headRef = 'refs/heads/main';
+      let headRef: string | undefined;
       try {
         const resolvedHead = await git.resolveRef({ fs, dir, ref: 'HEAD' });
-        headRef = resolvedHead.startsWith('refs/')
-          ? resolvedHead
-          : `refs/heads/${resolvedHead}`;
-      } catch {}
-      const nostrRefs: string[] = [];
-      for (const key of Object.keys(refs)) {
-        if (key.startsWith('refs/nostr/')) {
-          nostrRefs.push(key.replace('refs/nostr/', ''));
-        }
-      }
+        headRef = resolvedHead.startsWith('refs/') ? resolvedHead : `refs/heads/${resolvedHead}`;
+      } catch { }
+
       const event = createRepoStateEvent({
+        // Mirrors ngit repo_state.rs address tag: "a" -> "<npub>:<repo>"
         repoId: encodeRepoAddress(owner, repo),
+        head: headRef,
         refs: Object.entries(refs).map(([ref, commit]) => ({
           type: ref.startsWith('refs/heads/') ? 'heads' : 'tags',
-          name: ref.replace('refs/', ''),
+          name: ref, // keep full ref path; shared-types flattener will handle
           commit,
         })),
       });
-      if (opts?.prevEventId) {
-        event.tags.push(['refs/heads/main', opts.prevEventId]);
+      if (headRef && !event.tags.find(t => t[0] === 'HEAD')) {
+        // shared-types expects HEAD tag value in the form `ref: refs/heads/<branch>`
+        // Mirrors ngit repo_state.rs::add_head
+        event.tags.push(['HEAD', `ref: ${headRef}` as any]);
       }
-      // NOTE: Event publication moved to UI layer. This method now throws an error.
-      throw new Error('publishStateFromLocal not supported without external EventIO. Publish state events via UI layer.');
+      // If an EventIO is injected, publish directly; otherwise return unsigned for the UI to handle.
+      // Mirrors ngit architectural flexibility where publishing lives in client layer (client.rs)
+      if (this.eventIO?.publishEvent) {
+        try {
+          await this.eventIO.publishEvent(event as any);
+        } catch (e) {
+          console.warn('EventIO.publishEvent failed; returning unsigned event instead', e);
+          return event as unknown as NostrEvent;
+        }
+      }
+      return event as unknown as NostrEvent;
     } catch (err) {
       console.error('publishStateFromLocal failed:', err);
-      throw new Error(`Failed to publish state event: ${err}`);
+      throw new Error(`Failed to build state event: ${err}`);
     }
   }
 
@@ -256,17 +325,19 @@ export class GraspApi implements GitServiceApi {
     // NOTE: Event publishing moved to UI layer (useNewRepo.svelte.ts).
     // This method now only constructs metadata and Smart HTTP URLs.
     // The UI layer must publish RepoAnnouncementEvent and RepoStateEvent before calling this.
-    
+
     console.log('[GraspApi] createRepo - pubkey:', this.pubkey);
     console.log('[GraspApi] createRepo - pubkey length:', this.pubkey.length);
     console.log('[GraspApi] createRepo - pubkey type:', typeof this.pubkey);
-    
+
+    await this.ensureCapabilities();
     const npub = nip19.npubEncode(this.pubkey);
     console.log('[GraspApi] createRepo - npub:', npub);
-    
-    const httpBase = this.relayUrl.replace(/^ws:\/\//, 'http://').replace(/^wss:\/\//, 'https://');
+
+    // Use derived Smart HTTP base from NIP-11 (may include path like /git). Mirrors ngit client.rs discovery
+    const httpBase = this.httpBase || normalizeHttpOrigin(this.relayUrl);
     console.log('[GraspApi] createRepo - httpBase:', httpBase);
-    
+
     const webUrl = `${httpBase}/${npub}/${options.name}`; // no .git
     const cloneUrl = `${webUrl}.git`;
     console.log('[GraspApi] createRepo - webUrl:', webUrl);
@@ -281,7 +352,7 @@ export class GraspApi implements GitServiceApi {
       const port = u.port ? `:${u.port}` : '';
       const ngitAlias = `${u.protocol}//ngit-relay${port}`;
       aliases.push(ngitAlias);
-    } catch {}
+    } catch { }
     // de-duplicate while preserving order
     const seen = new Set<string>();
     // Only include valid Nostr relay URLs in the relays tag to avoid adapter errors
@@ -297,7 +368,8 @@ export class GraspApi implements GitServiceApi {
       name: options.name,
       fullName: `${npub}/${options.name}`,
       description: options.description || '',
-      defaultBranch: 'master',
+      // Do not hardcode default branch; leave empty until state/HEAD is known
+      defaultBranch: '',
       isPrivate: options.private || false,
       cloneUrl: cloneUrl,
       htmlUrl: webUrl,
@@ -332,21 +404,19 @@ export class GraspApi implements GitServiceApi {
     const npub = nip19.npubEncode(owner);
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl);
     const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`;
+    // Mirrors ngit git/mod.rs::get_main_or_master_branch + traversal
+    let ref = options?.sha;
+    if (!ref) {
+      const st = await this.fetchLatestState(owner, repo);
+      ref = getDefaultBranchFromHead(st?.head || '');
+    }
+    if (!ref) {
+      throw new Error('No ref provided and no HEAD in repo state. Provide options.sha or publish a state event with HEAD.');
+    }
     try {
-      // Smart HTTP fetch logic parallels ngit’s use of libgit2 fetch mechanism
       const fs = createMemFs();
       const dir = '/grasp';
-      await git.fetch({
-        fs,
-        http,
-        dir,
-        url: remoteUrl,
-        depth: options?.per_page ?? 20,
-        singleBranch: true,
-        ref: options?.sha ?? 'main'
-      });
-      const ref = options?.sha ?? 'main';
-      // Equivalent to ngit git/mod.rs::list_commits constructing head log traversal
+      await git.fetch({ fs, http, dir, url: remoteUrl, depth: options?.per_page ?? 20, singleBranch: true, ref });
       const commits = await git.log({ fs, dir, ref, depth: options?.per_page ?? 20 });
       return commits.map((c) => ({
         sha: c.oid,
@@ -384,10 +454,9 @@ export class GraspApi implements GitServiceApi {
     try {
       const fs = createMemFs();
       const dir = '/grasp';
-      // Mirrors ngit git/mod.rs::fetch_commit pattern using libgit2 shallow fetch
+      // Mirrors ngit git/mod.rs::fetch_commit with shallow fetch
       await git.fetch({ fs, http, dir, url: remoteUrl, depth: 1 });
       const { commit } = await git.readCommit({ fs, dir, oid: sha });
-      // Commit parsing consistent with ngit commit_to_event representation
       return {
         sha,
         url: `${remoteUrl}/commit/${sha}`,
@@ -456,6 +525,12 @@ export class GraspApi implements GitServiceApi {
   ): Promise<PullRequest[]> {
     // Map to patch operations
     const patches = await this.listPatches(owner, repo);
+    // Derive base ref from state HEAD when available (no hardcoded default)
+    let baseRef = '';
+    try {
+      const st = await this.fetchLatestState(owner, repo);
+      baseRef = getDefaultBranchFromHead(st?.head || '') || '';
+    } catch { }
 
     return patches.map((patch) => ({
       id: parseInt(patch.id.slice(-8), 16),
@@ -470,7 +545,7 @@ export class GraspApi implements GitServiceApi {
         repo: { name: repo, owner: nip19.npubEncode(owner) }
       },
       base: {
-        ref: 'main',
+        ref: baseRef,
         sha: '',
         repo: { name: repo, owner: nip19.npubEncode(owner) }
       },
@@ -679,8 +754,21 @@ export class GraspApi implements GitServiceApi {
     throw new Error('GRASP getTag not implemented - requires Git Smart HTTP parsing');
   }
 
+  // Support multiple filters and dedupe results
+  // Mirrors ngit client.rs::get_events and consolidation
   async queryEvents(filters: NostrFilter[]): Promise<NostrEvent[]> {
-    const events = await this.pool.querySync([this.relayUrl], filters[0]);
-    return events;
+    const all: Record<string, NostrEvent> = {};
+    for (const f of filters) {
+      try {
+        const evs = await this.pool.querySync([this.relayUrl], f);
+        for (const ev of evs as any[]) {
+          if (!ev?.id) continue;
+          all[ev.id] = ev as NostrEvent;
+        }
+      } catch (e) {
+        console.warn('queryEvents filter failed:', f, e);
+      }
+    }
+    return Object.values(all);
   }
 }

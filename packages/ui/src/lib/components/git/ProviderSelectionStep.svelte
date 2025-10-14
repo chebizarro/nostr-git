@@ -111,7 +111,7 @@
         disabled: isDisabled,
         disabledReason: isDisabled ? "Repository name already exists" : undefined,
         // Keep GRASP selectable regardless of name conflicts; others require token and no conflict
-        hasToken: isGrasp ? true : provider.hasToken && !isDisabled,
+        hasToken: isGrasp ? false : provider.hasToken && !isDisabled,
       };
     });
 

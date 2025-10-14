@@ -7,7 +7,7 @@
  * Based on ngit's client.rs factory patterns and configuration management.
  */
 
-import type { EventIO } from '@nostr-git/shared-types';
+import type { EventIO, NostrEvent } from '@nostr-git/shared-types';
 
 import { NostrGitProvider, type NostrGitConfig } from './nostr-git-provider.js';
 import { GraspApi, type GraspApiConfig } from './grasp-api.js';
@@ -80,9 +80,11 @@ export function createNostrGitProvider(options: NostrGitFactoryOptions): NostrGi
   let graspApi;
   if (enableGrasp) {
     const graspConfig: GraspApiConfig = {
-      eventIO,
       relays: graspRelays,
-      timeoutMs
+      timeoutMs,
+      publishEvent: (event: NostrEvent) => {
+        return publishEventToRelays(event, graspRelays);
+      }
     };
     graspApi = new GraspApi(graspConfig);
   }

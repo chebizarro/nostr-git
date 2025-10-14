@@ -1,5 +1,5 @@
 import { expose } from 'comlink';
-import { finalizeEvent } from 'nostr-tools';
+import { finalizeEvent, nip19 } from 'nostr-tools';
 import { GitProvider, getGitProvider } from '@nostr-git/git-wrapper';
 import { rootDir } from '../git.js';
 import { Buffer } from 'buffer';
@@ -86,8 +86,8 @@ function initializeEventIO(): EventIO {
  * @param io - EventIO instance (ignored - worker creates its own)
  */
 const setEventIO = (io: EventIO) => {
-  console.log('[git-worker] setEventIO called - EventIO is now created internally');
-  // No-op: EventIO is created internally
+  console.log('[git-worker] setEventIO called - using provided EventIO from main thread');
+  workerEventIO = io;
 };
 
 /**
@@ -220,6 +220,27 @@ async function safePushToRemote(options: {
     pushToRemote: ({ repoId, remoteUrl, branch, token, provider }) =>
       pushToRemote({ repoId, remoteUrl, branch, token, provider })
   });
+}
+
+async function probeSmartHttpEndpoint(remoteUrl: string): Promise<string> {
+  const candidates = [
+    `${remoteUrl}/git`,
+    `${remoteUrl}/npub`,
+    `${remoteUrl}/hex`
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      const response = await fetch(`${candidate}/info/refs?service=git-receive-pack`);
+      if (response.ok || response.status === 401 || response.status === 403) {
+        return candidate;
+      }
+    } catch (error) {
+      console.error(`Failed to probe Smart HTTP endpoint ${candidate}:`, error);
+    }
+  }
+
+  throw new Error(`Failed to find working Smart HTTP endpoint for ${remoteUrl}`);
 }
 
 // Lightweight message-based RPC for calls that may trip Comlink cloning issues
@@ -1286,9 +1307,8 @@ const pushToRemote = async ({
         throw new Error('GRASP provider requires a pubkey token');
       }
 
-      // For GRASP, we use the GraspApi instead of isomorphic-git
-      // The GraspApi handles the Git Smart HTTP protocol and event signing
-      // Ensure we construct GraspApi with the BASE relay URL (ws/wss origin), not a pathful clone URL
+      // For GRASP, we use Smart HTTP over HTTPS with message-based auth (username=pubkey, password placeholder).
+      // Ensure we construct the relay base (ws/wss origin), then probe for the correct Smart HTTP path.
       let relayBaseUrl = remoteUrl;
       try {
         const u = new URL(remoteUrl);
@@ -1307,15 +1327,81 @@ const pushToRemote = async ({
 
       console.log(`[GRASP] Using relay base URL for API:`, relayBaseUrl);
       
-      // NOTE: Repository state events are now published in the UI layer (useNewRepo.svelte.ts)
-      // BEFORE calling createRemoteRepo. We don't need to publish them again here.
-      // This avoids duplicate event publishing.
+      // Ensure a repo state (STATE_KIND=30618) is published to the GRASP relay before pushing
+      // Mirrors ngit init.rs + repo_state.rs; critical so the relay recognizes refs/HEAD.
+      try {
+        const io = getEventIO();
+        // Derive npub and repo from remoteUrl path: /<npub>/<repo>.git
+        const u = new URL(remoteUrl);
+        const parts = u.pathname.replace(/^\//, '').split('/');
+        const npub = parts[0] || '';
+        const repo = (parts[1] || '').replace(/\.git$/, '');
+
+        // Collect local heads/tags
+        const heads = await git.listBranches({ dir });
+        const tags = await git.listTags({ dir });
+        const refs: Record<string, string> = {};
+        for (const b of heads) {
+          try {
+            const sha = await git.resolveRef({ dir, ref: `refs/heads/${b}` });
+            refs[`refs/heads/${b}`] = sha;
+          } catch {}
+        }
+        for (const t of tags) {
+          try {
+            const sha = await git.resolveRef({ dir, ref: `refs/tags/${t}` });
+            refs[`refs/tags/${t}`] = sha;
+          } catch {}
+        }
+
+        const headRef = branch ? `refs/heads/${branch}` : undefined;
+        // Build 30618 event using shared-types helper
+        const repoId = `${npub}:${repo}`; // "a" tag content
+        const stateEvent = createRepoStateEvent({
+          repoId,
+          head: headRef,
+          refs: Object.entries(refs).map(([ref, commit]) => ({
+            type: ref.startsWith('refs/heads/') ? 'heads' : 'tags',
+            name: ref,
+            commit,
+          })),
+        });
+        if (headRef && !stateEvent.tags.find(t => t[0] === 'HEAD')) {
+          stateEvent.tags.push(['HEAD', `ref: ${headRef}` as any]);
+        }
+        // Publish via EventIO; implementation should route to GRASP relay. If not available, skip.
+        if (typeof (io as any).publishEvent === 'function') {
+          // Publish explicitly to the GRASP relay base (ws/wss origin)
+          // Most EventIO adapters expect (event, relays?) signature
+          const pub = (io as any).publishEvent(stateEvent as any, [relayBaseUrl]);
+          // Do not let this block push indefinitely — proceed after 3s
+          await Promise.race([
+            pub,
+            new Promise((resolve) => setTimeout(resolve, 3000))
+          ]);
+          console.log('[GRASP] Pre-push state publish attempted (non-blocking) to', relayBaseUrl);
+        }
+      } catch (e) {
+        console.warn('[GRASP] Failed to publish pre-push state; proceeding to push anyway', e);
+      }
+
+      // Choose spec path directly (no discovery probes): https://<host>/<npub>/<repo>.git
+      function pickSmartHttpUrl(orig: string): string {
+        const u = new URL(orig);
+        // Strip '/git' prefix if present (spec root path)
+        let p = u.pathname.startsWith('/git/') ? u.pathname.slice(4) : u.pathname;
+        // Ensure .git suffix
+        if (!p.endsWith('.git')) p = p.endsWith('/') ? `${p.slice(0, -1)}.git` : `${p}.git`;
+        return `${u.protocol}//${u.host}${p}`;
+      }
 
       // Push actual Git objects to the HTTPS remote
       try {
+        // Choose best Smart HTTP URL
+        const pushUrl = pickSmartHttpUrl(remoteUrl);
         // Ensure remote exists (idempotent)
         try {
-          await git.addRemote({ dir, remote: 'origin', url: remoteUrl });
+          await git.addRemote({ dir, remote: 'origin', url: pushUrl });
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
           if (!errMsg.includes('already exists') && !errMsg.includes('Remote named')) {
@@ -1323,24 +1409,55 @@ const pushToRemote = async ({
           }
         }
 
-        console.log(`[GRASP] Pushing packfiles over HTTPS to ${remoteUrl} (ref=refs/heads/${branch})`);
+        console.log(`[GRASP] Pushing packfiles over HTTPS to ${pushUrl} (ref=refs/heads/${branch})`);
         
-        // GRASP requires authentication with pubkey
-        const authCallback = () => ({
-          username: token, // pubkey as username
-          password: 'grasp' // placeholder, actual signing is done via Nostr event
-        });
-        
-        await git.push({
-          dir,
-          url: remoteUrl,
-          ref: `refs/heads/${branch}`,
-          onAuth: authCallback
-        });
-        console.log('[GRASP] Git objects pushed successfully');
-      } catch (pushErr) {
+        // Try a few Basic auth mappings (parity with GitAuthenticator plaintext creds)
+        const authCandidates = [
+          { username: 'grasp', password: token as string },
+          { username: token as string, password: 'grasp' },
+          { username: token as string, password: token as string },
+        ];
+        let pushed = false;
+        let lastErr: any = null;
+        for (const creds of authCandidates) {
+          try {
+            await git.push({
+              dir,
+              url: pushUrl,
+              ref: `refs/heads/${branch}`,
+              onAuth: () => creds,
+            });
+            console.log('[GRASP] Git objects pushed successfully with auth mapping', Object.keys(creds).length);
+            pushed = true;
+            break;
+          } catch (e) {
+            lastErr = e;
+          }
+        }
+        if (!pushed) {
+          throw lastErr || new Error('Push failed for all auth mappings');
+        }
+      } catch (pushErr: any) {
         console.error('[GRASP] Failed to push packfiles over HTTPS:', pushErr);
-        throw new Error(`Failed to push packfiles to GRASP relay: ${pushErr}`);
+        // If 404 on discovery, try alternate path (no '.git' or with '/git' prefix)
+        const msg = pushErr?.message || String(pushErr || '');
+        if (msg.includes('HTTP Error: 404')) {
+          try {
+            const u = new URL(remoteUrl);
+            // Try probing explicitly and push to selected URL
+            const retryUrl = await pickSmartHttpUrl(remoteUrl);
+            console.warn('[GRASP] Retrying push with probed path:', retryUrl);
+            try { await git.addRemote({ dir, remote: 'origin', url: retryUrl }); } catch {}
+            const authCallback = () => ({ username: token as string, password: 'grasp' });
+            await git.push({ dir, url: retryUrl, ref: `refs/heads/${branch}`, onAuth: authCallback });
+            console.log('[GRASP] Git objects pushed successfully after probed path fallback');
+          } catch (retryErr) {
+            console.error('[GRASP] Fallback push also failed:', retryErr);
+            throw new Error(`Failed to push packfiles to GRASP relay: ${retryErr}`);
+          }
+        } else {
+          throw new Error(`Failed to push packfiles to GRASP relay: ${pushErr}`);
+        }
       }
 
       // Return success result

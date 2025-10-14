@@ -92,9 +92,13 @@ export function deriveHttpOrigins(relayWsUrl: string, info?: RelayInfo): string[
     enrich(info.smart_http);
   }
 
-  if (!origins.includes(primary)) {
-    origins.push(primary);
-  }
+  if (!origins.includes(primary)) origins.push(primary);
+
+  // Heuristic fallbacks when NIP-11 doesn't advertise smart_http or is unreachable.
+  // Many Smart HTTP frontends (e.g., Gitea) expose Git endpoints under '/git'.
+  // Mirrors the resilience in ngit where multiple candidates are tried.
+  const withGitPath = `${primary.replace(/\/$/, '')}/git`;
+  if (!origins.includes(withGitPath)) origins.push(withGitPath);
 
   // Deduplicate
   const seen = new Set<string>();

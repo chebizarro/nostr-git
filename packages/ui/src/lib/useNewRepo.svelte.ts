@@ -512,7 +512,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
           cloneUrl = `${webUrl}.git`;
         }
 
-        // Build relay aliases (same logic as existing code)
+        // Build relay aliases: ensure GRASP relay is present for metadata
         const aliases: string[] = [];
         if (wsOrigin) {
           aliases.push(wsOrigin);
@@ -520,22 +520,19 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
             const u = new URL(wsOrigin);
             const port = u.port ? `:${u.port}` : "";
             aliases.push(`${u.protocol}//ngit-relay${port}`);
-          } catch { }
+          } catch {}
         }
-        
-        // Include default repo relays for discoverability
         const defaultRepoRelays = ['wss://nos.lol/', 'wss://relay.damus.io/'];
         aliases.push(...defaultRepoRelays);
-        
         const seen = new Set<string>();
-        const relays = aliases.filter((a) => {
-          if (seen.has(a)) return false;
-          seen.add(a);
-          return true;
-        });
+        const relays = aliases.filter((a) => { if (seen.has(a)) return false; seen.add(a); return true; });
+        // Compute canonical repo address '<npub>:<repo>' (ngit-compatible 'a' tag)
+        const ownerNpub = graspPubkey ? (await import('nostr-tools')).nip19.npubEncode(graspPubkey) : undefined;
+        const canonicalRepoId = ownerNpub ? `${ownerNpub}:${config.name}` : config.name;
+
         // Create announcement event
         announcementEvent = createAnnouncementEventShared({
-          repoId: config.name,
+          repoId: canonicalRepoId,
           name: config.name,
           description: config.description || "",
           web: webUrl ? [webUrl] : undefined,
@@ -546,27 +543,49 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
           earliestUniqueCommit: localRepo?.initialCommit || undefined,
         });
         // Create state event
-        const refs = localRepo?.initialCommit
-          ? [
-            {
+        // Build full ref names per ngit (refs/heads/<branch>) for HEAD and refs
+        const headRef = config.defaultBranch ? `refs/heads/${config.defaultBranch}` : undefined;
+        const refs = localRepo?.initialCommit && headRef
+          ? [{
               type: "heads" as const,
-              name: config.defaultBranch || "main",
+              name: headRef,
               commit: localRepo.initialCommit,
-            },
-          ]
+            }]
           : undefined;
         stateEvent = createStateEventShared({
-          repoId: config.name,
+          repoId: canonicalRepoId,
           refs,
-          head: config.defaultBranch,
+          head: headRef,
         });
-        // Publish both events (if handler provided)
+        // Ensure explicit HEAD/ref tags are present (ngit-compatible)
+        try {
+          stateEvent.tags = stateEvent.tags || [];
+          if (headRef && !stateEvent.tags.find((t: any[]) => t[0] === 'HEAD')) {
+            stateEvent.tags.push(['HEAD', `ref: ${headRef}`]);
+          }
+          if (localRepo?.initialCommit && headRef && !stateEvent.tags.find((t: any[]) => t[0] === 'ref' && t[1] === headRef)) {
+            stateEvent.tags.push(['ref', headRef, localRepo.initialCommit]);
+          }
+        } catch {}
+        // Ensure app-level publisher sees the GRASP relay on both events: add a 'relays' tag mirroring repo relays
+        try {
+          const relaysTag = ['relays', ...relays] as unknown as string[];
+          // Avoid duplicate relays tag
+          if (!stateEvent.tags?.some((t: any[]) => t[0] === 'relays')) {
+            stateEvent.tags = [...(stateEvent.tags || []), relaysTag];
+          }
+          announcementEvent.tags = announcementEvent.tags || [];
+          if (!announcementEvent.tags?.some((t: any[]) => t[0] === 'relays')) {
+            announcementEvent.tags = [...(announcementEvent.tags || []), relaysTag];
+          }
+        } catch {}
+        // Publish ANNOUNCEMENT first (triggers server provisioning), then STATE
         if (onPublishEvent) {
-          console.log("🔐 publishing announcementEvent", announcementEvent);
+          console.log("🔐 publishing announcementEvent (first)", announcementEvent);
           await onPublishEvent(announcementEvent);
+          console.log("🔐 publishing stateEvent (second)", stateEvent);
           await onPublishEvent(stateEvent);
-          updateProgress("grasp-events", "GRASP events published successfully", "completed");
-          console.log("🔐 announcementEvent", announcementEvent);
+          updateProgress("grasp-events", "GRASP state and announcement published", "completed");
         } else {
           console.warn("⚠️ No onPublishEvent callback provided; GRASP events not published");
           updateProgress("grasp-events", "Skipped event publishing (no callback)", "completed");
