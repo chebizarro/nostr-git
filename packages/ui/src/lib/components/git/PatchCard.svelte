@@ -68,7 +68,6 @@
   let isBookmarked = $state(false);
 
   const noun = "Patch";
-  const url = "";
 
   // Copy to clipboard function
   const copyToClipboard = async (text: string, label: string) => {
@@ -284,14 +283,14 @@
     <div class="flex items-center gap-1">
       <ReactionSummary
         event={event}
-        url={url}
+        url={`patches/${id}`}
         reactionClass="tooltip-left"
         deleteReaction={() => {}}
         createReaction={() => {}}
         noTooltip={false}
         children={() => {}}
       />
-      <EventActions event={event} url={url} noun={noun} customActions={undefined} />
+      <EventActions event={event} url={`patches/${id}`} noun={noun} customActions={undefined} />
       <MessageSquare class="h-4 w-4 text-muted-foreground" />
       <span class="text-sm text-muted-foreground">{comments?.length ?? 0}</span>
       <Button size="sm" variant="outline" class="ml-2">

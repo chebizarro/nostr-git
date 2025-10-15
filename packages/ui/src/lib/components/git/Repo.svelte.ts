@@ -45,7 +45,7 @@ export class Repo {
   createdAt: string = $state("");
   clone: string[] = $state([]);
   web: string[] = $state([]);
-  address: string ="";
+  address: string = $state("");
 
   repoEvent: RepoAnnouncementEvent | undefined = $state(undefined);
   #repo: RepoAnnouncement | undefined = $state(undefined);
