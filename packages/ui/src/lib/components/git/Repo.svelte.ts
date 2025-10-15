@@ -25,25 +25,12 @@ import { CommitManager } from "./CommitManager";
 import { BranchManager } from "./BranchManager";
 import { FileManager } from "./FileManager";
 import {
+  RepoCore,
   type RepoContext,
-  mergeRepoStateByMaintainers as coreMergeRepoStateByMaintainers,
-  getPatchGraph as coreGetPatchGraph,
-  resolveStatusFor as coreResolveStatusFor,
-  getIssueThread as coreGetIssueThread,
-  getEffectiveLabelsFor as coreGetEffectiveLabelsFor,
-  getRepoLabels as coreGetRepoLabels,
-  getIssueLabels as coreGetIssueLabels,
-  getPatchLabels as coreGetPatchLabels,
-  getMaintainerBadge as coreGetMaintainerBadge,
-  getRecommendedFilters as coreGetRecommendedFilters,
-} from "./RepoCore";
+  type EffectiveLabelsV2,
+} from "@nostr-git/core";
 
-// Inline label result type (shared-types does not export this interface)
-type EffectiveLabelsV2 = {
-  byNamespace: Record<string, Set<string>>;
-  flat: Set<string>;
-  legacyT: Set<string>;
-};
+
 
 export class Repo {
   name: string = $state("");
@@ -54,8 +41,6 @@ export class Repo {
   hashtags = $state<string[]>([]);
   tokens = $state<Token[]>([]);
   refs: Array<{ name: string; type: "heads" | "tags"; fullRef: string; commitId: string }> = $state([]);
-  maintainers: string[] = $state([]);
-  relays: string[] = $state([]);
   earliestUniqueCommit: string = $state("");
   createdAt: string = $state("");
   clone: string[] = $state([]);
@@ -228,15 +213,15 @@ export class Repo {
     repoEvent.subscribe((event) => {
       if (event) {
         this.repoEvent = event;
-        this.repo = parseRepoAnnouncementEvent(event);
-        this.name = this.repo.name;
-        this.description = this.repo.description;
+        this.#repo = parseRepoAnnouncementEvent(event);
+        this.name = this.#repo!.name!;
+        this.description = this.#repo!.description!;
         // Compute canonical key from "pubkey:name" string (matches current @nostr-git/core signature)
         const _owner = this.getOwnerPubkey();
-        this.key = canonicalRepoKey(`${_owner}:${this.repo.name}`);
+        this.key = canonicalRepoKey(`${_owner}:${this.#repo!.name}`);
         this.commitManager.setRepoKeys({
           canonicalKey: this.key,
-          workerRepoId: this.repoEvent.id,
+          workerRepoId: this.repoEvent!.id,
         });
 
         // Invalidate branch cache when repo event changes
@@ -250,25 +235,23 @@ export class Repo {
         }
 
         // Only load branches if WorkerManager is ready
-        if (this.workerManager.isReady && !this.state) {
+        if (this.workerManager.isReady && !this.#state) {
           this.#loadBranchesFromRepo(event);
         }
 
-        this.clone = this.repo.clone;
-        this.web = this.repo;
-        this.hashtags = this.repo.hashtags;
-        this.maintainers = this.repo.maintainers;
-        this.relays = this.repo.relays;
-        this.earliestUniqueCommit = this.repo.earliestUniqueCommit;
-        this.createdAt = this.repo.createdAt;
-        this.address = this.repo.address;
+        this.clone = this.#repo!.clone!;
+        this.web = this.#repo!.web!;
+        this.hashtags = this.#repo!.hashtags!;
+        this.earliestUniqueCommit = this.#repo!.earliestUniqueCommit!;
+        this.createdAt = this.#repo!.createdAt;
+        this.address = this.#repo!.address;
       }
     });
 
     repoStateEvent.subscribe((event) => {
       if (event) {
-        this.repoStateEvent = event; // Set the reactive state
-        this.state = parseRepoStateEvent(event);
+        this.#repoStateEvent = event; // Set the reactive state
+        this.#state = parseRepoStateEvent(event);
 
         // Process the Repository State event in BranchManager (verified against worker when possible)
         if (initialRepoEvent) {
@@ -287,19 +270,19 @@ export class Repo {
 
     // Optional streams
     repoStateEvents?.subscribe((events) => {
-      this.repoStateEventsArr = events;
+      this.#repoStateEventsArr = events;
       this.#mergedRefsCache = undefined; // invalidate
     });
     statusEvents?.subscribe((events) => {
-      this.statusEventsArr = events;
+      this.#statusEventsArr = events;
       this.#statusCache.clear();
     });
     commentEvents?.subscribe((events) => {
-      this.commentEventsArr = events;
+      this.#commentEventsArr = events;
       this.#issueThreadCache.clear();
     });
     labelEvents?.subscribe((events) => {
-      this.labelEventsArr = events;
+      this.#labelEventsArr = events;
       this.#labelsCache.clear();
     });
 
@@ -344,14 +327,14 @@ export class Repo {
 
         // Load branches/refs using the new unified method
         try {
-          this.refsLoading = true;
+          this.#refsLoading = true;
           await this.branchManager.loadAllRefs(() => this.getAllRefsWithFallback());
           this.refs = this.branchManager.getAllRefs();
         } catch (error) {
           console.error("Failed to load branches:", error);
           this.refs = [];
         } finally {
-          this.refsLoading = false;
+          this.#refsLoading = false;
         }
 
         // Ensure background merge analysis runs once worker is ready
@@ -430,7 +413,7 @@ export class Repo {
   }
 
   private getOwnerPubkey(): string {
-    const owner = this.repo?.owner?.trim();
+    const owner = this.#repo?.owner?.trim();
     if (owner && owner.length > 0) return owner;
     return (this.repoEvent?.pubkey || "").trim();
   }
@@ -439,14 +422,14 @@ export class Repo {
   #coreCtx(): RepoContext {
     return {
       repoEvent: this.repoEvent,
-      repoStateEvent: this.repoStateEvent as any,
-      repo: this.repo as any,
+      repoStateEvent: this.#repoStateEvent,
+      repo: this.#repo,
       issues: this.issues,
       patches: this.patches,
-      repoStateEventsArr: this.repoStateEventsArr,
-      statusEventsArr: this.statusEventsArr,
-      commentEventsArr: this.commentEventsArr,
-      labelEventsArr: this.labelEventsArr,
+      repoStateEventsArr: this.#repoStateEventsArr,
+      statusEventsArr: this.#statusEventsArr,
+      commentEventsArr: this.#commentEventsArr,
+      labelEventsArr: this.#labelEventsArr,
     } as RepoContext;
   }
 
@@ -474,7 +457,7 @@ export class Repo {
   private mergeRepoStateByMaintainers(
     events: RepoStateEvent[]
   ): Map<string, { commitId: string; type: "heads" | "tags"; fullRef: string }> {
-    return coreMergeRepoStateByMaintainers(this.#coreCtx(), events);
+    return RepoCore.mergeRepoStateByMaintainers(this.#coreCtx(), events);
   }
 
   // -------------------------
@@ -495,7 +478,7 @@ export class Repo {
       .sort()
       .join(",");
     if (this.#patchDagCache?.key === ids) return this.#patchDagCache.value as any;
-    const value = coreGetPatchGraph(this.#coreCtx());
+    const value = RepoCore.getPatchGraph(this.#coreCtx());
     this.#patchDagCache = { key: ids, value: value as any };
     return value as any;
   }
@@ -512,10 +495,10 @@ export class Repo {
     at: number;
     eventId: string;
   } | null {
-    if (!this.statusEventsArr || this.statusEventsArr.length === 0) return null;
+    if (!this.#statusEventsArr || this.#statusEventsArr.length === 0) return null;
     const cached = this.#statusCache.get(rootId);
     if (cached !== undefined) return cached;
-    const result = coreResolveStatusFor(this.#coreCtx(), rootId);
+    const result = RepoCore.resolveStatusFor(this.#coreCtx(), rootId);
     this.#statusCache.set(rootId, result as any);
     return result as any;
   }
@@ -534,7 +517,7 @@ export class Repo {
   public getIssueThread(rootId: string): { rootId: string; comments: CommentEvent[] } {
     const cached = this.#issueThreadCache.get(rootId);
     if (cached) return cached;
-    const res = coreGetIssueThread(this.#coreCtx(), rootId);
+    const res = RepoCore.getIssueThread(this.#coreCtx(), rootId);
     this.#issueThreadCache.set(rootId, res);
     return res;
   }
@@ -551,7 +534,7 @@ export class Repo {
     const key = `${target.id || ""}|${target.address || ""}|${target.euc || ""}`;
     const cached = this.#labelsCache.get(key);
     if (cached) return cached;
-    const result = coreGetEffectiveLabelsFor(
+    const result = RepoCore.getEffectiveLabelsFor(
       this.#coreCtx(),
       target
     ) as unknown as EffectiveLabelsV2;
@@ -560,21 +543,21 @@ export class Repo {
   }
 
   public getRepoLabels(): EffectiveLabelsV2 {
-    return coreGetRepoLabels(this.#coreCtx()) as unknown as EffectiveLabelsV2;
+    return RepoCore.getRepoLabels(this.#coreCtx()) as unknown as EffectiveLabelsV2;
   }
 
   public getIssueLabels(rootId: string): EffectiveLabelsV2 {
-    return coreGetIssueLabels(this.#coreCtx(), rootId) as unknown as EffectiveLabelsV2;
+    return RepoCore.getIssueLabels(this.#coreCtx(), rootId) as unknown as EffectiveLabelsV2;
   }
   public getPatchLabels(rootId: string): EffectiveLabelsV2 {
-    return coreGetPatchLabels(this.#coreCtx(), rootId) as unknown as EffectiveLabelsV2;
+    return RepoCore.getPatchLabels(this.#coreCtx(), rootId) as unknown as EffectiveLabelsV2;
   }
 
   // -------------------------
   // Subscription hints (no network)
   // -------------------------
   public getRecommendedFilters(): any[] {
-    return coreGetRecommendedFilters(this.#coreCtx());
+    return RepoCore.getRecommendedFilters(this.#coreCtx());
   }
 
   // -------------------------
@@ -594,8 +577,8 @@ export class Repo {
           : `refs/heads/${s}`;
     const fullRef = toFullRef(ref);
     // Prefer merged refs if present
-    if (this.repoStateEventsArr && this.repoStateEventsArr.length > 0) {
-      const merged = this.mergeRepoStateByMaintainers(this.repoStateEventsArr);
+    if (this.#repoStateEventsArr && this.#repoStateEventsArr.length > 0) {
+      const merged = this.mergeRepoStateByMaintainers(this.#repoStateEventsArr);
       for (const [, v] of merged.entries()) {
         if (v.fullRef === fullRef) {
           // No lineage info available in merged map; cannot compute trail
@@ -604,8 +587,8 @@ export class Repo {
       }
     }
     // Fallback to single repo state event with possible lineage
-    if (this.repoStateEvent) {
-      const parsed: any = parseRepoStateEvent(this.repoStateEvent);
+    if (this.#repoStateEvent) {
+      const parsed: any = parseRepoStateEvent(this.#repoStateEvent);
       const hit = (parsed.refs || []).find(
         (r: any) => (r.ref || `refs/${r.type}/${r.name}`) === fullRef
       );
@@ -622,7 +605,7 @@ export class Repo {
 
   /** Return a maintainer badge for a pubkey: "owner" | "maintainer" | null. */
   public getMaintainerBadge(pubkey: string): "owner" | "maintainer" | null {
-    return coreGetMaintainerBadge(this.#coreCtx(), pubkey);
+    return RepoCore.getMaintainerBadge(this.#coreCtx(), pubkey);
   }
 
   // Public API for getting merge analysis result (requires patch object for proper validation)
@@ -691,7 +674,7 @@ export class Repo {
 
     try {
       const repoId = this.key;
-      const cloneUrls = [...(this.repo?.clone || [])];
+      const cloneUrls = [...(this.#repo?.clone || [])];
 
       if (!repoId || !cloneUrls.length) {
         console.warn("Repository ID or clone URLs missing, skipping initialization");
@@ -745,13 +728,13 @@ export class Repo {
 
   async #loadBranchesFromRepo(repoEvent: RepoAnnouncementEvent) {
     // Process repository state event for NIP-34 references if available
-    if (this.repoStateEvent) {
+    if (this.#repoStateEvent) {
       // Prefer verified processing when we have the repoEvent
-      await this.branchManager.processRepoStateEventVerified(this.repoStateEvent, repoEvent);
+      await this.branchManager.processRepoStateEventVerified(this.#repoStateEvent, repoEvent);
     }
 
     // Delegate to BranchManager
-    await this.branchManager.loadBranchesFromRepo(repoEvent);
+    await this.branchManager.loadAllRefs(() => this.getAllRefsWithFallback());
   }
 
   get repoId() {
@@ -768,20 +751,20 @@ export class Repo {
 
   // Expose clone URLs from the parsed repo announcement
   get cloneUrls(): string[] {
-    return this.repo?.clone ?? [];
+    return this.#repo?.clone ?? [];
   }
 
   // Expose relays from the parsed repo announcement
   get relays(): string[] {
-    return this.repo?.relays ?? [];
+    return this.#repo?.relays ?? [];
   }
 
   // Expose maintainers from the parsed repo announcement
   get maintainers(): string[] {
     const owner = this.getOwnerPubkey();
     const combined = owner
-      ? [...(this.repo?.maintainers || []), owner]
-      : this.repo?.maintainers || [];
+      ? [...(this.#repo?.maintainers || []), owner]
+      : this.#repo?.maintainers || [];
     return Array.from(new Set(combined.filter(Boolean)));
   }
 
@@ -803,9 +786,9 @@ export class Repo {
     Array<{ name: string; type: "heads" | "tags"; fullRef: string; commitId: string }>
   > {
     // Prefer merged refs by trusted maintainers when multiple 30618s are available
-    if (this.repoStateEventsArr && this.repoStateEventsArr.length > 0) {
+    if (this.#repoStateEventsArr && this.#repoStateEventsArr.length > 0) {
       if (!this.#mergedRefsCache) {
-        this.#mergedRefsCache = this.mergeRepoStateByMaintainers(this.repoStateEventsArr);
+        this.#mergedRefsCache = this.mergeRepoStateByMaintainers(this.#repoStateEventsArr);
       }
       const refs: Array<{
         name: string;
@@ -825,20 +808,20 @@ export class Repo {
     }
 
     // Process single repo state event if available and not already processed
-    if (this.repoStateEvent && this.repoStateEvent.tags) {
+    if (this.#repoStateEvent && this.#repoStateEvent.tags) {
       const hasProcessedState = this.branchManager?.getAllNIP34References().size > 0;
       if (!hasProcessedState) {
-        if (this.repo) {
-          await this.branchManager.processRepoStateEventVerified(this.repoStateEvent, this.repoEvent!);
+        if (this.#repo) {
+          await this.branchManager.processRepoStateEventVerified(this.#repoStateEvent, this.repoEvent!);
         } else {
-          this.branchManager?.processRepoStateEvent(this.repoStateEvent);
+          this.branchManager?.processRepoStateEvent(this.#repoStateEvent);
         }
       }
-    } else if (!this.repoStateEvent) {
+    } else if (!this.#repoStateEvent) {
       // Load branches from repository if not available and we have a repo event
       if (this.branchManager && this.branchManager.getBranches().length === 0 && this.repoEvent) {
         try {
-          await this.branchManager.loadBranchesFromRepo(this.repoEvent);
+          await this.branchManager.loadAllRefs(() => this.getAllRefsWithFallback());
         } catch (error) {
           console.error("Failed to load branches from git repository:", error);
           // Continue with empty branches rather than throwing
@@ -937,7 +920,7 @@ export class Repo {
         }
 
         // Gather clone URLs for remote operations
-        const cloneUrls = [...(this.repo?.clone || [])];
+        const cloneUrls = [...(this.#repo?.clone || [])];
 
         // 1) Ask worker to sync local repo with remote for the selected branch (switch/checkout)
         if (this.key && cloneUrls.length > 0) {
@@ -970,11 +953,11 @@ export class Repo {
 
       // 4) Reload refs so UI sees updated heads/tags state
       try {
-        this.refsLoading = true;
+        this.#refsLoading = true;
         await this.branchManager.loadAllRefs(() => this.getAllRefsWithFallback());
         this.refs = this.branchManager.getAllRefs();
       } finally {
-        this.refsLoading = false;
+        this.#refsLoading = false;
       }
 
       // 5) Verify worker status (debug visibility)

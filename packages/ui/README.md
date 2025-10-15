@@ -247,7 +247,7 @@ pnpm test:visual
 
 This UI package includes a testable core for Git/Nostr repo features, decoupled from Svelte runes, plus a reactive Repo class for UI consumption.
 
-- Core module: `src/lib/components/git/RepoCore.ts`
+- Core module: `@nostr-git/core` RepoCore class
   - `trustedMaintainers(ctx)`
   - `mergeRepoStateByMaintainers(ctx, events)` — merges trusted 30618 refs; includes legacy `r` tag pair fallback
   - `getPatchGraph(ctx)` returns:

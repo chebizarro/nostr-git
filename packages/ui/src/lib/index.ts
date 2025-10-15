@@ -16,3 +16,5 @@ export { loadTokensFromStorage, saveTokensToStorage, type TokenEntry } from "./u
 export { pushRepoAlert } from "./alertsAdapter";
 // Export event kind utilities
 export * from "./utils/eventKinds";
+// Export hash utilities
+export { sha256, md5 } from "./utils/hash";

@@ -7,6 +7,7 @@ export * from '../status.js';
 export * from '../nip34.js';
 export * from '../repo.js';
 export * from '../patches.js';
+export { RepoCore, type RepoContext, type EffectiveLabelsV2 } from '../repo-core.js';
 
 // New unified Git Service API abstraction layer
 export {

@@ -15,14 +15,9 @@ import type {
 import { parseRepoAnnouncementEvent } from "@nostr-git/shared-types";
 import { canonicalRepoKey } from "@nostr-git/core";
 import {
+  RepoCore,
   type RepoContext,
-  trustedMaintainers,
-  mergeRepoStateByMaintainers,
-  getPatchGraph,
-  resolveStatusFor,
-  getIssueThread,
-  getPatchLabels,
-} from "../src/lib/components/git/RepoCore";
+} from "@nostr-git/core";
 
 // Build a minimal RepoContext for tests
 const mkCtx = (over: Partial<RepoContext> = {}): RepoContext => ({
@@ -130,7 +125,7 @@ describe("Repo core helpers", () => {
     const ctx = mkCtx({ repoEvent: repoEv, repo });
     // canonicalRepoKey currently formats as owner/name
     expect(canonicalRepoKey(`owner-abc:my-repo`)).toContain("owner-abc/my-repo");
-    expect(trustedMaintainers(ctx)).toContain("owner-abc");
+    expect(RepoCore.trustedMaintainers(ctx)).toContain("owner-abc");
   });
 
   it("labels merge across namespaces with legacy t", async () => {
@@ -156,7 +151,7 @@ describe("Repo core helpers", () => {
       sig: "sig",
     } as any;
     const ctx = mkCtx({ patches: [evt] as any, labelEventsArr: [external] as any });
-    const eff = getPatchLabels(ctx, "p4");
+    const eff = RepoCore.getPatchLabels(ctx, "p4");
     // Namespaced labels should be in `flat`, legacy `t` values should be in `legacyT`
     const flat = Array.from(eff.flat);
     const legacyT = Array.from(eff.legacyT);
@@ -190,7 +185,7 @@ describe("Repo core helpers", () => {
       patches: [patch] as any,
       statusEventsArr: [maintClose, authorMerge] as any,
     });
-    const status = resolveStatusFor(ctx, "p5");
+    const status = RepoCore.resolveStatusFor(ctx, "p5");
     expect(status?.state).toBe("merged");
     expect(status?.by).toBe("author-z");
   });
@@ -217,7 +212,7 @@ describe("Repo core helpers", () => {
       repoEvent: repoEv,
       repo: { ...parseRepoAnnouncementEvent(repoEv as any), maintainers: ["maint-1"] } as any,
     });
-    const merged = mergeRepoStateByMaintainers(ctx, [state1, state2] as any);
+    const merged = RepoCore.mergeRepoStateByMaintainers(ctx, [state1, state2] as any);
     const main = merged.get("heads:main");
     expect(main?.commitId).toBe("2222222222222222222222222222222222222222");
   });
@@ -227,7 +222,7 @@ describe("Repo core helpers", () => {
     const p2 = mkPatch({ id: "p2", tags: [["e", "p1"]] });
     const p3 = mkPatch({ id: "p3", tags: [["e", "p1"]] });
     const ctx = mkCtx({ repoEvent: mkRepoAnnouncement(), patches: [p1, p2, p3] as any });
-    const dag = getPatchGraph(ctx);
+    const dag = RepoCore.getPatchGraph(ctx);
     expect(dag.roots).toContain("p1");
     expect(Array.from(dag.nodes.keys())).toContain("p2");
     // edges: p1 -> p2, p1 -> p3
@@ -250,7 +245,7 @@ describe("Repo core helpers", () => {
       issues: [issue] as any,
       statusEventsArr: [s1, s2] as any,
     });
-    const status = resolveStatusFor(ctx, "i1");
+    const status = RepoCore.resolveStatusFor(ctx, "i1");
     expect(status?.state).toBe("closed");
   });
 
@@ -259,7 +254,7 @@ describe("Repo core helpers", () => {
     const c1 = mkComment("i2", { created_at: 1000 });
     const c2 = mkComment("i2", { created_at: 2000 });
     const ctx = mkCtx({ issues: [issue] as any, commentEventsArr: [c2, c1] as any });
-    const thread = getIssueThread(ctx, "i2");
+    const thread = RepoCore.getIssueThread(ctx, "i2");
     expect(thread.comments[0].created_at).toBe(1000);
     expect(thread.comments[1].created_at).toBe(2000);
   });
@@ -279,7 +274,7 @@ describe("Repo core helpers", () => {
       sig: "sig",
     } as unknown as NostrEvent;
     const ctx = mkCtx({ patches: [p] as any, labelEventsArr: [externalLabel] as any });
-    const labels = getPatchLabels(ctx, "p3");
+    const labels = RepoCore.getPatchLabels(ctx, "p3");
     expect(Array.from(labels.flat)).toContain("ugc/type:feature");
   });
 
@@ -289,7 +284,7 @@ describe("Repo core helpers", () => {
     const c1 = mkPatch({ id: "c1", tags: [["e", "r1"]] });
     const c2 = mkPatch({ id: "c2", tags: [["e", "rr1"]] });
     const ctx = mkCtx({ patches: [pRoot, pRevRoot, c1, c2] as any });
-    const dag = getPatchGraph(ctx);
+    const dag = RepoCore.getPatchGraph(ctx);
     expect(dag.roots).toContain("r1");
     expect(dag.rootRevisions).toContain("rr1");
     expect(dag.parentOutDegree["r1"]).toBe(1);
@@ -317,7 +312,7 @@ describe("Repo core helpers", () => {
       issues: [issue] as any,
       statusEventsArr: [s1, sIgnored, s2, s3, s4] as any,
     });
-    const status = resolveStatusFor(ctx, "i3");
+    const status = RepoCore.resolveStatusFor(ctx, "i3");
     expect(status?.state).toBe("resolved");
   });
 });
