@@ -45,6 +45,7 @@
     statusEvents?: StatusEvent[];
     actorPubkey?: string;
     reviewersCount?: number; // new optional prop
+    relays?: string[]; // Relay URLs for EventActions
   }
 
   const {
@@ -59,11 +60,23 @@
     statusEvents = [],
     actorPubkey,
     reviewersCount = 0, // default value
+    relays = [],
   }: Props = $props();
 
   const parsed = parseGitPatchFromEvent(event);
 
   const { id, title, description, baseBranch, commitCount } = parsed;
+  
+  // Create relay URL for EventActions
+  const relayUrl = $derived.by(() => {
+    if (relays && relays.length > 0) {
+      return relays[0];
+    }
+    if (repo?.relays && repo.relays.length > 0) {
+      return repo.relays[0];
+    }
+    return "wss://relay.damus.io/";
+  });
   
   // Helper functions for label normalization (matching centralized logic)
   function toNaturalLabel(label: string): string {
@@ -382,14 +395,14 @@
     <div class="flex items-center gap-1">
       <ReactionSummary
         event={event}
-        url={`patches/${id}`}
+        url={relayUrl}
         reactionClass="tooltip-left"
         deleteReaction={() => {}}
         createReaction={() => {}}
         noTooltip={false}
         children={() => {}}
       />
-      <EventActions event={event} url={`patches/${id}`} noun={noun} customActions={undefined} />
+      <EventActions event={event} url={relayUrl} noun={noun} customActions={undefined} />
       <MessageSquare class="h-4 w-4 text-muted-foreground" />
       <span class="text-sm text-muted-foreground">{comments?.length ?? 0}</span>
       <Button size="sm" variant="outline" class="ml-2">
