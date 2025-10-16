@@ -226,6 +226,7 @@
 				{disabled}
 				class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
 				aria-expanded={open}
+				aria-controls="suggestions-listbox"
 				aria-haspopup="listbox"
 				role="combobox"
 				aria-autocomplete="list"
@@ -242,19 +243,19 @@
 	<!-- Suggestions dropdown -->
 	{#if open && suggestions.length > 0}
 		<div class="absolute z-50 w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-			<ul role="listbox" aria-label="Search suggestions">
+			<ul id="suggestions-listbox" role="listbox" aria-label="Search suggestions">
 				{#each suggestions as suggestion, index}
-					<li
-						role="option"
-						aria-selected={index === highlighted}
-						class="px-3 py-2 cursor-pointer hover:bg-gray-700 {index === highlighted ? 'bg-gray-700' : ''}"
-						onclick={() => {
-							addSelection(suggestion.pubkey);
-							inputValue = "";
-							open = false;
-							highlighted = -1;
-						}}
-					>
+					<li role="option" aria-selected={index === highlighted}>
+						<button
+							type="button"
+							class="w-full px-3 py-2 cursor-pointer hover:bg-gray-700 {index === highlighted ? 'bg-gray-700' : ''} text-left"
+							onclick={() => {
+								addSelection(suggestion.pubkey);
+								inputValue = "";
+								open = false;
+								highlighted = -1;
+							}}
+						>
 						<div class="flex items-center gap-3">
 							{#if showAvatars}
 								<UserAvatar pubkey={suggestion.pubkey} profile={profileCache.get(suggestion.pubkey)} size="sm" />
@@ -270,6 +271,7 @@
 								{/if}
 							</div>
 						</div>
+						</button>
 					</li>
 				{/each}
 			</ul>
