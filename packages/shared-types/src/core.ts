@@ -14,6 +14,22 @@ export interface Commit {
 }
 
 /**
+ * CommitMeta: describes a commit's metadata
+ */
+export interface CommitMeta {
+  sha: string;
+  author: string;
+  email: string;
+  date: number;
+  message: string;
+  parents: string[];
+  // Optional Nostr identifiers if available (reserved for future resolver wiring)
+  pubkey?: string;
+  nip05?: string;
+  nip39?: string;
+}
+
+/**
  * FileDiff: describes a single file's diff in a commit or patch
  */
 export interface FileDiff {

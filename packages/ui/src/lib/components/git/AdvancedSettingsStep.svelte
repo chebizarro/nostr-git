@@ -1,6 +1,6 @@
 <script lang="ts">
   import { commonHashtags } from "../../stores/hashtags";
-  import UserProfile from "../UserProfile.svelte";
+  import { PeoplePicker } from "@nostr-git/ui";
   import { Plus, Trash2, X, Hash, Globe, Users } from "@lucide/svelte";
   
   interface Props {
@@ -55,12 +55,6 @@
     searchRelays,
   }: Props = $props();
   
-  // Autocomplete state for maintainers
-  let maintainerSearchQuery = $state("");
-  let maintainerSearchResults = $state<Array<{ pubkey: string; name?: string; picture?: string; nip05?: string; display_name?: string }>>([]);
-  let showMaintainerAutocomplete = $state(false);
-  let maintainerProfiles = $state(new Map<string, any>());
-  
   // Autocomplete state for relays
   let relaySearchQuery = $state("");
   let relaySearchResults = $state<string[]>([]);
@@ -84,52 +78,6 @@
     { value: "mit", label: "MIT License" },
     { value: "apache-2.0", label: "Apache License 2.0" },
   ];
-  
-  // Load maintainer profiles
-  $effect(() => {
-    if (getProfile && maintainers) {
-      maintainers.forEach(async (maintainer) => {
-        if (maintainer && !maintainerProfiles.has(maintainer)) {
-          try {
-            const profile = await getProfile(maintainer);
-            if (profile) {
-              maintainerProfiles.set(maintainer, profile);
-              maintainerProfiles = new Map(maintainerProfiles);
-            }
-          } catch (e) {
-            console.error('Failed to load profile for', maintainer, e);
-          }
-        }
-      });
-    }
-  });
-  
-  // Handle maintainer search with debounce
-  let searchTimeout: ReturnType<typeof setTimeout> | null = null;
-  $effect(() => {
-    const query = maintainerSearchQuery;
-    if (searchTimeout) clearTimeout(searchTimeout);
-    
-    if (query && searchProfiles) {
-      searchTimeout = setTimeout(async () => {
-        try {
-          const results = await searchProfiles(query);
-          maintainerSearchResults = results;
-          showMaintainerAutocomplete = results.length > 0;
-        } catch (e) {
-          console.error('Failed to search profiles', e);
-          maintainerSearchResults = [];
-        }
-      }, 300);
-    } else {
-      maintainerSearchResults = [];
-      showMaintainerAutocomplete = false;
-    }
-    
-    return () => {
-      if (searchTimeout) clearTimeout(searchTimeout);
-    };
-  });
   
   // Handle relay search with debounce
   let relaySearchTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -403,82 +351,23 @@
             <Users class="w-4 h-4 inline mr-1" />
             Additional Maintainers
           </legend>
-          <div class="space-y-2">
-            {#each maintainers as m, index}
-              <div class="flex items-center space-x-2">
-                {#if getProfile && maintainerProfiles.has(m)}
-                  <div class="flex-1 flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700">
-                    <UserProfile profile={maintainerProfiles.get(m)} pubkey={m} />
-                  </div>
-                {:else}
-                  <input
-                    type="text"
-                    value={maintainers[index]}
-                    oninput={(e) =>
-                      updateItem(
-                        maintainers,
-                        index,
-                        (e.target as HTMLInputElement).value,
-                        onMaintainersChange
-                      )}
-                    placeholder="npub1..."
-                    class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
-                  />
-                {/if}
-                <button
-                  type="button"
-                  class="p-2 text-red-400 hover:text-red-300"
-                  aria-label="Remove maintainer"
-                  onclick={() => removeItem(maintainers, index, onMaintainersChange)}
-                >
-                  <Trash2 class="w-4 h-4" />
-                </button>
-              </div>
-            {/each}
-            
-            <!-- Autocomplete input for adding maintainers -->
-            {#if searchProfiles}
-              <div class="relative">
-                <input
-                  type="text"
-                  bind:value={maintainerSearchQuery}
-                  onfocus={() => showMaintainerAutocomplete = maintainerSearchResults.length > 0}
-                  onblur={() => setTimeout(() => showMaintainerAutocomplete = false, 200)}
-                  autocomplete="off"
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
-                  placeholder="Search by name, nip-05, or npub..."
-                />
-                {#if showMaintainerAutocomplete && maintainerSearchResults.length > 0}
-                  <div class="fixed z-50 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto" style="width: {document.activeElement?.getBoundingClientRect().width}px; left: {document.activeElement?.getBoundingClientRect().left}px; top: {(document.activeElement?.getBoundingClientRect().bottom || 0) + 4}px;">
-                    {#each maintainerSearchResults as result}
-                      <button
-                        type="button"
-                        onclick={() => {
-                          if (!maintainers.includes(result.pubkey)) {
-                            onMaintainersChange([...maintainers, result.pubkey]);
-                          }
-                          maintainerSearchQuery = "";
-                          showMaintainerAutocomplete = false;
-                        }}
-                        class="w-full p-2 hover:bg-gray-700 text-left"
-                      >
-                        <UserProfile profile={result} pubkey={result.pubkey} />
-                      </button>
-                    {/each}
-                  </div>
-                {/if}
-              </div>
-            {:else}
-              <button
-                type="button"
-                class="px-3 py-2 text-blue-400 hover:text-blue-300"
-                onclick={() => addItem(maintainers, onMaintainersChange)}
-              >
-                <Plus class="w-4 h-4 inline mr-1" />
-                Add maintainer
-              </button>
-            {/if}
-          </div>
+          <PeoplePicker
+            selected={maintainers}
+            placeholder="Search by name, nip-05, or npub..."
+            maxSelections={50}
+            showAvatars={true}
+            compact={false}
+            {getProfile}
+            {searchProfiles}
+            add={(pubkey: string) => {
+              if (!maintainers.includes(pubkey)) {
+                onMaintainersChange([...maintainers, pubkey]);
+              }
+            }}
+            remove={(pubkey: string) => {
+              onMaintainersChange(maintainers.filter(p => p !== pubkey));
+            }}
+          />
           <p class="mt-1 text-sm text-gray-400">Maintainer public keys (npub or hex)</p>
         </fieldset>
 

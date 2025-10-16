@@ -74,7 +74,12 @@ export {parseCommentEvent} from "./nip22-utils.js"
 export {createCommentEvent} from "./nip22.js"
 
 // Core git types
-export type {Commit, FileDiff, CommitDiff} from "./core.js"
+export type {
+  Commit,
+  FileDiff,
+  CommitDiff,
+  CommitMeta,
+} from "./core.js"
 
 // Relay sanitizer
 export {normalizeRelayUrl, sanitizeRelays} from "./sanitize-relays.js"

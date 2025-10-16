@@ -16,8 +16,8 @@
     Loader2,
   } from "@lucide/svelte";
   import type { NostrEvent } from "@nostr-git/shared-types";
+  import { PeoplePicker } from "@nostr-git/ui";
   import { Repo } from "./Repo.svelte";
-  import UserProfile from "../UserProfile.svelte";
   import { nip19 } from "nostr-tools";
   import { commonHashtags } from "../../stores/hashtags";
 
@@ -96,13 +96,6 @@
   // Form state - initialize with current values
   let formData = $state<FormData>(extractCurrentValues());
   
-  // Maintainer profiles cache
-  let maintainerProfiles = $state<Map<string, { name?: string; picture?: string; nip05?: string; display_name?: string }>>(new Map());
-  
-  // Autocomplete state for maintainers
-  let maintainerSearchQuery = $state("");
-  let maintainerSearchResults = $state<Array<{ pubkey: string; name?: string; picture?: string; nip05?: string; display_name?: string }>>([]);
-  let showMaintainerAutocomplete = $state(false);
   
   // Autocomplete state for relays
   let relaySearchQuery = $state("");
@@ -114,75 +107,8 @@
   let hashtagSearchResults = $state<string[]>([]);
   let showHashtagAutocomplete = $state(false);
 
-  // Helper to normalize pubkey (convert npub to hex if needed)
-  function normalizePubkey(pubkey: string): string {
-    if (!pubkey) return pubkey;
-    if (pubkey.startsWith('npub1')) {
-      try {
-        const decoded = nip19.decode(pubkey);
-        return decoded.type === 'npub' ? decoded.data : pubkey;
-      } catch (e) {
-        console.error('Failed to decode npub', pubkey, e);
-        return pubkey;
-      }
-    }
-    return pubkey;
-  }
 
-  // Load maintainer profiles
-  $effect(() => {
-    if (getProfile && formData.maintainers) {
-      console.log('[EditRepoPanel] Loading profiles for maintainers:', formData.maintainers);
-      formData.maintainers.forEach(async (maintainer) => {
-        if (maintainer) {
-          const hexPubkey = normalizePubkey(maintainer);
-          console.log('[EditRepoPanel] Normalized pubkey:', maintainer, '->', hexPubkey);
-          if (!maintainerProfiles.has(maintainer)) {
-            try {
-              const profile = await getProfile(hexPubkey);
-              console.log('[EditRepoPanel] Loaded profile for', hexPubkey, ':', profile);
-              if (profile) {
-                maintainerProfiles.set(maintainer, profile);
-                maintainerProfiles = new Map(maintainerProfiles); // Trigger reactivity
-              }
-            } catch (e) {
-              console.error('Failed to load profile for', hexPubkey, e);
-            }
-          }
-        }
-      });
-    }
-  });
   
-  // Handle maintainer search with debounce
-  let searchTimeout: ReturnType<typeof setTimeout> | null = null;
-  $effect(() => {
-    const query = maintainerSearchQuery;
-    
-    // Clear previous timeout
-    if (searchTimeout) clearTimeout(searchTimeout);
-    
-    if (query && searchProfiles) {
-      searchTimeout = setTimeout(async () => {
-        try {
-          const results = await searchProfiles(query);
-          maintainerSearchResults = results;
-          showMaintainerAutocomplete = results.length > 0;
-        } catch (e) {
-          console.error('Failed to search profiles', e);
-          maintainerSearchResults = [];
-        }
-      }, 300);
-    } else {
-      maintainerSearchResults = [];
-      showMaintainerAutocomplete = false;
-    }
-    
-    // Cleanup function
-    return () => {
-      if (searchTimeout) clearTimeout(searchTimeout);
-    };
-  });
   
   // Handle relay search with debounce
   let relaySearchTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -765,83 +691,18 @@
             <Users class="w-4 h-4 inline mr-1" />
             Maintainers
           </label>
-          <div class="space-y-2">
-            {#each formData.maintainers as maintainer, index}
-              <div class="flex items-center space-x-2 bg-gray-800/50 rounded-lg p-2">
-                {#if maintainerProfiles.has(maintainer)}
-                  <UserProfile 
-                    profile={maintainerProfiles.get(maintainer)} 
-                    pubkey={maintainer}
-                    class="flex-1"
-                  />
-                {:else}
-                  <input
-                    type="text"
-                    bind:value={formData.maintainers[index]}
-                    oninput={(e) =>
-                      updateArrayItem("maintainers", index, (e.target as HTMLInputElement).value)}
-                    disabled={isEditing}
-                    class="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-                    placeholder="npub1..."
-                  />
-                {/if}
-                <button
-                  type="button"
-                  onclick={() => removeArrayItem("maintainers", index)}
-                  disabled={isEditing}
-                  class="p-2 text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
-                  aria-label="Remove maintainer"
-                >
-                  <Trash2 class="w-4 h-4" />
-                </button>
-              </div>
-            {/each}
-            
-            <!-- Autocomplete input for adding maintainers -->
-            {#if searchProfiles}
-              <div class="relative">
-                <input
-                  type="text"
-                  bind:value={maintainerSearchQuery}
-                  onfocus={() => showMaintainerAutocomplete = maintainerSearchResults.length > 0}
-                  onblur={() => setTimeout(() => showMaintainerAutocomplete = false, 200)}
-                  disabled={isEditing}
-                  autocomplete="off"
-                  class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-                  placeholder="Search by name, nip-05, or npub..."
-                />
-                {#if showMaintainerAutocomplete && maintainerSearchResults.length > 0}
-                  <div class="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {#each maintainerSearchResults as result}
-                      <button
-                        type="button"
-                        onclick={() => {
-                          if (!formData.maintainers.includes(result.pubkey)) {
-                            formData.maintainers = [...formData.maintainers, result.pubkey];
-                          }
-                          maintainerSearchQuery = "";
-                          showMaintainerAutocomplete = false;
-                        }}
-                        class="w-full p-2 hover:bg-gray-700 text-left"
-                      >
-                        <UserProfile profile={result} pubkey={result.pubkey} />
-                      </button>
-                    {/each}
-                  </div>
-                {/if}
-              </div>
-            {:else}
-              <button
-                type="button"
-                onclick={() => addArrayItem("maintainers")}
-                disabled={isEditing}
-                class="flex items-center space-x-2 px-3 py-2 text-blue-400 hover:text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Plus class="w-4 h-4" />
-                <span>Add maintainer</span>
-              </button>
-            {/if}
-          </div>
+
+          <PeoplePicker
+            bind:selected={formData.maintainers}
+            placeholder="Add maintainer (npub or search)..."
+            disabled={isEditing}
+            maxSelections={50}
+            showAvatars={true}
+            compact={false}
+            {getProfile}
+            {searchProfiles}
+          />
+
           {#if validationErrors.maintainers}
             <p
               class="text-red-400 text-sm mt-1 flex items-center space-x-1"

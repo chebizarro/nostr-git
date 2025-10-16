@@ -44,6 +44,7 @@
     repo?: any;
     statusEvents?: StatusEvent[];
     actorPubkey?: string;
+    reviewersCount?: number; // new optional prop
   }
 
   const {
@@ -57,12 +58,106 @@
     repo,
     statusEvents = [],
     actorPubkey,
+    reviewersCount = 0, // default value
   }: Props = $props();
 
   const parsed = parseGitPatchFromEvent(event);
 
   const { id, title, description, baseBranch, commitCount } = parsed;
-  const displayLabels = $derived.by(() => Array.from(new Set([...(extraLabels || [])])));
+  
+  // Helper functions for label normalization (matching centralized logic)
+  function toNaturalLabel(label: string): string {
+    if (typeof label !== "string") return ""
+    const trimmed = label.trim()
+    if (!trimmed) return ""
+    const idx = trimmed.lastIndexOf("/")
+    if (idx >= 0 && idx < trimmed.length - 1) {
+      return trimmed.slice(idx + 1)
+    }
+    return trimmed.replace(/^#/, "")
+  }
+
+  function toStringSet(value: unknown): Set<string> {
+    if (!value) return new Set<string>()
+    if (value instanceof Set) {
+      return new Set(Array.from(value).filter(v => typeof v === "string") as string[])
+    }
+    if (Array.isArray(value)) {
+      return new Set(value.filter(v => typeof v === "string") as string[])
+    }
+    if (typeof value === "string") {
+      return new Set([value])
+    }
+    return new Set<string>()
+  }
+
+  function normalizeEffectiveLabels(eff?: any | null): { flat: Set<string>; byNamespace: Record<string, Set<string>> } {
+    const flat = toStringSet(eff?.flat)
+    const byNamespace: Record<string, Set<string>> = {}
+    
+    if (eff && typeof eff.byNamespace === "object") {
+      for (const ns of Object.keys(eff.byNamespace)) {
+        byNamespace[ns] = toStringSet(eff.byNamespace[ns])
+      }
+    }
+    
+    return { flat, byNamespace }
+  }
+
+  function toNaturalArray(values?: Iterable<string> | null): string[] {
+    if (!values) return []
+    const out = new Set<string>()
+    for (const val of values) {
+      if (typeof val === "string") {
+        out.add(toNaturalLabel(val))
+      }
+    }
+    return Array.from(out)
+  }
+
+  function groupLabels(view: { flat: Set<string>; byNamespace: Record<string, Set<string>> }): {
+    Status: string[]
+    Type: string[]
+    Area: string[]
+    Tags: string[]
+    Other: string[]
+  } {
+    const groupSets = {
+      Status: new Set<string>(),
+      Type: new Set<string>(),
+      Area: new Set<string>(),
+      Tags: new Set<string>(),
+      Other: new Set<string>(),
+    }
+
+    const namespaceToGroup = (ns: string): keyof typeof groupSets => {
+      if (ns === "org.nostr.git.status") return "Status"
+      if (ns === "org.nostr.git.type") return "Type"
+      if (ns === "org.nostr.git.area") return "Area"
+      if (ns === "#t") return "Tags"
+      return "Other"
+    }
+
+    for (const ns of Object.keys(view.byNamespace)) {
+      const group = namespaceToGroup(ns)
+      for (const val of view.byNamespace[ns]) {
+        groupSets[group].add(toNaturalLabel(val))
+      }
+    }
+
+    return {
+      Status: Array.from(groupSets.Status),
+      Type: Array.from(groupSets.Type),
+      Area: Array.from(groupSets.Area),
+      Tags: Array.from(groupSets.Tags),
+      Other: Array.from(groupSets.Other),
+    }
+  }
+
+  const displayLabels = $derived.by(() => {
+    // Normalize the extraLabels (which come from the centralized label system)
+    return toNaturalArray(extraLabels);
+  });
 
   let isExpanded = $state(false);
   let isBookmarked = $state(false);
@@ -177,6 +272,10 @@
     <span class="whitespace-nowrap">{commitCount + (patches?.length ?? 0)} commits</span>
     <span>•</span>
     <span class="whitespace-nowrap">{comments?.length ?? 0} comments</span>
+    {#if reviewersCount > 0}
+      <span>•</span>
+      <span class="whitespace-nowrap">{reviewersCount} reviewer{reviewersCount === 1 ? "" : "s"}</span>
+    {/if}
     {#if parsed.commitHash}
       <span>•</span>
       <div class="flex items-center gap-1 whitespace-nowrap">

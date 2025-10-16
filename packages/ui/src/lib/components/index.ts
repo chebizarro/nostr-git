@@ -52,6 +52,7 @@ export { default as ContextMessages } from "./ContextMessages.svelte";
 export { default as RichText } from "./RichText.svelte";
 export { PermalinkExtension, type PermalinkExtensionOptions } from "./editor/PermalinkExtension";
 export { default as Spinner } from "./editor/Spinner.svelte";
+export { default as PeoplePicker } from "./people/PeoplePicker.svelte";
 
 // UI primitives
 export { Button } from "./ui/button";
