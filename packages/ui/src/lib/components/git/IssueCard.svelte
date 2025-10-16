@@ -44,6 +44,7 @@
     // e.g. "https://njump.me/{raw}" or "/spaces/{type}/{id}"
     nip19LinkTemplate?: string;
     assigneeCount?: number; // New optional prop for displaying number of assignees
+    relays?: string[]; // Relay URLs for EventActions
   }
   // Accept event and optional author (Profile store)
   const {
@@ -58,7 +59,20 @@
     actorPubkey,
     nip19LinkTemplate,
     assigneeCount = 0, // Default value for optional prop
+    relays = [],
   }: Props = $props();
+
+  // Get relay URL from relays prop or repo relays or use a default
+  const relayUrl = $derived.by(() => {
+    if (relays && relays.length > 0) {
+      return relays[0];
+    }
+    if (repo?.relays && repo.relays.length > 0) {
+      return repo.relays[0];
+    }
+    // Fallback to a default relay if no relays available
+    return "wss://relay.damus.io/";
+  });
 
   const parsed = parseIssueEvent(event);
 
@@ -280,7 +294,7 @@
     <!-- footer actions (expand) -->
     {#snippet slotFooter()}
       <div class="flex items-center gap-2">
-        <EventActions event={event} url={`issues/${id}`} noun="issue" customActions={undefined} />
+        <EventActions event={event} url={relayUrl} noun="issue" customActions={undefined} />
         <button
           type="button"
           aria-expanded={isExpanded}
