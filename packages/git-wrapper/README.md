@@ -280,6 +280,41 @@ node packages/git-wrapper/examples/push-pr.ts
 node packages/git-wrapper/examples/clone-and-pr.ts
 ```
 
+### Pushing to Blossom
+
+The `push()` method supports automatic mirroring of Git objects to Blossom servers after a successful push:
+
+```ts
+import BlossomFS from './src/blossom.js';
+import { NostrGitProvider } from './src/nostr-git-provider.js';
+
+// Create a BlossomFS instance with signer for authentication
+const fs = new BlossomFS('my-repo', {
+  signer: nostrSigner, // NIP-07/NIP-46 signer
+  endpoint: 'https://blossom.budabit.club'
+});
+
+const provider = new NostrGitProvider(git, nostr);
+
+// Push with automatic Blossom mirroring
+await provider.push({
+  dir: '/example',
+  fs,
+  refspecs: ['refs/heads/main'],
+  repoId: 'demo',
+  repoAddr: '31990:npub1...:demo',
+  blossomMirror: true, // Enable Blossom mirroring
+  endpoint: 'https://blossom.budabit.club' // Optional: override fs endpoint
+});
+```
+
+When `blossomMirror: true` is set:
+- All Git objects (commits, trees, blobs) reachable from the pushed refs are enumerated
+- Each object's SHA-256 hash is computed and checked against the Blossom server
+- Missing objects are uploaded using authenticated PUT requests
+- Progress is logged to console (can be customized via `onProgress` callback)
+- The operation runs after successful push and GRASP state publishing
+
 ## API highlights
 
 - `discoverRepo(repoId, { timeoutMs, stateKind })` -> `{ urls, branches, tags, event, state }`

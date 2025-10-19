@@ -332,6 +332,22 @@ export class NostrGitProvider implements GitProvider {
   async pull(options: any): Promise<any> {
     return this.git.pull(options)
   }
+  /**
+   * Push commits to remote repository and optionally mirror to Blossom.
+   * 
+   * @param options - Push options including:
+   *   - refspecs: Array of refspecs to push
+   *   - dir: Repository directory path
+   *   - fs: Filesystem instance (must have pushToBlossom method for blossomMirror)
+   *   - blossomMirror?: boolean - If true, upload all Git objects to Blossom after successful push
+   *   - endpoint?: string - Blossom server endpoint (defaults to fs endpoint)
+   *   - repoAddr: Repository address for Nostr events
+   *   - repoId: Repository identifier
+   *   - publishRepoStateFromLocal?: boolean - Publish GRASP state after push
+   *   - ownerPubkey: Owner public key for GRASP
+   *   - nostrStatus?: Status event configuration
+   * @returns Push results including server response and event IDs
+   */
   async push(options: any): Promise<any> {
     // Partition refspecs: PR refs vs regular refs
     const refspecs: string[] = Array.isArray(options?.refspecs)
@@ -546,6 +562,21 @@ export class NostrGitProvider implements GitProvider {
         } catch (err) {
           console.error("Error publishing GRASP state:", err)
         }
+      }
+    }
+
+    // Blossom mirror upload if configured
+    if (delegated?.blossomMirror && delegated?.dir && delegated?.fs?.pushToBlossom) {
+      try {
+        console.log("Starting Blossom mirror upload...")
+        await delegated.fs.pushToBlossom(delegated.dir, { 
+          endpoint: delegated.endpoint,
+          onProgress: (pct) => console.log(`Blossom upload progress: ${pct.toFixed(1)}%`)
+        })
+        console.log("Blossom mirror upload completed")
+      } catch (err) {
+        console.error("Error during Blossom mirror upload:", err)
+        // Don't fail the push if Blossom mirror fails
       }
     }
 

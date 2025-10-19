@@ -25,14 +25,17 @@
     "example:clone-and-pr": "node --loader ts-node/esm examples/clone-and-pr.ts"
   },
   "dependencies": {
+    "@isomorphic-git/lightning-fs": "^4.6.2",
     "@nostr-git/shared-types": "workspace:*",
     "buffer": "^6.0.3",
     "dotenv": "^16.4.5",
-    "@isomorphic-git/lightning-fs": "^4.6.2",
     "isomorphic-git": "https://github.com/chebizarro/isomorphic-git/releases/download/v2.0.0-alpha/isomorphic-git-2.0.0-alpha.tgz"
   },
   "devDependencies": {
+    "@vitest/browser": "^3.2.4",
     "cross-env": "^7.0.3",
+    "fake-indexeddb": "^6.2.4",
+    "jsdom": "^26.1.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.0.0",
     "vitest": "^3.2.4"
