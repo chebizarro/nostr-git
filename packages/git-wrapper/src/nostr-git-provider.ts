@@ -22,6 +22,9 @@ import {
   GIT_STATUS_APPLIED,
   GIT_STATUS_CLOSED,
   GIT_STATUS_DRAFT,
+  GIT_PULL_REQUEST,
+  GIT_PULL_REQUEST_UPDATE,
+  GIT_USER_GRASP_LIST,
   createPatchEvent,
   createStatusEvent,
   getTags,
@@ -30,6 +33,9 @@ import {
   validatePatchEvent,
   validateIssueEvent,
   validateStatusEvent,
+  type PullRequestEvent,
+  type PullRequestUpdateEvent,
+  type UserGraspListEvent,
   PatchTag,
 } from "@nostr-git/shared-types"
 

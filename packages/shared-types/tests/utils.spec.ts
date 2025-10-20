@@ -1,5 +1,5 @@
 import {describe, it, expect} from "vitest"
-import {getTag, getTags, getTagValue} from "../src/utils.js"
+import {getTag, getTags, getTagValue} from "../src/nip34-utils.js"
 import type {NostrTag} from "../src/nip34.js"
 
 function makeEvent(tags: NostrTag[]) {

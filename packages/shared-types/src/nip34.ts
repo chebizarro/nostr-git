@@ -29,6 +29,13 @@ export const GIT_PATCH = 1617
 // Issue events
 export const GIT_ISSUE = 1621
 
+// Pull Request events
+export const GIT_PULL_REQUEST = 1618
+export const GIT_PULL_REQUEST_UPDATE = 1619
+
+// User grasp lists
+export const GIT_USER_GRASP_LIST = 10317
+
 // Status events
 export const GIT_STATUS_OPEN = 1630
 export const GIT_STATUS_APPLIED = 1631
@@ -105,6 +112,55 @@ export interface IssueEvent extends NostrEvent {
 }
 
 // -------------------
+// Pull Request (kind: 1618)
+// -------------------
+export type PullRequestTag =
+  | ["a", string]
+  | ["r", string]
+  | ["p", string]
+  | ["subject", string]
+  | ["t", string]
+  | ["c", string]
+  | ["clone", ...string[]]
+  | ["branch-name", string]
+  | ["e", string]
+  | ["merge-base", string]
+
+export interface PullRequestEvent extends NostrEvent {
+  kind: typeof GIT_PULL_REQUEST
+  content: string
+  tags: PullRequestTag[]
+}
+
+// -------------------
+// Pull Request Update (kind: 1619)
+// -------------------
+export type PullRequestUpdateTag =
+  | ["a", string]
+  | ["r", string]
+  | ["p", string]
+  | ["c", string]
+  | ["clone", ...string[]]
+  | ["merge-base", string]
+
+export interface PullRequestUpdateEvent extends NostrEvent {
+  kind: typeof GIT_PULL_REQUEST_UPDATE
+  content: string
+  tags: PullRequestUpdateTag[]
+}
+
+// -------------------
+// User Grasp List (kind: 10317)
+// -------------------
+export type UserGraspListTag = ["g", string]
+
+export interface UserGraspListEvent extends NostrEvent {
+  kind: typeof GIT_USER_GRASP_LIST
+  content: string
+  tags: UserGraspListTag[]
+}
+
+// -------------------
 // Status (kinds: 1630, 1631, 1632, 1633)
 // -------------------
 export type StatusTag =
@@ -135,6 +191,9 @@ export type Nip34Event =
   | RepoStateEvent
   | PatchEvent
   | IssueEvent
+  | PullRequestEvent
+  | PullRequestUpdateEvent
+  | UserGraspListEvent
   | StatusEvent
 
 // Utility: kind to type mapping

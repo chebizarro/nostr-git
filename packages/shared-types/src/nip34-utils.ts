@@ -5,16 +5,36 @@ import {
   type PatchEvent,
   type IssueEvent,
   type StatusEvent,
+  type PullRequestEvent,
+  type PullRequestUpdateEvent,
+  type UserGraspListEvent,
   type NostrTag,
   GIT_REPO_ANNOUNCEMENT,
 } from "./nip34.js"
-import type {RepoAnnouncementTag, RepoStateTag, PatchTag, IssueTag, StatusTag} from "./nip34.js"
+import type {
+  RepoAnnouncementTag,
+  RepoStateTag,
+  PatchTag,
+  IssueTag,
+  StatusTag,
+  PullRequestTag,
+  PullRequestUpdateTag,
+  UserGraspListTag,
+} from "./nip34.js"
 import type {CommentEvent} from "./nip22.js"
 
 // Stronger typing for tag helpers: map known tag names to their tuple types
 // (imports of specific tag types are declared at the top of file)
 
-type KnownTags = RepoAnnouncementTag | RepoStateTag | PatchTag | IssueTag | StatusTag
+type KnownTags =
+  | RepoAnnouncementTag
+  | RepoStateTag
+  | PatchTag
+  | IssueTag
+  | StatusTag
+  | PullRequestTag
+  | PullRequestUpdateTag
+  | UserGraspListTag
 
 // For a given tag name T, resolve to the precise tuple type if known; otherwise fallback to a generic [T, ...string[]]
 export type TagFor<T extends string> =
@@ -62,6 +82,27 @@ export function isStatusEvent(event: Nip34Event): event is StatusEvent {
 }
 
 /**
+ * Type guard for PullRequestEvent (kind: 1618)
+ */
+export function isPullRequestEvent(event: Nip34Event): event is PullRequestEvent {
+  return event.kind === 1618
+}
+
+/**
+ * Type guard for PullRequestUpdateEvent (kind: 1619)
+ */
+export function isPullRequestUpdateEvent(event: Nip34Event): event is PullRequestUpdateEvent {
+  return event.kind === 1619
+}
+
+/**
+ * Type guard for UserGraspListEvent (kind: 10317)
+ */
+export function isUserGraspListEvent(event: Nip34Event): event is UserGraspListEvent {
+  return event.kind === 10317
+}
+
+/**
  * Get a human-readable label for a NIP-34 or NIP-22 event kind
  */
 export function getNostrKindLabel(kind: number): string {
@@ -74,6 +115,10 @@ export function getNostrKindLabel(kind: number): string {
       return "Patch"
     case 1621:
       return "Issue"
+    case 1618:
+      return "Pull Request"
+    case 1619:
+      return "Pull Request Update"
     case 1630:
       return "Status: Open"
     case 1631:
@@ -84,6 +129,8 @@ export function getNostrKindLabel(kind: number): string {
       return "Status: Draft"
     case 1111:
       return "Comment"
+    case 10317:
+      return "User Grasp List"
     default:
       return "Unknown"
   }
@@ -341,6 +388,81 @@ export function createIssueEvent(opts: {
 }
 
 /**
+ * Create a pull request event (kind 1618)
+ */
+export function createPullRequestEvent(opts: {
+  content: string
+  repoAddr: string
+  recipients?: string[]
+  subject?: string
+  labels?: string[]
+  commits?: string[]
+  clone?: string[]
+  branchName?: string
+  mergeBase?: string
+  tags?: PullRequestTag[]
+  created_at?: number
+}): PullRequestEvent {
+  const tags: PullRequestTag[] = [["a", opts.repoAddr]]
+  if (opts.recipients) opts.recipients.forEach(p => tags.push(["p", p]))
+  if (opts.subject) tags.push(["subject", opts.subject])
+  if (opts.labels) opts.labels.forEach(l => tags.push(["t", l]))
+  if (opts.commits) opts.commits.forEach(c => tags.push(["c", c]))
+  if (opts.clone && opts.clone.length > 0) tags.push(["clone", ...opts.clone])
+  if (opts.branchName) tags.push(["branch-name", opts.branchName])
+  if (opts.mergeBase) tags.push(["merge-base", opts.mergeBase])
+  if (opts.tags) tags.push(...opts.tags)
+  return {
+    kind: 1618,
+    content: opts.content,
+    tags,
+    created_at: opts.created_at ?? Math.floor(Date.now() / 1000),
+  } as PullRequestEvent
+}
+
+/**
+ * Create a pull request update event (kind 1619)
+ */
+export function createPullRequestUpdateEvent(opts: {
+  repoAddr: string
+  recipients?: string[]
+  commits?: string[]
+  clone?: string[]
+  mergeBase?: string
+  tags?: PullRequestUpdateTag[]
+  created_at?: number
+}): PullRequestUpdateEvent {
+  const tags: PullRequestUpdateTag[] = [["a", opts.repoAddr]]
+  if (opts.recipients) opts.recipients.forEach(p => tags.push(["p", p]))
+  if (opts.commits) opts.commits.forEach(c => tags.push(["c", c]))
+  if (opts.clone && opts.clone.length > 0) tags.push(["clone", ...opts.clone])
+  if (opts.mergeBase) tags.push(["merge-base", opts.mergeBase])
+  if (opts.tags) tags.push(...opts.tags)
+  return {
+    kind: 1619,
+    content: "",
+    tags,
+    created_at: opts.created_at ?? Math.floor(Date.now() / 1000),
+  } as PullRequestUpdateEvent
+}
+
+/**
+ * Create a user grasp list event (kind 10317)
+ */
+export function createUserGraspListEvent(opts: {
+  services: string[]
+  created_at?: number
+}): UserGraspListEvent {
+  const tags: UserGraspListTag[] = opts.services.map(s => ["g", s])
+  return {
+    kind: 10317,
+    content: "",
+    tags,
+    created_at: opts.created_at ?? Math.floor(Date.now() / 1000),
+  } as UserGraspListEvent
+}
+
+/**
  * Create a status event (kinds 1630-1633)
  */
 export function createStatusEvent(opts: {
@@ -471,6 +593,81 @@ export function parseIssueEvent(event: IssueEvent): Issue {
     content: event.content,
     author: {pubkey: event.pubkey},
     labels: getAllTags("t"),
+    createdAt: new Date(event.created_at * 1000).toISOString(),
+    raw: event,
+  }
+}
+
+export interface PullRequest {
+  id: string
+  repoId: string
+  subject: string
+  content: string
+  author: {pubkey: string}
+  labels: string[]
+  commits: string[]
+  branchName?: string
+  mergeBase?: string
+  createdAt: string
+  raw: PullRequestEvent
+}
+
+export function parsePullRequestEvent(event: PullRequestEvent): PullRequest {
+  const getTag = (name: string) => event.tags.find(t => t[0] === name)?.[1]
+  const getAllTags = (name: string) => event.tags.filter(t => t[0] === name).map(t => t[1])
+  return {
+    id: event.id,
+    repoId: getTag("a") || "",
+    subject: getTag("subject") || "",
+    content: event.content,
+    author: {pubkey: event.pubkey},
+    labels: getAllTags("t"),
+    commits: getAllTags("c"),
+    branchName: getTag("branch-name"),
+    mergeBase: getTag("merge-base"),
+    createdAt: new Date(event.created_at * 1000).toISOString(),
+    raw: event,
+  }
+}
+
+export interface PullRequestUpdate {
+  id: string
+  repoId: string
+  commits: string[]
+  mergeBase?: string
+  author: {pubkey: string}
+  createdAt: string
+  raw: PullRequestUpdateEvent
+}
+
+export function parsePullRequestUpdateEvent(event: PullRequestUpdateEvent): PullRequestUpdate {
+  const getTag = (name: string) => event.tags.find(t => t[0] === name)?.[1]
+  const getAllTags = (name: string) => event.tags.filter(t => t[0] === name).map(t => t[1])
+  return {
+    id: event.id,
+    repoId: getTag("a") || "",
+    commits: getAllTags("c"),
+    mergeBase: getTag("merge-base"),
+    author: {pubkey: event.pubkey},
+    createdAt: new Date(event.created_at * 1000).toISOString(),
+    raw: event,
+  }
+}
+
+export interface UserGraspList {
+  id: string
+  services: string[]
+  author: {pubkey: string}
+  createdAt: string
+  raw: UserGraspListEvent
+}
+
+export function parseUserGraspListEvent(event: UserGraspListEvent): UserGraspList {
+  const services = event.tags.filter(t => t[0] === "g").map(t => t[1])
+  return {
+    id: event.id,
+    services,
+    author: {pubkey: event.pubkey},
     createdAt: new Date(event.created_at * 1000).toISOString(),
     raw: event,
   }

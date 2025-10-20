@@ -6,6 +6,9 @@ import type {
   StatusEvent,
   IssueEvent,
   PatchEvent,
+  PullRequestEvent,
+  PullRequestUpdateEvent,
+  UserGraspListEvent,
 } from "@nostr-git/shared-types";
 import {
   canonicalRepoKey,
@@ -39,6 +42,9 @@ export type RepoContext = {
   commentEventsArr?: CommentEvent[];
   labelEventsArr?: LabelEvent[];
   maintainers?: string[];
+  pullRequests?: PullRequestEvent[];
+  pullRequestUpdates?: PullRequestUpdateEvent[];
+  userGraspLists?: UserGraspListEvent[];
 };
 
 // EffectiveLabelsV2 used for compatibility, simplified placeholder
@@ -346,7 +352,7 @@ export class RepoCore {
       : undefined;
     if (a)
       filters.push({
-        kinds: [30617, 1617, 1621, 1630, 1631, 1632, 1633],
+        kinds: [30617, 1617, 1618, 1619, 1621, 1630, 1631, 1632, 1633, 10317],
         "#a": [a],
       });
 

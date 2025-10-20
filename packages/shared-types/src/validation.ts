@@ -76,6 +76,7 @@ export const PTag = z.tuple([z.literal("p"), z.string()])
 export const RootTTag = z.tuple([z.literal("t"), z.literal("root")])
 export const RootRevisionTTag = z.tuple([z.literal("t"), z.literal("root-revision")])
 export const CommitTag = z.tuple([z.literal("commit"), z.string()])
+export const CTag = z.tuple([z.literal("c"), z.string()])
 export const ParentCommitTag = z.tuple([z.literal("parent-commit"), z.string()])
 export const CommitPgpSigTag = z.tuple([z.literal("commit-pgp-sig"), z.string()]) // can be empty string
 export const CommitterTag = z.tuple([
@@ -126,6 +127,36 @@ export const StatusTagSchema = z.union([
   AppliedAsCommitsTag,
 ])
 export const StatusTagsSchema = z.array(StatusTagSchema)
+
+// Pull Request tags (kind 1618)
+export const PullRequestTagSchema = z.union([
+  AddressRepoTag,
+  PatchRTag,
+  PTag,
+  SubjectTag,
+  HashtagTag,
+  CTag,
+  CloneTag,
+  z.tuple([z.literal("branch-name"), z.string()]),
+  z.tuple([z.literal("merge-base"), z.string()]),
+  z.tuple([z.literal("e"), z.string()]),
+])
+export const PullRequestTagsSchema = z.array(PullRequestTagSchema)
+
+// Pull Request Update tags (kind 1619)
+export const PullRequestUpdateTagSchema = z.union([
+  AddressRepoTag,
+  PatchRTag,
+  PTag,
+  CTag,
+  CloneTag,
+  z.tuple([z.literal("merge-base"), z.string()]),
+])
+export const PullRequestUpdateTagsSchema = z.array(PullRequestUpdateTagSchema)
+
+// User Grasp List tags (kind 10317)
+export const UserGraspListTagSchema = z.tuple([z.literal("g"), z.string()])
+export const UserGraspListTagsSchema = z.array(UserGraspListTagSchema)
 
 // Convenience per-kind tag validators
 export const validateRepoAnnouncementTags = (tags: unknown) =>
@@ -209,9 +240,46 @@ export const StatusEventSchema = NostrEventSchema.extend({
   }
 })
 
+// Pull Request event (kind 1618)
+export const PullRequestEventSchema = NostrEventSchema.extend({
+  kind: z.literal(1618),
+  tags: PullRequestTagsSchema,
+}).superRefine((evt, ctx) => {
+  if (!hasTagName(evt.tags as unknown[], "a")) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Pull Request must include an 'a' tag (repo address)",
+    })
+  }
+})
+
+// Pull Request Update event (kind 1619)
+export const PullRequestUpdateEventSchema = NostrEventSchema.extend({
+  kind: z.literal(1619),
+  tags: PullRequestUpdateTagsSchema,
+}).superRefine((evt, ctx) => {
+  if (!hasTagName(evt.tags as unknown[], "a")) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Pull Request update must include an 'a' tag (repo address)",
+    })
+  }
+})
+
+// User Grasp List event (kind 10317)
+export const UserGraspListEventSchema = NostrEventSchema.extend({
+  kind: z.literal(10317),
+  tags: UserGraspListTagsSchema,
+})
+
 export const validateRepoAnnouncementEvent = (evt: unknown) =>
   RepoAnnouncementEventSchema.safeParse(evt)
 export const validateRepoStateEvent = (evt: unknown) => RepoStateEventSchema.safeParse(evt)
 export const validatePatchEvent = (evt: unknown) => PatchEventSchema.safeParse(evt)
 export const validateIssueEvent = (evt: unknown) => IssueEventSchema.safeParse(evt)
 export const validateStatusEvent = (evt: unknown) => StatusEventSchema.safeParse(evt)
+
+// Convenience per-kind validators
+export const validatePullRequestEvent = (evt: unknown) => PullRequestEventSchema.safeParse(evt)
+export const validatePullRequestUpdateEvent = (evt: unknown) => PullRequestUpdateEventSchema.safeParse(evt)
+export const validateUserGraspListEvent = (evt: unknown) => UserGraspListEventSchema.safeParse(evt)

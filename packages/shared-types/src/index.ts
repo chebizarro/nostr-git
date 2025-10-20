@@ -6,6 +6,9 @@ export {
   GIT_REPO_STATE,
   GIT_PATCH,
   GIT_ISSUE,
+  GIT_PULL_REQUEST,
+  GIT_PULL_REQUEST_UPDATE,
+  GIT_USER_GRASP_LIST,
   GIT_STATUS_OPEN,
   GIT_STATUS_APPLIED,
   GIT_STATUS_CLOSED,
@@ -23,6 +26,12 @@ export type {
   PatchEvent,
   IssueTag,
   IssueEvent,
+  PullRequestTag,
+  PullRequestUpdateTag,
+  UserGraspListTag,
+  PullRequestEvent,
+  PullRequestUpdateEvent,
+  UserGraspListEvent,
   StatusTag,
   StatusEvent,
   Nip34Event,
@@ -39,6 +48,9 @@ export {
   isPatchEvent,
   isIssueEvent,
   isStatusEvent,
+  isPullRequestEvent,
+  isPullRequestUpdateEvent,
+  isUserGraspListEvent,
   isCommentEvent,
   getNostrKindLabel,
   getTag,
@@ -55,11 +67,22 @@ export {
   removeTag,
   parsePatchEvent,
   parseIssueEvent,
+  createPullRequestEvent,
+  createPullRequestUpdateEvent,
+  createUserGraspListEvent,
+  parsePullRequestEvent,
+  parsePullRequestUpdateEvent,
+  parseUserGraspListEvent,
   parseRepoAnnouncementEvent,
   parseRepoStateEvent,
   parseStatusEvent,
 } from "./nip34-utils.js"
 export type {Patch, Issue, RepoAnnouncement, RepoState, Status} from "./nip34-utils.js"
+export type {
+  PullRequest,
+  PullRequestUpdate,
+  UserGraspList,
+} from "./nip34-utils.js"
 
 export {
   GIT_COMMENT,
@@ -103,6 +126,9 @@ export {
   validatePatchEvent,
   validateIssueEvent,
   validateStatusEvent,
+  validatePullRequestEvent,
+  validatePullRequestUpdateEvent,
+  validateUserGraspListEvent,
 } from "./validation.js"
 export type {NostrTagRuntime, NostrEventLike} from "./validation.js"
 
