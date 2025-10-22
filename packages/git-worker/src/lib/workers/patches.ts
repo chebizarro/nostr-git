@@ -30,20 +30,15 @@ export async function analyzePatchMergeUtil(
   const { repoId, patchData, targetBranch } = opts;
   const { rootDir, canonicalRepoKey, resolveRobustBranch, analyzePatchMergeability } = deps;
   
-  const startTime = Date.now();
-  console.log(`[analyzePatchMerge] Starting analysis for patch ${patchData.id.slice(0, 8)}, repo: ${repoId}, targetBranch: ${targetBranch || patchData.baseBranch}`);
-  
   try {
     const key = canonicalRepoKey(repoId);
     const dir = `${rootDir}/${key}`;
-    console.log(`[analyzePatchMerge] Canonical key: ${key}, dir: ${dir}`);
 
     // Resolve target branch robustly
     const effectiveTargetBranch = await resolveRobustBranch(
       dir,
       targetBranch || patchData.baseBranch
     );
-    console.log(`[analyzePatchMerge] Resolved target branch: ${effectiveTargetBranch}`);
 
     // Prepare patch structure for analysis
     const patch = {
@@ -52,33 +47,11 @@ export async function analyzePatchMergeUtil(
       baseBranch: patchData.baseBranch,
       raw: { content: patchData.rawContent }
     };
-    console.log(`[analyzePatchMerge] Patch prepared with ${patchData.commits.length} commits`);
 
     // Delegate to analysis function
-    console.log(`[analyzePatchMerge] Calling analyzePatchMergeability...`);
     const result = await analyzePatchMergeability(git, dir, patch as any, effectiveTargetBranch);
-    
-    const duration = Date.now() - startTime;
-    console.log(`[analyzePatchMerge] Analysis complete in ${duration}ms:`, {
-      analysis: result.analysis,
-      canMerge: result.canMerge,
-      hasConflicts: result.hasConflicts,
-      conflictFiles: result.conflictFiles?.length || 0,
-      upToDate: result.upToDate,
-      fastForward: result.fastForward
-    });
-    
     return result;
   } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`[analyzePatchMerge] Analysis failed after ${duration}ms:`, error);
-    console.error(`[analyzePatchMerge] Error details:`, {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-      repoId,
-      patchId: patchData.id.slice(0, 8)
-    });
-    
     return {
       canMerge: false,
       hasConflicts: false,

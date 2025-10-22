@@ -33,6 +33,8 @@ if (typeof globalThis.Buffer === 'undefined') {
   (globalThis as any).Buffer = Buffer;
 }
 
+declare const self: any;
+
 /**
  * Global EventIO instance (created internally by worker)
  * Used for all Nostr event publishing operations in the worker.
@@ -156,6 +158,23 @@ function toPlain<T>(val: T): T {
 }
 
 const cacheManager = new RepoCacheManager();
+
+function emitMergeProgress(details: {
+  repoId: string;
+  patchId?: string;
+  phase: string;
+  progress?: number;
+  targetBranch?: string;
+  message?: string;
+}) {
+  try {
+    if (typeof self?.postMessage === 'function') {
+      self.postMessage({ type: 'merge-progress', ...details });
+    }
+  } catch (err) {
+    console.debug('[git-worker] Failed to emit merge progress event:', err);
+  }
+}
 
 // Initialize cache cleanup on worker start
 cacheManager.clearOldCache().catch((err) => {
@@ -881,15 +900,36 @@ async function analyzePatchMerge({
   };
   targetBranch?: string;
 }): Promise<MergeAnalysisResult> {
-  console.log('[git-worker] analyzePatchMerge CALLED with:', {
-    repoId: repoId?.slice(0, 20),
-    patchId: patchData?.id?.slice(0, 8),
-    targetBranch,
-    hasCommits: !!patchData?.commits,
-    commitCount: patchData?.commits?.length
+  const effectiveTargetBranch = targetBranch ?? patchData.baseBranch;
+
+  emitMergeProgress({
+    repoId,
+    patchId: patchData.id,
+    targetBranch: effectiveTargetBranch,
+    phase: 'start'
   });
-  
+
   try {
+    const cached = await cacheManager.getMergeAnalysis(repoId, patchData.id, effectiveTargetBranch);
+    if (cached) {
+      emitMergeProgress({
+        repoId,
+        patchId: patchData.id,
+        targetBranch: effectiveTargetBranch,
+        phase: 'cache-hit',
+        message: cached.analysis
+      });
+      return cached;
+    }
+
+    emitMergeProgress({
+      repoId,
+      patchId: patchData.id,
+      targetBranch: effectiveTargetBranch,
+      phase: 'analyzing',
+      progress: 0.2
+    });
+
     const result = await analyzePatchMergeUtil(
       git,
       { repoId, patchData, targetBranch },
@@ -900,9 +940,42 @@ async function analyzePatchMerge({
         analyzePatchMergeability
       }
     );
-    console.log('[git-worker] analyzePatchMerge RETURNING result:', result?.analysis);
-    return result;
+
+    const plainResult = toPlain(result);
+
+    emitMergeProgress({
+      repoId,
+      patchId: patchData.id,
+      targetBranch: effectiveTargetBranch,
+      phase: 'persisting',
+      progress: 0.9,
+      message: plainResult.analysis
+    });
+
+    try {
+      await cacheManager.setMergeAnalysis(repoId, patchData.id, effectiveTargetBranch, plainResult);
+    } catch (cacheError) {
+      console.warn('[git-worker] Failed to cache merge analysis result:', cacheError);
+    }
+
+    emitMergeProgress({
+      repoId,
+      patchId: patchData.id,
+      targetBranch: effectiveTargetBranch,
+      phase: 'complete',
+      progress: 1,
+      message: plainResult.analysis
+    });
+
+    return plainResult;
   } catch (error) {
+    emitMergeProgress({
+      repoId,
+      patchId: patchData.id,
+      targetBranch: effectiveTargetBranch,
+      phase: 'error',
+      message: error instanceof Error ? error.message : String(error)
+    });
     console.error('[git-worker] analyzePatchMerge FAILED:', error);
     throw error;
   }

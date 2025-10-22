@@ -337,9 +337,49 @@ async function checkIfPatchApplied(
           );
           return true;
         }
-      } catch (commitError) {
-        // Patch commit might not exist in this repo, continue with other checks
-        console.warn('Could not read patch commit for content comparison:', commitError);
+      } catch (commitError: any) {
+        // Patch commit might not exist locally. Attempt a targeted fetch, otherwise skip
+        const notFound = commitError?.code === 'NotFoundError' || /not.?found/i.test(commitError?.message ?? '');
+        if (notFound) {
+          try {
+            // Attempt to fetch the specific commit from origin
+            const remotes = await git.listRemotes({ dir: repoDir });
+            const originRemote = remotes.find((r: any) => r.remote === 'origin');
+            if (originRemote?.url) {
+              await git.fetch({
+                dir: repoDir,
+                url: originRemote.url,
+                oauth2format: 'github',
+                singleBranch: false,
+                depth: 1,
+                commit: patchCommits[0]
+              } as any);
+
+              const fetchedCommit = await git.readCommit({
+                dir: repoDir,
+                oid: patchCommits[0]
+              });
+
+              const recentCommits = log.slice(0, 50);
+              const matchingCommit = recentCommits.find(
+                (commit: any) =>
+                  commit.commit.author.email === fetchedCommit.commit.author.email &&
+                  commit.commit.message.trim() === fetchedCommit.commit.message.trim()
+              );
+
+              if (matchingCommit) {
+                console.log(
+                  `Patch content already merged after targeted fetch: matching commit ${matchingCommit.oid}`
+                );
+                return true;
+              }
+            }
+          } catch (fetchErr) {
+            console.warn('Failed targeted fetch for patch commit during merge analysis:', fetchErr);
+          }
+        } else {
+          console.warn('Could not read patch commit for content comparison:', commitError);
+        }
       }
     }
 

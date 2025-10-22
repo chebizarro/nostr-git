@@ -15,6 +15,9 @@ export interface WorkerProgressEvent {
   repoId: string;
   phase: string;
   progress?: number;
+  patchId?: string;
+  targetBranch?: string;
+  message?: string;
 }
 
 export interface WorkerProgressCallback {
@@ -68,17 +71,13 @@ export class WorkerManager {
       return;
     }
     this.initInFlight = (async () => {
-      console.log('[WorkerManager] Initializing git worker...');
-      const { worker, api } = getGitWorker(this.progressCallback);
-      console.log('[WorkerManager] Git worker created:', { worker: !!worker, api: !!api });
+      const { worker, api } = getGitWorker(this.handleWorkerProgress);
       this.worker = worker;
       this.api = api as any;
       this.isInitialized = true;
-      console.log('[WorkerManager] WorkerManager initialized:', this.isInitialized);
       
       try {
         if (this.worker) {
-          console.log('[WorkerManager] Worker available, verifying API proxy...');
           // Comlink proxies do not enumerate properties reliably; avoid Object.keys checks
         }
 
@@ -86,9 +85,7 @@ export class WorkerManager {
         const cfgJson = JSON.stringify(this.authConfig || {});
         if (cfgJson !== this.lastAuthConfigJson) {
           if (this.authConfig.tokens.length > 0 && this.api && typeof (this.api as any).setAuthConfig === 'function') {
-            console.log('[WorkerManager] Setting auth config...');
             await (this.api as any).setAuthConfig(this.authConfig);
-            console.log('[WorkerManager] Auth config set successfully');
           }
           this.lastAuthConfigJson = cfgJson;
         }
@@ -100,7 +97,6 @@ export class WorkerManager {
       }
 
       this.lastInitAt = Date.now();
-      console.log('[WorkerManager] Initialization complete');
     })();
 
     try {
@@ -110,7 +106,6 @@ export class WorkerManager {
     }
   }
   async execute<T>(operation: string, params: any): Promise<T> {
-    console.log('[WorkerManager] execute called:', { operation, params });
     if (!this.isInitialized || !this.api) {
       throw new Error("WorkerManager not initialized. Call initialize() first.");
     }
@@ -129,34 +124,23 @@ export class WorkerManager {
         throw new Error(`Operation '${operation}' is not supported by current worker.`);
       }
 
-      console.log('[WorkerManager] Invoking worker API operation:', operation);
-      
       // Check if params are actually serializable
       try {
         const serialized = JSON.stringify(safeParams, null, 2);
-        console.log('[WorkerManager] Params serialized OK, size:', serialized.length, 'bytes');
-        console.log('[WorkerManager] Params preview:', serialized.slice(0, 500));
       } catch (serError) {
         console.error('[WorkerManager] Params NOT serializable!', serError);
         throw new Error(`Cannot serialize params for ${operation}: ${serError}`);
       }
       
       // Check if method is actually a function
-      console.log('[WorkerManager] Method type:', typeof method);
-      console.log('[WorkerManager] Method is Comlink proxy:', method[Symbol.toStringTag] === 'Comlink.proxy');
       
       // Add timeout to detect hanging worker calls
-      const timeoutMs = 30000; // 30 seconds
+      const timeoutMs = operation === 'analyzePatchMerge' ? 90000 : 30000;
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error(`Worker operation '${operation}' timed out after ${timeoutMs}ms`)), timeoutMs);
       });
-      
-      console.log('[WorkerManager] About to call method...');
       const resultPromise = method(safeParams);
-      console.log('[WorkerManager] Method called, waiting for result...');
       const result = await Promise.race([resultPromise, timeoutPromise]);
-      
-      console.log('[WorkerManager] Worker returned result for:', operation);
       try {
         return JSON.parse(JSON.stringify(result)) as T;
       } catch {
@@ -445,18 +429,6 @@ export class WorkerManager {
   }> {
     await this.initialize();
 
-    // Debug patch data in WorkerManager
-    console.log("🔧 WorkerManager - Patch data received:", {
-      repoId: params.repoId,
-      patchDataId: params.patchData?.id,
-      hasRawContent: !!params.patchData?.rawContent,
-      rawContentType: typeof params.patchData?.rawContent,
-      rawContentLength: params.patchData?.rawContent?.length,
-      targetBranch: params.targetBranch,
-      authorName: params.authorName,
-      authorEmail: params.authorEmail,
-    });
-
     const result = await this.api.applyPatchAndPush(params);
     return result;
   }
@@ -495,7 +467,6 @@ export class WorkerManager {
         if (nextJson !== this.lastAuthConfigJson) {
           await this.api.setAuthConfig(config);
           this.lastAuthConfigJson = nextJson;
-          console.log("Authentication configuration updated for", config.tokens.length, "hosts");
         } // else no-op
       } catch (error) {
         console.error("Failed to update authentication configuration:", error);
@@ -568,6 +539,29 @@ export class WorkerManager {
     this.progressCallback = callback;
   }
 
+  private handleWorkerProgress = (event: WorkerProgressEvent | MessageEvent): void => {
+    const payload = event instanceof MessageEvent ? event.data : event;
+    if (!payload || typeof payload !== 'object') {
+      return;
+    }
+    if ('type' in payload && payload.type !== 'clone-progress' && payload.type !== 'merge-progress') {
+      return;
+    }
+
+    if (!this.progressCallback) {
+      return;
+    }
+
+    this.progressCallback({
+      repoId: (payload as any).repoId,
+      phase: (payload as any).phase ?? (payload as any).step ?? 'unknown',
+      progress: typeof payload.progress === 'number' ? payload.progress : undefined,
+      patchId: (payload as any).patchId,
+      targetBranch: (payload as any).targetBranch,
+      message: (payload as any).message,
+    });
+  };
+
   /**
    * Terminate the worker and clean up resources
    */
@@ -603,7 +597,6 @@ export class WorkerManager {
    * Restart the worker if it becomes unresponsive
    */
   async restart(): Promise<void> {
-    console.log("Restarting git worker...");
     this.dispose();
     await this.initialize();
   }

@@ -15,21 +15,22 @@ export interface CloneProgressEvent {
 /**
  * Get a Git worker instance with Comlink API wrapper.
  * 
- * IMPORTANT: After creating the worker, you must call api.setEventIO(io)
- * to configure the EventIO instance before performing any GRASP operations.
- * 
  * @param onProgress Optional callback for clone progress events
  * @returns Object with worker instance and Comlink API
  */
-export function getGitWorker(onProgress?: (event: CloneProgressEvent) => void) {
+export function getGitWorker(onProgress?: (event: MessageEvent | CloneProgressEvent) => void) {
   // Use Vite's worker import - works in both dev and production
   console.log('[GitWorker] Creating worker at', WorkerUrl);
   const worker = new Worker(WorkerUrl, { type: 'module' });
 
   if (onProgress) {
     worker.addEventListener('message', (event: MessageEvent) => {
-      if (event.data.type === 'clone-progress') {
-        onProgress(event.data);
+      const data = event.data;
+      if (!data || typeof data !== 'object') {
+        return;
+      }
+      if (data.type === 'clone-progress' || data.type === 'merge-progress') {
+        onProgress(event);
       }
     });
   }
