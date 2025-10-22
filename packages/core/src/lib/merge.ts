@@ -11,7 +11,7 @@ export async function analyzePatchMerge(
   targetBranch?: string,
   onProgress?: (event: any) => void
 ): Promise<MergeAnalysisResult> {
-  const { api, worker } = getGitWorker(onProgress);
+  const { api, worker } = await getGitWorker(onProgress);
 
   try {
     // Serialize patch data for worker communication

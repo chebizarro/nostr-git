@@ -20,16 +20,16 @@ export interface CloneProgressEvent {
  * @returns Object with worker instance and Comlink API
  */
 export function getGitWorker(onProgress?: (event: CloneProgressEvent) => void) {
-  // Always append a cache-busting query param to avoid stale workers
-  const u = new URL('./workers/git-worker.js', import.meta.url);
-  try {
-    u.searchParams.set('v', String(Date.now()));
-  } catch {}
-  console.log('[GitWorker] Spawning worker at', u.toString());
-  const worker = new Worker(u, { type: 'module' });
+  const meta = import.meta as any;
+  const workerSpecifier = meta?.env?.DEV
+    ? /* @vite-ignore */ new URL('./workers/git-worker.ts', import.meta.url)
+    : '/_app/lib/workers/git-worker.js';
+
+  console.log('[GitWorker] Creating worker at', workerSpecifier.toString());
+  const worker = new Worker(workerSpecifier, { type: 'module' });
 
   if (onProgress) {
-    worker.addEventListener('message', (event) => {
+    worker.addEventListener('message', (event: MessageEvent) => {
       if (event.data.type === 'clone-progress') {
         onProgress(event.data);
       }
@@ -53,6 +53,3 @@ export async function configureWorkerEventIO(api: any, io: EventIO): Promise<voi
   console.log('[GitWorker] EventIO configured successfully');
 }
 
-// NOTE: registerEventSigner has been eliminated!
-// The new EventIO interface uses closures instead of passing signers around.
-// This eliminates the anti-pattern of complex message passing between worker and main thread.

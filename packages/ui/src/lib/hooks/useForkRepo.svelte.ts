@@ -184,11 +184,11 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
         gitWorkerApi = options.workerApi;
         // Need worker for GRASP - create temporary one if not available
         const { getGitWorker } = await import("@nostr-git/core");
-        const workerInstance = getGitWorker();
+        const workerInstance = await getGitWorker();
         worker = workerInstance.worker;
       } else {
         const { getGitWorker } = await import("@nostr-git/core");
-        const workerInstance = getGitWorker();
+        const workerInstance = await getGitWorker();
         gitWorkerApi = workerInstance.api;
         worker = workerInstance.worker;
       }

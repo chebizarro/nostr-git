@@ -1,12 +1,14 @@
 import type { GraspSetEvent, GraspSetTag, NostrEvent } from '@nostr-git/shared-types';
 import { DEFAULT_GRASP_SET_ID, GRASP_SET_KIND } from './nip51.js';
 
-// Bookmark entry for a single repo
-export type BookmarkedRepo = {
-    address: string;  // kind:pubkey:identifier
-    event: any;       // The repo announcement event
-    relayHint: string;
-};
+// Derive bookmarked addresses from the singleton bookmarksStore
+export type BookmarkAddress = {
+    address: string
+    author: string
+    identifier: string
+    relayHint: string
+  }
+
 
 export function validateGraspServerUrl(url: string): boolean {
     try {

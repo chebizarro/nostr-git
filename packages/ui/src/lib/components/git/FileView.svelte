@@ -10,7 +10,6 @@
   import CodeMirror from "svelte-codemirror-editor";
   import {
     detectFileType,
-    getFileMetadata,
     type FileTypeInfo,
   } from "../../utils/fileTypeDetection";
   import FileMetadataPanel from "./FileMetadataPanel.svelte";

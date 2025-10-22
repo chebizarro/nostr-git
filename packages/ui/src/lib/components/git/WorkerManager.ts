@@ -68,21 +68,28 @@ export class WorkerManager {
       return;
     }
     this.initInFlight = (async () => {
-      const { worker, api } = await getGitWorker(this.progressCallback);
+      console.log('[WorkerManager] Initializing git worker...');
+      const { worker, api } = getGitWorker(this.progressCallback);
+      console.log('[WorkerManager] Git worker created:', { worker: !!worker, api: !!api });
       this.worker = worker;
       this.api = api as any;
       this.isInitialized = true;
+      console.log('[WorkerManager] WorkerManager initialized:', this.isInitialized);
+      
       try {
         // Worker is initialized - EventIO will be handled internally by the worker
         if (this.worker) {
-          // EventIO configuration removed - worker handles its own EventIO internally
+          console.log('[WorkerManager] Worker available, verifying API proxy...');
+          // Comlink proxies do not enumerate properties reliably; avoid Object.keys checks
         }
 
         // Set authentication configuration in the worker (dedup)
         const cfgJson = JSON.stringify(this.authConfig || {});
         if (cfgJson !== this.lastAuthConfigJson) {
-          if (this.authConfig.tokens.length > 0) {
-            await this.api.setAuthConfig(this.authConfig);
+          if (this.authConfig.tokens.length > 0 && this.api && typeof (this.api as any).setAuthConfig === 'function') {
+            console.log('[WorkerManager] Setting auth config...');
+            await (this.api as any).setAuthConfig(this.authConfig);
+            console.log('[WorkerManager] Auth config set successfully');
           }
           this.lastAuthConfigJson = cfgJson;
         }
@@ -94,6 +101,7 @@ export class WorkerManager {
       }
 
       this.lastInitAt = Date.now();
+      console.log('[WorkerManager] Initialization complete');
     })();
 
     try {
@@ -103,61 +111,39 @@ export class WorkerManager {
     }
   }
   async execute<T>(operation: string, params: any): Promise<T> {
+    console.log('[WorkerManager] execute called:', { operation, params });
     if (!this.isInitialized || !this.api) {
       throw new Error("WorkerManager not initialized. Call initialize() first.");
     }
+    console.log('[WorkerManager] API available:', !!this.api);
     try {
-      // Bypass Comlink for syncWithRemote due to clone issues; use raw RPC channel
-      if (operation === "syncWithRemote" && this.worker) {
-        const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        const safeArgs = (() => {
-          try {
-            return JSON.parse(JSON.stringify(params));
-          } catch {
-            return params;
-          }
-        })();
-        const worker = this.worker;
-        return await new Promise<T>((resolve, reject) => {
-          const onMessage = (ev: MessageEvent) => {
-            const msg: any = ev.data;
-            if (!msg || msg.type !== "rpc:syncWithRemote:result" || msg.id !== id) return;
-            worker.removeEventListener("message", onMessage);
-            if (msg.ok) {
-              try {
-                resolve(JSON.parse(JSON.stringify(msg.result)) as T);
-              } catch {
-                resolve(msg.result as T);
-              }
-            } else {
-              reject(new Error(msg.error || "syncWithRemote failed"));
-            }
-          };
-          worker.addEventListener("message", onMessage);
-          worker.postMessage({ type: "rpc:syncWithRemote", id, args: safeArgs });
-        });
-      }
-      // Ensure params are structured-cloneable before crossing into Comlink
       let safeParams = params;
       try {
         safeParams = JSON.parse(JSON.stringify(params));
       } catch {
         /* fall back to original */
       }
-      const result = await (this.api as any)[operation](safeParams);
-      // Ensure result is structured-cloneable; drop functions/proxies
+
+      const method = (this.api as any)[operation];
+
+      if (typeof method !== 'function') {
+        console.warn(`[WorkerManager] Requested operation '${operation}' not found in worker API`);
+        throw new Error(`Operation '${operation}' is not supported by current worker.`);
+      }
+
+      console.log('[WorkerManager] Invoking worker API operation:', operation);
+      const result = await method(safeParams);
       try {
         return JSON.parse(JSON.stringify(result)) as T;
       } catch {
         return result as T;
       }
     } catch (error) {
+      console.error('[WorkerManager] execute error:', error);
       const msg = error instanceof Error ? error.message : String(error);
       if (msg && msg.includes("Proxy object could not be cloned")) {
-        // Normalize the error so upstream can handle gracefully
         throw new Error(`Worker returned a non-transferable value for '${operation}'.`);
       }
-      console.error(`Git operation '${operation}' failed:`, error);
       throw error;
     }
   }

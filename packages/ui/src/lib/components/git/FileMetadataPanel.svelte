@@ -181,14 +181,6 @@
             </div>
           </div>
         {/if}
-
-        <!-- Actions -->
-        <div class="border-t pt-4" style="border-color: hsl(var(--border));">
-          <h4 class="text-sm font-medium text-foreground mb-3 uppercase tracking-wide">Actions</h4>
-          <p class="text-sm text-muted-foreground">
-            Use the buttons in the header to copy, download, or share this file.
-          </p>
-        </div>
       {:else}
         <div class="text-center text-muted-foreground py-8">
           <p class="text-sm">No information available for this file.</p>

@@ -739,7 +739,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       api = options.workerApi;
     } else {
       const { getGitWorker } = await import("@nostr-git/core");
-      const workerInstance = getGitWorker();
+      const workerInstance = await getGitWorker();
       api = workerInstance.api;
     }
 
@@ -1007,7 +1007,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       // Fallback: create new worker (won't have EventIO configured)
       console.warn("🔐 No workerApi/workerInstance provided for push, creating new worker (EventIO may not be configured)");
       const { getGitWorker } = await import("@nostr-git/core");
-      const workerInstance = getGitWorker();
+      const workerInstance = await getGitWorker();
       api = workerInstance.api;
       worker = workerInstance.worker;
     }

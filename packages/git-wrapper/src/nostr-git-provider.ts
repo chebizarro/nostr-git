@@ -577,7 +577,7 @@ export class NostrGitProvider implements GitProvider {
         console.log("Starting Blossom mirror upload...")
         await delegated.fs.pushToBlossom(delegated.dir, { 
           endpoint: delegated.endpoint,
-          onProgress: (pct) => console.log(`Blossom upload progress: ${pct.toFixed(1)}%`)
+          onProgress: (pct: number) => console.log(`Blossom upload progress: ${pct.toFixed(1)}%`)
         })
         console.log("Blossom mirror upload completed")
       } catch (err) {

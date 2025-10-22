@@ -189,7 +189,7 @@ export type {
 } from "./nip51.js"
 
 export {
-  BookmarkedRepo,
+  BookmarkAddress,
   validateGraspServerUrl,
   normalizeGraspServerUrl,
   createGraspServersEvent,

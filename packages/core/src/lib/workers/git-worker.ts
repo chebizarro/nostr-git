@@ -1,5 +1,5 @@
 import { expose } from 'comlink';
-import { finalizeEvent, nip19 } from 'nostr-tools';
+import { finalizeEvent } from 'nostr-tools';
 import { GitProvider, getGitProvider } from '@nostr-git/git-wrapper';
 import { rootDir } from '../git.js';
 import { Buffer } from 'buffer';
@@ -9,8 +9,11 @@ import type { GitVendor } from '../vendor-providers.js';
 import { createRepoStateEvent, type EventIO } from '@nostr-git/shared-types';
 import { canonicalRepoKey } from '../utils/canonicalRepoKey.js';
 import { listRepoFilesFromEvent } from '../files.js';
-
-import { setAuthConfig, getAuthCallback, getConfiguredAuthHosts, type AuthConfig } from './auth.js';
+import {
+  setAuthConfig,
+  getAuthCallback,
+  getConfiguredAuthHosts
+} from './auth.js';
 import { RepoCache, RepoCacheManager } from './cache.js';
 import { getProviderFs, isRepoClonedFs, safeRmrf } from './fs-utils.js';
 import { resolveRobustBranch } from './branches.js';
@@ -86,8 +89,9 @@ function initializeEventIO(): EventIO {
  * @param io - EventIO instance (ignored - worker creates its own)
  */
 const setEventIO = (io: EventIO) => {
-  console.log('[git-worker] setEventIO called - using provided EventIO from main thread');
-  workerEventIO = io;
+  console.log('[git-worker] setEventIO called - but using internal EventIO instead');
+  // Don't use the external EventIO - use our internal one instead
+  // This avoids complex object serialization issues across thread boundary
 };
 
 /**
@@ -2248,11 +2252,17 @@ async function getStatus({ repoId, branch }: { repoId: string; branch?: string }
   text?: string;
   error?: string;
 }> {
+  console.log('[git-worker] getStatus called:', { repoId, branch });
   const key = canonicalRepoKey(repoId);
   const dir = `${rootDir}/${key}`;
+  console.log('[git-worker] getStatus - repo key:', key, 'dir:', dir);
+  
   try {
     // Ensure repo exists
+    console.log('[git-worker] getStatus - checking if repo is cloned...');
     const cloned = await isRepoCloned(dir);
+    console.log('[git-worker] getStatus - repo cloned:', cloned);
+    
     if (!cloned) {
       return {
         success: false,
@@ -2265,16 +2275,23 @@ async function getStatus({ repoId, branch }: { repoId: string; branch?: string }
     }
 
     // Resolve branch robustly
+    console.log('[git-worker] getStatus - resolving branch...');
     const targetBranch = await resolveRobustBranchInWorker(dir, branch);
+    console.log('[git-worker] getStatus - target branch:', targetBranch);
 
     // Best-effort checkout to ensure HEAD points to target branch
+    console.log('[git-worker] getStatus - checking out branch...');
     try {
       await git.checkout({ dir, ref: targetBranch });
-    } catch {
+      console.log('[git-worker] getStatus - checkout successful');
+    } catch (e) {
+      console.log('[git-worker] getStatus - checkout failed (ignoring):', e);
       // ignore
     }
 
+    console.log('[git-worker] getStatus - getting status matrix...');
     const matrix = await git.statusMatrix({ dir });
+    console.log('[git-worker] getStatus - status matrix received, rows:', matrix.length);
     type StatusFile = {
       path: string;
       head: number;
@@ -2360,34 +2377,57 @@ async function getStatus({ repoId, branch }: { repoId: string; branch?: string }
   }
 }
 
-expose({
-  cloneAndFork,
-  clone,
-  smartInitializeRepo,
-  // Ensure syncWithRemote always returns structured-cloneable data
-  syncWithRemote: async (args: any) => toPlain(await syncWithRemote(args)),
-  initializeRepo,
-  ensureShallowClone,
-  ensureFullClone,
-  getRepoDataLevel,
-  clearCloneCache,
-  getCommitHistory,
-  getCommitCount,
-  deleteRepo,
-  analyzePatchMerge,
-  applyPatchAndPush,
-  resetRepoToRemote,
-  setAuthConfig,
-  createLocalRepo,
-  createRemoteRepo,
-  pushToRemote,
-  safePushToRemote,
-  cloneRemoteRepo,
-  forkAndCloneRepo,
-  updateRemoteRepoMetadata,
-  updateAndPushFiles,
-  getCommitDetails,
-  getStatus,
-  listTreeAtCommit,
-  setEventIO // Function to configure EventIO from main thread
-});
+// Immediate test to see if worker loads at all
+console.log('[git-worker] IMMEDIATE TEST - Worker loaded successfully!');
+console.log('[git-worker] Worker starting up...');
+console.log('[git-worker] Worker environment:', typeof self, typeof window);
+
+console.log('[git-worker] Preparing to expose API methods...');
+
+try {
+  const api = {
+    cloneAndFork,
+    clone,
+    smartInitializeRepo,
+    // Ensure syncWithRemote always returns structured-cloneable data
+    syncWithRemote: async (args: any) => toPlain(await syncWithRemote(args)),
+    initializeRepo,
+    ensureShallowClone,
+    ensureFullClone,
+    getRepoDataLevel,
+    clearCloneCache,
+    getCommitHistory,
+    getCommitCount,
+    deleteRepo,
+    analyzePatchMerge,
+    applyPatchAndPush,
+    resetRepoToRemote,
+    setAuthConfig,
+    createLocalRepo,
+    createRemoteRepo,
+    pushToRemote,
+    safePushToRemote,
+    cloneRemoteRepo,
+    forkAndCloneRepo,
+    updateRemoteRepoMetadata,
+    updateAndPushFiles,
+    getCommitDetails,
+    getStatus: async (params: any) => {
+      console.log('[git-worker] getStatus RPC received:', params);
+      return await getStatus(params);
+    },
+    listTreeAtCommit,
+    setEventIO // Function to configure EventIO from main thread
+  };
+
+  console.log('[git-worker] API object created with', Object.keys(api).length, 'methods');
+  console.log('[git-worker] API methods:', Object.keys(api));
+  
+  expose(api);
+
+  console.log('[git-worker] API methods exposed successfully');
+} catch (error) {
+  console.error('[git-worker] Failed to expose API methods:', error);
+  console.error('[git-worker] Error details:', error instanceof Error ? error.stack : String(error));
+  throw error;
+}

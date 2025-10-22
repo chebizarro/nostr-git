@@ -82,7 +82,7 @@ export function useEditRepo(hookOptions: UseEditRepoOptions = {}) {
         gitWorker = { api: hookOptions.workerApi };
       } else {
         const { getGitWorker } = await import("@nostr-git/core");
-        gitWorker = getGitWorker();
+        gitWorker = await getGitWorker();
       }
 
       // Extract current repository info

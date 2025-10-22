@@ -427,13 +427,21 @@
   }
 
   async function handleGitRpc(op: string, params: any): Promise<any> {
+    console.log('[Terminal] handleGitRpc called:', { op, params });
     const mgr = await ensureWM();
+    console.log('[Terminal] WorkerManager ready:', mgr);
+    
     if (op === "git.status") {
       try {
         const repoId = params?.repoId;
         const branch = params?.branch ?? currentBranch;
+        console.log('[Terminal] git.status params:', { repoId, branch });
         if (!repoId) return { text: "error: git status requires repoId\n" };
+        
+        console.log('[Terminal] Calling mgr.getStatus...');
         const res = await mgr.getStatus({ repoId, branch });
+        console.log('[Terminal] mgr.getStatus result:', res);
+        
         if (res?.success === false) {
           return { text: `error: status failed: ${res?.error || "unknown"}\n` };
         }
@@ -444,6 +452,7 @@
             .join("\n");
         return { text: out.endsWith("\n") ? out : out + "\n" };
       } catch (e: any) {
+        console.error('[Terminal] git.status error:', e);
         return { text: `error: status exception: ${e?.message || String(e)}\n` };
       }
     }
@@ -715,73 +724,64 @@
 
   async function ensureWorker() {
     if (worker) return;
-    const isDist = String(import.meta.url).includes("/packages/nostr-git/packages/ui/dist/");
-    const preferred = isDist
-      ? ["./worker/cli.js", "./worker/cli.mjs", "./worker/cli.ts"]
-      : ["./worker/cli.ts", "./worker/cli.js", "./worker/cli.mjs"];
-    let lastErr: any = null;
-    for (const rel of preferred) {
-      const u = new URL(rel, import.meta.url);
-      try {
-        try {
-          const isLikelyDev =
-            typeof location !== "undefined" &&
-            (location.hostname === "localhost" || location.hostname === "127.0.0.1");
-          if (isLikelyDev) {
-            u.searchParams.set("v", String(Date.now()));
+    
+    const isDev = (import.meta as any)?.env?.DEV ?? false;
+    const base =
+      (import.meta as any)?.env?.BASE_URL ??
+      (document.querySelector('base')?.getAttribute('href') || '/');
+    const normalizedBase = String(base).endsWith('/')
+      ? String(base).slice(0, -1)
+      : String(base);
+
+    const workerSpecifier = isDev
+      ? /* @vite-ignore */ new URL('./worker/cli.ts', import.meta.url)
+      : `${normalizedBase || ''}/_app/lib/terminal/worker/cli.js`;
+    const workerUrl = workerSpecifier instanceof URL ? workerSpecifier.toString() : String(workerSpecifier);
+
+    console.debug('[terminal] creating worker at', workerUrl);
+    
+    try {
+      const w = new Worker(workerUrl, { type: "module" });
+
+      // Strict handshake: wait for explicit "ready" message from worker
+      const ok = await new Promise<boolean>((resolve) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (!settled) {
+            settled = true;
+            resolve(false);
           }
-        } catch {}
-        console.debug("[terminal] attempting worker url", u.toString());
-        const w = new Worker(u, { type: "module" });
-        // If the worker errors immediately (e.g., 404 / bad MIME), fall back to next candidate
-        const ok = await new Promise<boolean>((resolve) => {
-          let settled = false;
-          const timer = setTimeout(() => {
-            if (!settled) {
-              settled = true;
-              resolve(true);
-            }
-          }, 150);
-          const onError = (e: ErrorEvent) => {
-            if (settled) return;
+        }, 2000); // wait up to 2s for ready
+        const onError = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(false);
+        };
+        const onMsg = (ev: MessageEvent) => {
+          if (settled) return;
+          if (ev?.data?.type === 'ready') {
             settled = true;
             clearTimeout(timer);
-            resolve(false);
-          };
-          w.addEventListener("error", onError, { once: true });
-          // Also treat messageerror as failure during bootstrap
-          w.addEventListener("messageerror", onError as any, { once: true });
-          // If the worker sends any message quickly, consider it alive
-          w.addEventListener(
-            "message",
-            () => {
-              if (settled) return;
-              settled = true;
-              clearTimeout(timer);
-              resolve(true);
-            },
-            { once: true }
-          );
-        });
-        if (!ok) {
-          console.debug("[terminal] worker boot failed for", u.toString());
-          try {
-            w.terminate();
-          } catch {}
-          lastErr = new Error("worker boot failed");
-          continue;
-        }
-        worker = w;
-        break;
-      } catch (e) {
-        lastErr = e;
-        worker = null;
-        console.debug("[terminal] worker init failed for candidate", rel, e);
+            w.removeEventListener('message', onMsg as any);
+            resolve(true);
+          }
+        };
+        w.addEventListener('error', onError, { once: true });
+        w.addEventListener('messageerror', onError as any, { once: true });
+        w.addEventListener('message', onMsg as any);
+      });
+      
+      if (!ok) {
+        console.debug("[terminal] worker boot failed for", workerUrl);
+        w.terminate();
+        throw new Error(`Terminal worker failed to initialize: ${workerUrl}`);
       }
-    }
-    if (!worker) {
-      console.error("[terminal] failed to initialize worker with fallbacks", lastErr);
-      throw lastErr;
+      
+      worker = w;
+    } catch (e) {
+      console.error("[terminal] failed to initialize worker", e);
+      throw e;
     }
 
     // Initial handshake

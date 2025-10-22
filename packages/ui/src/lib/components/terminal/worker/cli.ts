@@ -26,6 +26,8 @@ export type WorkerToUI =
   | { type: "git"; op: string; id: string; params: any }
   | { type: "cwd"; path: string };
 
+postMessage({ type: "ready" } as any);
+
 let repoRef: { relay: string; naddr: string; npub: string; repoId: string } | null = null;
 let urlAllowlist: string[] = [];
 let outputLimit = { bytes: 1_000_000, lines: 10_000, timeMs: 30_000 };
@@ -324,7 +326,19 @@ async function route(id: string, argv: string[]): Promise<number> {
     if (bi !== -1) return bi;
 
     if (cmd === "git") {
-      const { runGitCli } = await import("../git-cli-adapter");
+      // Compute base path from worker's own URL to support subpath deployments
+      const baseFromWorker = (() => {
+        try {
+          const p = self.location?.pathname || "/";
+          const idx = p.indexOf("/_app/");
+          return idx >= 0 ? p.slice(0, idx) || "/" : "/";
+        } catch {
+          return "/";
+        }
+      })();
+      const gitCliAdapterUrl = `${baseFromWorker}/_app/immutable/git-cli-adapter.js`;
+
+      const { runGitCli } = await import(gitCliAdapterUrl);
       const res = await runGitCli(argv, {
         repoRef: repoRef!,
         onProgress: (evt) => postMessage({ type: "progress", ...evt } as any),

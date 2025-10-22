@@ -52,7 +52,7 @@ export function useCloneRepo(options: CloneRepoOptions): CloneRepoHook {
         api = options.workerApi;
       } else {
         const { getGitWorker } = await import("@nostr-git/core");
-        const workerInstance = getGitWorker();
+        const workerInstance = await getGitWorker();
         api = workerInstance.api;
       }
 

@@ -10,7 +10,6 @@ export const GIT_REPO_BOOKMARK_SET = 30003; // NIP-51 set kind per app conventio
 
 export const GIT_REPO_BOOKMARK_DTAG = "git-repo-bookmark";
 
-
 export type GraspSetTag =
     | ["d", string]
     | ["relay", string]
