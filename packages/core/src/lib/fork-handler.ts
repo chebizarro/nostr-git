@@ -1,4 +1,4 @@
-import { getGitWorker } from './git-worker-client.js';
+import { getGitWorker } from '@nostr-git/git-worker';
 
 export interface ForkOptions {
   sourceUrl: string;

@@ -1,22 +1,22 @@
 import { expose } from 'comlink';
 import { finalizeEvent } from 'nostr-tools';
 import { GitProvider, getGitProvider } from '@nostr-git/git-wrapper';
-import { rootDir } from '../git.js';
+import { rootDir } from './git.js';
 import { Buffer } from 'buffer';
-import { analyzePatchMergeability, type MergeAnalysisResult } from '../merge-analysis.js';
-import { getGitServiceApi } from '../git/factory.js';
-import type { GitVendor } from '../vendor-providers.js';
+import { analyzePatchMergeability, type MergeAnalysisResult } from './merge-analysis.js';
+import { getGitServiceApi } from './git/factory.js';
+import type { GitVendor } from './vendor-providers.js';
 import { createRepoStateEvent, type EventIO } from '@nostr-git/shared-types';
-import { canonicalRepoKey } from '../utils/canonicalRepoKey.js';
-import { listRepoFilesFromEvent } from '../files.js';
+import { canonicalRepoKey } from './utils/canonicalRepoKey.js';
+import { listRepoFilesFromEvent } from './files.js';
 import {
   setAuthConfig,
   getAuthCallback,
   getConfiguredAuthHosts
-} from './auth.js';
-import { RepoCache, RepoCacheManager } from './cache.js';
-import { getProviderFs, isRepoClonedFs, safeRmrf } from './fs-utils.js';
-import { resolveRobustBranch } from './branches.js';
+} from './lib/workers/auth.js';
+import { RepoCache, RepoCacheManager } from './lib/workers/cache.js';
+import { getProviderFs, isRepoClonedFs, safeRmrf } from './lib/workers/fs-utils.js';
+import { resolveRobustBranch } from './lib/workers/branches.js';
 import {
   cloneRemoteRepoUtil,
   clearCloneTracking,
@@ -24,10 +24,10 @@ import {
   initializeRepoUtil,
   ensureShallowCloneUtil,
   ensureFullCloneUtil
-} from './repos.js';
-import { safePushToRemoteUtil } from './push.js';
-import { needsUpdateUtil, syncWithRemoteUtil } from './sync.js';
-import { analyzePatchMergeUtil, applyPatchAndPushUtil } from './patches.js';
+} from './lib/workers/repos.js';
+import { safePushToRemoteUtil } from './lib/workers/push.js';
+import { needsUpdateUtil, syncWithRemoteUtil } from './lib/workers/sync.js';
+import { analyzePatchMergeUtil, applyPatchAndPushUtil } from './lib/workers/patches.js';
 
 if (typeof globalThis.Buffer === 'undefined') {
   (globalThis as any).Buffer = Buffer;
@@ -676,6 +676,7 @@ const getRepoDataLevel = (repoId: string): 'none' | 'refs' | 'shallow' | 'full' 
 /**
  * Get commit history for a repository
  * Ensures the repository has sufficient history depth before fetching commits
+ * Checks if sync is needed before loading to ensure fresh data
  */
 const getCommitHistory = async ({
   repoId,
@@ -688,18 +689,76 @@ const getCommitHistory = async ({
 }) => {
   const key = canonicalRepoKey(repoId);
   const dir = `${rootDir}/${key}`;
+  
+  const startTime = Date.now();
+  console.log(`[getCommitHistory] Starting for ${repoId}, branch: ${branch || 'default'}, depth: ${depth}`);
 
   // Use robust multi-fallback branch resolution
   const targetBranch = await resolveRobustBranchInWorker(dir, branch);
+  console.log(`[getCommitHistory] Resolved branch: ${targetBranch}`);
+
+  // Check IndexedDB cache first
+  try {
+    const cachedCommits = await cacheManager.getCommitHistory(key, targetBranch);
+    if (cachedCommits && cachedCommits.commits.length >= depth) {
+      const cacheAge = Date.now() - cachedCommits.lastUpdated;
+      const maxCacheAge = 5 * 60 * 1000; // 5 minutes
+      
+      if (cacheAge < maxCacheAge) {
+        const duration = Date.now() - startTime;
+        console.log(`[getCommitHistory] Returning ${cachedCommits.commits.length} commits from IndexedDB cache (age: ${Math.round(cacheAge / 1000)}s)`);
+        return {
+          success: true,
+          commits: cachedCommits.commits.slice(0, depth),
+          repoId,
+          branch: targetBranch,
+          actualDepth: Math.min(cachedCommits.commits.length, depth),
+          requestedDepth: depth,
+          duration,
+          fromCache: true
+        };
+      } else {
+        console.log(`[getCommitHistory] Cache expired (age: ${Math.round(cacheAge / 1000)}s), fetching fresh data`);
+      }
+    }
+  } catch (cacheCheckError) {
+    console.warn(`[getCommitHistory] Cache check failed:`, cacheCheckError);
+  }
+
+  // Check if we need to sync first to get latest commits
+  try {
+    const cache = await cacheManager.getRepoCache(key);
+    const cloneUrls = cache?.cloneUrls || [];
+    
+    if (cloneUrls.length > 0) {
+      const needsSync = await needsUpdate(repoId, cloneUrls, cache);
+      if (needsSync) {
+        console.log(`[getCommitHistory] Repo needs sync, syncing first...`);
+        const syncResult = await syncWithRemote({ repoId, cloneUrls, branch });
+        if (!syncResult.success) {
+          console.warn(`[getCommitHistory] Sync failed:`, (syncResult as any).error);
+        } else {
+          console.log(`[getCommitHistory] Sync completed successfully`);
+        }
+      } else {
+        console.log(`[getCommitHistory] Repo is up-to-date, no sync needed`);
+      }
+    }
+  } catch (syncCheckError) {
+    console.warn(`[getCommitHistory] Sync check failed, continuing anyway:`, syncCheckError);
+  }
+  
   let attempt = 0;
-  let maxAttempts = 3; // Increased attempts
+  let maxAttempts = 3;
   let lastError = null;
-  let currentDepth = Math.max(depth, 50); // Ensure minimum depth
+  let currentDepth = Math.max(depth, 50);
 
   while (attempt < maxAttempts) {
     try {
+      console.log(`[getCommitHistory] Attempt ${attempt + 1}/${maxAttempts}, depth: ${currentDepth}`);
+      
       // Always ensure we have sufficient history for the requested depth
-      const cloneResult = await ensureFullClone({ repoId, branch, depth: currentDepth });
+      const cloneResult = await ensureFullClone({ repoId, branch: targetBranch, depth: currentDepth });
       if (!cloneResult.success) {
         throw new Error(`Failed to ensure full clone: ${cloneResult.error}`);
       }
@@ -707,13 +766,13 @@ const getCommitHistory = async ({
       // Verify the repository has the expected data level
       const actualDataLevel = repoDataLevels.get(key);
       if (actualDataLevel !== 'full') {
-        console.warn(`Expected full clone but got ${actualDataLevel}, forcing full clone...`);
+        console.warn(`[getCommitHistory] Expected full clone but got ${actualDataLevel}, forcing full clone...`);
         // Force a full clone by temporarily removing from cache
         const wasCloned = clonedRepos.has(key);
         clonedRepos.delete(key);
         repoDataLevels.delete(key);
 
-        const retryResult = await ensureFullClone({ repoId, branch, depth: currentDepth });
+        const retryResult = await ensureFullClone({ repoId, branch: targetBranch, depth: currentDepth });
         if (!retryResult.success) {
           throw new Error(`Failed to force full clone: ${retryResult.error}`);
         }
@@ -729,30 +788,55 @@ const getCommitHistory = async ({
         depth: currentDepth
       });
 
+      const duration = Date.now() - startTime;
+      console.log(`[getCommitHistory] Success: loaded ${commits.length} commits in ${duration}ms`);
+
+      // Persist commit history to IndexedDB for offline access
+      try {
+        const cache = await cacheManager.getRepoCache(key);
+        await cacheManager.setCommitHistory({
+          id: `${key}:${targetBranch}`,
+          repoId: key,
+          branch: targetBranch,
+          commits,
+          totalCount: commits.length,
+          lastUpdated: Date.now(),
+          depth: currentDepth,
+          headCommit: cache?.headCommit
+        });
+        console.log(`[getCommitHistory] Commit history cached to IndexedDB`);
+      } catch (cacheError) {
+        console.warn(`[getCommitHistory] Failed to cache commit history:`, cacheError);
+      }
+
       return {
         success: true,
         commits,
         repoId,
-        branch,
+        branch: targetBranch,
         actualDepth: commits.length,
-        requestedDepth: currentDepth
+        requestedDepth: currentDepth,
+        duration
       };
     } catch (error: any) {
       lastError = error;
-      console.error(`Attempt ${attempt + 1} failed for getCommitHistory ${repoId}:`, error);
+      console.error(`[getCommitHistory] Attempt ${attempt + 1} failed:`, {
+        error: error?.message,
+        repoId,
+        branch: targetBranch,
+        depth: currentDepth
+      });
 
       // Handle different types of errors
       if (error && error.message) {
         if (error.message.includes('Could not find') && attempt < maxAttempts - 1) {
-          console.warn(
-            `NotFoundError in getCommitHistory for ${repoId}, deepening and retrying...`
-          );
+          console.log(`[getCommitHistory] NotFoundError, deepening clone...`);
           // Exponentially increase depth
           currentDepth = Math.min(currentDepth * 2, 1000);
           attempt++;
           continue;
         } else if (error.message.includes('shallow') && attempt < maxAttempts - 1) {
-          console.warn(`Shallow clone issue for ${repoId}, forcing full clone...`);
+          console.log(`[getCommitHistory] Shallow clone issue, forcing full clone...`);
           // Force re-clone by clearing cache
           clonedRepos.delete(key);
           repoDataLevels.delete(key);
@@ -762,10 +846,12 @@ const getCommitHistory = async ({
         }
       }
 
-      console.error(`Error getting commit history for ${repoId}:`, error);
       break;
     }
   }
+
+  const duration = Date.now() - startTime;
+  console.error(`[getCommitHistory] Failed after ${duration}ms and ${attempt} attempts`);
 
   return {
     success: false,
@@ -773,7 +859,8 @@ const getCommitHistory = async ({
     repoId,
     branch: targetBranch,
     retried: attempt > 0,
-    finalDepth: currentDepth
+    finalDepth: currentDepth,
+    duration
   };
 };
 
@@ -794,16 +881,31 @@ async function analyzePatchMerge({
   };
   targetBranch?: string;
 }): Promise<MergeAnalysisResult> {
-  return analyzePatchMergeUtil(
-    git,
-    { repoId, patchData, targetBranch },
-    {
-      rootDir,
-      canonicalRepoKey,
-      resolveRobustBranch: (dir, requested) => resolveRobustBranchInWorker(dir, requested),
-      analyzePatchMergeability
-    }
-  );
+  console.log('[git-worker] analyzePatchMerge CALLED with:', {
+    repoId: repoId?.slice(0, 20),
+    patchId: patchData?.id?.slice(0, 8),
+    targetBranch,
+    hasCommits: !!patchData?.commits,
+    commitCount: patchData?.commits?.length
+  });
+  
+  try {
+    const result = await analyzePatchMergeUtil(
+      git,
+      { repoId, patchData, targetBranch },
+      {
+        rootDir,
+        canonicalRepoKey,
+        resolveRobustBranch: (dir, requested) => resolveRobustBranchInWorker(dir, requested),
+        analyzePatchMergeability
+      }
+    );
+    console.log('[git-worker] analyzePatchMerge RETURNING result:', result?.analysis);
+    return result;
+  } catch (error) {
+    console.error('[git-worker] analyzePatchMerge FAILED:', error);
+    throw error;
+  }
 }
 
 /**
@@ -936,7 +1038,7 @@ const createRemoteRepoWithVendor = async (
     gitignoreTemplate?: string;
   } = {}
 ): Promise<string> => {
-  const { getMultiVendorGitProvider } = await import('../git-provider.js');
+  const { getMultiVendorGitProvider } = await import('./git-provider.js');
   const gitProvider = getMultiVendorGitProvider();
 
   // Set the token for this host
@@ -1152,7 +1254,7 @@ const createLocalRepo = async ({
 
         try {
           // Create directory structure if it doesn't exist
-          const { ensureDir } = await import('./fs-utils.js');
+          const { ensureDir } = await import('./lib/workers/fs-utils.js');
           await ensureDir(fs, fullDirPath);
         } catch (error) {
           // Directory might already exist, that's fine
@@ -1622,7 +1724,7 @@ async function forkAndCloneRepo(options: {
     });
 
     // Step 1: Create remote fork using GitServiceApi abstraction
-    const { getGitServiceApi } = await import('../git/factory.js');
+    const { getGitServiceApi } = await import('./git/factory.js');
     const gitServiceApi = getGitServiceApi(provider as any, token, baseUrl);
 
     // Determine source URL based on provider (for diagnostics only)
@@ -2386,6 +2488,11 @@ console.log('[git-worker] Preparing to expose API methods...');
 
 try {
   const api = {
+    // Simple ping method to test Comlink
+    ping: async () => {
+      console.log('[git-worker] PING received');
+      return { success: true, message: 'pong', timestamp: Date.now() };
+    },
     cloneAndFork,
     clone,
     smartInitializeRepo,
@@ -2399,7 +2506,14 @@ try {
     getCommitHistory,
     getCommitCount,
     deleteRepo,
-    analyzePatchMerge,
+    // Wrap analyzePatchMerge to ensure result is serializable
+    analyzePatchMerge: async (args: any) => {
+      console.log('[git-worker] analyzePatchMerge API wrapper called');
+      console.log('[git-worker] analyzePatchMerge args:', JSON.stringify(args).slice(0, 200));
+      const result = await analyzePatchMerge(args);
+      console.log('[git-worker] analyzePatchMerge API wrapper returning:', result?.analysis);
+      return toPlain(result);
+    },
     applyPatchAndPush,
     resetRepoToRemote,
     setAuthConfig,

@@ -52,9 +52,9 @@ function defaultShouldRetry(error: GitError, attempt: number): boolean {
     return true;
   }
 
-  // Retry fatal errors only once (attempt 1 = first retry)
+  // Retry fatal errors only once (attempt 0 = first retry after initial failure)
   // This handles transient FS issues
-  return attempt === 1;
+  return attempt === 0;
 }
 
 /**

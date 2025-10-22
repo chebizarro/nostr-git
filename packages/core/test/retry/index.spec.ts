@@ -224,9 +224,11 @@ describe('Retry Logic', () => {
       
       const promise = withGraspRetry(operation);
       
-      await vi.runAllTimersAsync();
+      // Run timers and wait for promise to settle
+      const timerPromise = vi.runAllTimersAsync();
       
       await expect(promise).rejects.toThrow();
+      await timerPromise;
       
       // Should use GRASP maxAttempts
       expect(operation).toHaveBeenCalledTimes(GRASP_RETRY_OPTIONS.maxAttempts);
@@ -237,9 +239,11 @@ describe('Retry Logic', () => {
       
       const promise = withGraspRetry(operation, { maxAttempts: 5 });
       
-      await vi.runAllTimersAsync();
+      // Run timers and wait for promise to settle
+      const timerPromise = vi.runAllTimersAsync();
       
       await expect(promise).rejects.toThrow();
+      await timerPromise;
       
       expect(operation).toHaveBeenCalledTimes(5);
     });
@@ -270,9 +274,11 @@ describe('Retry Logic', () => {
       
       const promise = withRetry(operation, { maxAttempts: 3 });
       
-      await vi.runAllTimersAsync();
+      // Run timers and wait for promise to settle
+      const timerPromise = vi.runAllTimersAsync();
       
       await expect(promise).rejects.toBe(error3);
+      await timerPromise;
     });
 
     it('should handle non-GitError exceptions', async () => {
@@ -280,9 +286,11 @@ describe('Retry Logic', () => {
       
       const promise = withRetry(operation, { maxAttempts: 2 });
       
-      await vi.runAllTimersAsync();
+      // Run timers and wait for promise to settle
+      const timerPromise = vi.runAllTimersAsync();
       
       await expect(promise).rejects.toThrow('generic error');
+      await timerPromise;
       
       // Should still retry (treats as retriable by default)
       expect(operation).toHaveBeenCalledTimes(2);

@@ -5,6 +5,8 @@
   // Import xterm's CSS so the internal helper textarea is hidden and styling is applied
   import "@xterm/xterm/css/xterm.css";
   import { WorkerManager } from "../git/WorkerManager";
+  import { canonicalRepoKey } from "@nostr-git/core";
+  import { parseRepoAnnouncementEvent } from "@nostr-git/shared-types";
   // Instantiate worker via URL like core git-worker client does
   // Lazy import xterm only on mount to avoid SSR issues
   type Stream = "stdout" | "stderr";
@@ -426,6 +428,18 @@
     return wm;
   }
 
+  // Resolve the canonical repoId used by the worker filesystem (owner:name)
+  function getCanonicalRepoId(): string {
+    try {
+      const owner = repoEvent?.pubkey;
+      const name = repoEvent ? parseRepoAnnouncementEvent(repoEvent).name : undefined;
+      if (owner && name) {
+        return canonicalRepoKey(`${owner}:${name}`);
+      }
+    } catch {}
+    return repoRef?.repoId;
+  }
+
   async function handleGitRpc(op: string, params: any): Promise<any> {
     console.log('[Terminal] handleGitRpc called:', { op, params });
     const mgr = await ensureWM();
@@ -433,7 +447,7 @@
     
     if (op === "git.status") {
       try {
-        const repoId = params?.repoId;
+        const repoId = getCanonicalRepoId();
         const branch = params?.branch ?? currentBranch;
         console.log('[Terminal] git.status params:', { repoId, branch });
         if (!repoId) return { text: "error: git status requires repoId\n" };
@@ -460,7 +474,7 @@
       const depth = params.depth ?? 50;
       const branch = params.branch ?? currentBranch;
       const oneline: boolean = !!params.oneline;
-      const hist = await mgr.getCommitHistory({ repoId: params.repoId, branch, depth });
+      const hist = await mgr.getCommitHistory({ repoId: getCanonicalRepoId(), branch, depth });
       if (!hist || hist.success === false) {
         throw new Error(hist?.error || "log unavailable");
       }
@@ -491,7 +505,8 @@
       return { text: text.endsWith("\n") ? text : text + "\n" };
     }
     if (op === "git.show") {
-      const { repoId, object } = params || {};
+      const { object } = params || {};
+      const repoId = getCanonicalRepoId();
       if (!repoId || !object) return { text: "error: git show requires an object id\n" };
       try {
         const det = await mgr.getCommitDetails({
@@ -570,7 +585,7 @@
     if (op === "git.diff") {
       // Phase 1: show diff for the latest commit vs parent (HEAD)
       try {
-        const repoId = params?.repoId;
+        const repoId = getCanonicalRepoId();
         const branch = params?.branch ?? currentBranch;
         const hist = await (await ensureWM()).getCommitHistory({ repoId, branch, depth: 2 });
         const commits: any[] = hist?.commits || hist?.items || [];
@@ -733,12 +748,12 @@
       ? String(base).slice(0, -1)
       : String(base);
 
-    const workerSpecifier = isDev
-      ? /* @vite-ignore */ new URL('./worker/cli.ts', import.meta.url)
-      : `${normalizedBase || ''}/_app/lib/terminal/worker/cli.js`;
-    const workerUrl = workerSpecifier instanceof URL ? workerSpecifier.toString() : String(workerSpecifier);
+    // Always use URL constructor for proper Vite handling
+    const workerUrl = isDev
+      ? new URL('./worker/cli.ts', import.meta.url)
+      : new URL(`${normalizedBase || ''}/_app/lib/terminal/worker/cli.js`, window.location.origin);
 
-    console.debug('[terminal] creating worker at', workerUrl);
+    console.debug('[terminal] creating worker at', workerUrl.toString());
     
     try {
       const w = new Worker(workerUrl, { type: "module" });

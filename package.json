@@ -16,6 +16,7 @@
     "watch": "pnpm -r --parallel --stream watch",
     "watch:core": "pnpm --filter @nostr-git/core watch",
     "watch:ui": "pnpm --filter @nostr-git/ui watch",
+    "watch:git-worker": "pnpm --filter @nostr-git/git-worker watch",
     "watch:shared-types": "pnpm --filter @nostr-git/shared-types watch",
     "watch:git-wrapper": "pnpm --filter @nostr-git/git-wrapper watch",
     "watch:all": "pnpm -r --parallel --stream run watch",

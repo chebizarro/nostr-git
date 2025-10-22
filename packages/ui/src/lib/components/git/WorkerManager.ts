@@ -1,4 +1,4 @@
-import { getGitWorker } from "@nostr-git/core";
+import { getGitWorker } from "@nostr-git/git-worker";
 import type { EventIO } from "@nostr-git/shared-types";
 import {
   listBranchesFromEvent,
@@ -77,7 +77,6 @@ export class WorkerManager {
       console.log('[WorkerManager] WorkerManager initialized:', this.isInitialized);
       
       try {
-        // Worker is initialized - EventIO will be handled internally by the worker
         if (this.worker) {
           console.log('[WorkerManager] Worker available, verifying API proxy...');
           // Comlink proxies do not enumerate properties reliably; avoid Object.keys checks
@@ -115,7 +114,6 @@ export class WorkerManager {
     if (!this.isInitialized || !this.api) {
       throw new Error("WorkerManager not initialized. Call initialize() first.");
     }
-    console.log('[WorkerManager] API available:', !!this.api);
     try {
       let safeParams = params;
       try {
@@ -132,7 +130,33 @@ export class WorkerManager {
       }
 
       console.log('[WorkerManager] Invoking worker API operation:', operation);
-      const result = await method(safeParams);
+      
+      // Check if params are actually serializable
+      try {
+        const serialized = JSON.stringify(safeParams, null, 2);
+        console.log('[WorkerManager] Params serialized OK, size:', serialized.length, 'bytes');
+        console.log('[WorkerManager] Params preview:', serialized.slice(0, 500));
+      } catch (serError) {
+        console.error('[WorkerManager] Params NOT serializable!', serError);
+        throw new Error(`Cannot serialize params for ${operation}: ${serError}`);
+      }
+      
+      // Check if method is actually a function
+      console.log('[WorkerManager] Method type:', typeof method);
+      console.log('[WorkerManager] Method is Comlink proxy:', method[Symbol.toStringTag] === 'Comlink.proxy');
+      
+      // Add timeout to detect hanging worker calls
+      const timeoutMs = 30000; // 30 seconds
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error(`Worker operation '${operation}' timed out after ${timeoutMs}ms`)), timeoutMs);
+      });
+      
+      console.log('[WorkerManager] About to call method...');
+      const resultPromise = method(safeParams);
+      console.log('[WorkerManager] Method called, waiting for result...');
+      const result = await Promise.race([resultPromise, timeoutPromise]);
+      
+      console.log('[WorkerManager] Worker returned result for:', operation);
       try {
         return JSON.parse(JSON.stringify(result)) as T;
       } catch {

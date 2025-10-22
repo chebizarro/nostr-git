@@ -3,6 +3,9 @@
     // Target ES2020 for modern JavaScript features while maintaining broad compatibility
     "target": "ES2020",
 
+    // Include DOM and WebWorker libraries for browser and worker environments
+    "lib": ["ES2020", "DOM", "WebWorker"],
+
     // Use ESNext modules for tree-shaking and modern import/export syntax
     "module": "ESNext",
 
@@ -36,6 +39,7 @@
     // Path mapping for workspace packages to enable cross-package imports
     "paths": {
       "@nostr-git/core": ["packages/core/src"],
+      "@nostr-git/git-worker": ["packages/git-worker/src"],
       "@nostr-git/ui": ["packages/ui/src/lib"],
       "@nostr-git/shared-types": ["packages/shared-types/src"],
       "@nostr-git/git-wrapper": ["packages/git-wrapper/src"]

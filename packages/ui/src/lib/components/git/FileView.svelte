@@ -44,12 +44,7 @@
   let fileTypeInfo = $state<FileTypeInfo | null>(null);
   let metadata = $state<Record<string, string>>({});
   let selectedStart: number | null = $state(null);
-  let selectedEnd: number | null = $state(null);
-  
-  $effect(() => {
-    console.log(`[${instanceId}:${path}] selectedStart changed to ${selectedStart}`);
-  });
-  
+  let selectedEnd: number | null = $state(null);  
   let cmExtensions: any[] = $state([]);
   let showPermalinkMenu = $state(false);
   let editorHost: HTMLElement | null = $state(null);

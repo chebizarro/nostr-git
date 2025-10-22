@@ -1,12 +1,15 @@
 // Entry point for @nostr-git/core
 // Export all main public APIs from core/src/lib
 
+// Re-export worker functionality from git-worker package
+export { getGitWorker, configureWorkerEventIO } from '@nostr-git/git-worker';
+export type { CloneProgressEvent } from '@nostr-git/git-worker';
+
 export * from './lib/git.js';
 export * from './lib/permalink.js';
 export * from './lib/event.js';
 export * from './lib/fork-handler.js';
 export * from './lib/git-provider.js';
-export * from './lib/git-worker-client.js';
 
 // Clean event publishing interfaces
 export { 
@@ -24,7 +27,6 @@ export {
 } from './lib/eventio.js';
 export * from './lib/files.js';
 export * from './lib/repo.js';
-export * from './lib/workers/git-worker.js';
 export * from './lib/branches.js';
 export * from './lib/patches.js';
 export * from './lib/merge-analysis.js';
@@ -40,7 +42,15 @@ export * from './lib/issues.js';
 export * from './lib/labels.js';
 export * from './lib/subscriptions.js';
 export * from './lib/status-resolver.js';
-export * from './lib/repoKeys.js';
+// Export from repoKeys, but exclude canonicalRepoKey to avoid conflict with utils/canonicalRepoKey
+export { 
+  buildCanonicalRepoKey,
+  warnIfLegacyRepoKey,
+  normalizeRepoKeyFlexible,
+  type RepoKeyPreference,
+  type RepoKeyResolvers,
+  type ParsedRepoKey
+} from './lib/repoKeys.js';
 export { buildPatchDAG } from './lib/repoDAG.js';
 export * from './lib/status163x.js';
 export type { LabelNS } from './lib/labels32.js';

@@ -48,6 +48,10 @@ export {
   DEFAULT_RELAYS
 } from './providers/nostr-git-factory.js';
 
+// Re-export worker functionality from git-worker package
+export { getGitWorker, configureWorkerEventIO } from '@nostr-git/git-worker';
+export type { CloneProgressEvent } from '@nostr-git/git-worker';
+
 import * as files from '../files.js';
 import * as core from '../git.js';
 import * as branches from '../branches.js';

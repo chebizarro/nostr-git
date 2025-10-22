@@ -1,5 +1,7 @@
 import { wrap } from 'comlink';
-import type { EventIO } from './eventio.js';
+import type { EventIO } from '@nostr-git/shared-types';
+// @ts-ignore - Vite handles this worker import at build time
+import WorkerUrl from './worker.js?worker&url';
 
 export interface CloneProgressEvent {
   type: 'clone-progress';
@@ -20,13 +22,9 @@ export interface CloneProgressEvent {
  * @returns Object with worker instance and Comlink API
  */
 export function getGitWorker(onProgress?: (event: CloneProgressEvent) => void) {
-  const meta = import.meta as any;
-  const workerSpecifier = meta?.env?.DEV
-    ? /* @vite-ignore */ new URL('./workers/git-worker.ts', import.meta.url)
-    : '/_app/lib/workers/git-worker.js';
-
-  console.log('[GitWorker] Creating worker at', workerSpecifier.toString());
-  const worker = new Worker(workerSpecifier, { type: 'module' });
+  // Use Vite's worker import - works in both dev and production
+  console.log('[GitWorker] Creating worker at', WorkerUrl);
+  const worker = new Worker(WorkerUrl, { type: 'module' });
 
   if (onProgress) {
     worker.addEventListener('message', (event: MessageEvent) => {

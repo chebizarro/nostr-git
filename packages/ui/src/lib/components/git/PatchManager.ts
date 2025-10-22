@@ -153,6 +153,8 @@ export class PatchManager {
     canonicalKey: string,
     workerRepoId?: string
   ): Promise<MergeAnalysisResult | null> {
+    console.log(`[PatchManager] getMergeAnalysis called for patch ${patch.id.slice(0, 8)}, branch: ${targetBranch}, repo: ${canonicalKey}`);
+    
     // First try to get cached result
     const cachedResult = await this.cacheManager.get(patch, targetBranch, canonicalKey);
 
@@ -162,14 +164,18 @@ export class PatchManager {
         "debug",
         `🧠 MergeAnalysis cache hit for patch ${patch.id} → ${cachedResult.analysis} (branch=${targetBranch}, repo=${canonicalKey})`
       );
+      console.log(`[PatchManager] Returning cached result:`, cachedResult.analysis);
       return cachedResult;
     }
+
+    console.log(`[PatchManager] No valid cache, performing fresh analysis...`);
 
     // If no cached result or cached result is an error, perform fresh analysis
     try {
       const freshResult = await this.analyzePatch(patch, targetBranch, canonicalKey, workerRepoId);
 
       if (freshResult) {
+        console.log(`[PatchManager] Fresh analysis complete:`, freshResult.analysis);
         // Cache the fresh result
         await this.cacheManager.set(patch, targetBranch, canonicalKey, freshResult);
         // Publish to reactive store
@@ -178,14 +184,18 @@ export class PatchManager {
           "debug",
           `🧪 MergeAnalysis fresh result for patch ${patch.id} → ${freshResult.analysis} (branch=${targetBranch}, repo=${canonicalKey})`
         );
+      } else {
+        console.warn(`[PatchManager] Fresh analysis returned null`);
       }
 
       return freshResult;
     } catch (error) {
+      console.error(`[PatchManager] Fresh analysis failed:`, error);
       this.log("error", "PatchManager fresh analysis failed:", error);
 
       // Return cached error result if we have one, otherwise create new error result
       if (cachedResult && cachedResult.analysis === "error") {
+        console.log(`[PatchManager] Returning cached error result`);
         return cachedResult;
       }
 
@@ -202,6 +212,7 @@ export class PatchManager {
         errorMessage: error instanceof Error ? error.message : "Unknown analysis error",
       };
 
+      console.log(`[PatchManager] Returning new error result:`, errorResult.errorMessage);
       return errorResult;
     }
   }
@@ -270,6 +281,8 @@ export class PatchManager {
       const parsedPatch = parseGitPatchFromEvent(patch);
 
       // Use WorkerManager to perform the analysis
+      // NOTE: Do NOT pass rawContent through Comlink - it's too large and causes serialization issues
+      // Instead, pass just the metadata and let the worker read the patch content if needed
       const result = await this.workerManager.analyzePatchMerge({
         repoId: canonicalKey,
         patchData: {
@@ -280,7 +293,8 @@ export class PatchManager {
             author: { name: c.author.name, email: c.author.email },
           })),
           baseBranch: parsedPatch.baseBranch,
-          rawContent: parsedPatch.raw.content,
+          // rawContent removed - worker doesn't actually need it for merge analysis
+          rawContent: "", // Empty string to satisfy type, worker uses git operations instead
         },
         targetBranch,
       });

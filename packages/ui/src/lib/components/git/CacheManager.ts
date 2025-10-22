@@ -466,9 +466,9 @@ export class MergeAnalysisCacheManager {
     this.cacheManager.registerCache(this.CACHE_NAME, {
       type: CacheType.LOCAL_STORAGE,
       keyPrefix: "merge_analysis_cache_",
-      defaultTTL: 30 * 60 * 1000, // 30 minutes
+      defaultTTL: 7 * 24 * 60 * 60 * 1000, // 7 days
       autoCleanup: true,
-      cleanupInterval: 5 * 60 * 1000, // 5 minutes
+      cleanupInterval: 6 * 60 * 60 * 1000, // 6 hours
     });
   }
 
@@ -476,20 +476,15 @@ export class MergeAnalysisCacheManager {
    * Generate a hash for patch content to detect changes
    */
   private generatePatchHash(patch: PatchEvent): string {
-    const content = JSON.stringify({
-      id: patch.id,
-      content: patch.content,
-      created_at: patch.created_at,
-      pubkey: patch.pubkey,
-      tags: patch.tags,
-    });
+    // Patch events are immutable (new revisions create new ids). We only need to
+    // capture the intrinsic patch payload to detect meaningful changes.
+    const content = `${patch.id}:${patch.pubkey}:${patch.created_at}:${patch.content}`;
 
-    // Simple hash function for cache key
     let hash = 0;
     for (let i = 0; i < content.length; i++) {
       const char = content.charCodeAt(i);
       hash = (hash << 5) - hash + char;
-      hash = hash & hash; // Convert to 32-bit integer
+      hash |= 0; // force 32-bit integer
     }
     return hash.toString(36);
   }

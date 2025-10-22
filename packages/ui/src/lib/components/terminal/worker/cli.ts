@@ -3,7 +3,6 @@
 // - Builtins: pwd, echo, cd, ls, cat, mkdir, rm -r, mv, cp, head, tail, touch
 // - curl/wget with allowlist and limits
 // - git routed to adapter (streams via stdout/stderr)
-
 export type UIToWorker =
   | {
       type: "config";
@@ -30,7 +29,7 @@ postMessage({ type: "ready" } as any);
 
 let repoRef: { relay: string; naddr: string; npub: string; repoId: string } | null = null;
 let urlAllowlist: string[] = [];
-let outputLimit = { bytes: 1_000_000, lines: 10_000, timeMs: 30_000 };
+let outputLimit = { bytes: 1_000_000, lines: 10_000, timeMs: 60_000 };
 
 const running = new Map<string, { aborted: boolean; started: number }>();
 let cwd = "/";
@@ -326,22 +325,33 @@ async function route(id: string, argv: string[]): Promise<number> {
     if (bi !== -1) return bi;
 
     if (cmd === "git") {
-      // Compute base path from worker's own URL to support subpath deployments
-      const baseFromWorker = (() => {
-        try {
-          const p = self.location?.pathname || "/";
-          const idx = p.indexOf("/_app/");
-          return idx >= 0 ? p.slice(0, idx) || "/" : "/";
-        } catch {
-          return "/";
-        }
-      })();
-      const gitCliAdapterUrl = `${baseFromWorker}/_app/immutable/git-cli-adapter.js`;
-
-      const { runGitCli } = await import(gitCliAdapterUrl);
+      // Ensure bundlers include the adapter while still resolving correctly at runtime.
+      // Primary attempt: relative import so svelte-package bundles the module.
+      let runGitCliMod: any;
+      try {
+        runGitCliMod = await import("../git-cli-adapter.js");
+      } catch (err) {
+        const baseFromWorker = (() => {
+          try {
+            const p = self.location?.pathname || "/";
+            const idx = p.indexOf("/_app/");
+            return idx >= 0 ? p.slice(0, idx) || "/" : "/";
+          } catch {
+            return "/";
+          }
+        })();
+        const basePrefix = baseFromWorker === "/"
+          ? ""
+          : baseFromWorker.endsWith("/")
+            ? baseFromWorker.slice(0, -1)
+            : baseFromWorker;
+        const gitCliAdapterUrl = `${basePrefix}/_app/immutable/git-cli-adapter.js`;
+        runGitCliMod = await import(gitCliAdapterUrl);
+      }
+      const { runGitCli } = runGitCliMod;
       const res = await runGitCli(argv, {
         repoRef: repoRef!,
-        onProgress: (evt) => postMessage({ type: "progress", ...evt } as any),
+        onProgress: (evt: any) => postMessage({ type: "progress", ...evt } as any),
         rpc: (op: string, params: any) => gitReq(op, params),
       });
       if (res.stdout) limitAndWrite(id, res.stdout, "stdout");
@@ -447,20 +457,41 @@ async function route(id: string, argv: string[]): Promise<number> {
     const { id, argv, cwd: startCwd } = msg;
     if (startCwd && startCwd !== cwd) setCwd(startCwd);
     // Enforce runtime limit
-    const timer = setTimeout(() => {
-      const r = running.get(id);
-      if (r) {
-        r.aborted = true;
-        stderr(id, "command timed out\n");
-        exit(id, 124);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleTimeout = (ms: number) => {
+      if (timer) clearTimeout(timer);
+      if (ms === Infinity) {
+        timer = null;
+        return;
       }
-    }, outputLimit.timeMs);
+      timer = setTimeout(() => {
+        const r = running.get(id);
+        if (r) {
+          r.aborted = true;
+          stderr(id, "command timed out\n");
+          exit(id, 124);
+        }
+      }, ms);
+    };
+
+    const subcmd = argv[0] === "git" ? argv[1] || "" : "";
+    if (argv[0] === "git") {
+      // Git RPC commands can legitimately take a while; don't force-timeout unless
+      // the UI provided an explicit cap.
+      const ms = outputLimit.timeMs;
+      scheduleTimeout(
+        Number.isFinite(ms) && ms > 0 && ms < Infinity ? Math.max(ms, 5 * 60_000) : Infinity
+      );
+    } else {
+      const ms = outputLimit.timeMs;
+      scheduleTimeout(Number.isFinite(ms) && ms > 0 ? ms : Infinity);
+    }
     try {
       const code = await route(id, argv);
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       exit(id, code);
     } catch (e: any) {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       stderr(id, (e?.message || String(e)) + "\n");
       exit(id, 1);
     }

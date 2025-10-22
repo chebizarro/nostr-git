@@ -1,12 +1,16 @@
 // Core: canonical repo key helpers
 // Existing simple helper (kept for backward compatibility)
+// Note: This is different from utils/canonicalRepoKey which normalizes string repo IDs
 
-function canonicalRepoKeyInternal(args: { npub: string; name?: string }): string {
+export function buildCanonicalRepoKey(args: { npub: string; name?: string }): string {
   const npub = args.npub?.trim();
   const name = args.name?.trim();
-  if (!npub) throw new Error('canonicalRepoKey: npub is required');
+  if (!npub) throw new Error('buildCanonicalRepoKey: npub is required');
   return name ? `${npub}/${name}` : npub;
 }
+
+// Deprecated alias for backward compatibility
+export const canonicalRepoKey = buildCanonicalRepoKey;
 
 export function warnIfLegacyRepoKey(key: string): void {
   // Heuristic: legacy keys looked like numeric kind-id or event id based strings

@@ -64,39 +64,59 @@ export async function syncWithRemoteUtil(
   const key = canonicalRepoKey(repoId);
   const dir = `${rootDir}/${key}`;
 
+  const startTime = Date.now();
+  console.log(`[syncWithRemote] Starting sync for ${repoId}, branch: ${branch || 'default'}`);
+
   try {
+    // 1. Verify repo exists locally
     const cloned = await isRepoCloned(dir);
-    if (!cloned) throw new Error('Repository not cloned locally. Clone first before syncing.');
+    if (!cloned) {
+      const error = 'Repository not cloned locally. Clone first before syncing.';
+      console.error(`[syncWithRemote] ${error}`);
+      throw new Error(error);
+    }
 
+    // 2. Resolve target branch
     const targetBranch = await resolveRobustBranch(dir, branch);
+    console.log(`[syncWithRemote] Resolved branch: ${targetBranch}`);
 
-    // Determine remote URL for fetch
+    // 3. Get remote URL
     const remotes = await git.listRemotes({ dir });
     const originRemote = remotes.find((r: any) => r.remote === 'origin');
     const remoteUrl = originRemote?.url || cloneUrls[0];
+    
+    if (!remoteUrl) {
+      throw new Error('No remote URL available for sync');
+    }
+    console.log(`[syncWithRemote] Using remote URL: ${remoteUrl}`);
 
-    const onAuth = remoteUrl ? undefined : undefined; // Auth handled inside git-worker using callbacks where needed
-
-    // Fetch and update tracking ref
+    // 4. Fetch from remote
+    console.log(`[syncWithRemote] Fetching from remote...`);
     await git.fetch({
       dir,
       url: remoteUrl,
       ref: targetBranch,
       singleBranch: true,
       depth: 1,
-      prune: true,
-      onAuth
+      prune: true
     });
+    console.log(`[syncWithRemote] Fetch completed`);
 
-    // Resolve remote HEAD
+    // 5. Resolve remote HEAD
     const remoteCommit = await git
       .resolveRef({ dir, ref: `refs/remotes/origin/${targetBranch}` })
       .catch(async () => {
-        // Fallback to HEAD if tracking ref not available
+        console.warn(`[syncWithRemote] Tracking ref not found, falling back to HEAD`);
         return await git.resolveRef({ dir, ref: 'HEAD' });
       });
+    console.log(`[syncWithRemote] Remote HEAD: ${remoteCommit}`);
 
-    // Update cache
+    // 6. Get local HEAD for comparison
+    const localCommit = await git.resolveRef({ dir, ref: 'HEAD' }).catch(() => null);
+    const needsUpdate = localCommit !== remoteCommit;
+    console.log(`[syncWithRemote] Local HEAD: ${localCommit}, needs update: ${needsUpdate}`);
+
+    // 7. Update cache with comprehensive data
     const branches = await git.listBranches({ dir });
     const newCache = {
       repoId: key,
@@ -108,16 +128,38 @@ export async function syncWithRemoteUtil(
     };
 
     await cacheManager.setRepoCache(newCache);
+    console.log(`[syncWithRemote] Cache updated`);
+
+    const duration = Date.now() - startTime;
+    console.log(`[syncWithRemote] Sync completed successfully in ${duration}ms`);
 
     return toPlain({
       success: true,
       repoId,
       branch: targetBranch,
       headCommit: remoteCommit,
+      localCommit,
+      needsUpdate,
       synced: true,
+      duration,
       serializable: true
     });
   } catch (error: any) {
-    return toPlain({ success: false, repoId, error: error?.message || String(error) });
+    const duration = Date.now() - startTime;
+    console.error(`[syncWithRemote] Sync failed after ${duration}ms:`, error);
+    console.error(`[syncWithRemote] Error details:`, {
+      message: error?.message,
+      stack: error?.stack,
+      repoId,
+      branch
+    });
+    
+    return toPlain({ 
+      success: false, 
+      repoId, 
+      branch,
+      error: error?.message || String(error),
+      duration
+    });
   }
 }

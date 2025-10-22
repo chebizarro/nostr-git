@@ -1,4 +1,4 @@
-import { getGitWorker } from './git-worker-client.js';
+import { getGitWorker } from '@nostr-git/git-worker';
 import type { MergeAnalysisResult } from './merge-analysis.js';
 import type { Patch } from '@nostr-git/shared-types';
 
