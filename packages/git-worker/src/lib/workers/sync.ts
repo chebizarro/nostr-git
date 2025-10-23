@@ -117,13 +117,29 @@ export async function syncWithRemoteUtil(
     console.log(`[syncWithRemote] Local HEAD: ${localCommit}, needs update: ${needsUpdate}`);
 
     // 7. Update cache with comprehensive data
-    const branches = await git.listBranches({ dir });
+    const branchNames = await git.listBranches({ dir });
+    const branchEntries: Array<{ name: string; commit: string }> = [];
+    for (const name of branchNames) {
+      try {
+        const commit = await git
+          .resolveRef({ dir, ref: `refs/heads/${name}` })
+          .catch(async () => await git.resolveRef({ dir, ref: `refs/remotes/origin/${name}` }));
+        branchEntries.push({ name, commit });
+      } catch {
+        // Skip branches we cannot resolve
+      }
+    }
+
+    // Preserve existing dataLevel if present, otherwise set to 'shallow'
+    const existing = await cacheManager.getRepoCache(key).catch(() => null);
+    const dataLevel = (existing?.dataLevel || 'shallow') as 'refs' | 'shallow' | 'full';
+
     const newCache = {
       repoId: key,
       lastUpdated: Date.now(),
       headCommit: remoteCommit,
-      dataLevel: 'shallow' as const,
-      branches: branches.map((name: string) => ({ name, commit: remoteCommit })),
+      dataLevel,
+      branches: branchEntries,
       cloneUrls
     };
 

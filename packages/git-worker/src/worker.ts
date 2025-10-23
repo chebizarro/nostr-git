@@ -181,6 +181,56 @@ cacheManager.clearOldCache().catch((err) => {
   console.error('[git-worker] Failed to clear old cache on startup:', err);
 });
 
+// Helper: capture current repo snapshot and persist to IndexedDB
+async function persistRepoSnapshot({
+  repoId,
+  cloneUrls
+}: {
+  repoId: string;
+  cloneUrls?: string[];
+}): Promise<void> {
+  try {
+    const key = canonicalRepoKey(repoId);
+    const dir = `${rootDir}/${key}`;
+
+    // Resolve HEAD commit safely
+    let headCommit: string = '';
+    try {
+      headCommit = await git.resolveRef({ dir, ref: 'HEAD' });
+    } catch {}
+
+    // Enumerate local branches and resolve their commits
+    let branches: Array<{ name: string; commit: string }> = [];
+    try {
+      const localBranches = await git.listBranches({ dir });
+      const out: Array<{ name: string; commit: string }> = [];
+      for (const name of localBranches) {
+        try {
+          const commit = await git.resolveRef({ dir, ref: `refs/heads/${name}` });
+          out.push({ name, commit });
+        } catch {
+          // ignore resolution errors for individual branches
+        }
+      }
+      branches = out;
+    } catch {}
+
+    // Determine current data level from memory, default to 'shallow' if unknown
+    const level = (repoDataLevels.get(key) || 'shallow') as 'refs' | 'shallow' | 'full';
+
+    await cacheManager.setRepoCache({
+      repoId: key,
+      lastUpdated: Date.now(),
+      headCommit,
+      dataLevel: level,
+      branches,
+      cloneUrls: cloneUrls || (await cacheManager.getRepoCache(key))?.cloneUrls || []
+    });
+  } catch (e) {
+    console.warn('[git-worker] Failed to persist repo snapshot:', e);
+  }
+}
+
 // ----------------------
 // Safety/Preflight Utils
 // ----------------------
@@ -402,7 +452,16 @@ const ensureShallowClone = async ({ repoId, branch }: { repoId: string; branch?:
       resolveRobustBranch: (g, dir, requested) => resolveRobustBranch(g, dir, requested)
     },
     sendProgress
-  );
+  ).then(async (res) => {
+    if (res && res.success) {
+      try {
+        const key = canonicalRepoKey(repoId);
+        const cache = await cacheManager.getRepoCache(key);
+        await persistRepoSnapshot({ repoId, cloneUrls: cache?.cloneUrls });
+      } catch {}
+    }
+    return res;
+  });
 };
 
 /**
@@ -439,7 +498,18 @@ const ensureFullClone = async ({
       resolveRobustBranch: (g, dir, requested) => resolveRobustBranch(g, dir, requested)
     },
     sendProgress
-  );
+  ).then(async (res) => {
+    if (res && res.success) {
+      try {
+        const key = canonicalRepoKey(repoId);
+        const cache = await cacheManager.getRepoCache(key);
+        // Promote in-memory level if util set it
+        if (repoDataLevels.get(key) !== 'full') repoDataLevels.set(key, 'full');
+        await persistRepoSnapshot({ repoId, cloneUrls: cache?.cloneUrls });
+      } catch {}
+    }
+    return res;
+  });
 };
 
 /**
@@ -627,63 +697,6 @@ async function isRepoCloned(dir: string): Promise<boolean> {
 }
 
 /**
-      };
-    }
-  }
-
-  console.log(`Upgrading repository ${repoId} to full clone (depth: ${depth})...`);
-
-  const sendProgress = (phase: string, loaded?: number, total?: number) => {
-    self.postMessage({
-      type: 'clone-progress',
-      repoId,
-      phase,
-      loaded,
-      total,
-      progress: total ? (loaded || 0) / total : undefined
-    });
-  };
-
-  sendProgress(`Fetching commit history (depth: ${depth})...`);
-
-  try {
-    // Get remote URL for fetch operation
-    const remotes = await git.listRemotes({ dir });
-    const originRemote = remotes.find((r: any) => r.remote === 'origin');
-    
-    if (!originRemote || !originRemote.url) {
-      throw new Error('Origin remote not found or has no URL configured');
-    }
-    
-    // Fetch more history - unshallow the repository
-    const authCallback = getAuthCallback(originRemote.url);
-    await git.fetch({
-      dir,
-      url: originRemote.url,
-      ref: targetBranch,
-      depth: Math.min(depth, 100), // Cap at 100 to prevent excessive downloads
-      singleBranch: true,
-      tags: false,
-      onProgress: (progress: { phase: string; loaded?: number; total?: number }) => {
-        sendProgress(`Full clone: ${progress.phase}`, progress.loaded, progress.total);
-      },
-      ...(authCallback && { onAuth: authCallback }),
-    });
-
-    sendProgress('Full clone completed');
-
-    // Update data level
-    repoDataLevels.set(key, 'full');
-    console.log(`Repository ${repoId} upgraded to full clone successfully`);
-
-    return { success: true, repoId, cached: false, level: 'full' };
-  } catch (error: any) {
-    console.error(`Failed to create full clone for repository ${repoId}:`, error);
-    return { success: false, repoId, error: error.message };
-  }
-};
-
-/**
  * Get the current data level for a repository
  */
 const getRepoDataLevel = (repoId: string): 'none' | 'refs' | 'shallow' | 'full' => {
@@ -824,6 +837,11 @@ const getCommitHistory = async ({
           headCommit: cache?.headCommit
         });
         console.log(`[getCommitHistory] Commit history cached to IndexedDB`);
+        // Promote repo data level to 'full' in memory and cache
+        if (repoDataLevels.get(key) !== 'full') {
+          repoDataLevels.set(key, 'full');
+        }
+        await persistRepoSnapshot({ repoId, cloneUrls: cache?.cloneUrls });
       } catch (cacheError) {
         console.warn(`[getCommitHistory] Failed to cache commit history:`, cacheError);
       }
@@ -1006,7 +1024,7 @@ async function applyPatchAndPush(params: {
   warning?: string;
   pushErrors?: Array<{ remote: string; url: string; error: string; code: string; stack: string }>;
 }> {
-  return applyPatchAndPushUtil(git, params, {
+  const result = await applyPatchAndPushUtil(git, params, {
     rootDir,
     canonicalRepoKey,
     resolveRobustBranch: (dir, requested) => resolveRobustBranchInWorker(dir, requested),
@@ -1015,6 +1033,14 @@ async function applyPatchAndPush(params: {
     getConfiguredAuthHosts,
     getProviderFs: (g) => getProviderFs(g)
   });
+  try {
+    if (result?.success && params?.repoId) {
+      const key = canonicalRepoKey(params.repoId);
+      const cache = await cacheManager.getRepoCache(key);
+      await persistRepoSnapshot({ repoId: params.repoId, cloneUrls: cache?.cloneUrls });
+    }
+  } catch {}
+  return result;
 }
 
 /**
@@ -1212,6 +1238,12 @@ const resetRepoToRemote = async ({ repoId, branch }: { repoId: string; branch?: 
 
     console.log(`Repository ${repoId} successfully reset to remote commit ${remoteCommit}`);
 
+    // Persist updated HEAD/branches
+    try {
+      const cache = await cacheManager.getRepoCache(key);
+      await persistRepoSnapshot({ repoId, cloneUrls: cache?.cloneUrls });
+    } catch {}
+
     return {
       success: true,
       repoId,
@@ -1363,6 +1395,11 @@ const createLocalRepo = async ({
     repoDataLevels.set(key, 'full');
 
     console.log(`Local repository created successfully: ${commitSha}`);
+
+    // Persist repo snapshot after createLocalRepo success
+    try {
+      await persistRepoSnapshot({ repoId, cloneUrls: [] });
+    } catch {}
 
     return {
       success: true,
@@ -1639,6 +1676,13 @@ const pushToRemote = async ({
         }
       }
 
+      // Persist cache before returning success
+      try {
+        const key = canonicalRepoKey(repoId);
+        const cache = await cacheManager.getRepoCache(key);
+        await persistRepoSnapshot({ repoId, cloneUrls: cache?.cloneUrls || [remoteUrl] });
+      } catch {}
+
       // Return success result
       return {
         success: true,
@@ -1671,6 +1715,13 @@ const pushToRemote = async ({
     }
 
     console.log(`Successfully pushed to remote: ${remoteUrl}`);
+
+    // Persist cache before returning success
+    try {
+      const key = canonicalRepoKey(repoId);
+      const cache = await cacheManager.getRepoCache(key);
+      await persistRepoSnapshot({ repoId, cloneUrls: cache?.cloneUrls || [remoteUrl] });
+    } catch {}
 
     return {
       success: true,

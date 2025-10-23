@@ -116,6 +116,8 @@ export class Repo {
     progress: 0,
   });
 
+  syncStatus: any = $state(null);
+
   constructor({
     repoEvent,
     repoStateEvent,
@@ -322,8 +324,16 @@ export class Repo {
           console.log("No authentication tokens found");
         }
 
-        // Delegate initialization and commit loading to a single method
         await this.#loadCommitsFromRepo();
+
+        try {
+          const repoId = this.key;
+          const cloneUrls = [...(this.#repo?.clone || [])];
+          const branch = this.branchManager.getMainBranch();
+          if (repoId && cloneUrls.length > 0) {
+            this.syncStatus = await this.workerManager.syncWithRemote({ repoId, cloneUrls, branch });
+          }
+        } catch {}
 
         // Load branches/refs using the new unified method
         try {
@@ -925,7 +935,7 @@ export class Repo {
         // 1) Ask worker to sync local repo with remote for the selected branch (switch/checkout)
         if (this.key && cloneUrls.length > 0) {
           try {
-            await this.workerManager.syncWithRemote({
+            this.syncStatus = await this.workerManager.syncWithRemote({
               repoId: this.key,
               cloneUrls,
               branch: shortBranch,
