@@ -27,6 +27,7 @@ export interface CommitHistoryCache {
 export class RepoCacheManager {
   private dbName = 'nostr-git-cache';
   private dbVersion = 2;
+  private dbVersion = 2;
   private db: IDBDatabase | null = null;
 
   private mergeAnalysisKey(repoId: string, patchId: string, targetBranch: string): string {
@@ -37,30 +38,56 @@ export class RepoCacheManager {
     if (this.db) return;
 
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open(this.dbName, this.dbVersion);
-
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => {
-        this.db = request.result;
-        resolve();
+      // Step 1: try opening without version to detect the current DB version
+      const probe = indexedDB.open(this.dbName);
+      let probed = false;
+      probe.onerror = () => {
+        // If DB doesn't exist yet, proceed to open with desired version directly
+        const req = indexedDB.open(this.dbName, this.dbVersion);
+        wireOpenWithUpgrade(req, resolve, reject);
+      };
+      probe.onsuccess = () => {
+        probed = true;
+        const existingDb = probe.result;
+        const existingVersion = existingDb.version;
+        // If existing DB version is greater than or equal to desired, reuse it
+        if (existingVersion >= this.dbVersion) {
+          this.db = existingDb;
+          resolve();
+        } else {
+          // Need to upgrade: close and reopen with desired version
+          existingDb.close();
+          const req = indexedDB.open(this.dbName, this.dbVersion);
+          wireOpenWithUpgrade(req, resolve, reject);
+        }
       };
 
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-        
-        // Repos object store
-        if (!db.objectStoreNames.contains('repos')) {
-          const repoStore = db.createObjectStore('repos', { keyPath: 'repoId' });
-          repoStore.createIndex('lastUpdated', 'lastUpdated');
-        }
-        
-        // Commits object store for commit history caching
-        if (!db.objectStoreNames.contains('commits')) {
-          const commitStore = db.createObjectStore('commits', { keyPath: 'id' });
-          commitStore.createIndex('repoId', 'repoId');
-          commitStore.createIndex('lastUpdated', 'lastUpdated');
-          commitStore.createIndex('repoIdBranch', ['repoId', 'branch']);
-        }
+      // Helper to wire open() with upgrade handler
+      const wireOpenWithUpgrade = (
+        request: IDBOpenDBRequest,
+        resolveFn: () => void,
+        rejectFn: (reason?: any) => void
+      ) => {
+        request.onerror = () => rejectFn(request.error);
+        request.onsuccess = () => {
+          this.db = request.result;
+          resolveFn();
+        };
+        request.onupgradeneeded = (event) => {
+          const db = (event.target as IDBOpenDBRequest).result;
+          // Repos object store
+          if (!db.objectStoreNames.contains('repos')) {
+            const repoStore = db.createObjectStore('repos', { keyPath: 'repoId' });
+            repoStore.createIndex('lastUpdated', 'lastUpdated');
+          }
+          // Commits object store for commit history caching
+          if (!db.objectStoreNames.contains('commits')) {
+            const commitStore = db.createObjectStore('commits', { keyPath: 'id' });
+            commitStore.createIndex('repoId', 'repoId');
+            commitStore.createIndex('lastUpdated', 'lastUpdated');
+            commitStore.createIndex('repoIdBranch', ['repoId', 'branch']);
+          }
+        };
 
         // Merge analysis cache store
         if (!db.objectStoreNames.contains('mergeAnalysis')) {

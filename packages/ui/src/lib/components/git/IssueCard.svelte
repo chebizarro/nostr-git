@@ -58,7 +58,7 @@
     statusEvents = [],
     actorPubkey,
     nip19LinkTemplate,
-    assigneeCount = 0, // Default value for optional prop
+    assigneeCount = 0,
     relays = [],
   }: Props = $props();
 
