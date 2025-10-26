@@ -2,7 +2,7 @@
 // A browser-only, IndexedDB-backed filesystem adapter for isomorphic-git,
 // which optionally stores file contents as Blossom blobs and transparently
 // fetches/prefetches them when read.
-import { utf8ToBytes, bytesToHex } from '@noble/hashes/utils';
+import { utf8ToBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { NostrEvent } from 'nostr-tools';
 
 export interface Signer {

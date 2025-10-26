@@ -26,10 +26,12 @@
   },
   "dependencies": {
     "@isomorphic-git/lightning-fs": "^4.6.2",
+    "@noble/hashes": "^2.0.1",
     "@nostr-git/shared-types": "workspace:*",
     "buffer": "^6.0.3",
     "dotenv": "^16.4.5",
-    "isomorphic-git": "https://github.com/chebizarro/isomorphic-git/releases/download/v2.0.0-alpha/isomorphic-git-2.0.0-alpha.tgz"
+    "isomorphic-git": "https://github.com/chebizarro/isomorphic-git/releases/download/v2.0.0-alpha/isomorphic-git-2.0.0-alpha.tgz",
+    "nostr-tools": "^2.17.0"
   },
   "devDependencies": {
     "@vitest/browser": "^3.2.4",
