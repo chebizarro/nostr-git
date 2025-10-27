@@ -136,10 +136,8 @@ export type {NostrTagRuntime, NostrEventLike} from "./validation.js"
 export { GIT_PERMALINK } from "./permalink.js"
 export type { Permalink, PermalinkEvent } from "./permalink.js"
 
-export {
-  GIT_LABEL,
-} from "./nip32.js"
-// NIP-32 labels (helpers)
+export { GIT_LABEL } from "./nip32.js"
+// NIP-32 unified API
 export {
   extractSelfLabels,
   extractLabelEvents,
@@ -147,23 +145,24 @@ export {
 } from "./nip32.js"
 export type {
   Label as Nip32Label,
-  EffectiveLabels as Nip32EffectiveLabels,
   LabelEvent,
+  EffectiveLabels,
+  LabelTargets,
+  LabelNamespace,
+  LabelValue,
+  EffectiveLabelsInput,
 } from "./nip32.js"
 
-// NIP-32 V2 convergence helpers and types
+// NIP-32 create/parse utilities
 export {
-  extractSelfLabelsV2,
-  extractLabelEventsV2,
-  mergeEffectiveLabelsV2,
-} from "./nip32.js"
-export type {
-  EffectiveLabelsInput as Nip32EffectiveLabelsInput,
-  EffectiveLabelsV2 as Nip32EffectiveLabelsV2,
-  LabelTargets as Nip32LabelTargets,
-  LabelNamespace as Nip32LabelNamespace,
-  LabelValue as Nip32LabelValue,
-} from "./nip32.js"
+  isLabelEvent,
+  createLabelEvent,
+  createRoleLabelEvent,
+  parseLabelEvent,
+  parseRoleLabelEvent,
+  getLabelNamespaces,
+  getLabelValues,
+} from "./nip32-utils.js"
 
 // Nostr I/O adapter types (framework-agnostic)
 export type {

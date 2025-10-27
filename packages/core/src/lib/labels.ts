@@ -14,5 +14,5 @@ export function effectiveLabelsFor(target: { self: NostrEvent; external: NostrEv
   const external = extractLabelEvents(target.external);
   const t = target.self.tags.filter((t) => t[0] === 't').map((t) => t[1]);
   const merged = mergeEffectiveLabels({ self, external, t });
-  return { normalized: merged.normalized };
+  return { normalized: [...merged.flat] };
 }

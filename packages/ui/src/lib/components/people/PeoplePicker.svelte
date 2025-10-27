@@ -3,6 +3,7 @@
 	import UserAvatar from "../UserAvatar.svelte";
 	import UserProfile from "../UserProfile.svelte";
 	import { nip19 } from "nostr-tools";
+	import type { LabelEvent } from "@nostr-git/shared-types";
 
 	export interface PersonProfile {
 		name?: string;
@@ -16,7 +17,7 @@
 	}
 
 	export interface Props {
-		selected?: string[];
+		selected?: LabelEvent[];
 		placeholder?: string;
 		disabled?: boolean;
 		maxSelections?: number;
@@ -26,7 +27,7 @@
 		getProfile?: (pubkey: string) => Promise<PersonProfile | null>;
 		searchProfiles?: (query: string) => Promise<PersonSuggestion[]>;
 		add?: (pubkey: string) => void | Promise<void>;
-		remove?: (pubkey: string) => void | Promise<void>;
+		onDeleteLabel?: (evt: LabelEvent) => void | Promise<void>;
 	}
 
 	const {
@@ -40,7 +41,7 @@
 		getProfile,
 		searchProfiles,
 		add,
-		remove
+		onDeleteLabel
 	}: Props = $props();
 
 	let inputValue = $state("");
@@ -109,31 +110,16 @@
 
 	function addSelection(pubkey: string) {
 		const normalized = normalizePubkey(pubkey);
-		if (selected.includes(normalized) || selected.length >= maxSelections) return;
-		
-		selected.push(normalized);
 		add?.(normalized);
-		
-		// Dispatch change event
-		const event = new CustomEvent('change', {
-			detail: { selected: [...selected] }
-		});
-		document.dispatchEvent(event);
 	}
 
-	function removeSelection(pubkey: string) {
-		const normalized = normalizePubkey(pubkey);
-		const index = selected.indexOf(normalized);
-		if (index > -1) {
-			selected.splice(index, 1);
-		}
-		remove?.(normalized);
-		
-		// Dispatch change event
-		const event = new CustomEvent('change', {
-			detail: { selected: [...selected] }
-		});
-		document.dispatchEvent(event);
+	function getEventPubkey(evt: LabelEvent): string | undefined {
+		const p = evt.tags.find(t => t[0] === "p")
+		return p?.[1]
+	}
+
+	function removeSelection(evt: LabelEvent) {
+		if (evt && onDeleteLabel) onDeleteLabel(evt)
 	}
 
 	function onKeydown(e: KeyboardEvent) {
@@ -163,7 +149,7 @@
 				highlighted = -1;
 				break;
 			case 'Backspace':
-				if (!inputValue && selected.length > 0) {
+				if (!inputValue && (selected?.length || 0) > 0) {
 					e.preventDefault();
 					removeSelection(selected[selected.length - 1]);
 				}
@@ -173,37 +159,35 @@
 
 	// Ensure profiles are cached for selected and suggestions
 	$effect(() => {
-		[...selected, ...suggestions.map(s => s.pubkey)].forEach(pubkey => {
-			ensureProfile(pubkey);
-		});
+		const keys = (selected || []).map(getEventPubkey).filter(Boolean) as string[]
+		;[...keys, ...suggestions.map(s => s.pubkey)].forEach(pubkey => {
+			ensureProfile(pubkey || "")
+		})
 	});
 </script>
 
 <div class="space-y-2">
 	<!-- Selected people -->
-	{#if selected.length > 0}
+	{#if (selected?.length || 0)}
 		<div class="flex flex-wrap gap-2">
-			{#each selected as pubkey}
+			{#each selected as evt}
+				{@const pubkey = getEventPubkey(evt)}
 				<div class="flex items-center gap-2 bg-gray-700 rounded-lg px-3 py-2 text-sm">
 					{#if showAvatars}
-						<UserAvatar pubkey={pubkey} profile={profileCache.get(pubkey)} size="sm" />
+						<UserAvatar pubkey={pubkey} profile={profileCache.get(pubkey || "")} size="sm" />
 					{:else}
-						<span class="text-gray-300">{pubkey.slice(0, 8)}...</span>
+						<span class="text-gray-300">{pubkey?.slice(0, 8)}...</span>
 					{/if}
 					<div class="flex-1 min-w-0">
 						<div class="text-white text-sm truncate">
 							{(() => {
-								const profile = profileCache.get(pubkey);
-								return profile?.display_name || profile?.name || profile?.nip05 || pubkey.slice(0, 16) + '...';
+								const profile = pubkey ? profileCache.get(pubkey) : undefined;
+								return profile?.display_name || profile?.name || profile?.nip05 || (pubkey ? pubkey.slice(0, 16) + '...' : '')
 							})()}
 						</div>
 					</div>
 					{#if !disabled}
-						<button
-							onclick={() => removeSelection(pubkey)}
-							class="text-gray-400 hover:text-gray-200 transition-colors"
-							aria-label="Remove {pubkey}"
-						>
+						<button onclick={() => removeSelection(evt)} class="text-gray-400 hover:text-gray-200 transition-colors" aria-label="Remove">
 							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
 							</svg>
@@ -215,7 +199,7 @@
 	{/if}
 
 	<!-- Search input -->
-	{#if selected.length < maxSelections}
+	{#if (selected?.length || 0) < maxSelections}
 		<div class="relative">
 			<input
 				bind:value={inputValue}
