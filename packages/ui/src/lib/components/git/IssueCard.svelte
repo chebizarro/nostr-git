@@ -230,23 +230,6 @@
 
 <div transition:fly>
   <BaseItemCard clickable={true} href={`issues/${id}`} variant="issue">
-    <!-- icon / status indicator -->
-    {#snippet slotIcon()}
-      {#if repo && statusEvents}
-        <Status
-          repo={repo}
-          rootId={id}
-          rootKind={1621}
-          rootAuthor={event.pubkey}
-          statusEvents={statusEvents}
-          actorPubkey={actorPubkey}
-          compact={true} />
-      {:else if statusIcon}
-        {@const { icon: IconCmp, color } = statusIcon()}
-        <IconCmp class={`h-6 w-6 mt-1 ${color}`} />
-      {/if}
-    {/snippet}
-
     <!-- title -->
     {#snippet slotTitle()}
       {title || "No title"}
@@ -271,8 +254,25 @@
 
     <!-- meta row -->
     {#snippet slotMeta()}
+      {#if repo && statusEvents}
+        <Status
+          repo={repo}
+          rootId={id}
+          rootKind={1621}
+          rootAuthor={event.pubkey}
+          statusEvents={statusEvents}
+          actorPubkey={actorPubkey}
+          compact={true} />
+      {:else if statusIcon}
+        {@const { icon: IconCmp, color } = statusIcon()}
+        <IconCmp class={`h-6 w-6 mt-1 ${color}`} />
+      {/if}
       <span class="whitespace-nowrap">Opened <TimeAgo date={createdAt} /></span>
-      <span class="whitespace-nowrap">• By <ProfileLink pubkey={event.pubkey} /> </span>
+      <div class="flex items-center gap-1">
+        <span class="whitespace-nowrap">• By </span>
+        <NostrAvatar pubkey={event.pubkey} title={title || 'Issue author'} />
+        <ProfileLink pubkey={event.pubkey} />
+      </div>
       <span class="whitespace-nowrap">• {commentCount} comments</span>
       <span class="whitespace-nowrap">• {assigneeCount} assignee{assigneeCount === 1 ? "" : "s"}</span>
     {/snippet}
@@ -308,16 +308,6 @@
           {/if}
         </button>
       </div>
-    {/snippet}
-
-    <!-- right side (avatar/profile) to match PatchCard -->
-    {#snippet slotSide()}
-      <NostrAvatar
-        pubkey={event.pubkey}
-        size={40}
-        class="h-10 w-10"
-        title={title || 'Issue author'}
-      />
     {/snippet}
   </BaseItemCard>
 </div>

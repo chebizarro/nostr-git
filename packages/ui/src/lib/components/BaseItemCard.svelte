@@ -61,14 +61,16 @@
 <Card class={`git-card transition-colors ${clickable ? 'hover:bg-accent/50' : ''}`}>
   <div class="flex items-start gap-3">
     <!-- Left column: icon / status indicator -->
-    <div class="flex-shrink-0 mt-0.5">
-      {@render slotIcon?.()}
-    </div>
+    {#if slotIcon}
+      <div class="flex-shrink-0 mt-0.5">
+        {@render slotIcon?.()}
+      </div>
+    {/if}
 
     <!-- Main content -->
-    <div class="flex-1 min-w-0">
+    <div class="flex flex-col flex-1 min-w-0 gap-2">
       <!-- Title row -->
-      <div class="flex items-start justify-between gap-2">
+      <div class="flex items-center justify-between gap-2">
         <div class="flex-1 min-w-0">
           {#if href}
             <a href={href} class={clickable ? 'cursor-pointer' : ''}>
@@ -93,17 +95,17 @@
       </div>
 
       <!-- Meta row: author, time, counts -->
-      <div class="flex items-center flex-wrap gap-2 text-sm text-muted-foreground mb-1 overflow-hidden">
+      <div class="flex items-center flex-wrap gap-2 text-sm text-muted-foreground overflow-hidden">
         {@render slotMeta?.()}
       </div>
 
       <!-- Body content -->
-      <div class="my-3 text-sm text-muted-foreground min-w-0">
+      <div class="text-sm text-muted-foreground min-w-0">
         {@render children?.()}
       </div>
 
       <!-- Tags / labels -->
-      <div class="mb-2 inline-flex gap-1">
+      <div class="inline-flex gap-1">
         {@render slotTags?.()}
       </div>
 
@@ -114,9 +116,11 @@
       </div>
     </div>
 
-    <!-- Right column optional (e.g., avatar) -->
-    <div class="flex-shrink-0 w-10">
-      {@render slotSide?.()}
-    </div>
+    <!-- Right column optional (e.g., avatar) - only render if slotSide is provided -->
+    {#if slotSide}
+      <div class="flex-shrink-0 w-10">
+        {@render slotSide()}
+      </div>
+    {/if}
   </div>
 </Card>
