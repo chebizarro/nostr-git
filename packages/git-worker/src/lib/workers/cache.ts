@@ -26,7 +26,7 @@ export interface CommitHistoryCache {
 
 export class RepoCacheManager {
   private dbName = 'nostr-git-cache';
-  private dbVersion = 2;
+  private dbVersion = 3;
   private db: IDBDatabase | null = null;
 
   private mergeAnalysisKey(repoId: string, patchId: string, targetBranch: string): string {
@@ -85,6 +85,11 @@ export class RepoCacheManager {
             commitStore.createIndex('repoId', 'repoId');
             commitStore.createIndex('lastUpdated', 'lastUpdated');
             commitStore.createIndex('repoIdBranch', ['repoId', 'branch']);
+          }
+          // Merge analysis cache (used by worker merge analysis)
+          if (!db.objectStoreNames.contains('mergeAnalysis')) {
+            const mergeStore = db.createObjectStore('mergeAnalysis', { keyPath: 'id' });
+            mergeStore.createIndex('lastUpdated', 'lastUpdated');
           }
         };
       };
