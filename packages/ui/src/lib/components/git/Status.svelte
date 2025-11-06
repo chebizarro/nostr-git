@@ -327,34 +327,36 @@
   <!-- Full mode: complete status UI -->
   <Card>
     <CardHeader>
-      <CardTitle class="flex items-center gap-2 text-lg">
-        <AlertCircle class="h-5 w-5" />
+      <CardTitle class="flex items-center gap-2 text-base sm:text-lg">
+        <AlertCircle class="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
         Status
       </CardTitle>
     </CardHeader>
-    <CardContent class="space-y-4">
+    <CardContent class="space-y-3 sm:space-y-4 p-4 sm:p-6">
       <!-- Current Status -->
-      <div class="flex items-center justify-between">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         {#snippet currentStatusBadge()}
           {@const { icon: Icon, color, bg, border } = getStateIcon(currentState)}
-          <div class="flex items-center gap-2">
-            <Badge variant="outline" class={`${bg} ${border} ${color} gap-1`}>
-              <Icon class="h-4 w-4" />
+          <div class="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0 flex-1">
+            <Badge variant="outline" class={`${bg} ${border} ${color} gap-1 text-xs sm:text-sm w-fit`}>
+              <Icon class="h-3 w-3 sm:h-4 sm:w-4" />
               {currentState.charAt(0).toUpperCase() + currentState.slice(1)}
             </Badge>
             {#if currentStatusEvent}
-              <span class="text-xs text-muted-foreground">
-                by <ProfileComponent pubkey={currentStatusEvent.pubkey} /> •
-                {new Date(currentStatusEvent.created_at * 1000).toLocaleString()}
+              <span class="text-xs text-muted-foreground flex flex-wrap items-center gap-1">
+                <span>by</span>
+                <ProfileComponent pubkey={currentStatusEvent.pubkey} />
+                <span class="hidden sm:inline">•</span>
+                <span class="break-all sm:break-normal">{new Date(currentStatusEvent.created_at * 1000).toLocaleString()}</span>
               </span>
             {/if}
           </div>
         {/snippet}
         {@render currentStatusBadge()}
 
-        <div class="flex items-center gap-2">
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           {#if isAuthorized}
-            <Button size="sm" variant="outline" onclick={() => (showEditor = !showEditor)}>
+            <Button size="sm" variant="outline" onclick={() => (showEditor = !showEditor)} class="w-full sm:w-auto text-xs sm:text-sm">
               {showEditor ? "Cancel" : "Change Status"}
             </Button>
           {/if}
@@ -363,7 +365,7 @@
             variant="outline"
             onclick={() => (showHistory = !showHistory)}
             disabled={pastCount === 0}
-          >
+            class="w-full sm:w-auto text-xs sm:text-sm whitespace-normal sm:whitespace-nowrap">
             {pastCount === 0 ? "No History" : showHistory ? "Hide History" : `Show History (${pastCount})`}
           </Button>
         </div>
@@ -371,9 +373,9 @@
 
       <!-- Editor -->
       {#if showEditor && isAuthorized}
-        <div class="space-y-3 rounded-md border border-border bg-muted/30 p-4">
+        <div class="space-y-3 rounded-md border border-border bg-muted/30 p-3 sm:p-4">
           <div>
-            <Label for="status-state">New Status</Label>
+            <Label for="status-state" class="text-sm">New Status</Label>
             <div class="mt-2 flex flex-wrap gap-2">
               {#each availableStates as state (state)}
                 {#snippet stateButton()}
@@ -393,53 +395,54 @@
           </div>
 
           <div>
-            <Label for="status-note">Note (optional)</Label>
+            <Label for="status-note" class="text-sm">Note (optional)</Label>
             <Textarea
               id="status-note"
               bind:value={statusNote}
               placeholder="Add a note about this status change..."
               rows={3}
-              class="mt-1" />
+              class="mt-1 text-sm resize-none" />
           </div>
 
           {#if selectedState === "merged" || selectedState === "resolved"}
-            <div class="space-y-2 rounded border border-border/50 bg-background p-3">
-              <p class="text-xs text-muted-foreground">
+            <div class="space-y-2 rounded border border-border/50 bg-background p-2 sm:p-3">
+              <p class="text-[10px] sm:text-xs text-muted-foreground">
                 Merge metadata (optional, defaults to current HEAD)
               </p>
               <div>
-                <Label for="merge-commit" class="text-xs">Merge Commit SHA</Label>
+                <Label for="merge-commit" class="text-[10px] sm:text-xs">Merge Commit SHA</Label>
                 <Input
                   id="merge-commit"
                   bind:value={mergeCommit}
                   placeholder="Leave empty for HEAD"
-                  class="mt-1 text-xs" />
+                  class="mt-1 text-xs h-9 sm:h-10" />
               </div>
               <div>
-                <Label for="applied-commits" class="text-xs">Applied Commits (comma-separated)</Label>
+                <Label for="applied-commits" class="text-[10px] sm:text-xs">Applied Commits (comma-separated)</Label>
                 <Input
                   id="applied-commits"
                   bind:value={appliedCommits}
                   placeholder="sha1, sha2, sha3..."
-                  class="mt-1 text-xs" />
+                  class="mt-1 text-xs h-9 sm:h-10" />
               </div>
             </div>
           {/if}
 
           {#if publishError}
-            <div class="rounded bg-destructive/10 p-2 text-xs text-destructive">
+            <div class="rounded bg-destructive/10 p-2 text-[10px] sm:text-xs text-destructive break-words">
               {publishError}
             </div>
           {/if}
 
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-muted-foreground">
+          <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2">
+            <span class="text-[10px] sm:text-xs text-muted-foreground text-center sm:text-left">
               {canPublish ? "" : `Wait ${Math.ceil((COOLDOWN_MS - (Date.now() - lastPublishTime)) / 1000)}s`}
             </span>
             <Button
               size="sm"
               onclick={handlePublish}
-              disabled={isPublishing || !canPublish}>
+              disabled={isPublishing || !canPublish}
+              class="w-full sm:w-auto text-xs sm:text-sm min-h-[36px] sm:min-h-0">
               {isPublishing ? "Publishing..." : "Publish Status"}
             </Button>
           </div>
@@ -448,27 +451,27 @@
 
       <!-- History -->
       <div>
-        <Separator class="my-3" />
+        <Separator class="my-2 sm:my-3" />
         {#if showHistory && pastCount > 0}
           <div class="space-y-2">
             {#each history.slice(1) as event (event.id)}
               {#snippet historyItem()}
                 {@const state = kindToState(event.kind)}
                 {@const { icon: Icon, color } = getStateIcon(state)}
-                <div class="flex items-start gap-2 text-xs">
-                  <Icon class={`mt-0.5 h-3 w-3 ${color}`} />
-                  <div class="flex-1">
-                    <div class="flex items-center gap-2">
+                <div class="flex items-start gap-2 text-[10px] sm:text-xs">
+                  <Icon class={`mt-0.5 h-3 w-3 ${color} flex-shrink-0`} />
+                  <div class="flex-1 min-w-0">
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                       <span class="font-medium">{state.charAt(0).toUpperCase() + state.slice(1)}</span>
-                      <span class="text-muted-foreground">
-                        by <ProfileComponent pubkey={event.pubkey} />
-                      </span>
-                      <span class="text-muted-foreground">
-                        {new Date(event.created_at * 1000).toLocaleString()}
+                      <span class="text-muted-foreground flex items-center gap-1 flex-wrap">
+                        <span>by</span>
+                        <ProfileComponent pubkey={event.pubkey} />
+                        <span class="hidden sm:inline">•</span>
+                        <span class="break-all sm:break-normal">{new Date(event.created_at * 1000).toLocaleString()}</span>
                       </span>
                     </div>
                     {#if event.content}
-                      <p class="mt-1 text-muted-foreground">{event.content}</p>
+                      <p class="mt-1 text-muted-foreground break-words">{event.content}</p>
                     {/if}
                   </div>
                 </div>
@@ -482,28 +485,28 @@
       <!-- Suggestions -->
       {#if suggestions.length > 0 && isAuthorized}
         <div>
-          <Separator class="my-3" />
-          <h4 class="mb-2 text-sm font-medium">Suggestions from Community</h4>
+          <Separator class="my-2 sm:my-3" />
+          <h4 class="mb-2 text-xs sm:text-sm font-medium">Suggestions from Community</h4>
           <div class="space-y-2">
             {#each suggestions as event (event.id)}
               {#snippet suggestionItem()}
                 {@const state = kindToState(event.kind)}
                 {@const { icon: Icon, color } = getStateIcon(state)}
-                <div class="flex items-start justify-between gap-2 rounded border border-border/50 bg-muted/20 p-2">
-                  <div class="flex items-start gap-2 text-xs">
-                    <Icon class={`mt-0.5 h-3 w-3 ${color}`} />
-                    <div class="flex-1">
-                      <div class="flex items-center gap-2">
+                <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 rounded border border-border/50 bg-muted/20 p-2">
+                  <div class="flex items-start gap-2 text-[10px] sm:text-xs min-w-0 flex-1">
+                    <Icon class={`mt-0.5 h-3 w-3 ${color} flex-shrink-0`} />
+                    <div class="flex-1 min-w-0">
+                      <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                         <span class="font-medium">{state.charAt(0).toUpperCase() + state.slice(1)}</span>
-                        <span class="text-muted-foreground">
-                          by <ProfileComponent pubkey={event.pubkey} />
-                        </span>
-                        <span class="text-muted-foreground">
-                          {new Date(event.created_at * 1000).toLocaleString()}
+                        <span class="text-muted-foreground flex items-center gap-1 flex-wrap">
+                          <span>by</span>
+                          <ProfileComponent pubkey={event.pubkey} />
+                          <span class="hidden sm:inline">•</span>
+                          <span class="break-all sm:break-normal">{new Date(event.created_at * 1000).toLocaleString()}</span>
                         </span>
                       </div>
                       {#if event.content}
-                        <p class="mt-1 text-muted-foreground">{event.content}</p>
+                        <p class="mt-1 text-muted-foreground break-words">{event.content}</p>
                       {/if}
                     </div>
                   </div>
@@ -511,7 +514,8 @@
                     size="sm"
                     variant="ghost"
                     onclick={() => handleAdopt(event)}
-                    disabled={!canPublish || isPublishing}>
+                    disabled={!canPublish || isPublishing}
+                    class="w-full sm:w-auto text-xs sm:text-sm min-h-[32px] sm:min-h-0 flex-shrink-0">
                     Adopt
                   </Button>
                 </div>
