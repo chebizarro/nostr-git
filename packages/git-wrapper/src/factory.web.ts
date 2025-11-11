@@ -20,6 +20,8 @@ export function getGitProvider(overrides?: Partial<GitWrapperConfig>): GitProvid
     corsProxy: cfg.defaultCorsProxy ?? "https://cors.isomorphic-git.org",
   })
 
+  console.log("ismorphic git using cors proxy:", provider.corsProxy)
+
   if (cfg.cacheMode === "off") {
     singleton = provider
     return provider

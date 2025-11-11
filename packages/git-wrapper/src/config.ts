@@ -35,7 +35,7 @@ export function loadConfig(overrides?: Partial<GitWrapperConfig>): GitWrapperCon
   const defaultCorsProxy =
     defaultCorsProxyEnv === "none"
       ? null
-      : defaultCorsProxyEnv ?? "https://cors.isomorphic-git.org"
+      : defaultCorsProxyEnv ?? "https://corsproxy.budabit.club"
 
   return { compatMode, cacheMode, cacheMaxAgeMs, defaultCorsProxy }
 }
