@@ -7,7 +7,9 @@
   const { Button, Spinner } = useRegistry();
   import { fly } from "svelte/transition";
   import { preventDefault } from "svelte/legacy";
-  import { GIT_REPO_BOOKMARK_DTAG } from "@nostr-git/core";
+  import { GIT_REPO_BOOKMARK_DTAG, normalizeRepoKeySync } from "@nostr-git/core";
+  import { GIT_REPO_ANNOUNCEMENT } from "@nostr-git/shared-types";
+  import NostrAvatar from "./NostrAvatar.svelte";
 
 
   // Props/closures injected by host app via FunctionProvider or direct props
@@ -45,6 +47,10 @@
   
   // Cache for constructed addresses to avoid recalculating
   const addressCache = new Map<string, string>();
+
+  // Store for naddr search event
+  const naddrSearchEvents = writable<any[]>([]);
+  let naddrSearchEvent = $state<any | null>(null);
   
   function startFetch() {
     const r = fetchRepos({
@@ -75,6 +81,40 @@
   }
 
   const repos = $derived.by(() => {
+    // When naddr search is active, only show the searched repo
+    if (naddrSearchEvent) {
+      try {
+        const dTag = (naddrSearchEvent.tags || []).find((t: string[]) => t[0] === "d")?.[1];
+        if (dTag && naddrSearchEvent.pubkey && naddrSearchEvent.kind) {
+          const addressStr = `${naddrSearchEvent.kind}:${naddrSearchEvent.pubkey}:${dTag}`;
+          // Check if it's already selected
+          const selectedRepo = localSelectedReposState.find((r) => r.address === addressStr);
+          
+          if (selectedRepo) {
+            // Only show the selected naddr repo
+            return [{
+              repo: selectedRepo.event,
+              relay: selectedRepo.relayHint,
+              address: addressStr,
+              selected: true,
+            }];
+          } else {
+            // Only show the naddr repo in available section
+            const relayHint = makeRelayHint ? makeRelayHint(naddrSearchEvent) : "";
+            return [{
+              repo: naddrSearchEvent,
+              relay: relayHint,
+              address: addressStr,
+              selected: false,
+            }];
+          }
+        }
+      } catch (e) {
+        console.error("[RepoPicker] Failed to process naddr search event:", e);
+      }
+      return [];
+    }
+
     const elements = [];
 
     for (const { address, event, relayHint } of localSelectedReposState) {
@@ -137,7 +177,70 @@
     updateDebouncedTerm(searchTerm);
   });
 
+  // Detect if search query is a URI (naddr or nostr:naddr)
+  const isUriSearch = $derived.by(() => {
+    const trimmed = debouncedTerm.trim();
+    return trimmed.startsWith("naddr1") || trimmed.startsWith("nostr:naddr1");
+  });
+
+  // Extract naddr from search query (handle both naddr1... and nostr:naddr1...)
+  const extractedNaddr = $derived.by(() => {
+    if (!isUriSearch) return null;
+    const trimmed = debouncedTerm.trim();
+    if (trimmed.startsWith("nostr:")) {
+      return trimmed.replace("nostr:", "");
+    }
+    return trimmed;
+  });
+
+  // Fetch event for URI search
+  $effect(() => {
+    const naddr = extractedNaddr;
+    if (!naddr) {
+      naddrSearchEvent = null;
+      naddrSearchEvents.set([]);
+      return;
+    }
+
+    try {
+      // Use normalizeRepoKeySync from @nostr-git/core to decode naddr
+      const normalized = normalizeRepoKeySync(naddr);
+      
+      // normalizeRepoKeySync validates that it's kind 30617, so we can proceed
+      const filters = [
+        {
+          authors: [normalized.parts.pubkey],
+          kinds: [GIT_REPO_ANNOUNCEMENT],
+          "#d": [normalized.parts.name || ""],
+        },
+      ];
+
+        const controller = fetchRepos({
+          filters,
+          onResult: (events: any[]) => {
+            if (events.length > 0) {
+              naddrSearchEvents.set(events);
+              naddrSearchEvent = events[0];
+              loading = false;
+            } else {
+              naddrSearchEvent = null;
+              naddrSearchEvents.set([]);
+              loading = false;
+            }
+          },
+        });
+    } catch (e) {
+      console.error("[RepoPicker] Failed to decode naddr:", e);
+      naddrSearchEvent = null;
+      naddrSearchEvents.set([]);
+      loading = false;
+    }
+  });
+
   const searchedRepos = $derived.by(() => {
+    // If URI search, repos already contains only the naddr result
+    if (isUriSearch) return repos;
+    
     const term = debouncedTerm.trim().toLowerCase();
     if (term.length <= 2) return repos;
     return repos.filter(({ repo }) => {
@@ -224,7 +327,7 @@
       bind:value={searchTerm}
       class="w-full rounded-md border border-border bg-background px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
       type="text"
-      placeholder="Search repos..."
+      placeholder="Paste naddr or search repos..."
     />
   </div>
   <div
@@ -236,11 +339,14 @@
       <div class="mb-3" out:fly={{ duration: 200 }}>
         <div class="rounded-md border border-primary bg-card p-3">
           <div class="flex items-start justify-between gap-2">
-            <div class="min-w-0 flex-1">
-              <div class="text-sm font-semibold truncate">{getRepoName(repo, address)}</div>
-              {#if getRepoDescription(repo)}
-                <div class="mt-1 text-xs opacity-70 line-clamp-2">{getRepoDescription(repo)}</div>
-              {/if}
+            <div class="min-w-0 flex-1 flex items-start gap-2">
+              <NostrAvatar pubkey={repo.pubkey} />
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-semibold truncate">{getRepoName(repo, address)}</div>
+                {#if getRepoDescription(repo)}
+                  <div class="mt-1 text-xs opacity-70 line-clamp-2">{getRepoDescription(repo)}</div>
+                {/if}
+              </div>
             </div>
             <label class="inline-flex shrink-0 items-center gap-2">
               {@render repoSelectCheckBox(relay, address, repo, true)}
@@ -254,11 +360,14 @@
       <div class="mb-3" out:fly={{ duration: 200 }}>
         <div class="rounded-md border border-border bg-card p-3">
           <div class="flex items-start justify-between gap-2">
-            <div class="min-w-0 flex-1">
-              <div class="text-sm font-semibold truncate">{getRepoName(repo, address)}</div>
-              {#if getRepoDescription(repo)}
-                <div class="mt-1 text-xs opacity-70 line-clamp-2">{getRepoDescription(repo)}</div>
-              {/if}
+            <div class="min-w-0 flex-1 flex items-start gap-2">
+              <NostrAvatar pubkey={repo.pubkey}  />
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-semibold truncate">{getRepoName(repo, address)}</div>
+                {#if getRepoDescription(repo)}
+                  <div class="mt-1 text-xs opacity-70 line-clamp-2">{getRepoDescription(repo)}</div>
+                {/if}
+              </div>
             </div>
             <label class="inline-flex shrink-0 items-center gap-2">
               {@render repoSelectCheckBox(relay, address, repo, false)}
