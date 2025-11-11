@@ -26,11 +26,11 @@
   }
 </script>
 
-<div class="flex items-center gap-2">
+<div class="flex items-center gap-2 min-w-0">
   <select
     value={selectedBranch}
     onchange={handleChange}
-    class="rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+    class="rounded-md border border-border bg-background px-2 sm:px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed min-w-0 max-w-full"
   >
     {#if refs.length === 0}
       <option value="">No branches found</option>
