@@ -545,7 +545,9 @@
   </div>
 
   <!-- Progress Indicator -->
-  <div class="flex items-center justify-center space-x-4 mb-8">
+  <div
+    class="grid grid-cols-2 gap-4 mb-8 px-4 md:px-0 md:flex md:items-center md:justify-center md:space-x-4"
+  >
     <div class="flex items-center space-x-2">
       <div
         class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium"
@@ -559,7 +561,7 @@
       <span class="text-sm font-medium text-foreground">Choose Service</span>
     </div>
 
-    <div class="w-12 h-px bg-border"></div>
+    <div class="hidden md:block w-12 h-px bg-border"></div>
 
     <div class="flex items-center space-x-2">
       <div
@@ -574,7 +576,7 @@
       <span class="text-sm font-medium text-foreground">Repository Details</span>
     </div>
 
-    <div class="w-12 h-px bg-border"></div>
+    <div class="hidden md:block w-12 h-px bg-border"></div>
 
     <div class="flex items-center space-x-2">
       <div
@@ -589,7 +591,7 @@
       <span class="text-sm font-medium text-foreground">Advanced Settings</span>
     </div>
 
-    <div class="w-12 h-px bg-border"></div>
+    <div class="hidden md:block w-12 h-px bg-border"></div>
 
     <div class="flex items-center space-x-2">
       <div

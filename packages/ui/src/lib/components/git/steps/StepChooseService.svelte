@@ -22,7 +22,7 @@
   const graspServerOptions = $derived(__props.graspServerOptions ?? []);
 </script>
 
-<div class="space-y-4 max-h-[70vh]">
+<div class="space-y-4 max-h-[40vh] md:max-h-[50vh]">
   <ProviderSelectionStep
     tokens={tokens}
     selectedProvider={selectedProvider || undefined}

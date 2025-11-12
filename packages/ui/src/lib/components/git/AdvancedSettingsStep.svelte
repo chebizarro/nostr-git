@@ -152,7 +152,7 @@
   }
 </script>
 
-<div class="space-y-6">
+<div class="space-y-6 max-h-[40vh] md:max-h-[50vh]">
   <div class="space-y-4">
     <h2 class="text-xl font-semibold text-gray-100">Advanced Settings</h2>
     <p class="text-sm text-gray-300">Configure additional options for your repository.</p>
