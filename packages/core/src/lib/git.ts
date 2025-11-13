@@ -171,7 +171,6 @@ export async function ensureRepo(
 
     const clonePromise = git.clone({
       dir,
-      corsProxy: 'https://cors.isomorphic-git.org',
       url: `https://${opts.host}/${opts.owner}/${opts.repo}.git`,
       ref: opts.branch,
       depth: Math.min(depth, 1), // Force shallow clone for large repos

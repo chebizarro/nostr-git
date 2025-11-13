@@ -162,7 +162,7 @@ export async function createNostrGitProviderFromGitConfig(options: {
     enableGrasp: true,
     publishRepoState: true,
     publishRepoAnnouncements: false,
-    corsProxy: 'https://cors.isomorphic-git.org'
+    corsProxy: 'https://corsproxy.budabit.club'
   };
 
   // Try to read from git config if available

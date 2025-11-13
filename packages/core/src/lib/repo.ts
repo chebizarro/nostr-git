@@ -75,7 +75,6 @@ export class GitRepository {
     const git = getGitProvider();
     const repo = await git.clone({
       dir: this.dir,
-      corsProxy: 'https://cors.isomorphic-git.org',
       url,
       ref: this.state?.head,
       singleBranch: true,
