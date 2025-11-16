@@ -6,6 +6,7 @@ import {
   createRepoAnnouncementEvent as createAnnouncementEventShared,
   createRepoStateEvent as createStateEventShared,
 } from "@nostr-git/shared-types";
+import { tryTokensForHost, getTokensForHost } from "./utils/tokenHelpers.js";
 
 /**
  * Normalize GRASP URLs to ensure proper protocol handling.
@@ -18,7 +19,7 @@ function normalizeGraspOrigins(input: string): { wsOrigin: string; httpOrigin: s
     const host = url.host;
 
     // Check if the input uses secure protocol (wss:// or https://)
-    const isSecure = url.protocol === 'wss:' || url.protocol === 'https:';
+    const isSecure = url.protocol === "wss:" || url.protocol === "https:";
 
     // Build origins with proper protocols based on input
     const wsOrigin = isSecure ? `wss://${host}` : `ws://${host}`;
@@ -31,14 +32,14 @@ function normalizeGraspOrigins(input: string): { wsOrigin: string; httpOrigin: s
     if (hostMatch) {
       const host = hostMatch[1];
       // Check if input starts with secure protocol
-      const isSecure = input.startsWith('wss://') || input.startsWith('https://');
+      const isSecure = input.startsWith("wss://") || input.startsWith("https://");
       const wsOrigin = isSecure ? `wss://${host}` : `ws://${host}`;
       const httpOrigin = isSecure ? `https://${host}` : `http://${host}`;
       return { wsOrigin, httpOrigin };
     }
 
     // Last resort - assume it's a hostname, default to secure
-    const host = input.replace(/^\/\//, '');
+    const host = input.replace(/^\/\//, "");
     const wsOrigin = `wss://${host}`;
     const httpOrigin = `https://${host}`;
     return { wsOrigin, httpOrigin };
@@ -88,7 +89,7 @@ export async function checkGitHubRepoAvailability(
     console.error("Error checking repo availability:", error);
     return {
       available: false,
-      reason: `Failed to check availability: ${error instanceof Error ? error.message : String(error)}`
+      reason: `Failed to check availability: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }
@@ -144,9 +145,9 @@ export async function checkProviderRepoAvailability(
   };
 
   const match = hostMatchers[provider as keyof typeof hostMatchers];
-  const tokenEntry = tokens.find((t) => match?.(t.host));
+  const matchingTokens = getTokensForHost(tokens, match || (() => false));
 
-  if (!tokenEntry) {
+  if (matchingTokens.length === 0) {
     // No token: we cannot query provider API, treat as unknown but do not block
     return {
       results: [
@@ -163,60 +164,68 @@ export async function checkProviderRepoAvailability(
     };
   }
 
+  // Try all tokens until one succeeds
   try {
-    const api = getGitServiceApi(provider as any, tokenEntry.token);
-    const currentUser = await api.getCurrentUser();
-    const username = (currentUser as any).login || (currentUser as any).username || "me";
+    const result = await tryTokensForHost(
+      tokens,
+      match || (() => false),
+      async (token: string, host: string) => {
+        const api = getGitServiceApi(provider as any, token);
+        const currentUser = await api.getCurrentUser();
+        const username = (currentUser as any).login || (currentUser as any).username || "me";
 
-    try {
-      await api.getRepo(username, repoName);
-      // Exists → conflict
-      return {
-        results: [
-          {
-            provider,
-            host: tokenEntry.host,
-            available: false,
-            reason: `Repository name already exists in your ${provider} account`,
-            username,
-          },
-        ],
-        hasConflicts: true,
-        availableProviders: [],
-        conflictProviders: [provider],
-      };
-    } catch (error: any) {
-      if (error?.message?.includes("404") || error?.message?.includes("Not Found")) {
-        return {
-          results: [
-            {
-              provider,
-              host: tokenEntry.host,
-              available: true,
-              username,
-            },
-          ],
-          hasConflicts: false,
-          availableProviders: [provider],
-          conflictProviders: [],
-        };
+        try {
+          await api.getRepo(username, repoName);
+          // Exists → conflict
+          return {
+            results: [
+              {
+                provider,
+                host: host, // Use the host of the token that succeeded
+                available: false,
+                reason: `Repository name already exists in your ${provider} account`,
+                username,
+              },
+            ],
+            hasConflicts: true,
+            availableProviders: [],
+            conflictProviders: [provider],
+          };
+        } catch (error: any) {
+          if (error?.message?.includes("404") || error?.message?.includes("Not Found")) {
+            return {
+              results: [
+                {
+                  provider,
+                  host: host,
+                  available: true,
+                  username,
+                },
+              ],
+              hasConflicts: false,
+              availableProviders: [provider],
+              conflictProviders: [],
+            };
+          }
+          // Unknown error: return soft-OK to avoid blocking
+          return {
+            results: [
+              {
+                provider,
+                host: host,
+                available: true,
+                error: String(error?.message || error),
+                username,
+              },
+            ],
+            hasConflicts: false,
+            availableProviders: [provider],
+            conflictProviders: [],
+          };
+        }
       }
-      // Unknown error: return soft-OK to avoid blocking
-      return {
-        results: [
-          {
-            provider,
-            host: tokenEntry.host,
-            available: true,
-            error: String(error?.message || error),
-            username,
-          },
-        ],
-        hasConflicts: false,
-        availableProviders: [provider],
-        conflictProviders: [],
-      };
-    }
+    );
+    return result;
   } catch (e: any) {
     // Network or API error; soft-OK
     return {
@@ -522,12 +531,18 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
             aliases.push(`${u.protocol}//ngit-relay${port}`);
           } catch {}
         }
-        const defaultRepoRelays = ['wss://nos.lol/', 'wss://relay.damus.io/'];
+        const defaultRepoRelays = ["wss://nos.lol/", "wss://relay.damus.io/"];
         aliases.push(...defaultRepoRelays);
         const seen = new Set<string>();
-        const relays = aliases.filter((a) => { if (seen.has(a)) return false; seen.add(a); return true; });
+        const relays = aliases.filter((a) => {
+          if (seen.has(a)) return false;
+          seen.add(a);
+          return true;
+        });
         // Compute canonical repo address '<npub>:<repo>' (ngit-compatible 'a' tag)
-        const ownerNpub = graspPubkey ? (await import('nostr-tools')).nip19.npubEncode(graspPubkey) : undefined;
+        const ownerNpub = graspPubkey
+          ? (await import("nostr-tools")).nip19.npubEncode(graspPubkey)
+          : undefined;
         const canonicalRepoId = ownerNpub ? `${ownerNpub}:${config.name}` : config.name;
 
         // Create announcement event
@@ -538,20 +553,24 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
           web: webUrl ? [webUrl] : undefined,
           clone: cloneUrl ? [cloneUrl] : undefined,
           relays,
-          maintainers: config.maintainers && config.maintainers.length > 0 ? config.maintainers : undefined,
+          maintainers:
+            config.maintainers && config.maintainers.length > 0 ? config.maintainers : undefined,
           hashtags: config.tags && config.tags.length > 0 ? config.tags : undefined,
           earliestUniqueCommit: localRepo?.initialCommit || undefined,
         });
         // Create state event
         // Build full ref names per ngit (refs/heads/<branch>) for HEAD and refs
         const headRef = config.defaultBranch ? `refs/heads/${config.defaultBranch}` : undefined;
-        const refs = localRepo?.initialCommit && headRef
-          ? [{
-              type: "heads" as const,
-              name: headRef,
-              commit: localRepo.initialCommit,
-            }]
-          : undefined;
+        const refs =
+          localRepo?.initialCommit && headRef
+            ? [
+                {
+                  type: "heads" as const,
+                  name: headRef,
+                  commit: localRepo.initialCommit,
+                },
+              ]
+            : undefined;
         stateEvent = createStateEventShared({
           repoId: canonicalRepoId,
           refs,
@@ -560,22 +579,26 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
         // Ensure explicit HEAD/ref tags are present (ngit-compatible)
         try {
           stateEvent.tags = stateEvent.tags || [];
-          if (headRef && !stateEvent.tags.find((t: any[]) => t[0] === 'HEAD')) {
-            stateEvent.tags.push(['HEAD', `ref: ${headRef}`]);
+          if (headRef && !stateEvent.tags.find((t: any[]) => t[0] === "HEAD")) {
+            stateEvent.tags.push(["HEAD", `ref: ${headRef}`]);
           }
-          if (localRepo?.initialCommit && headRef && !stateEvent.tags.find((t: any[]) => t[0] === 'ref' && t[1] === headRef)) {
-            stateEvent.tags.push(['ref', headRef, localRepo.initialCommit]);
+          if (
+            localRepo?.initialCommit &&
+            headRef &&
+            !stateEvent.tags.find((t: any[]) => t[0] === "ref" && t[1] === headRef)
+          ) {
+            stateEvent.tags.push(["ref", headRef, localRepo.initialCommit]);
           }
         } catch {}
         // Ensure app-level publisher sees the GRASP relay on both events: add a 'relays' tag mirroring repo relays
         try {
-          const relaysTag = ['relays', ...relays] as unknown as string[];
+          const relaysTag = ["relays", ...relays] as unknown as string[];
           // Avoid duplicate relays tag
-          if (!stateEvent.tags?.some((t: any[]) => t[0] === 'relays')) {
+          if (!stateEvent.tags?.some((t: any[]) => t[0] === "relays")) {
             stateEvent.tags = [...(stateEvent.tags || []), relaysTag];
           }
           announcementEvent.tags = announcementEvent.tags || [];
-          if (!announcementEvent.tags?.some((t: any[]) => t[0] === 'relays')) {
+          if (!announcementEvent.tags?.some((t: any[]) => t[0] === "relays")) {
             announcementEvent.tags = [...(announcementEvent.tags || []), relaysTag];
           }
         } catch {}
@@ -606,7 +629,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
         // For GRASP, wait for the relay to process the announcement event
         if (config.provider === "grasp") {
           updateProgress("push", "Waiting for GRASP server to process announcement...", "running");
-          await new Promise(resolve => setTimeout(resolve, 10000)); // 10 second delay
+          await new Promise((resolve) => setTimeout(resolve, 10000)); // 10 second delay
         }
 
         updateProgress("push", "Pushing to remote repository...", "running");
@@ -679,12 +702,12 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
 
         const refs = localRepo?.initialCommit
           ? [
-            {
-              type: "heads" as const,
-              name: config.defaultBranch || "master",
-              commit: localRepo.initialCommit,
-            },
-          ]
+              {
+                type: "heads" as const,
+                name: config.defaultBranch || "master",
+                commit: localRepo.initialCommit,
+              },
+            ]
           : undefined;
         stateEvent = createStateEventShared({
           repoId: config.name,
@@ -808,7 +831,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       console.error(`Error checking repo availability on ${config.provider}:`, error);
       return {
         available: false,
-        reason: `Failed to check availability: ${error instanceof Error ? error.message : String(error)}`
+        reason: `Failed to check availability: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   }
@@ -864,113 +887,116 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
         );
         console.log("🔐 Looking for provider:", config.provider, "with host:", providerHost);
 
-        finalToken = tokens.find((t: Token) => t.host === providerHost)?.token || null;
-      }
+        const matchingTokens = getTokensForHost(tokens, (h) => h === providerHost);
 
-      console.log(
-        "🔐 Provider token found:",
-        finalToken
-          ? "YES (length: " +
-          finalToken.length +
-          ", starts: " +
-          finalToken.substring(0, 8) +
-          ", ends: " +
-          finalToken.substring(finalToken.length - 8) +
-          ")"
-          : "NO"
-      );
+        if (matchingTokens.length === 0) {
+          // Try to wait for tokens to load if they're not available yet
+          console.log("🔐 No token found for provider, waiting for token store initialization...");
+          await tokensStore.waitForInitialization();
 
-      if (!finalToken && config.provider !== "grasp") {
-        // Try to wait for tokens to load if they're not available yet
-        console.log("🔐 No token found for provider, waiting for token store initialization...");
-        await tokensStore.waitForInitialization();
+          // Refresh tokens after waiting
+          await tokensStore.refresh();
 
-        // Refresh tokens after waiting
-        await tokensStore.refresh();
+          // Try again after waiting and refreshing
+          const refreshedTokens = getTokensForHost(tokens, (h) => h === providerHost);
 
-        // Try again after waiting and refreshing
-        finalToken = tokens.find((t: Token) => t.host === providerHost)?.token || null;
+          console.log("🔐 Tokens after refresh:", tokens.length, "tokens");
+          console.log("🔐 Matching tokens found after retry:", refreshedTokens.length);
 
-        console.log("🔐 Tokens after refresh:", tokens.length, "tokens");
-        console.log(
-          "🔐 Provider token found after retry:",
-          finalToken ? "YES (length: " + finalToken.length + ")" : "NO"
+          if (refreshedTokens.length === 0) {
+            throw new Error(
+              `No ${config.provider} authentication token found. Please add a ${config.provider} token in settings.`
+            );
+          }
+        }
+
+        // Try all tokens until one succeeds (for both availability check and repo creation)
+        const result = await tryTokensForHost(
+          tokens,
+          (h) => h === providerHost!,
+          async (token: string, host: string) => {
+            // Skip availability check for GRASP; providers with tokens are checked
+            if (config.provider !== "grasp") {
+              console.log("🚀 Checking repository name availability...");
+              const availability = await checkRepoAvailability(config, token);
+              if (!availability.available) {
+                throw new Error(availability.reason || "Repository name is not available");
+              }
+            }
+
+            console.log("🚀 Repository name is available, proceeding with creation...");
+            console.log("🚀 Calling createRemoteRepo API with:", {
+              provider: config.provider,
+              name: config.name,
+              description: config.description,
+              tokenLength: token.length,
+              tokenStart: token.substring(0, 8),
+              tokenEnd: token.substring(token.length - 8),
+            });
+
+            // Standard Git providers - create repo with this token
+            const repoResult = await api.createRemoteRepo({
+              provider: config.provider as any,
+              token: token,
+              name: config.name,
+              description: config.description,
+              isPrivate: false, // Default to public for now
+            });
+
+            if (!repoResult.success) {
+              console.error("Remote repository creation failed:", repoResult.error);
+              throw new Error(`Remote repository creation failed: ${repoResult.error}`);
+            }
+
+            return repoResult;
+          }
         );
 
-        if (!finalToken) {
-          throw new Error(
-            `No ${config.provider} authentication token found. Please add a ${config.provider} token in settings.`
-          );
-        }
+        console.log("🚀 API call completed, result:", result);
+        console.log("🚀 Remote repository created successfully:", result);
+        return {
+          url: result.remoteUrl, // Use remoteUrl from the API response
+          provider: result.provider,
+          webUrl: result.webUrl || result.remoteUrl, // Fallback to remoteUrl if webUrl not provided
+        };
       }
 
-      // Skip availability check for GRASP; providers with tokens are checked
-      if (config.provider !== "grasp") {
-        console.log("🚀 Checking repository name availability...");
-        if (!finalToken) {
-          throw new Error("No token available for repository availability check");
-        }
-        const availability = await checkRepoAvailability(config, finalToken);
-        if (!availability.available) {
-          throw new Error(availability.reason || "Repository name is not available");
-        }
-      }
+      // Handle GRASP separately (doesn't use token retry logic)
+      console.log("🔐 Setting up GRASP repository creation with EventIO (no more signer passing!)");
 
-      console.log("🚀 Repository name is available, proceeding with creation...");
-      console.log("🚀 Calling createRemoteRepo API with:", {
-        provider: config.provider,
-        name: config.name,
-        description: config.description,
-        tokenLength: finalToken ? finalToken.length : "N/A",
-        tokenStart: finalToken ? finalToken.substring(0, 8) : "N/A",
-        tokenEnd: finalToken ? finalToken.substring(finalToken.length - 8) : "N/A",
-      });
+      if (!config.relayUrl) throw new Error("GRASP provider requires a relay URL");
 
-      let result;
+      // Normalize GRASP URLs to ensure proper protocol handling
+      const { wsOrigin, httpOrigin } = normalizeGraspOrigins(config.relayUrl!);
+      console.log("🔐 Normalized GRASP URLs:", { wsOrigin, httpOrigin });
 
-      if (config.provider === "grasp") {
-        console.log("🔐 Setting up GRASP repository creation with EventIO (no more signer passing!)");
-
-        if (!config.relayUrl) throw new Error("GRASP provider requires a relay URL");
-
-        // Normalize GRASP URLs to ensure proper protocol handling
-        const { wsOrigin, httpOrigin } = normalizeGraspOrigins(config.relayUrl!);
-        console.log("🔐 Normalized GRASP URLs:", { wsOrigin, httpOrigin });
-
-        // Get the Git worker - IMPORTANT: We need to use the same worker instance for both API calls and event signing
-        let api: any, worker: Worker;
-        if (options.workerApi && options.workerInstance) {
-          // Use the passed worker API and instance (already configured with EventIO)
-          api = options.workerApi;
-          worker = options.workerInstance;
-          console.log("🔐 Using provided worker API and instance");
-        } else {
-          // Fallback: create new worker (won't have EventIO configured)
-          console.warn("🔐 No workerApi/workerInstance provided, creating new worker (EventIO may not be configured)");
-          const { getGitWorker } = await import("@nostr-git/core");
-          const workerInstance = getGitWorker();
-          api = workerInstance.api;
-          worker = workerInstance.worker;
-        }
-
-        result = await api.createRemoteRepo({
-          provider: config.provider as any,
-          token: finalToken, // This is the pubkey for GRASP
-          name: config.name,
-          description: config.description || "",
-          isPrivate: false,
-          baseUrl: wsOrigin, // Use normalized WebSocket origin for GRASP API
-        });
+      // Get the Git worker - IMPORTANT: We need to use the same worker instance for both API calls and event signing
+      // Reuse the api variable already declared above, but get worker instance
+      let worker: Worker;
+      if (options.workerApi && options.workerInstance) {
+        // Use the passed worker API and instance (already configured with EventIO)
+        // api is already set above, just get the worker instance
+        worker = options.workerInstance;
+        console.log("🔐 Using provided worker API and instance");
       } else {
-        // Standard Git providers
-        result = await api.createRemoteRepo({
-          provider: config.provider as any,
-          token: finalToken,
-          name: config.name,
-          description: config.description,
-          isPrivate: false, // Default to public for now
-        });
+        // Fallback: create new worker (won't have EventIO configured)
+        console.warn(
+          "🔐 No workerApi/workerInstance provided, creating new worker (EventIO may not be configured)"
+        );
+        const { getGitWorker } = await import("@nostr-git/core");
+        const workerInstance = getGitWorker();
+        api = workerInstance.api;
+        worker = workerInstance.worker;
       }
+
+      const result = await api.createRemoteRepo({
+        provider: config.provider as any,
+        token: finalToken, // This is the pubkey for GRASP
+        name: config.name,
+        description: config.description || "",
+        isPrivate: false,
+        baseUrl: wsOrigin, // Use normalized WebSocket origin for GRASP API
+      });
 
       console.log("🚀 API call completed, result:", result);
 
@@ -1005,7 +1031,9 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       console.log("🔐 Using provided worker API and instance for push");
     } else {
       // Fallback: create new worker (won't have EventIO configured)
-      console.warn("🔐 No workerApi/workerInstance provided for push, creating new worker (EventIO may not be configured)");
+      console.warn(
+        "🔐 No workerApi/workerInstance provided for push, creating new worker (EventIO may not be configured)"
+      );
       const { getGitWorker } = await import("@nostr-git/core");
       const workerInstance = await getGitWorker();
       api = workerInstance.api;
@@ -1020,55 +1048,26 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       bitbucket: "bitbucket.org",
     };
 
-    let providerToken: string;
-
-    if (config.provider === "grasp") {
-      // For GRASP, we use EventIO instead of explicit signer passing
-      console.log("🔐 GRASP push - EventIO handles signing internally (no more signer passing!)");
-      providerToken = config.authorPubkey || "";
-
-      // NOTE: No more registerEventSigner needed!
-      // The new EventIO interface uses closures instead of passing signers around.
-      // The worker will use the EventIO instance passed via configureWorkerEventIO.
-    } else {
-      const providerHost = providerHosts[config.provider] || config.provider;
-      providerToken = tokens.find((t: Token) => t.host === providerHost)?.token || "";
-    }
-
     // For GRASP, ensure we use HTTP(S) endpoint for push operations
     let pushUrl: string;
     if (config.provider === "grasp") {
       // Use the URL from the GRASP API which already has the correct npub format
-      pushUrl = remoteRepo.url;  // Fixed: use .url not .remoteUrl
+      pushUrl = remoteRepo.url; // Fixed: use .url not .remoteUrl
       console.log("🔐 Using GRASP API URL for push:", { pushUrl });
-    } else {
-      pushUrl = remoteRepo.url;
-    }
 
-    console.log("🚀 Pushing to remote with URL:", pushUrl);
-    console.log("🚀 Push config:", {
-      provider: config.provider,
-      repoPath: canonicalKey ?? config.name,
-      defaultBranch: config.defaultBranch,
-      remoteUrl: pushUrl,
-      tokenLength: providerToken ? providerToken.length : "No token",
-    });
+      // For GRASP, we use EventIO instead of explicit signer passing
+      console.log("🔐 GRASP push - EventIO handles signing internally (no more signer passing!)");
+      const providerToken = config.authorPubkey || "";
 
-    // Push to remote repository
-    // Note: For GRASP, we don't pass a signer object since signing is handled via message protocol
-    // For GRASP, use direct pushToRemote since we know the repo exists locally
-    // For other providers, use safePushToRemote for preflight checks
-    console.log("[NEW REPO] Pushing to remote for provider:", config.provider);
-    console.log("[NEW REPO] Push params:", {
-      repoId: canonicalKey || config.name,
-      remoteUrl: pushUrl,
-      branch: config.defaultBranch,
-      tokenLength: providerToken ? providerToken.length : "No token",
-      provider: config.provider,
-    });
+      console.log("🚀 Pushing to remote with URL:", pushUrl);
+      console.log("🚀 Push config:", {
+        provider: config.provider,
+        repoPath: canonicalKey ?? config.name,
+        defaultBranch: config.defaultBranch,
+        remoteUrl: pushUrl,
+        tokenLength: providerToken ? providerToken.length : "No token",
+      });
 
-    let pushResult;
-    if (config.provider === "grasp") {
       // For GRASP, use direct push since we just created the local repo
       console.log("[NEW REPO] Using direct pushToRemote for GRASP");
       const directPushResult = await api.pushToRemote({
@@ -1078,33 +1077,68 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
         token: providerToken,
         provider: config.provider as any,
       });
-      pushResult = { success: directPushResult?.success || false, pushed: directPushResult?.success };
-    } else {
-      // For other providers, use safePushToRemote for preflight checks
-      console.log("[NEW REPO] Using safePushToRemote for non-GRASP provider");
-      pushResult = await api.safePushToRemote({
-        repoId: canonicalKey || config.name,
-        remoteUrl: pushUrl,
-        branch: config.defaultBranch,
-        token: providerToken,
-        provider: config.provider as any,
-        preflight: {
-          blockIfUncommitted: true,
-          requireUpToDate: true,
-          blockIfShallow: false,
-        },
-      });
-    }
-    console.log("[NEW REPO] Push result:", pushResult);
+      const pushResult = {
+        success: directPushResult?.success || false,
+        pushed: directPushResult?.success,
+      };
 
-    if (!pushResult?.success) {
-      if (pushResult?.requiresConfirmation) {
-        throw new Error(pushResult.warning || "Force push requires confirmation.");
+      if (!pushResult.success) {
+        throw new Error("Failed to push to GRASP remote repository");
       }
-      throw new Error(pushResult?.error || "Safe push failed");
-    }
 
-    return remoteRepo;
+      return pushResult;
+    } else {
+      // For standard Git providers, try all tokens until one succeeds
+      pushUrl = remoteRepo.url;
+      const providerHost = providerHosts[config.provider] || config.provider;
+
+      const matchingTokens = getTokensForHost(tokens, (h) => h === providerHost);
+      if (matchingTokens.length === 0) {
+        throw new Error(`No ${config.provider} authentication token found for push operation`);
+      }
+
+      const pushResult = await tryTokensForHost(
+        tokens,
+        (h) => h === providerHost,
+        async (token: string, host: string) => {
+          console.log("🚀 Pushing to remote with URL:", pushUrl);
+          console.log("🚀 Push config:", {
+            provider: config.provider,
+            repoPath: canonicalKey ?? config.name,
+            defaultBranch: config.defaultBranch,
+            remoteUrl: pushUrl,
+            tokenLength: token.length,
+          });
+
+          // For other providers, use safePushToRemote for preflight checks
+          console.log("[NEW REPO] Using safePushToRemote for non-GRASP provider");
+          const result = await api.safePushToRemote({
+            repoId: canonicalKey || config.name,
+            remoteUrl: pushUrl,
+            branch: config.defaultBranch,
+            token: token,
+            provider: config.provider as any,
+            preflight: {
+              blockIfUncommitted: true,
+              requireUpToDate: true,
+              blockIfShallow: false,
+            },
+          });
+
+          if (!result?.success) {
+            if (result?.requiresConfirmation) {
+              throw new Error(result.warning || "Force push requires confirmation.");
+            }
+            throw new Error(result?.error || "Safe push failed");
+          }
+
+          return result;
+        }
+      );
+
+      console.log("[NEW REPO] Push result:", pushResult);
+      return remoteRepo;
+    }
   }
 
   function reset() {
