@@ -1,14 +1,17 @@
 <script lang="ts">
-  import { MessageSquare } from "@lucide/svelte";
+  import { MessageSquare, Loader2 } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
   const { Avatar, AvatarFallback, AvatarImage, Button, Textarea } = useRegistry();
   import { formatDistanceToNow } from "date-fns";
   import parseDiff from "parse-diff";
   import { ChevronDown, ChevronUp } from "@lucide/svelte";
+  import { createCommentEvent, type CommentEvent, type CommentTag } from "@nostr-git/shared-types";
+  import type { NostrEvent } from "nostr-tools";
 
   interface Comment {
     id: string;
     lineNumber: number;
+    filePath?: string;
     content: string;
     author: {
       name: string;
@@ -38,16 +41,25 @@
     showLineNumbers = true,
     expandAll = false,
     comments = [],
+    rootEvent,
+    onComment,
+    currentPubkey,
   }: {
     diff: AnyFileChange[] | string | undefined;
     showLineNumbers?: boolean;
     expandAll?: boolean;
     comments?: Comment[];
+    rootEvent?: NostrEvent | { id: string; pubkey?: string; kind?: number };
+    onComment?: (comment: Omit<CommentEvent, "id" | "pubkey" | "sig">) => Promise<void>;
+    currentPubkey?: string | null;
   } = $props();
 
   let selectedLine = $state<number | null>(null);
+  let selectedFileIdx = $state<number | null>(null);
+  let selectedChunkIdx = $state<number | null>(null);
   let newComment = $state("");
   let expandedFiles = $state(new Set<string>());
+  let isSubmitting = $state(false);
 
   // Accept both AST and raw string for dev ergonomics
   let parsed = $state<AnyFileChange[]>([]);
@@ -73,23 +85,137 @@
   });
 
   // Comments by file/hunk/line
-  // TODO: Map comments by file/hunk/line for full AST support
-  function getCommentsForLine(lineKey: string): Comment[] {
-    // For now, fallback to lineNumber only (legacy)
-    // In the future, use fileIdx/hunkIdx/ln for precise mapping
-    const lineNum = Number(lineKey.split(":").pop());
-    return comments.filter((c) => c.lineNumber === lineNum);
+  // Match comments based on actual line numbers from the change object and file path
+  function getCommentsForLine(change: import("parse-diff").Change, filePath: string): Comment[] {
+    // Extract the actual line number from the change based on its type
+    // We use a single line number per change to ensure comments appear exactly once
+    let lineNumberToMatch: number | null = null;
+    
+    if (change.type === "add") {
+      // For added lines, use the new line number
+      lineNumberToMatch = change.ln ?? null;
+    } else if (change.type === "del") {
+      // For deleted lines, use the old line number
+      lineNumberToMatch = change.ln ?? null;
+    } else if (change.type === "normal") {
+      // For normal changes, use the new line number (ln2) since that's what
+      // the user sees in the final file and what's stored when creating comments
+      // (see submitComment which prefers ln2)
+      lineNumberToMatch = change.ln2 ?? change.ln1 ?? null;
+    }
+    
+    // Match comments that have this line number AND file path
+    if (lineNumberToMatch === null) {
+      return [];
+    }
+    
+    return comments.filter((c) => {
+      // Match line number
+      if (c.lineNumber !== lineNumberToMatch) {
+        return false;
+      }
+      // If comment has a filePath, it must match; if comment doesn't have filePath (legacy), allow it
+      // This provides backward compatibility with old comments that don't have file paths
+      if (c.filePath !== undefined && c.filePath !== "") {
+        return c.filePath === filePath;
+      }
+      // Legacy comments without filePath are allowed (backward compatibility)
+      return true;
+    });
   }
 
-  function toggleCommentBox(line: number) {
-    selectedLine = selectedLine === line ? null : line;
+  function toggleCommentBox(line: number, fileIdx: number, chunkIdx: number) {
+    if (selectedLine === line && selectedFileIdx === fileIdx && selectedChunkIdx === chunkIdx) {
+      selectedLine = null;
+      selectedFileIdx = null;
+      selectedChunkIdx = null;
+    } else {
+      selectedLine = line;
+      selectedFileIdx = fileIdx;
+      selectedChunkIdx = chunkIdx;
+    }
     newComment = "";
   }
 
-  function submitComment(line: number) {
-    console.log(`New comment on line ${line}:`, newComment);
-    selectedLine = null;
-    newComment = "";
+  async function submitComment(
+    line: number,
+    fileIdx: number,
+    chunkIdx: number,
+    filePath: string,
+    lineNumber: number | null,
+  ) {
+    if (!newComment.trim() || !rootEvent || !onComment || !currentPubkey) {
+      console.warn("[DiffViewer] Cannot submit comment: missing required props");
+      return;
+    }
+
+    if (isSubmitting) return;
+
+    isSubmitting = true;
+    try {
+      // Get the actual line number from the change
+      const file = parsed[fileIdx];
+      if (!file || !file.chunks) {
+        throw new Error("Invalid file or chunk");
+      }
+
+      const chunk = file.chunks[chunkIdx];
+      if (!chunk || !("changes" in chunk)) {
+        throw new Error("Invalid chunk");
+      }
+
+      // Find the change at this line index
+      const change = chunk.changes[line - 1];
+      if (!change) {
+        throw new Error("Invalid change");
+      }
+
+      // Determine the actual line number based on change type
+      let actualLineNumber: number | null = null;
+      if (change.type === "add") {
+        actualLineNumber = (change as any).ln ?? null;
+      } else if (change.type === "del") {
+        actualLineNumber = (change as any).ln ?? null;
+      } else if (change.type === "normal") {
+        // For normal changes, prefer the new line number (ln2)
+        actualLineNumber = (change as any).ln2 ?? (change as any).ln1 ?? null;
+      }
+
+      // Build comment content with context
+      const commentContent = newComment.trim();
+      const contextInfo = `File: ${filePath}${actualLineNumber !== null ? `\nLine: ${actualLineNumber}` : ""}`;
+      const fullContent = `${commentContent}\n\n---\n${contextInfo}`;
+
+      // No extra tags needed - file/line info is in content
+      const extraTags: CommentTag[] = [];
+
+      // Create NIP-22 comment event
+      const commentEvent = createCommentEvent({
+        content: fullContent,
+        root: {
+          type: "E",
+          value: rootEvent.id,
+          kind: rootEvent.kind?.toString() || "",
+          pubkey: rootEvent.pubkey,
+        },
+        authorPubkey: currentPubkey,
+        extraTags,
+      });
+
+      // Publish the comment
+      await onComment(commentEvent);
+
+      // Reset state
+      selectedLine = null;
+      selectedFileIdx = null;
+      selectedChunkIdx = null;
+      newComment = "";
+    } catch (error) {
+      console.error("[DiffViewer] Failed to submit comment:", error);
+      // Optionally show error to user via toast or other UI feedback
+    } finally {
+      isSubmitting = false;
+    }
   }
 </script>
 
@@ -137,8 +263,8 @@
                 <div class="text-xs text-muted-foreground mb-1">{chunk.content}</div>
                 {#each chunk.changes as change, i}
                   {@const ln = i + 1}
-                  {@const lineKey = `${fileIdx}:${chunkIdx}:${ln}`}
-                  {@const lineComments = getCommentsForLine(lineKey)}
+                  {@const currentFilePath = file.to || file.from || "unknown"}
+                  {@const lineComments = getCommentsForLine(change, currentFilePath)}
                   {@const hasComments = lineComments.length > 0}
                   {@const isAdd = change.type === "add"}
                   {@const isDel = change.type === "del"}
@@ -166,7 +292,7 @@
                         variant="ghost"
                         size="icon"
                         class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto"
-                        onclick={() => toggleCommentBox(ln)}
+                        onclick={() => toggleCommentBox(ln, fileIdx, chunkIdx)}
                       >
                         <MessageSquare class="h-4 w-4" />
                       </Button>
@@ -199,7 +325,7 @@
                         {/each}
                       </div>
                     {/if}
-                    {#if selectedLine === ln}
+                    {#if selectedLine === ln && selectedFileIdx === fileIdx && selectedChunkIdx === chunkIdx}
                       <div class="bg-secondary/20 border-l-4 border-primary ml-10 pl-4 py-2">
                         <div class="flex gap-2">
                           <Avatar class="h-8 w-8">
@@ -210,20 +336,37 @@
                               bind:value={newComment}
                               placeholder="Add a comment..."
                               class="min-h-[60px] resize-none"
+                              disabled={isSubmitting}
                             />
                             <div class="flex justify-end gap-2">
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onclick={() => (selectedLine = null)}>Cancel</Button
+                                onclick={() => {
+                                  selectedLine = null;
+                                  selectedFileIdx = null;
+                                  selectedChunkIdx = null;
+                                }}
+                                disabled={isSubmitting}
                               >
+                                Cancel
+                              </Button>
                               <Button
                                 size="sm"
                                 class="gap-1 bg-git hover:bg-git-hover"
-                                disabled={!newComment.trim()}
-                                onclick={() => submitComment(ln)}
+                                disabled={!newComment.trim() || isSubmitting || !rootEvent || !onComment || !currentPubkey}
+                                onclick={() => {
+                                  const filePath = file.to || file.from || "unknown";
+                                  const lineNum = isAdd ? (change.ln ?? null) : isNormal ? (change.ln2 ?? change.ln1 ?? null) : (change.ln ?? null);
+                                  submitComment(ln, fileIdx, chunkIdx, filePath, lineNum);
+                                }}
                               >
-                                <MessageSquare class="h-3.5 w-3.5" /> Comment
+                                {#if isSubmitting}
+                                  <Loader2 class="h-3.5 w-3.5 animate-spin" />
+                                {:else}
+                                  <MessageSquare class="h-3.5 w-3.5" />
+                                {/if}
+                                Comment
                               </Button>
                             </div>
                           </div>
