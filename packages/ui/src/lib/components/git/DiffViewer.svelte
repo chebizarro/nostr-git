@@ -50,7 +50,7 @@
     expandAll?: boolean;
     comments?: Comment[];
     rootEvent?: NostrEvent | { id: string; pubkey?: string; kind?: number };
-    onComment?: (comment: Omit<CommentEvent, "id" | "pubkey" | "sig">) => Promise<void>;
+    onComment?: (comment: Omit<CommentEvent, "id" | "pubkey" | "sig">) => void;
     currentPubkey?: string | null;
   } = $props();
 
@@ -203,7 +203,7 @@
       });
 
       // Publish the comment
-      await onComment(commentEvent);
+      onComment(commentEvent);
 
       // Reset state
       selectedLine = null;
@@ -220,7 +220,7 @@
 </script>
 
 <div
-  class="git-diff-view border border-border rounded-md overflow-hidden"
+  class="git-diff-view border border-border rounded-md"
   style="border-color: hsl(var(--border));"
 >
   {#if parsed.length === 0}
@@ -250,7 +250,7 @@
         {:else}
           <ChevronDown class="h-4 w-4 mr-2 shrink-0" />
         {/if}
-        <span class="truncate">{fileId}</span>
+        <span>{fileId}</span>
         {#if getFileIsBinary(file)}
           <span class="ml-2 text-xs text-orange-400 shrink-0">[binary]</span>
         {/if}
@@ -275,8 +275,8 @@
                       ? "git-diff-line-remove bg-red-500/10"
                       : "hover:bg-secondary/50"}
 
-                  <div>
-                    <div class={`flex group pl-2 pt-1 ${bgClass}`}>
+                  <div class="w-full">
+                    <div class={`flex group pl-2 pt-1 ${bgClass} w-full`} style="min-width: max-content;">
                       <div class="flex shrink-0 text-muted-foreground select-none">
                         {#if showLineNumbers}
                           <span class="w-8 text-right pr-2">
@@ -287,11 +287,11 @@
                           </span>
                         {/if}
                       </div>
-                      <span class="font-mono whitespace-pre px-2 flex-1">{change.content}</span>
+                      <span class="font-mono whitespace-pre px-2 flex-shrink-0">{change.content}</span>
                       <Button
                         variant="ghost"
                         size="icon"
-                        class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto"
+                        class="opacity-0 group-hover:opacity-100 transition-opacity ml-auto shrink-0"
                         onclick={() => toggleCommentBox(ln, fileIdx, chunkIdx)}
                       >
                         <MessageSquare class="h-4 w-4" />
