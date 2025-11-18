@@ -15,7 +15,7 @@
     User,
   } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
-  const { Button, Card, ProfileComponent, EventActions, ReactionSummary } = useRegistry();
+  const { Button, Card, ProfileComponent, EventActions, ReactionSummary, ProfileLink } = useRegistry();
   import { toast } from "../../stores/toast";
   import {
     GIT_STATUS_APPLIED,
@@ -31,6 +31,8 @@
   import Status from "./Status.svelte";
   import { getTagValue, getTags } from "@nostr-git/shared-types";
   import BaseItemCard from "../BaseItemCard.svelte";
+  import TimeAgo from "../../TimeAgo.svelte";
+  import NostrAvatar from "./NostrAvatar.svelte";
 
   interface Props {
     event: PatchEvent;
@@ -65,7 +67,7 @@
 
   const parsed = parseGitPatchFromEvent(event);
 
-  const { id, title, description, baseBranch, commitCount } = parsed;
+  const { id, title, description, baseBranch, commitCount, createdAt } = parsed;
   
   // Create relay URL for EventActions
   const relayUrl = $derived.by(() => {
@@ -226,26 +228,9 @@
 </script>
 
 <BaseItemCard clickable={true} href={`patches/${id}`} variant="patch">
-  <!-- icon/status -->
-  {#snippet slotIcon()}
-    {#if repo && statusEvents}
-      <Status
-        repo={repo}
-        rootId={id}
-        rootKind={1617}
-        rootAuthor={event.pubkey}
-        statusEvents={statusEvents}
-        actorPubkey={actorPubkey}
-        compact={true} />
-    {:else if statusIcon}
-      {@const { icon: Icon, color } = statusIcon()}
-      <Icon class={`h-6 w-6 ${color}`} />
-    {/if}
-  {/snippet}
-
   <!-- title -->
   {#snippet slotTitle()}
-    {description}
+    {title}
   {/snippet}
 
   <!-- actions (bookmark + chevron) -->
@@ -280,18 +265,43 @@
 
   <!-- meta row -->
   {#snippet slotMeta()}
-    <span class="whitespace-nowrap">Base: <span class="max-w-[120px] inline-block truncate align-bottom" title={baseBranch}>{baseBranch}</span></span>
-    <span>•</span>
-    <span class="whitespace-nowrap">{commitCount + (patches?.length ?? 0)} commits</span>
-    <span>•</span>
-    <span class="whitespace-nowrap">{comments?.length ?? 0} comments</span>
+    {#if repo && statusEvents}
+        <Status
+          repo={repo}
+          rootId={id}
+          rootKind={1617}
+          rootAuthor={event.pubkey}
+          statusEvents={statusEvents}
+          actorPubkey={actorPubkey}
+          compact={true} />
+      {:else if statusIcon}
+        {@const { icon: Icon, color } = statusIcon()}
+        <Icon class={`h-6 w-6 ${color}`} />
+    {/if}
+    <span class="whitespace-nowrap">Opened <TimeAgo date={createdAt} /></span>
+    <div class="flex items-center gap-1">
+        <span class="whitespace-nowrap">• By </span>
+        <NostrAvatar pubkey={event.pubkey} title={title || 'Issue author'} />
+        <ProfileLink pubkey={event.pubkey} />
+    </div>
+    {#if baseBranch}
+      <div class="flex items-center gap-1">
+        <span class="whitespace-nowrap">• Base: </span>
+        <span class="max-w-[120px] inline-block truncate align-bottom" title={baseBranch}>{baseBranch}</span>
+      </div>
+    {/if}
+    {#if commitCount > 0}
+      <span class="whitespace-nowrap">• {commitCount + (patches?.length ?? 0)} commits</span>
+    {/if}
+    {#if comments?.length > 0}
+      <span class="whitespace-nowrap">• {comments?.length ?? 0} comments</span>
+    {/if}
     {#if reviewersCount > 0}
-      <span>•</span>
-      <span class="whitespace-nowrap">{reviewersCount} reviewer{reviewersCount === 1 ? "" : "s"}</span>
+      <span class="whitespace-nowrap">• {reviewersCount} reviewer{reviewersCount === 1 ? "" : "s"}</span>
     {/if}
     {#if parsed.commitHash}
-      <span>•</span>
       <div class="flex items-center gap-1 whitespace-nowrap">
+        <span>•</span>
         <GitCommit class="h-3 w-3" />
         <code class="text-xs font-mono">{parsed.commitHash.substring(0, 7)}</code>
         <button class="hover:text-foreground transition-colors" onclick={() => copyToClipboard(parsed.commitHash, "Commit hash")}>
@@ -405,15 +415,7 @@
       <EventActions event={event} url={relayUrl} noun={noun} customActions={undefined} />
       <MessageSquare class="h-4 w-4 text-muted-foreground" />
       <span class="text-sm text-muted-foreground">{comments?.length ?? 0}</span>
-      <Button size="sm" variant="outline" class="ml-2">
-        <a href={`patches/${id}`}>View Diff</a>
-      </Button>
     </div>
-  {/snippet}
-
-  <!-- right side (avatar/profile) -->
-  {#snippet slotSide()}
-    <ProfileComponent pubkey={event.pubkey} hideDetails={true} />
   {/snippet}
 </BaseItemCard>
 
