@@ -4,6 +4,15 @@ import { getAuthCallback, setAuthConfig } from './auth.js';
 import { resolveRobustBranch } from './branches.js';
 import { getProviderFs, safeRmrf } from './fs-utils.js';
 
+// Import toPlain from worker (it's defined in the same directory)
+function toPlain<T>(val: T): T {
+  try {
+    return JSON.parse(JSON.stringify(val));
+  } catch {
+    return val;
+  }
+}
+
 export interface CloneRemoteRepoOptions {
   url: string;
   depth?: number;
@@ -79,15 +88,45 @@ export async function smartInitializeRepoUtil(
         sendProgress('Syncing with remote');
         const cloneUrl = cloneUrls[0];
         if (cloneUrl) {
-          await git.fetch({
-            dir,
-            url: cloneUrl,
-            ref: await resolveRobustBranch(git, dir),
-            singleBranch: false,
-            depth: repoDataLevels.get(key) === 'full' ? undefined : 50
+          try {
+            await git.fetch({
+              dir,
+              url: cloneUrl,
+              ref: 'HEAD', // Use HEAD instead of trying to resolve branch first
+              singleBranch: false,
+              depth: repoDataLevels.get(key) === 'full' ? undefined : 50
+            });
+          } catch (fetchError: any) {
+            // Handle CORS/network errors gracefully during fetch
+            const errorMessage = fetchError?.message || String(fetchError);
+            if (errorMessage.includes('CORS') || 
+                errorMessage.includes('NetworkError') || 
+                errorMessage.includes('Failed to fetch') ||
+                errorMessage.includes('Access-Control')) {
+              console.warn(`[smartInitializeRepo] CORS/Network error during fetch, using local data only:`, errorMessage);
+              // Continue with local data, don't throw error
+            } else {
+              throw fetchError;
+            }
+          }
+        }
+        
+        // Try to resolve branch, but handle empty repos gracefully
+        let mainBranch: string;
+        try {
+          mainBranch = await resolveRobustBranch(git, dir);
+        } catch (branchError) {
+          console.warn(`[smartInitializeRepo] Could not resolve branches, repository may be empty:`, branchError);
+          // For empty repos, we'll return a limited success state
+          return toPlain({
+            success: true,
+            repoId,
+            fromCache: false,
+            dataLevel: 'refs',
+            warning: 'Repository initialized but no branches found. Repository may be empty.',
+            serializable: true
           });
         }
-        const mainBranch = await resolveRobustBranch(git, dir);
         const remoteRef = `refs/remotes/origin/${mainBranch}`;
         let remoteCommit: string;
         try {
@@ -168,12 +207,15 @@ export async function initializeRepoUtil(
 
     let lastError: Error | null = null;
     let succeeded = false;
+    let corsError = false;
+    
     for (const cloneUrl of cloneUrls) {
       sendProgress('Fetching repository metadata', 0, 1);
       const onProgress = (progress: { phase: string; loaded?: number; total?: number }) =>
         sendProgress(progress.phase, progress.loaded, progress.total);
       const authCallback = getAuthCallback(cloneUrl);
       const refCandidates = ['HEAD', 'main', 'master', 'develop', 'dev'];
+      
       for (const refCandidate of refCandidates) {
         try {
           await git.clone({
@@ -191,12 +233,38 @@ export async function initializeRepoUtil(
           break;
         } catch (e: any) {
           lastError = e;
+          const errorMessage = e?.message || String(e);
+          
+          // Check for CORS/network errors specifically
+          if (errorMessage.includes('CORS') || 
+              errorMessage.includes('NetworkError') || 
+              errorMessage.includes('Failed to fetch') ||
+              errorMessage.includes('Access-Control') ||
+              errorMessage.includes('Cross-Origin')) {
+            corsError = true;
+            console.warn(`[initializeRepo] CORS/Network error for ${cloneUrl}:`, errorMessage);
+          }
+          
           continue;
         }
       }
       if (succeeded) break;
     }
-    if (!succeeded) throw lastError || new Error('All clone URLs failed');
+    
+    if (!succeeded) {
+      if (corsError) {
+        // For CORS errors, return a special response instead of throwing
+        return toPlain({
+          success: false,
+          repoId,
+          error: 'Repository initialization failed due to CORS/network restrictions. The remote repository may be accessible but the browser cannot fetch it due to security policies.',
+          corsError: true,
+          fromCache: false,
+          serializable: true
+        });
+      }
+      throw lastError || new Error('All clone URLs failed');
+    }
 
     const branches = await git.listBranches({ dir });
     const headCommit = await git.resolveRef({ dir, ref: 'HEAD' });

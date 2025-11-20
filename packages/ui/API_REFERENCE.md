@@ -659,6 +659,22 @@ if (repo.hasMergeAnalysis(patchId)) {
 }
 ```
 
+#### Automatic Background Merge Analysis (Optional)
+
+The `Repo` class can optionally perform **background merge analysis** for all patches when a repository is initialized, when patches change, or after a reset. This behavior is **disabled by default** to avoid expensive analysis work on first load.
+
+To enable background merge analysis for a given `Repo` instance:
+
+```typescript
+// After constructing Repo
+const repo = new Repo(config);
+
+// Opt in to background merge analysis of all patches
+repo.enableAutoMergeAnalysis();
+```
+
+When enabled, `Repo` will coordinate with `PatchManager` to process patches in the background using the worker, populating merge analysis results proactively. Manual analysis via the patch detail page or explicit calls to `refreshMergeAnalysis` continue to work regardless of this flag.
+
 ### Cache Management
 
 ```typescript

@@ -118,6 +118,9 @@ export class Repo {
 
   syncStatus: any = $state(null);
 
+  // Feature flag: controls whether background merge analysis runs automatically
+  #autoMergeAnalysisEnabled: boolean = false;
+
   constructor({
     repoEvent,
     repoStateEvent,
@@ -290,8 +293,8 @@ export class Repo {
 
     patches.subscribe((patchEvents) => {
       this.patches = patchEvents;
-      // Only perform merge analysis if WorkerManager is ready
-      if (this.workerManager.isReady) {
+      // Only perform merge analysis if explicitly enabled and WorkerManager is ready
+      if (this.#autoMergeAnalysisEnabled && this.workerManager.isReady) {
         this.#performMergeAnalysis(patchEvents);
       }
       // Invalidate DAG cache when patch set changes
@@ -347,8 +350,8 @@ export class Repo {
           this.#refsLoading = false;
         }
 
-        // Ensure background merge analysis runs once worker is ready
-        if (this.patches.length > 0) {
+        // Ensure background merge analysis runs once worker is ready, if enabled
+        if (this.#autoMergeAnalysisEnabled && this.patches.length > 0) {
           await this.#performMergeAnalysis(this.patches);
         }
       } catch (error) {
@@ -1228,8 +1231,8 @@ export class Repo {
       // Force reload branches and other data
       await this.#loadBranchesFromRepo(this.repoEvent);
 
-      // Trigger merge analysis refresh if patches exist
-      if (this.patches.length > 0) {
+      // Trigger merge analysis refresh if patches exist and auto analysis is enabled
+      if (this.#autoMergeAnalysisEnabled && this.patches.length > 0) {
         await this.#performMergeAnalysis(this.patches);
       }
     }
@@ -1368,6 +1371,11 @@ export class Repo {
     } catch {
       return "";
     }
+  }
+
+  // Enable automatic background merge analysis for this Repo instance
+  enableAutoMergeAnalysis(): void {
+    this.#autoMergeAnalysisEnabled = true;
   }
 
   // Perform background merge analysis for patches

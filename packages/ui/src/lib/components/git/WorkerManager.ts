@@ -181,6 +181,15 @@ export class WorkerManager {
   }
 
   /**
+   * Check if repository is cloned locally
+   */
+  async isRepoCloned(params: {
+    repoId: string;
+  }): Promise<boolean> {
+    return this.execute("isRepoCloned", params);
+  }
+
+  /**
    * Push local repository to a remote
    */
   async pushToRemote(params: {

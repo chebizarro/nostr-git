@@ -92,15 +92,41 @@ export async function syncWithRemoteUtil(
 
     // 4. Fetch from remote
     console.log(`[syncWithRemote] Fetching from remote...`);
-    await git.fetch({
-      dir,
-      url: remoteUrl,
-      ref: targetBranch,
-      singleBranch: true,
-      depth: 1,
-      prune: true
-    });
-    console.log(`[syncWithRemote] Fetch completed`);
+    try {
+      await git.fetch({
+        dir,
+        url: remoteUrl,
+        ref: targetBranch,
+        singleBranch: true,
+        depth: 1,
+        prune: true
+      });
+      console.log(`[syncWithRemote] Fetch completed`);
+    } catch (fetchError: any) {
+      // Handle CORS and network errors gracefully
+      const errorMessage = fetchError?.message || String(fetchError);
+      if (errorMessage.includes('CORS') || 
+          errorMessage.includes('NetworkError') || 
+          errorMessage.includes('Failed to fetch') ||
+          errorMessage.includes('Access-Control')) {
+        console.warn(`[syncWithRemote] CORS/Network error during fetch (this is expected for some remotes):`, errorMessage);
+        // For CORS errors, we'll continue with what we have locally
+        // This allows the app to work with local data even when remote is inaccessible
+        return toPlain({
+          success: true,
+          repoId,
+          branch: targetBranch,
+          headCommit: null, // We couldn't get remote HEAD
+          localCommit: null,
+          needsUpdate: false, // Assume no update since we can't check
+          synced: false, // Not fully synced due to network issues
+          duration: Date.now() - startTime,
+          warning: `Could not fetch from remote due to CORS/network restrictions. Using local data only.`,
+          serializable: true
+        });
+      }
+      throw fetchError;
+    }
 
     // 5. Resolve remote HEAD
     const remoteCommit = await git

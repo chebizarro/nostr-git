@@ -285,7 +285,7 @@ async function safePushToRemote(options: {
   return safePushToRemoteUtil(git, cacheManager, options, {
     rootDir,
     canonicalRepoKey,
-    isRepoCloned,
+    isRepoCloned: isRepoClonedInternal,
     isShallowClone,
     resolveRobustBranch: (dir, requested) => resolveRobustBranchInWorker(dir, requested),
     hasUncommittedChanges,
@@ -371,7 +371,7 @@ async function syncWithRemote({
       rootDir,
       canonicalRepoKey,
       resolveRobustBranch: (dir, requested) => resolveRobustBranchInWorker(dir, requested),
-      isRepoCloned,
+      isRepoCloned: isRepoClonedInternal,
       toPlain
     }
   );
@@ -692,8 +692,16 @@ async function getCommitCount({ repoId, branch }: { repoId: string; branch?: str
   }
 }
 
-async function isRepoCloned(dir: string): Promise<boolean> {
+// Internal function that takes directory string (for backward compatibility)
+async function isRepoClonedInternal(dir: string): Promise<boolean> {
   return isRepoClonedFs(git, dir);
+}
+
+// API function that takes parameter object
+async function isRepoCloned(params: { repoId: string }): Promise<boolean> {
+  const key = canonicalRepoKey(params.repoId);
+  const dir = `${rootDir}/${key}`;
+  return isRepoClonedInternal(dir);
 }
 
 /**
@@ -2486,7 +2494,7 @@ async function getStatus({ repoId, branch }: { repoId: string; branch?: string }
   try {
     // Ensure repo exists
     console.log('[git-worker] getStatus - checking if repo is cloned...');
-    const cloned = await isRepoCloned(dir);
+    const cloned = await isRepoClonedInternal(dir);
     console.log('[git-worker] getStatus - repo cloned:', cloned);
     
     if (!cloned) {
@@ -2654,6 +2662,7 @@ try {
       console.log('[git-worker] getStatus RPC received:', params);
       return await getStatus(params);
     },
+    isRepoCloned,
     listTreeAtCommit,
     setEventIO // Function to configure EventIO from main thread
   };

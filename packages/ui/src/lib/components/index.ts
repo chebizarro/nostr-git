@@ -1,5 +1,6 @@
 // Git components
 export { default as DiffViewer } from "./git/DiffViewer.svelte";
+export { default as PatchViewer } from "./git/PatchViewer.svelte";
 export { default as FileView } from "./git/FileView.svelte";
 export { default as IssueCard } from "./git/IssueCard.svelte";
 export { default as IssueThread } from "./git/IssueThread.svelte";
