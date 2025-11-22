@@ -22,11 +22,14 @@
     GIT_STATUS_CLOSED,
     GIT_STATUS_DRAFT,
     GIT_STATUS_OPEN,
+    GIT_PULL_REQUEST,
     type PatchEvent,
+    type PullRequestEvent,
     type StatusEvent,
     type CommentEvent,
   } from "@nostr-git/shared-types";
   import { parseGitPatchFromEvent } from "@nostr-git/core";
+  import { parsePullRequestEvent } from "@nostr-git/shared-types";
   import IssueThread from "./IssueThread.svelte";
   import Status from "./Status.svelte";
   import { getTagValue, getTags } from "@nostr-git/shared-types";
@@ -35,7 +38,7 @@
   import NostrAvatar from "./NostrAvatar.svelte";
 
   interface Props {
-    event: PatchEvent;
+    event: PatchEvent | PullRequestEvent;
     status?: StatusEvent;
     patches?: PatchEvent[];
     comments?: CommentEvent[];
@@ -65,9 +68,16 @@
     relays = [],
   }: Props = $props();
 
-  const parsed = parseGitPatchFromEvent(event);
+  const isPullRequest = event.kind === GIT_PULL_REQUEST;
+
+  const parsed = isPullRequest
+    ? (parsePullRequestEvent(event as PullRequestEvent) as any)
+    : (parseGitPatchFromEvent(event as PatchEvent) as any);
 
   const { id, title, description, baseBranch, commitCount, createdAt } = parsed;
+  const displayTitle = (title && typeof title === "string" && title.trim().length > 0)
+    ? title.trim()
+    : "Untitled";
   
   // Create relay URL for EventActions
   const relayUrl = $derived.by(() => {
@@ -177,7 +187,7 @@
   let isExpanded = $state(false);
   let isBookmarked = $state(false);
 
-  const noun = "Patch";
+  const noun = isPullRequest ? "Pull Request" : "Patch";
 
   // Copy to clipboard function
   const copyToClipboard = async (text: string, label: string) => {
@@ -230,7 +240,7 @@
 <BaseItemCard clickable={true} href={`patches/${id}`} variant="patch">
   <!-- title -->
   {#snippet slotTitle()}
-    {title}
+    {displayTitle}
   {/snippet}
 
   <!-- actions (bookmark + chevron) -->
@@ -269,7 +279,7 @@
         <Status
           repo={repo}
           rootId={id}
-          rootKind={1617}
+          rootKind={event.kind}
           rootAuthor={event.pubkey}
           statusEvents={statusEvents}
           actorPubkey={actorPubkey}
@@ -279,9 +289,12 @@
         <Icon class={`h-6 w-6 ${color}`} />
     {/if}
     <span class="whitespace-nowrap">Opened <TimeAgo date={createdAt} /></span>
+    <span class="ml-2 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+      {isPullRequest ? "Pull Request" : "Patch"}
+    </span>
     <div class="flex items-center gap-1">
         <span class="whitespace-nowrap">• By </span>
-        <NostrAvatar pubkey={event.pubkey} title={title || 'Issue author'} />
+        <NostrAvatar pubkey={event.pubkey} title={displayTitle || 'Issue author'} />
         <ProfileLink pubkey={event.pubkey} />
     </div>
     {#if baseBranch}
@@ -423,7 +436,7 @@
   <Card class="git-card transition-colors">
     <IssueThread
       issueId={id}
-      issueKind={"1617"}
+      issueKind={String(event.kind) as "1617" | "1618"}
       comments={comments}
       currentCommenter={currentCommenter}
       onCommentCreated={onCommentCreated}
