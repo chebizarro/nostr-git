@@ -50,7 +50,7 @@ function initializeEventIO(): EventIO {
   if (workerEventIO) {
     return workerEventIO;
   }
-  
+
   // Create a minimal EventIO implementation for the worker
   // This is a simplified version that can handle basic operations
   workerEventIO = {
@@ -59,26 +59,26 @@ function initializeEventIO(): EventIO {
       // Minimal implementation - return empty array for now
       return [];
     },
-    
+
     async publishEvent(event: any): Promise<any> {
       console.log('[git-worker] EventIO.publishEvent called - minimal implementation');
       // Minimal implementation - return success for now
       return { ok: true, relays: [] };
     },
-    
+
     async publishEvents(events: any[]): Promise<any[]> {
       console.log('[git-worker] EventIO.publishEvents called - minimal implementation');
       // Minimal implementation - return success for all events
       return events.map(() => ({ ok: true, relays: [] }));
     },
-    
+
     getCurrentPubkey(): string | null {
       console.log('[git-worker] EventIO.getCurrentPubkey called - minimal implementation');
       // Minimal implementation - return null for now
       return null;
     }
   };
-  
+
   console.log('[git-worker] EventIO initialized internally with minimal implementation');
   return workerEventIO;
 }
@@ -110,7 +110,7 @@ function getEventIO(): EventIO {
  */
 function createGraspHelpers(token: string) {
   const io = getEventIO();
-  
+
   // Clean approach - no more signer objects!
   // EventIO handles all signing internally via closures
   return { io };
@@ -197,7 +197,7 @@ async function persistRepoSnapshot({
     let headCommit: string = '';
     try {
       headCommit = await git.resolveRef({ dir, ref: 'HEAD' });
-    } catch {}
+    } catch { }
 
     // Enumerate local branches and resolve their commits
     let branches: Array<{ name: string; commit: string }> = [];
@@ -213,7 +213,7 @@ async function persistRepoSnapshot({
         }
       }
       branches = out;
-    } catch {}
+    } catch { }
 
     // Determine current data level from memory, default to 'shallow' if unknown
     const level = (repoDataLevels.get(key) || 'shallow') as 'refs' | 'shallow' | 'full';
@@ -458,7 +458,7 @@ const ensureShallowClone = async ({ repoId, branch }: { repoId: string; branch?:
         const key = canonicalRepoKey(repoId);
         const cache = await cacheManager.getRepoCache(key);
         await persistRepoSnapshot({ repoId, cloneUrls: cache?.cloneUrls });
-      } catch {}
+      } catch { }
     }
     return res;
   });
@@ -506,7 +506,7 @@ const ensureFullClone = async ({
         // Promote in-memory level if util set it
         if (repoDataLevels.get(key) !== 'full') repoDataLevels.set(key, 'full');
         await persistRepoSnapshot({ repoId, cloneUrls: cache?.cloneUrls });
-      } catch {}
+      } catch { }
     }
     return res;
   });
@@ -729,7 +729,7 @@ const getCommitHistory = async ({
 }) => {
   const key = canonicalRepoKey(repoId);
   const dir = `${rootDir}/${key}`;
-  
+
   const startTime = Date.now();
   console.log(`[getCommitHistory] Starting for ${repoId}, branch: ${branch || 'default'}, depth: ${depth}`);
 
@@ -743,7 +743,7 @@ const getCommitHistory = async ({
     if (cachedCommits && cachedCommits.commits.length >= depth) {
       const cacheAge = Date.now() - cachedCommits.lastUpdated;
       const maxCacheAge = 5 * 60 * 1000; // 5 minutes
-      
+
       if (cacheAge < maxCacheAge) {
         const duration = Date.now() - startTime;
         console.log(`[getCommitHistory] Returning ${cachedCommits.commits.length} commits from IndexedDB cache (age: ${Math.round(cacheAge / 1000)}s)`);
@@ -769,7 +769,7 @@ const getCommitHistory = async ({
   try {
     const cache = await cacheManager.getRepoCache(key);
     const cloneUrls = cache?.cloneUrls || [];
-    
+
     if (cloneUrls.length > 0) {
       const needsSync = await needsUpdate(repoId, cloneUrls, cache);
       if (needsSync) {
@@ -787,7 +787,7 @@ const getCommitHistory = async ({
   } catch (syncCheckError) {
     console.warn(`[getCommitHistory] Sync check failed, continuing anyway:`, syncCheckError);
   }
-  
+
   let attempt = 0;
   let maxAttempts = 3;
   let lastError = null;
@@ -796,7 +796,7 @@ const getCommitHistory = async ({
   while (attempt < maxAttempts) {
     try {
       console.log(`[getCommitHistory] Attempt ${attempt + 1}/${maxAttempts}, depth: ${currentDepth}`);
-      
+
       // Always ensure we have sufficient history for the requested depth
       const cloneResult = await ensureFullClone({ repoId, branch: targetBranch, depth: currentDepth });
       if (!cloneResult.success) {
@@ -1047,7 +1047,7 @@ async function applyPatchAndPush(params: {
       const cache = await cacheManager.getRepoCache(key);
       await persistRepoSnapshot({ repoId: params.repoId, cloneUrls: cache?.cloneUrls });
     }
-  } catch {}
+  } catch { }
   return result;
 }
 
@@ -1122,7 +1122,7 @@ const cloneAndFork = async ({
     nostrPrivateKey
   );
 
-    
+
   console.log('[git-worker] Fork event published successfully');
   return remoteUrl;
 };
@@ -1250,7 +1250,7 @@ const resetRepoToRemote = async ({ repoId, branch }: { repoId: string; branch?: 
     try {
       const cache = await cacheManager.getRepoCache(key);
       await persistRepoSnapshot({ repoId, cloneUrls: cache?.cloneUrls });
-    } catch {}
+    } catch { }
 
     return {
       success: true,
@@ -1333,7 +1333,7 @@ const createLocalRepo = async ({
         providerFsCtor: (git as any)?.fs?.constructor?.name
       };
       console.log('[git-worker] Provider info:', providerInfo);
-    } catch {}
+    } catch { }
 
     const fs = getProviderFs(git);
     try {
@@ -1344,12 +1344,12 @@ const createLocalRepo = async ({
         promisesKeys: fs && (fs as any).promises ? Object.keys((fs as any).promises) : [],
         isLightningHint: Boolean(
           fs &&
-            ((fs as any).__isLightningFS ||
-              ((fs as any).constructor?.name || '').toLowerCase().includes('lightning'))
+          ((fs as any).__isLightningFS ||
+            ((fs as any).constructor?.name || '').toLowerCase().includes('lightning'))
         )
       };
       console.log('[git-worker] FS info:', fsInfo);
-    } catch {}
+    } catch { }
 
     if (!fs || !fs.promises) {
       throw new Error(
@@ -1407,7 +1407,7 @@ const createLocalRepo = async ({
     // Persist repo snapshot after createLocalRepo success
     try {
       await persistRepoSnapshot({ repoId, cloneUrls: [] });
-    } catch {}
+    } catch { }
 
     return {
       success: true,
@@ -1480,7 +1480,7 @@ const createRemoteRepo = async ({
 
     let remoteUrl = repoMetadata.cloneUrl;
     console.log(`[createRemoteRepo] Original cloneUrl from API: ${remoteUrl}`);
-    
+
     // For GRASP, ensure clone URL uses HTTP(S) scheme, not WS(S)
     if (provider === 'grasp') {
       remoteUrl = remoteUrl.replace(/^ws:\/\//, 'http://').replace(/^wss:\/\//, 'https://');
@@ -1550,7 +1550,7 @@ const pushToRemote = async ({
       }
 
       console.log(`[GRASP] Using relay base URL for API:`, relayBaseUrl);
-      
+
       // Ensure a repo state (STATE_KIND=30618) is published to the GRASP relay before pushing
       // Mirrors ngit init.rs + repo_state.rs; critical so the relay recognizes refs/HEAD.
       try {
@@ -1569,13 +1569,13 @@ const pushToRemote = async ({
           try {
             const sha = await git.resolveRef({ dir, ref: `refs/heads/${b}` });
             refs[`refs/heads/${b}`] = sha;
-          } catch {}
+          } catch { }
         }
         for (const t of tags) {
           try {
             const sha = await git.resolveRef({ dir, ref: `refs/tags/${t}` });
             refs[`refs/tags/${t}`] = sha;
-          } catch {}
+          } catch { }
         }
 
         const headRef = branch ? `refs/heads/${branch}` : undefined;
@@ -1634,7 +1634,7 @@ const pushToRemote = async ({
         }
 
         console.log(`[GRASP] Pushing packfiles over HTTPS to ${pushUrl} (ref=refs/heads/${branch})`);
-        
+
         // Try a few Basic auth mappings (parity with GitAuthenticator plaintext creds)
         const authCandidates = [
           { username: 'grasp', password: token as string },
@@ -1671,7 +1671,7 @@ const pushToRemote = async ({
             // Try probing explicitly and push to selected URL
             const retryUrl = await pickSmartHttpUrl(remoteUrl);
             console.warn('[GRASP] Retrying push with probed path:', retryUrl);
-            try { await git.addRemote({ dir, remote: 'origin', url: retryUrl }); } catch {}
+            try { await git.addRemote({ dir, remote: 'origin', url: retryUrl }); } catch { }
             const authCallback = () => ({ username: token as string, password: 'grasp' });
             await git.push({ dir, url: retryUrl, ref: `refs/heads/${branch}`, onAuth: authCallback });
             console.log('[GRASP] Git objects pushed successfully after probed path fallback');
@@ -1689,7 +1689,7 @@ const pushToRemote = async ({
         const key = canonicalRepoKey(repoId);
         const cache = await cacheManager.getRepoCache(key);
         await persistRepoSnapshot({ repoId, cloneUrls: cache?.cloneUrls || [remoteUrl] });
-      } catch {}
+      } catch { }
 
       // Return success result
       return {
@@ -1729,7 +1729,7 @@ const pushToRemote = async ({
       const key = canonicalRepoKey(repoId);
       const cache = await cacheManager.getRepoCache(key);
       await persistRepoSnapshot({ repoId, cloneUrls: cache?.cloneUrls || [remoteUrl] });
-    } catch {}
+    } catch { }
 
     return {
       success: true,
@@ -1996,7 +1996,7 @@ async function forkAndCloneRepo(options: {
     // Cleanup partial clone on error
     try {
       const fs: any = (git as any).fs;
-      await fs?.promises?.rmdir?.(dir).catch?.(() => {}); // Best effort cleanup
+      await fs?.promises?.rmdir?.(dir).catch?.(() => { }); // Best effort cleanup
     } catch {
       // Ignore cleanup errors
     }
@@ -2093,7 +2093,7 @@ async function updateAndPushFiles(options: {
       const filePath = `${dir}/${file.path}`;
       const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
       if (dirPath && dirPath !== dir) {
-        await fs.promises.mkdir(dirPath).catch(() => {});
+        await fs.promises.mkdir(dirPath).catch(() => { });
       }
       await fs.promises.writeFile(filePath, file.content, 'utf8');
     }
@@ -2403,7 +2403,7 @@ async function getCommitDetails({
             commitId,
             resolved: commit.oid
           });
-        } catch {}
+        } catch { }
       }
     } else {
       // Initial commit - show all files as added
@@ -2472,15 +2472,15 @@ async function getStatus({ repoId, branch }: { repoId: string; branch?: string }
     workdir: number;
     stage: number;
     status:
-      | 'added'
-      | 'modified'
-      | 'deleted'
-      | 'untracked'
-      | 'ignored'
-      | 'conflicted'
-      | 'staged'
-      | 'renamed'
-      | 'unknown';
+    | 'added'
+    | 'modified'
+    | 'deleted'
+    | 'untracked'
+    | 'ignored'
+    | 'conflicted'
+    | 'staged'
+    | 'renamed'
+    | 'unknown';
   }>;
   counts: Record<string, number>;
   text?: string;
@@ -2490,13 +2490,13 @@ async function getStatus({ repoId, branch }: { repoId: string; branch?: string }
   const key = canonicalRepoKey(repoId);
   const dir = `${rootDir}/${key}`;
   console.log('[git-worker] getStatus - repo key:', key, 'dir:', dir);
-  
+
   try {
     // Ensure repo exists
     console.log('[git-worker] getStatus - checking if repo is cloned...');
     const cloned = await isRepoClonedInternal(dir);
     console.log('[git-worker] getStatus - repo cloned:', cloned);
-    
+
     if (!cloned) {
       return {
         success: false,
@@ -2532,15 +2532,15 @@ async function getStatus({ repoId, branch }: { repoId: string; branch?: string }
       workdir: number;
       stage: number;
       status:
-        | 'added'
-        | 'modified'
-        | 'deleted'
-        | 'untracked'
-        | 'ignored'
-        | 'conflicted'
-        | 'staged'
-        | 'renamed'
-        | 'unknown';
+      | 'added'
+      | 'modified'
+      | 'deleted'
+      | 'untracked'
+      | 'ignored'
+      | 'conflicted'
+      | 'staged'
+      | 'renamed'
+      | 'unknown';
     };
 
     const files: StatusFile[] = matrix.map((row: any) => {
@@ -2669,7 +2669,7 @@ try {
 
   console.log('[git-worker] API object created with', Object.keys(api).length, 'methods');
   console.log('[git-worker] API methods:', Object.keys(api));
-  
+
   expose(api);
 
   console.log('[git-worker] API methods exposed successfully');
