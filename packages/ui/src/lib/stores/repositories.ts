@@ -144,6 +144,12 @@ function createRepositoriesStore() {
       Address,
     } = options;
 
+    // Validate that a string is a valid hex pubkey (exactly 64 hex characters)
+    const isValidPubkey = (pubkey: string | undefined | null): boolean => {
+      if (!pubkey || typeof pubkey !== 'string') return false;
+      return /^[0-9a-f]{64}$/i.test(pubkey);
+    };
+
     const bookmarked = loadedBookmarkedRepos || [];
     const byCompositeKey = new Map<string, RepoCard>();
 
@@ -189,7 +195,7 @@ function createRepositoriesStore() {
         mStore = deriveMaintainersForEuc(euc);
         maintainersStoreByEuc.set(euc, mStore);
       }
-      const maintainers = Array.from(mStore.get() || []);
+      const maintainers = Array.from(mStore.get() || []).filter((pk: any) => isValidPubkey(pk as string));
       let rStore = refStateStoreByEuc.get(euc);
       if (!rStore) {
         rStore = deriveRepoRefState(euc);
@@ -207,7 +213,12 @@ function createRepositoriesStore() {
         }
       } catch {}
       // Compute principal maintainer and naddr for navigation
-      const principal = maintainers[0] || (first as any)?.pubkey || "";
+      // Use first valid maintainer, or fall back to event pubkey if valid
+      const principal = maintainers.length > 0 && isValidPubkey(maintainers[0] as string)
+        ? maintainers[0]
+        : isValidPubkey((first as any)?.pubkey)
+        ? (first as any)?.pubkey
+        : "";
       const repoNaddr = (() => {
         try {
           if (!principal || !title) return "";
@@ -245,7 +256,8 @@ function createRepositoriesStore() {
         euc,
         web: Array.from(new Set(web)) as string[],
         clone: Array.from(new Set(clone)) as string[],
-        maintainers: maintainers as string[],
+        // Ensure maintainers are filtered to only valid pubkeys
+        maintainers: maintainers.filter((pk: any) => isValidPubkey(pk)) as string[],
         refs,
         rootsCount,
         revisionsCount,

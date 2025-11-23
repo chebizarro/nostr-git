@@ -34,6 +34,7 @@
   // Initialize the useForkRepo hook (allow DI override)
   const forkImpl = useForkRepoImpl ?? useForkRepo;
   const forkState = forkImpl({
+    userPubkey: pubkey, // Pass Nostr pubkey for maintainers
     onProgress: (steps) => {
       // Progress is handled internally by the hook
       console.log("🔄 Fork progress:", steps);

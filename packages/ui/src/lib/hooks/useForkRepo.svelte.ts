@@ -36,6 +36,7 @@ export interface ForkResult {
 
 export interface UseForkRepoOptions {
   workerApi?: any; // Git worker API instance (optional for backward compatibility)
+  userPubkey?: string; // Nostr pubkey of the user creating the fork (required for maintainers)
   onProgress?: (progress: ForkProgress[]) => void;
   onForkCompleted?: (result: ForkResult) => void;
   onPublishEvent?: (event: RepoAnnouncementEvent | RepoStateEvent) => Promise<void>;
@@ -80,7 +81,7 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
     console.log("🔐 Token store updated, now have", t.length, "tokens");
   });
 
-  const { onProgress, onForkCompleted, onPublishEvent } = options;
+  const { onProgress, onForkCompleted, onPublishEvent, userPubkey } = options;
 
   function updateProgress(
     step: string,
@@ -240,7 +241,7 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
           originalRepo.description || `Fork of ${originalRepo.owner}/${originalRepo.name}`,
         clone: cloneUrls,
         web: [workerResult.forkUrl.replace(/\.git$/, "")],
-        maintainers: [currentUser],
+        maintainers: userPubkey ? [userPubkey] : undefined,
         ...(relays ? { relays } : {}),
         ...(config.earliestUniqueCommit ? { earliestUniqueCommit: config.earliestUniqueCommit } : {}),
       });

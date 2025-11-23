@@ -2,7 +2,7 @@ import type { GitProvider } from '@nostr-git/git-wrapper';
 import { RepoCache, RepoCacheManager } from './cache.js';
 import { getAuthCallback, setAuthConfig } from './auth.js';
 import { resolveRobustBranch } from './branches.js';
-import { getProviderFs, safeRmrf } from './fs-utils.js';
+import { getProviderFs, safeRmrf, ensureDir } from './fs-utils.js';
 
 // Import toPlain from worker (it's defined in the same directory)
 function toPlain<T>(val: T): T {
@@ -439,6 +439,26 @@ export async function cloneRemoteRepoUtil(
       repoUrl = new URL(url);
     } catch {
       throw new Error(`Invalid repository URL: ${url}`);
+    }
+
+    // Ensure the parent directory exists before cloning
+    // isomorphic-git requires the parent directory to exist
+    try {
+      const fs = getProviderFs(git);
+      if (fs?.promises) {
+        // Get parent directory (everything except the last component)
+        const pathParts = dir.split('/').filter(Boolean);
+        if (pathParts.length > 1) {
+          const parentDir = '/' + pathParts.slice(0, -1).join('/');
+          await ensureDir(fs, parentDir);
+        } else {
+          // If dir is at root level, ensure root exists
+          await ensureDir(fs, '/');
+        }
+      }
+    } catch (dirError) {
+      // Log but don't fail - some FS implementations handle this automatically
+      console.warn('[cloneRemoteRepoUtil] Could not ensure parent directory exists:', dirError);
     }
 
     if (token) {

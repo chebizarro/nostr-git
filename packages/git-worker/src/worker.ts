@@ -1963,11 +1963,14 @@ async function forkAndCloneRepo(options: {
         ? forkUrl.replace('ws://', 'http://').replace('wss://', 'https://')
         : forkUrl;
 
-    console.log('[forkAndCloneRepo] Cloning', { cloneUrl, dir });
+    // Ensure dir is an absolute path (prepend rootDir if not already absolute)
+    const absoluteDir = dir.startsWith('/') ? dir : `${rootDir}/${dir}`;
+    
+    console.log('[forkAndCloneRepo] Cloning', { cloneUrl, dir: absoluteDir });
 
     await cloneRemoteRepo({
       url: cloneUrl,
-      dir,
+      dir: absoluteDir,
       depth: 0, // Full clone for forks
       token,
       onProgress: (message: string, percentage?: number) => {
@@ -1978,9 +1981,9 @@ async function forkAndCloneRepo(options: {
     onProgress?.('Gathering repository metadata...', 95);
 
     // Get repository metadata after successful clone
-    const defaultBranch = await resolveRobustBranchInWorker(dir);
-    const branches = await git.listBranches({ dir });
-    const tags = await git.listTags({ dir });
+    const defaultBranch = await resolveRobustBranchInWorker(absoluteDir);
+    const branches = await git.listBranches({ dir: absoluteDir });
+    const tags = await git.listTags({ dir: absoluteDir });
 
     onProgress?.('Fork completed successfully!', 100);
 

@@ -3,6 +3,15 @@
 
 import type { RepoAnnouncementEvent, NostrTag } from '@nostr-git/shared-types';
 
+/**
+ * Validate that a string is a valid hex pubkey (exactly 64 hex characters)
+ */
+function isValidPubkey(pubkey: string | undefined | null): boolean {
+  if (!pubkey || typeof pubkey !== 'string') return false;
+  // Must be exactly 64 hex characters
+  return /^[0-9a-f]{64}$/i.test(pubkey);
+}
+
 export type IO = {
   fetchEvents: (filters: any[]) => Promise<any[]>;
   publishEvent?: (evt: any) => Promise<any>;
@@ -72,7 +81,10 @@ export function groupByEuc(events: RepoAnnouncementEvent[]): RepoGroup[] {
     const maint = evt.tags.find((t: NostrTag) => t[0] === 'maintainers') as string[] | undefined;
     
     // Ensure the author is considered a maintainer if not explicitly listed
-    const maintainers = maint ? maint.slice(1) : [];
+    // Filter out invalid pubkeys (must be exactly 64 hex characters)
+    const maintainers = maint 
+      ? maint.slice(1).filter((pk: string) => isValidPubkey(pk))
+      : [];
     if (evt.pubkey && !maintainers.includes(evt.pubkey)) maintainers.push(evt.pubkey);
 
     // Create composite key using EUC + name + clone URLs
@@ -106,7 +118,8 @@ export function groupByEuc(events: RepoAnnouncementEvent[]): RepoGroup[] {
     web: Array.from(new Set(g.web)),
     clone: Array.from(new Set(g.clone)),
     relays: Array.from(new Set(g.relays)),
-    maintainers: Array.from(new Set(g.maintainers))
+    // Filter out invalid pubkeys before deduplication
+    maintainers: Array.from(new Set(g.maintainers.filter((pk: string) => isValidPubkey(pk))))
   }));
 }
 
@@ -115,10 +128,16 @@ export function isMaintainer(npub: string, group: RepoGroup): boolean {
 }
 
 export function deriveMaintainers(group: RepoGroup): Set<string> {
-  const out = new Set<string>(group.maintainers);
-  // Add authors of all repo events as implicit maintainers
+  const out = new Set<string>();
+  // Filter and add valid maintainers from group
+  for (const pk of group.maintainers) {
+    if (isValidPubkey(pk)) out.add(pk);
+  }
+  // Add authors of all repo events as implicit maintainers (if valid)
   for (const evt of group.repos) {
-    if (evt.pubkey) out.add(evt.pubkey);
+    if (evt.pubkey && isValidPubkey(evt.pubkey)) {
+      out.add(evt.pubkey);
+    }
   }
   return out;
 }
