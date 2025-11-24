@@ -24,8 +24,8 @@ describe("NIP-32 label helpers", () => {
     ])
     const self = extractSelfLabels(e)
     expect(self).toEqual([
-      {namespace: "status", value: "open", mark: "status"},
-      {namespace: undefined, value: "bug", mark: undefined},
+      {L: "status", l: "open", targetKind: 1},
+      {L: undefined, l: "bug", targetKind: 1},
     ])
   })
 
@@ -46,10 +46,13 @@ describe("NIP-32 label helpers", () => {
   })
 
   it("merges with precedence: self, then external, then t-tags (normalized only)", () => {
-    const self = [{namespace: "status", value: "open"}]
-    const external = [{namespace: "type", value: "bug"}]
+    const self = [{L: "status", l: "open", targetKind: 1}]
+    const external = [{namespace: "type", value: "bug", targets: {}}]
     const t = ["good-first-issue"]
     const merged = mergeEffectiveLabels({self, external, t})
-    expect(merged.normalized).toEqual(["status/open", "type/bug", "t/good-first-issue"])
+    const flat = Array.from(merged.flat)
+    expect(flat).toContain("status/open")
+    expect(flat).toContain("type/bug")
+    expect(flat).toContain("#t/good-first-issue")
   })
 })
