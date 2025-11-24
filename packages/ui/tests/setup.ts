@@ -49,6 +49,28 @@ global.IntersectionObserver = vi.fn().mockImplementation(() => ({
   disconnect: vi.fn(),
 }));
 
+// Minimal Web Worker polyfill for Vitest (Node/happy-dom)
+// This is test-only and does not affect production behavior.
+if (typeof (globalThis as any).Worker === 'undefined') {
+  class FakeWorker {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    constructor(..._args: any[]) {}
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    postMessage(_msg: any) {}
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    terminate() {}
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    addEventListener(_type: string, _listener: any) {}
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    removeEventListener(_type: string, _listener: any) {}
+
+    onmessage: ((ev: MessageEvent) => void) | null = null;
+    onerror: ((ev: ErrorEvent) => void) | null = null;
+  }
+  // @ts-ignore
+  (globalThis as any).Worker = FakeWorker as any;
+}
+
 // Setup global test utilities
 declare global {
   namespace Vi {

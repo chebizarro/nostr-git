@@ -10,7 +10,7 @@
 
   interface Props {
     issueId: string;
-    issueKind: "1621" | "1617";
+    issueKind: "1621" | "1617" | "1618";
     currentCommenter: string;
     currentCommenterProfile?: Profile;
     comments?: CommentEvent[] | undefined;
