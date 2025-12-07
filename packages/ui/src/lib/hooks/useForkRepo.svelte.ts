@@ -43,6 +43,178 @@ export interface UseForkRepoOptions {
 }
 
 /**
+ * Parsed fork error information
+ */
+interface ParsedForkError {
+  type: "FORK_OWN_REPO" | "FORK_EXISTS" | "FORK_NAME_MISMATCH" | "UNKNOWN";
+  forkName?: string;
+  forkUrl?: string;
+  provider?: string;
+  originalMessage: string;
+}
+
+/**
+ * Parse structured fork error messages into a typed format
+ */
+function parseForkErrorStructure(errorMessage: string): ParsedForkError {
+  const result: ParsedForkError = {
+    type: "UNKNOWN",
+    originalMessage: errorMessage,
+  };
+
+  // Check for FORK_OWN_REPO
+  if (errorMessage.includes("FORK_OWN_REPO:")) {
+    result.type = "FORK_OWN_REPO";
+    return result;
+  }
+
+  // Check for FORK_EXISTS
+  if (errorMessage.includes("FORK_EXISTS:")) {
+    result.type = "FORK_EXISTS";
+    // Try multiple patterns to extract fork name and URL
+    const patterns = [
+      /named "([^"]+)".*?(?:GitHub|GitLab|Bitbucket|Gitea)?.*?URL: (.+)/,
+      /named "([^"]+)".*?URL: (.+)/,
+      /"([^"]+)".*?URL: (.+)/,
+    ];
+    
+    for (const pattern of patterns) {
+      const match = errorMessage.match(pattern);
+      if (match) {
+        result.forkName = match[1];
+        result.forkUrl = match[2];
+        break;
+      }
+    }
+
+    // Extract provider from message
+    if (errorMessage.includes("GitHub")) {
+      result.provider = "github";
+    } else if (errorMessage.includes("GitLab")) {
+      result.provider = "gitlab";
+    } else if (errorMessage.includes("Bitbucket")) {
+      result.provider = "bitbucket";
+    } else if (errorMessage.includes("Gitea")) {
+      result.provider = "gitea";
+    }
+
+    return result;
+  }
+
+  // Check for FORK_NAME_MISMATCH
+  if (errorMessage.includes("FORK_NAME_MISMATCH:")) {
+    result.type = "FORK_NAME_MISMATCH";
+    // Try multiple patterns to extract fork name and URL
+    const patterns = [
+      /name "([^"]+)".*?URL: (.+)/,
+      /named "([^"]+)".*?URL: (.+)/,
+      /"([^"]+)".*?URL: (.+)/,
+    ];
+    
+    for (const pattern of patterns) {
+      const match = errorMessage.match(pattern);
+      if (match) {
+        result.forkName = match[1];
+        result.forkUrl = match[2];
+        break;
+      }
+    }
+
+    // Extract provider from message
+    if (errorMessage.includes("GitHub")) {
+      result.provider = "github";
+    } else if (errorMessage.includes("GitLab")) {
+      result.provider = "gitlab";
+    } else if (errorMessage.includes("Bitbucket")) {
+      result.provider = "bitbucket";
+    } else if (errorMessage.includes("Gitea")) {
+      result.provider = "gitea";
+    }
+
+    return result;
+  }
+
+  return result;
+}
+
+/**
+ * Convert parsed fork error into user-friendly message
+ */
+function formatForkErrorMessage(parsed: ParsedForkError, defaultProvider: string = "github"): string {
+  const provider = parsed.provider || defaultProvider;
+  const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
+
+  switch (parsed.type) {
+    case "FORK_OWN_REPO":
+      return "You cannot fork your own repository. Consider creating a new branch or working directly in the repository instead.";
+
+    case "FORK_EXISTS": {
+      if (parsed.forkName && parsed.forkUrl) {
+        let providerMessage: string;
+        switch (provider) {
+          case "github":
+            providerMessage = "GitHub does not allow multiple forks of the same repository";
+            break;
+          case "gitlab":
+            providerMessage = "GitLab allows only one fork per namespace";
+            break;
+          case "bitbucket":
+            providerMessage = "Bitbucket does not allow multiple forks of the same repository";
+            break;
+          case "gitea":
+            providerMessage = "Gitea does not allow multiple forks of the same repository";
+            break;
+          default:
+            providerMessage = `${providerName} does not allow multiple forks of the same repository`;
+        }
+        return `You already have a fork of this repository named "${parsed.forkName}". ${providerMessage}. You can use your existing fork or delete it first. View it at: ${parsed.forkUrl}`;
+      }
+      // Fallback if parsing failed
+      return parsed.originalMessage.replace("FORK_EXISTS: ", "").trim();
+    }
+
+    case "FORK_NAME_MISMATCH": {
+      if (parsed.forkName && parsed.forkUrl) {
+        let providerMessage: string;
+        switch (provider) {
+          case "github":
+            providerMessage = "GitHub does not support renaming existing forks";
+            break;
+          case "gitlab":
+            providerMessage = "GitLab does not support renaming existing forks";
+            break;
+          case "bitbucket":
+            providerMessage = "Bitbucket does not support renaming existing forks";
+            break;
+          case "gitea":
+            providerMessage = "Gitea does not support renaming existing forks";
+            break;
+          default:
+            providerMessage = `${providerName} does not support renaming existing forks`;
+        }
+        return `A fork already exists with the name "${parsed.forkName}". ${providerMessage}. Please delete the existing fork first or choose a different name. View it at: ${parsed.forkUrl}`;
+      }
+      // Fallback if parsing failed
+      return parsed.originalMessage.replace("FORK_NAME_MISMATCH: ", "").trim();
+    }
+
+    case "UNKNOWN":
+    default:
+      // Return original message for unknown errors
+      return parsed.originalMessage;
+  }
+}
+
+/**
+ * Parse and format fork errors into user-friendly messages
+ */
+function parseForkError(error: unknown, defaultProvider: string = "github"): string {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  const parsed = parseForkErrorStructure(errorMessage);
+  return formatForkErrorMessage(parsed, defaultProvider);
+}
+
+/**
  * Svelte 5 composable for managing fork repository workflow
  * Handles git-worker integration, progress tracking, and NIP-34 event emission
  *
@@ -287,7 +459,7 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
       onForkCompleted?.(result);
       return result;
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error occurred";
+      const errorMessage = parseForkError(err, config.provider || "github");
       error = errorMessage;
 
       // Update the current step to error status

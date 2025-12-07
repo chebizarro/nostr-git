@@ -18,6 +18,7 @@
   import { getGitServiceApi } from "@nostr-git/core";
   import { toast } from "../../stores/toast";
   import { validateGraspServerUrl } from "@nostr-git/shared-types";
+  import { getProviderCapabilities, getProviderFromService, buildProviderUrl } from "@nostr-git/core";
   // Load user's GRASP servers directly (so chips are reactive even if prop is static)
 
   interface Props {
@@ -42,6 +43,11 @@
     onForkCompleted: (result) => {
       console.log("🎉 Fork completed:", result);
       completedResult = result;
+      // Show success notification
+      toast.push({
+        message: "Repository forked successfully!",
+        variant: "default",
+      });
     },
     onPublishEvent: onPublishEvent,
   });
@@ -59,16 +65,73 @@
   const cloneUrl = repo.clone?.[0] || "";
   let isOpen = $state(true);
 
-  // Parse owner and repo name from clone URL
-  const urlMatch = cloneUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)(?:\.git)?/);
+  // Parse owner and repo name from clone URL (supports HTTPS and SSH formats)
+  // Handles: https://hostname/owner/repo.git, git@hostname:owner/repo.git
+  function parseCloneUrl(url: string): { hostname: string; owner: string; name: string } {
+    // Try HTTPS/HTTP URL first
+    try {
+      const parsedUrl = new URL(url);
+      const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
+      if (pathParts.length >= 2) {
+        const owner = pathParts[pathParts.length - 2];
+        const name = pathParts[pathParts.length - 1].replace(/\.git$/, "");
+        return {
+          hostname: parsedUrl.hostname,
+          owner,
+          name,
+        };
+      }
+    } catch {
+      // Not a valid URL, try SSH format
+    }
+
+    // Try SSH format: git@hostname:owner/repo.git
+    const sshMatch = url.match(/git@([^:]+):([^/]+)\/([^/.]+)(?:\.git)?/);
+    if (sshMatch) {
+      return {
+        hostname: sshMatch[1],
+        owner: sshMatch[2],
+        name: sshMatch[3],
+      };
+    }
+
+    // Fallback: try generic pattern for any hostname
+    const genericMatch = url.match(/(?:https?:\/\/|git@)([^\/:]+)[\/:]([^\/]+)\/([^\/.]+)(?:\.git)?/);
+    if (genericMatch) {
+      return {
+        hostname: genericMatch[1],
+        owner: genericMatch[2],
+        name: genericMatch[3],
+      };
+    }
+
+    // Default fallback
+    return {
+      hostname: "unknown",
+      owner: "unknown",
+      name: "repository",
+    };
+  }
+
+  const parsedUrl = parseCloneUrl(cloneUrl);
   const originalRepo = {
-    owner: urlMatch?.[1] || "unknown",
-    name: urlMatch?.[2] || "repository",
+    owner: parsedUrl.owner,
+    name: parsedUrl.name,
     description: repo.description || "",
   };
+
+  // Determine default service based on hostname
+  function getDefaultService(hostname: string): string {
+    if (hostname === "github.com") return "github.com";
+    if (hostname === "gitlab.com") return "gitlab.com";
+    if (hostname === "bitbucket.org") return "bitbucket.org";
+    // Default to GitHub if hostname doesn't match known services
+    return "github.com";
+  }
+
   // Form state
   let forkName = $state(`${originalRepo.name}-fork`);
-  let selectedService = $state<string>("github.com"); // Default to GitHub
+  let selectedService = $state<string>(getDefaultService(parsedUrl.hostname));
   let isCheckingExistingFork = $state(false);
   let existingForkInfo = $state<{
     exists: boolean;
@@ -76,17 +139,20 @@
     message?: string;
     service?: string;
     error?: string;
+    isOwnRepo?: boolean; // True if user is trying to fork their own repo
+    forkName?: string; // Name of existing fork
   } | null>(null);
   // GRASP-specific state
   let relayUrl = $state("");
   let relayUrlError = $state<string | undefined>();
-  
+
   // Commit selection state
   let earliestUniqueCommit = $state("");
-  let availableCommits: Array<any> = [];
+  let availableCommits = $state<Array<any>>([]);
   let loadingCommits = $state(false);
   let commitSearchQuery = $state("");
   let showCommitDropdown = $state(false);
+  let commitInputFocused = $state(false);
 
   // Local reactive list of GRASP servers. Seed from prop, keep updated from profile and prop changes.
   let graspServerUrlsLocal = $state<string[]>([...(graspServerUrls || [])]);
@@ -107,7 +173,7 @@
   const knownGraspServers = $derived.by(() =>
     (graspServerUrlsLocal || []).map((u) => u.trim()).filter(Boolean)
   );
-  
+
   // Load commits on mount
   $effect(() => {
     if (repo) {
@@ -117,7 +183,8 @@
         availableCommits = existingCommits;
         loadingCommits = false;
       } else {
-        repo.getCommitHistory({ depth: 100 })
+        repo
+          .getCommitHistory({ depth: 100 })
           .then((commits) => {
             availableCommits = commits || repo.commits || [];
             loadingCommits = false;
@@ -130,19 +197,28 @@
       }
     }
   });
-  
+
+  // Show dropdown when commits become available while input is focused
+  $effect(() => {
+    if (commitInputFocused && availableCommits.length > 0 && !loadingCommits) {
+      showCommitDropdown = true;
+    }
+  });
+
   // Filter commits based on search query
   let filteredCommits = $derived.by(() => {
     if (!commitSearchQuery) return availableCommits.slice(0, 20);
     const query = commitSearchQuery.toLowerCase();
     return availableCommits
-      .filter(c => {
-        const oid = c.oid || '';
-        const message = c.message || c.commit?.message || '';
-        const author = c.author || c.commit?.author?.name || '';
-        return oid.toLowerCase().includes(query) ||
-               message.toLowerCase().includes(query) ||
-               author.toLowerCase().includes(query);
+      .filter((c) => {
+        const oid = c.oid || "";
+        const message = c.message || c.commit?.message || "";
+        const author = c.author || c.commit?.author?.name || "";
+        return (
+          oid.toLowerCase().includes(query) ||
+          message.toLowerCase().includes(query) ||
+          author.toLowerCase().includes(query)
+        );
       })
       .slice(0, 20);
   });
@@ -261,6 +337,12 @@
     }, 500);
   });
 
+  // Get provider-specific capabilities
+  function getProviderRestrictions(service: string) {
+    const provider = getProviderFromService(service);
+    return getProviderCapabilities(provider);
+  }
+
   // Function to check if fork already exists on selected service
   async function checkExistingFork(checkKey: string) {
     // Prevent concurrent checks and validate inputs
@@ -298,43 +380,88 @@
         return;
       }
 
-      // Check if fork exists based on service
-      if (selectedService === "github.com") {
-        // Get current user info and check if fork already exists
-        const api = getGitServiceApi("github", token);
+      const provider = getProviderFromService(selectedService);
+      const restrictions = getProviderRestrictions(selectedService);
+      const api = getGitServiceApi(provider as any, token);
+
+      // Use GitServiceApi's checkExistingFork if available
+      if (
+        restrictions.supportsForkChecking &&
+        "checkExistingFork" in api &&
+        typeof api.checkExistingFork === "function"
+      ) {
+        try {
+          const userData = await api.getCurrentUser();
+          const username = userData.login;
+
+          // Check if user is trying to fork their own repository
+          if (
+            !restrictions.allowOwnRepoFork &&
+            originalRepo.owner.toLowerCase() === username.toLowerCase()
+          ) {
+            const ownRepo = await api.getRepo(originalRepo.owner, originalRepo.name);
+            existingForkInfo = {
+              exists: true,
+              service: selectedService,
+              isOwnRepo: true,
+              message: "You cannot fork your own repository",
+              url: ownRepo.htmlUrl,
+            };
+            lastCheckedKey = checkKey;
+            return;
+          }
+
+          // Check for existing fork
+          const existingFork = await api.checkExistingFork(originalRepo.owner, originalRepo.name);
+
+          if (existingFork) {
+            existingForkInfo = {
+              exists: true,
+              service: selectedService,
+              isOwnRepo: false,
+              forkName: existingFork.name,
+              message: "You already have a fork of this repository",
+              url: existingFork.htmlUrl,
+            };
+            lastCheckedKey = checkKey;
+            return;
+          }
+        } catch (error: any) {
+          console.error("Error checking for existing fork:", error);
+          // Continue to check if the specific fork name exists
+        }
+      }
+
+      // Also check if a repo with the desired fork name already exists
+      try {
         const userData = await api.getCurrentUser();
         const username = userData.login;
+        const existingRepo = await api.getRepo(username, forkName);
 
-        // Check if fork already exists
-        try {
-          await api.getRepo(username, forkName);
-          // Fork exists
-          toast.push({
-            message: `Fork '${forkName}' already exists in your GitHub account`,
-            theme: "error",
-          });
-          return;
-        } catch (error: any) {
-          // Fork doesn't exist (good!) - continue with fork creation
-          if (!error.message?.includes("404") && !error.message?.includes("Not Found")) {
-            // Some other error occurred
-            throw error;
-          }
+        // Repo with this name exists
+        const serviceLabel =
+          availableServices.find((s) => s.host === selectedService)?.label || selectedService;
+        existingForkInfo = {
+          exists: true,
+          service: selectedService,
+          message: `A repository named '${forkName}' already exists in your ${serviceLabel} account`,
+          url: existingRepo.htmlUrl,
+        };
+        lastCheckedKey = checkKey;
+        return;
+      } catch (error: any) {
+        // Repo doesn't exist (good!) - continue
+        if (!error.message?.includes("404") && !error.message?.includes("Not Found")) {
+          // Some other error occurred
+          throw error;
         }
-
-        // Repository check is already done above - fork doesn't exist, so we can proceed
-        existingForkInfo = {
-          exists: false,
-          service: selectedService,
-        };
-      } else {
-        // For other services, show placeholder
-        existingForkInfo = {
-          exists: false,
-          service: selectedService,
-          message: `Fork checking not yet implemented for ${selectedService}`,
-        };
       }
+
+      // No conflicts found
+      existingForkInfo = {
+        exists: false,
+        service: selectedService,
+      };
 
       // Mark this combination as checked to prevent redundant calls
       lastCheckedKey = checkKey;
@@ -512,11 +639,11 @@
       }
     } catch (error) {
       console.error("❌ ForkRepoDialog: Fork failed:", error);
-    }
-
-    // Note: handleClose is called by onForkCompleted callback
-    if (!isForking) {
-      handleClose();
+      // Show error notification
+      toast.push({
+        message: error instanceof Error ? error.message : "Failed to fork repository",
+        theme: "error",
+      });
     }
   }
 
@@ -760,15 +887,34 @@
                   id="earliest-commit"
                   type="text"
                   bind:value={commitSearchQuery}
-                  onfocus={() => showCommitDropdown = availableCommits.length > 0}
-                  onblur={() => setTimeout(() => showCommitDropdown = false, 200)}
+                  onfocus={() => {
+                    commitInputFocused = true;
+                    if (availableCommits.length > 0) {
+                      showCommitDropdown = true;
+                    }
+                  }}
+                  onblur={() => {
+                    commitInputFocused = false;
+                    setTimeout(() => (showCommitDropdown = false), 200);
+                  }}
                   disabled={loadingCommits}
                   autocomplete="off"
                   class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed font-mono text-sm"
                   placeholder={earliestUniqueCommit || "Search commits or paste commit hash..."}
                 />
-                {#if showCommitDropdown && filteredCommits.length > 0}
-                  <div class="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-96 overflow-y-auto">
+                {#if commitInputFocused && loadingCommits}
+                  <div
+                    class="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg p-4"
+                  >
+                    <div class="flex items-center space-x-2 text-sm text-gray-300">
+                      <Loader2 class="w-4 h-4 animate-spin" />
+                      <span>Loading commits...</span>
+                    </div>
+                  </div>
+                {:else if showCommitDropdown && filteredCommits.length > 0}
+                  <div
+                    class="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-96 overflow-y-auto"
+                  >
                     {#each filteredCommits as commit}
                       <button
                         type="button"
@@ -782,20 +928,42 @@
                         <div class="flex items-start gap-2">
                           <GitCommit class="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
                           <div class="flex-1 min-w-0">
-                            <div class="text-xs font-mono text-blue-400">{commit.oid?.slice(0, 7) || 'unknown'}</div>
-                            <div class="text-sm text-white truncate">{commit.message?.split('\n')[0] || commit.commit?.message?.split('\n')[0] || 'No message'}</div>
+                            <div class="text-xs font-mono text-blue-400">
+                              {commit.oid?.slice(0, 7) || "unknown"}
+                            </div>
+                            <div class="text-sm text-white truncate">
+                              {commit.message?.split("\n")[0] ||
+                                commit.commit?.message?.split("\n")[0] ||
+                                "No message"}
+                            </div>
                             <div class="text-xs text-gray-400 mt-0.5">
-                              {commit.author || commit.commit?.author?.name || 'Unknown'} · {new Date((commit.timestamp || commit.commit?.author?.timestamp || 0) * 1000).toLocaleDateString()}
+                              {commit.author || commit.commit?.author?.name || "Unknown"} · {new Date(
+                                (commit.timestamp || commit.commit?.author?.timestamp || 0) * 1000
+                              ).toLocaleDateString()}
                             </div>
                           </div>
                         </div>
                       </button>
                     {/each}
                   </div>
+                {:else if showCommitDropdown && filteredCommits.length === 0 && commitSearchQuery}
+                  <div
+                    class="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg p-4"
+                  >
+                    <p class="text-sm text-gray-400 text-center">No commits match your search</p>
+                  </div>
+                {:else if commitInputFocused && !loadingCommits && availableCommits.length === 0}
+                  <div
+                    class="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg p-4"
+                  >
+                    <p class="text-sm text-gray-400 text-center">No commits available</p>
+                  </div>
                 {/if}
               </div>
               {#if earliestUniqueCommit}
-                <div class="mt-2 p-2 bg-gray-800/50 rounded text-xs font-mono text-gray-300 flex items-center justify-between">
+                <div
+                  class="mt-2 p-2 bg-gray-800/50 rounded text-xs font-mono text-gray-300 flex items-center justify-between"
+                >
                   <span class="truncate">{earliestUniqueCommit}</span>
                   <button
                     type="button"
@@ -830,22 +998,113 @@
                   {#if existingForkInfo.exists}
                     <AlertCircle class="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
                     <div class="flex-1">
-                      <p class="text-yellow-400 font-medium">{existingForkInfo.message}</p>
-                      {#if existingForkInfo.url}
-                        <a
-                          href={existingForkInfo.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          class="inline-flex items-center space-x-1 text-blue-400 hover:text-blue-300 mt-1"
-                        >
-                          <span>View existing repository</span>
-                          <ExternalLink class="w-3 h-3" />
-                        </a>
+                      <p class="text-yellow-400 font-medium mb-2">{existingForkInfo.message}</p>
+
+                      {#if existingForkInfo.isOwnRepo}
+                        <!-- User is trying to fork their own repo -->
+                        {@const providerLabel =
+                          availableServices.find((s) => s.host === selectedService)?.label ||
+                          selectedService}
+                        <div class="text-gray-300 text-sm space-y-2">
+                          <p>
+                            {providerLabel} does not allow forking your own repository. Instead, you
+                            can:
+                          </p>
+                          <ul class="list-disc list-inside space-y-1 ml-2">
+                            <li>Create a new branch for changes</li>
+                            <li>Clone to a new repository (loses fork relationship)</li>
+                            <li>Work directly in the repository</li>
+                          </ul>
+                          {#if existingForkInfo.url}
+                            <a
+                              href={existingForkInfo.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              class="inline-flex items-center space-x-1 text-blue-400 hover:text-blue-300 mt-2"
+                            >
+                              <span>Open repository</span>
+                              <ExternalLink class="w-3 h-3" />
+                            </a>
+                          {/if}
+                        </div>
+                      {:else}
+                        <!-- User already has a fork -->
+                        {@const provider = getProviderFromService(selectedService)}
+                        {@const restrictions = getProviderRestrictions(selectedService)}
+                        {@const providerLabel =
+                          availableServices.find((s) => s.host === selectedService)?.label ||
+                          selectedService}
+                        <div class="text-gray-300 text-sm space-y-2">
+                          <p>
+                            <strong class="text-white">
+                              {existingForkInfo.forkName || "Your fork"}
+                            </strong>
+                            {#if existingForkInfo.forkName && existingForkInfo.forkName !== forkName && restrictions.namespaceRestriction}
+                              <span class="text-gray-400">
+                                ({restrictions.namespaceRestriction})
+                              </span>
+                            {/if}
+                          </p>
+                          <p>You can:</p>
+                          <ul class="list-disc list-inside space-y-1 ml-2">
+                            <li>Use your existing fork and create new branches</li>
+                            {#if !restrictions.allowMultipleForks}
+                              <li>Delete the existing fork first, then create a new one</li>
+                            {/if}
+                            {#if restrictions.supportsRenaming}
+                              <li>Rename your existing fork to match "{forkName}"</li>
+                            {/if}
+                            {#if restrictions.supportsForkRelationshipRemoval}
+                              <li>Remove the fork relationship and fork again</li>
+                            {/if}
+                          </ul>
+                          {#if existingForkInfo.url}
+                            {@const settingsUrl = buildProviderUrl(existingForkInfo.url, restrictions.settingsUrlPattern)}
+                            {@const forkSettingsUrl = buildProviderUrl(existingForkInfo.url, restrictions.forkSettingsUrlPattern)}
+                            <div class="flex items-center gap-2 mt-2 flex-wrap">
+                              <a
+                                href={existingForkInfo.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="inline-flex items-center space-x-1 text-blue-400 hover:text-blue-300"
+                              >
+                                <span>Open existing fork</span>
+                                <ExternalLink class="w-3 h-3" />
+                              </a>
+                              {#if restrictions.supportsRenaming && settingsUrl}
+                                <span class="text-gray-500">|</span>
+                                <a
+                                  href={settingsUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  class="inline-flex items-center space-x-1 text-blue-400 hover:text-blue-300"
+                                >
+                                  <span>Rename fork</span>
+                                  <ExternalLink class="w-3 h-3" />
+                                </a>
+                              {/if}
+                              {#if restrictions.supportsForkRelationshipRemoval && forkSettingsUrl}
+                                <span class="text-gray-500">|</span>
+                                <a
+                                  href={forkSettingsUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  class="inline-flex items-center space-x-1 text-blue-400 hover:text-blue-300"
+                                >
+                                  <span>Remove fork relationship</span>
+                                  <ExternalLink class="w-3 h-3" />
+                                </a>
+                              {/if}
+                            </div>
+                          {/if}
+                        </div>
                       {/if}
                     </div>
                   {:else}
                     <CheckCircle2 class="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
-                    <p class="text-green-400">{existingForkInfo.message}</p>
+                    <p class="text-green-400">
+                      {existingForkInfo.message || "Repository name is available"}
+                    </p>
                   {/if}
                 </div>
               </div>
@@ -871,8 +1130,25 @@
               <AlertCircle class="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
               <div class="flex-1">
                 <h4 class="text-red-400 font-medium mb-1">Fork Failed</h4>
-                <p class="text-red-300 text-sm">{error}</p>
-                {#if !isForking}
+                <div class="text-red-300 text-sm">
+                  {#if error.includes("View it at: ")}
+                    <!-- Parse and make URLs clickable -->
+                    {@const parts = error.split("View it at: ")}
+                    <p class="mb-2">{parts[0]}</p>
+                    <a
+                      href={parts[1].trim()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="inline-flex items-center space-x-1 text-blue-400 hover:text-blue-300"
+                    >
+                      <span>View existing fork</span>
+                      <ExternalLink class="w-3 h-3" />
+                    </a>
+                  {:else}
+                    <p>{error}</p>
+                  {/if}
+                </div>
+                {#if !isForking && !error.includes("cannot fork your own")}
                   <button
                     type="button"
                     onclick={handleRetry}

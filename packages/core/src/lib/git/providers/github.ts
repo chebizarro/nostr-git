@@ -177,6 +177,57 @@ export class GitHubApi implements GitServiceApi {
   }
 
   /**
+   * Check if a fork of the repository already exists for the authenticated user
+   * @param owner - Repository owner
+   * @param repo - Repository name
+   * @returns Fork metadata if exists, null otherwise
+   */
+  async checkExistingFork(owner: string, repo: string): Promise<RepoMetadata | null> {
+    try {
+      // Get current user
+      const currentUser = await this.getCurrentUser();
+      const username = currentUser.login;
+
+      // Check if user is trying to fork their own repo
+      if (owner.toLowerCase() === username.toLowerCase()) {
+        // Return the original repo as "existing fork" to trigger the UI warning
+        return await this.getRepo(owner, repo);
+      }
+
+      // Get list of forks for this repository
+      const forks = await this.request<any[]>(`/repos/${owner}/${repo}/forks?per_page=100`);
+
+      // Find fork owned by current user
+      const userFork = forks.find(
+        (fork: any) => fork.owner.login.toLowerCase() === username.toLowerCase()
+      );
+
+      if (userFork) {
+        return {
+          id: userFork.id.toString(),
+          name: userFork.name,
+          fullName: userFork.full_name,
+          description: userFork.description,
+          defaultBranch: userFork.default_branch,
+          isPrivate: userFork.private,
+          cloneUrl: userFork.clone_url,
+          htmlUrl: userFork.html_url,
+          owner: {
+            login: userFork.owner.login,
+            type: userFork.owner.type === 'Organization' ? 'Organization' : 'User'
+          }
+        };
+      }
+
+      return null;
+    } catch (error) {
+      // Log error but don't fail - return null to allow fork attempt
+      console.error('Error checking for existing fork:', error);
+      return null;
+    }
+  }
+
+  /**
    * Commit Operations
    */
   async listCommits(owner: string, repo: string, options?: ListCommitsOptions): Promise<Commit[]> {

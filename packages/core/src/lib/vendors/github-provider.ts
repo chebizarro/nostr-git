@@ -117,12 +117,95 @@ export class GitHubProvider implements VendorProvider {
     };
   }
 
+  /**
+   * Check if a fork of the repository already exists for the authenticated user
+   * @returns Fork metadata if exists, null otherwise
+   */
+  async checkExistingFork(
+    owner: string,
+    repo: string,
+    token: string
+  ): Promise<RepoMetadata | null> {
+    try {
+      // Get the list of forks for this repository
+      const response = await axios.get(this.getApiUrl(`repos/${owner}/${repo}/forks`), {
+        headers: {
+          ...this.getAuthHeaders(token),
+          Accept: 'application/vnd.github.v3+json'
+        },
+        params: {
+          per_page: 100 // Get up to 100 forks
+        }
+      });
+
+      // Get current user to check if they own any of the forks
+      const userResponse = await axios.get(this.getApiUrl('user'), {
+        headers: {
+          ...this.getAuthHeaders(token),
+          Accept: 'application/vnd.github.v3+json'
+        }
+      });
+
+      const currentUsername = userResponse.data.login;
+      const forks = response.data;
+
+      // Find a fork owned by the current user
+      const userFork = forks.find((fork: any) => fork.owner.login === currentUsername);
+
+      if (userFork) {
+        return {
+          id: userFork.id.toString(),
+          name: userFork.name,
+          fullName: userFork.full_name,
+          description: userFork.description,
+          defaultBranch: userFork.default_branch,
+          isPrivate: userFork.private,
+          cloneUrl: userFork.clone_url,
+          htmlUrl: userFork.html_url,
+          owner: {
+            login: userFork.owner.login,
+            type: userFork.owner.type
+          }
+        };
+      }
+
+      return null;
+    } catch (error) {
+      // If we can't check, return null (assume no fork exists)
+      console.error('Error checking for existing fork:', error);
+      return null;
+    }
+  }
+
   async forkRepo(
     owner: string,
     repo: string,
     forkName: string,
     token: string
   ): Promise<RepoMetadata> {
+    // Check if user is trying to fork their own repository
+    const userResponse = await axios.get(this.getApiUrl('user'), {
+      headers: {
+        ...this.getAuthHeaders(token),
+        Accept: 'application/vnd.github.v3+json'
+      }
+    });
+    const currentUsername = userResponse.data.login;
+
+    if (owner.toLowerCase() === currentUsername.toLowerCase()) {
+      throw new Error(
+        `FORK_OWN_REPO: You cannot fork your own repository. Consider creating a new branch or cloning to a new repository instead.`
+      );
+    }
+
+    // Check if fork already exists
+    const existingFork = await this.checkExistingFork(owner, repo, token);
+    if (existingFork) {
+      throw new Error(
+        `FORK_EXISTS: You already have a fork of this repository named "${existingFork.name}". GitHub does not allow multiple forks of the same repository. URL: ${existingFork.htmlUrl}`
+      );
+    }
+
     // Step 1: Create the fork
     const forkResponse = await axios.post(
       this.getApiUrl(`repos/${owner}/${repo}/forks`),
@@ -149,8 +232,9 @@ export class GitHubProvider implements VendorProvider {
 
     // Check if GitHub ignored our custom fork name (happens when fork already exists)
     if (forkData.name !== forkName) {
+      const existingForkUrl = forkData.html_url;
       throw new Error(
-        `Fork already exists with name "${forkData.name}". GitHub does not support renaming existing forks. Please delete the existing fork first or choose a different name.`
+        `FORK_NAME_MISMATCH: Fork already exists with name "${forkData.name}". GitHub does not support renaming existing forks. URL: ${existingForkUrl}`
       );
     }
 

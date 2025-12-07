@@ -241,6 +241,14 @@ export interface GitServiceApi {
   forkRepo(owner: string, repo: string, options?: GitForkOptions): Promise<RepoMetadata>;
 
   /**
+   * Check if a fork of the repository already exists for the authenticated user
+   * Returns fork metadata if found, null otherwise
+   *
+   * Note: Not all providers implement this. Check provider capabilities.
+   */
+  checkExistingFork?(owner: string, repo: string): Promise<RepoMetadata | null>;
+
+  /**
    * Commit Operations
    */
   listCommits(owner: string, repo: string, options?: ListCommitsOptions): Promise<Commit[]>;

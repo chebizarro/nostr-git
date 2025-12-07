@@ -203,6 +203,53 @@ export class GitLabApi implements GitServiceApi {
   }
 
   /**
+   * Check if a fork of the repository already exists for the authenticated user
+   * @param owner - Repository owner/namespace
+   * @param repo - Repository name/path
+   * @returns Fork metadata if exists, null otherwise
+   */
+  async checkExistingFork(owner: string, repo: string): Promise<RepoMetadata | null> {
+    try {
+      const projectId = await this.getProjectId(owner, repo);
+
+      // Get list of forks for this project
+      const forks = await this.request<any[]>(`/projects/${projectId}/forks?per_page=100`);
+
+      // Get current user
+      const currentUser = await this.getCurrentUser();
+      const username = currentUser.login;
+
+      // Find fork in current user's namespace
+      const userFork = forks.find(
+        (fork: any) => fork.namespace.path === username || fork.namespace.name === username
+      );
+
+      if (userFork) {
+        return {
+          id: userFork.id.toString(),
+          name: userFork.name,
+          fullName: userFork.path_with_namespace,
+          description: userFork.description,
+          defaultBranch: userFork.default_branch,
+          isPrivate: userFork.visibility === 'private',
+          cloneUrl: userFork.http_url_to_repo,
+          htmlUrl: userFork.web_url,
+          owner: {
+            login: userFork.namespace.path,
+            type: userFork.namespace.kind === 'user' ? 'User' : 'Organization'
+          }
+        };
+      }
+
+      return null;
+    } catch (error) {
+      // Log error but don't fail - return null to allow fork attempt
+      console.error('Error checking for existing fork:', error);
+      return null;
+    }
+  }
+
+  /**
    * Import a repository from GitHub to GitLab (cross-provider forking)
    */
   private async importFromGitHub(

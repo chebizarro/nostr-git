@@ -33,6 +33,14 @@ export {
   supportsRestApi,
   getDefaultApiBaseUrl
 } from './factory.js';
+export {
+  getProviderCapabilities,
+  getProviderFromService,
+  buildProviderUrl,
+  type ProviderCapabilities,
+  PROVIDER_CAPABILITIES,
+  SERVICE_TO_PROVIDER
+} from './provider-config.js';
 export { GitHubApi } from './providers/github.js';
 export { GitLabApi } from './providers/gitlab.js';
 export { GiteaApi } from './providers/gitea.js';
