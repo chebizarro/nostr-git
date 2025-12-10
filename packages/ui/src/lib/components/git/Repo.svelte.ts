@@ -312,14 +312,26 @@ export class Repo {
       }
     });
 
-    // Smart initialization - initialize WorkerManager and then load branches
+    // Smart initialization - load refs immediately, then initialize worker in background
     (async () => {
       try {
-        // Initialize the WorkerManager first
+        // Load branches/refs FIRST from state event (fast, no network needed)
+        try {
+          this.#refsLoading = true;
+          await this.branchManager.loadAllRefs(() => this.getAllRefsWithFallback());
+          this.refs = this.branchManager.getAllRefs();
+          console.log(`✅ Loaded ${this.refs.length} refs immediately from state`);
+        } catch (error) {
+          console.error("Failed to load branches from state:", error);
+          this.refs = [];
+        } finally {
+          this.#refsLoading = false;
+        }
+
+        // Initialize the WorkerManager (can be slow)
         await this.workerManager.initialize();
 
         // Wait for tokens to be loaded from localStorage before configuring auth
-        const loadedTokens = await tokens.waitForInitialization();
         if (loadedTokens.length > 0) {
           await this.workerManager.setAuthConfig({ tokens: loadedTokens });
           console.log("Configured git authentication for", loadedTokens.length, "hosts");

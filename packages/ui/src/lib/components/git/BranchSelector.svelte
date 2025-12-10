@@ -3,19 +3,11 @@
 
   const { repo }: { repo: Repo } = $props();
 
-  // Get all refs (branches and tags) from BranchManager
+  // Get all refs (branches and tags) from repo
   const refs = $derived(repo.refs);
-  let branches = $derived(refs.filter((ref) => ref.type === "heads"));
-  let tags = $derived(refs.filter((ref) => ref.type === "tags"));
-  let selectedBranch = $derived(repo.selectedBranch || repo.mainBranch || "");
-
-  $effect(() => {
-    if (repo.refs.length > 0) {
-      branches = repo.refs.filter((ref) => ref.type === "heads");
-      tags = repo.refs.filter((ref) => ref.type === "tags");
-      selectedBranch = repo.selectedBranch || repo.mainBranch || "";
-    }
-  });
+  const branches = $derived(refs.filter((ref) => ref.type === "heads"));
+  const tags = $derived(refs.filter((ref) => ref.type === "tags"));
+  const selectedBranch = $derived(repo.selectedBranch || repo.mainBranch || "");
 
   function handleChange(e: Event) {
     const target = e.target as HTMLSelectElement;
