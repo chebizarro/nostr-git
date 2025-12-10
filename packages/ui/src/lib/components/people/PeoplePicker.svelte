@@ -240,7 +240,15 @@
 				bind:value={inputValue}
 				onkeydown={onKeydown}
 				onfocus={() => open = suggestions.length > 0}
-				onblur={() => setTimeout(() => open = false, 150)}
+				onblur={(e) => {
+					// Delay closing to allow click events on suggestions to fire first
+					setTimeout(() => {
+						// Only close if focus didn't move to a suggestion button
+						if (!e.relatedTarget || !(e.relatedTarget as HTMLElement).closest('#suggestions-listbox')) {
+							open = false;
+						}
+					}, 150);
+				}}
 				{placeholder}
 				{disabled}
 				class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -256,44 +264,48 @@
 					<div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
 				</div>
 			{/if}
-		</div>
-	{/if}
 
-	<!-- Suggestions dropdown -->
-	{#if open && suggestions.length > 0}
-		<div class="absolute z-50 w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-			<ul id="suggestions-listbox" role="listbox" aria-label="Search suggestions">
-				{#each suggestions as suggestion, index}
-					<li role="option" aria-selected={index === highlighted}>
-						<button
-							type="button"
-							class="w-full px-3 py-2 cursor-pointer hover:bg-gray-700 {index === highlighted ? 'bg-gray-700' : ''} text-left"
-							onclick={() => {
-								addSelection(suggestion.pubkey);
-								inputValue = "";
-								open = false;
-								highlighted = -1;
-							}}
-						>
-						<div class="flex items-center gap-3">
-							{#if showAvatars}
-								<UserAvatar pubkey={suggestion.pubkey} profile={profileCache.get(suggestion.pubkey)} size="sm" />
-							{:else}
-								<span class="text-gray-300">{suggestion.pubkey.slice(0, 8)}...</span>
-							{/if}
-							<div class="flex-1 min-w-0">
-								<div class="text-white text-sm truncate">
-									{suggestion.display_name || suggestion.name || suggestion.nip05 || suggestion.pubkey.slice(0, 16) + '...'}
+			<!-- Suggestions dropdown -->
+			{#if open && suggestions.length > 0}
+				<div class="absolute z-[50] w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+					<ul id="suggestions-listbox" role="listbox" aria-label="Search suggestions">
+						{#each suggestions as suggestion, index}
+							<li role="option" aria-selected={index === highlighted}>
+								<button
+									type="button"
+									class="w-full px-3 py-2 cursor-pointer hover:bg-gray-700 {index === highlighted ? 'bg-gray-700' : ''} text-left"
+									onmousedown={(e) => {
+										// Prevent input blur from firing before click
+										e.preventDefault();
+									}}
+									onclick={() => {
+										addSelection(suggestion.pubkey);
+										inputValue = "";
+										open = false;
+										highlighted = -1;
+									}}
+								>
+								<div class="flex items-center gap-3">
+									{#if showAvatars}
+										<UserAvatar pubkey={suggestion.pubkey} profile={profileCache.get(suggestion.pubkey)} size="sm" />
+									{:else}
+										<span class="text-gray-300">{suggestion.pubkey.slice(0, 8)}...</span>
+									{/if}
+									<div class="flex-1 min-w-0">
+										<div class="text-white text-sm truncate">
+											{suggestion.display_name || suggestion.name || suggestion.nip05 || suggestion.pubkey.slice(0, 16) + '...'}
+										</div>
+										{#if suggestion.nip05 && suggestion.nip05 !== suggestion.display_name && suggestion.nip05 !== suggestion.name}
+											<div class="text-gray-400 text-xs truncate">{suggestion.nip05}</div>
+										{/if}
+									</div>
 								</div>
-								{#if suggestion.nip05 && suggestion.nip05 !== suggestion.display_name && suggestion.nip05 !== suggestion.name}
-									<div class="text-gray-400 text-xs truncate">{suggestion.nip05}</div>
-								{/if}
-							</div>
-						</div>
-						</button>
-					</li>
-				{/each}
-			</ul>
+								</button>
+							</li>
+						{/each}
+					</ul>
+				</div>
+			{/if}
 		</div>
 	{/if}
 </div>

@@ -5,6 +5,7 @@ import { tokens as tokensStore, type Token } from "./stores/tokens.js";
 import {
   createRepoAnnouncementEvent as createAnnouncementEventShared,
   createRepoStateEvent as createStateEventShared,
+  sanitizeRelays,
 } from "@nostr-git/shared-types";
 import { tryTokensForHost, getTokensForHost } from "./utils/tokenHelpers.js";
 
@@ -646,46 +647,12 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
         updateProgress("events", "Creating Nostr events...", "running");
         // Derive clone and web URLs
         const ensureNoGitSuffix = (url: string) => url?.replace(/\.git$/, "");
-        const cloneUrl = (() => {
-          const raw = remoteRepo?.url || config.cloneUrl || "";
-          if (config.provider === "grasp") {
-            return raw.replace(/^ws:\/\//, "http://").replace(/^wss:\/\//, "https://");
-          }
-          return raw;
-        })();
+        const cloneUrl = remoteRepo?.url || config.cloneUrl || "";
         const webUrl = ensureNoGitSuffix(remoteRepo?.webUrl || config.webUrl || cloneUrl);
 
-        // Build GRASP relay aliases if applicable
-        let relays: string[] | undefined = undefined;
-        if (config.provider === "grasp") {
-          const normalizeRelayWsOrigin = (u: string) => {
-            if (!u) return "";
-            try {
-              const url = new URL(u);
-              const origin = `${url.protocol}//${url.host}`;
-              return origin.replace(/^http:\/\//, "ws://").replace(/^https:\/\//, "wss://");
-            } catch {
-              return u
-                .replace(/^http:\/\//, "ws://")
-                .replace(/^https:\/\//, "wss://")
-                .replace(/(ws[s]?:\/\/[^/]+).*/, "$1");
-            }
-          };
-          const baseRelay = normalizeRelayWsOrigin(config.relayUrl || "");
-          const aliases: string[] = [];
-          if (baseRelay) {
-            aliases.push(baseRelay);
-            const u = new URL(baseRelay);
-            const port = u.port ? `:${u.port}` : "";
-            aliases.push(`${u.protocol}//ngit-relay${port}`);
-          }
-          const seen = new Set<string>();
-          relays = aliases.filter((a) => {
-            if (seen.has(a)) return false;
-            seen.add(a);
-            return true;
-          });
-        }
+        // Sanitize and use relays from config if provided
+        const sanitizedRelays =
+          config.relays && config.relays.length > 0 ? sanitizeRelays(config.relays) : [];
 
         announcementEvent = createAnnouncementEventShared({
           repoId: config.name,
@@ -693,11 +660,10 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
           description: config.description || "",
           web: webUrl ? [webUrl] : undefined,
           clone: cloneUrl ? [cloneUrl] : undefined,
-          relays,
+          relays: sanitizedRelays,
           maintainers:
             config.maintainers && config.maintainers.length > 0 ? config.maintainers : undefined,
           hashtags: config.tags && config.tags.length > 0 ? config.tags : undefined,
-          earliestUniqueCommit: localRepo?.initialCommit || undefined,
         });
 
         const refs = localRepo?.initialCommit

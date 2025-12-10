@@ -59,11 +59,14 @@
   let relaySearchQuery = $state("");
   let relaySearchResults = $state<string[]>([]);
   let showRelayAutocomplete = $state(false);
+  let relayInputElement: HTMLInputElement | undefined = $state();
   
   // Autocomplete state for hashtags
   let hashtagSearchQuery = $state("");
   let hashtagSearchResults = $state<string[]>([]);
   let showHashtagAutocomplete = $state(false);
+  let hashtagInputElement: HTMLInputElement | undefined = $state();
+  let highlightedHashtagIndex = $state(-1);
 
   const gitignoreOptions = [
     { value: "", label: "None" },
@@ -106,19 +109,105 @@
     };
   });
   
+  // Normalize hashtag: strip #, lowercase, trim
+  function normalizeHashtag(tag: string): string {
+    return tag.toLowerCase().replace(/^#/, '').trim();
+  }
+
+  // Check if a tag already exists (case-insensitive)
+  function tagExists(tag: string): boolean {
+    const normalized = normalizeHashtag(tag);
+    return tags.some(t => normalizeHashtag(t) === normalized);
+  }
+
+  // Get normalized query (helper for derived computations)
+  function getNormalizedQuery(): string {
+    return normalizeHashtag(hashtagSearchQuery);
+  }
+
+  // Check if we can create a custom tag
+  function canCreateCustomTag(): boolean {
+    const normalized = getNormalizedQuery();
+    return normalized.length > 0 && !tagExists(normalized);
+  }
+
+  // Get total number of hashtag options
+  function getTotalHashtagOptions(): number {
+    return hashtagSearchResults.length + (canCreateCustomTag() ? 1 : 0);
+  }
+
   // Handle hashtag search (client-side filtering)
   $effect(() => {
-    const query = hashtagSearchQuery;
+    const query = hashtagSearchQuery.trim();
     
     if (query) {
-      const results = commonHashtags.search(query, 10);
-      hashtagSearchResults = results;
-      showHashtagAutocomplete = results.length > 0;
+      const normalized = normalizeHashtag(query);
+      hashtagSearchResults = commonHashtags.search(normalized, 10);
+      // Show autocomplete if there's a query (we'll show results or "create" option)
+      showHashtagAutocomplete = true;
     } else {
       hashtagSearchResults = [];
       showHashtagAutocomplete = false;
     }
+    // Reset highlighted index when query changes
+    highlightedHashtagIndex = -1;
   });
+
+  function addHashtag(tag: string) {
+    const normalized = normalizeHashtag(tag);
+    if (normalized && !tagExists(normalized)) {
+      onTagsChange([...tags, normalized]);
+      resetHashtagInput();
+    }
+  }
+
+  function resetHashtagInput() {
+    hashtagSearchQuery = "";
+    showHashtagAutocomplete = false;
+    highlightedHashtagIndex = -1;
+  }
+
+  function handleHashtagKeydown(e: KeyboardEvent) {
+    // Handle Enter when autocomplete is closed
+    if (!showHashtagAutocomplete && e.key === 'Enter' && hashtagSearchQuery.trim()) {
+      e.preventDefault();
+      addHashtag(hashtagSearchQuery);
+      return;
+    }
+
+    if (!showHashtagAutocomplete) return;
+
+    const totalOptions = getTotalHashtagOptions();
+    const canCreate = canCreateCustomTag();
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        highlightedHashtagIndex = Math.min(highlightedHashtagIndex + 1, totalOptions - 1);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        highlightedHashtagIndex = Math.max(highlightedHashtagIndex - 1, -1);
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (highlightedHashtagIndex >= 0 && highlightedHashtagIndex < hashtagSearchResults.length) {
+          // Select from suggestions
+          addHashtag(hashtagSearchResults[highlightedHashtagIndex]);
+        } else if (highlightedHashtagIndex === hashtagSearchResults.length && canCreate) {
+          // Create custom tag (last option)
+          addHashtag(hashtagSearchQuery);
+        } else if (canCreate) {
+          // No highlight, but can create
+          addHashtag(hashtagSearchQuery);
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        resetHashtagInput();
+        break;
+    }
+  }
 
   function handleGitignoreChange(event: Event) {
     const target = event.target as HTMLSelectElement;
@@ -287,60 +376,109 @@
             <Hash class="w-4 h-4 inline mr-1" />
             Tags/Topics
           </legend>
-          <div class="space-y-2">
-            {#each tags as tag, index}
-              <div class="flex items-center space-x-2">
-                <input
-                  type="text"
-                  value={tags[index]}
-                  oninput={(e) =>
-                    updateItem(tags, index, (e.target as HTMLInputElement).value, onTagsChange)}
-                  placeholder="javascript"
-                  class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
-                />
-                <button
-                  type="button"
-                  class="p-2 text-red-400 hover:text-red-300"
-                  aria-label="Remove tag"
-                  onclick={() => removeItem(tags, index, onTagsChange)}
-                >
-                  <Trash2 class="w-4 h-4" />
-                </button>
-              </div>
-            {/each}
-            
-            <!-- Autocomplete input for adding hashtags -->
-            <div class="relative">
-              <input
-                type="text"
-                bind:value={hashtagSearchQuery}
-                onfocus={() => showHashtagAutocomplete = hashtagSearchResults.length > 0}
-                onblur={() => setTimeout(() => showHashtagAutocomplete = false, 200)}
-                autocomplete="off"
-                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
-                placeholder="Search hashtags..."
-              />
-              {#if showHashtagAutocomplete && hashtagSearchResults.length > 0}
-                <div class="fixed z-50 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto" style="width: {document.activeElement?.getBoundingClientRect().width}px; left: {document.activeElement?.getBoundingClientRect().left}px; top: {(document.activeElement?.getBoundingClientRect().bottom || 0) + 4}px;">
-                  {#each hashtagSearchResults as tag}
-                    <button
-                      type="button"
-                      onclick={() => {
-                        if (!tags.includes(tag)) {
-                          onTagsChange([...tags, tag]);
-                        }
-                        hashtagSearchQuery = "";
-                        showHashtagAutocomplete = false;
-                      }}
-                      class="w-full text-left px-3 py-2 hover:bg-gray-700 text-sm flex items-center gap-2"
-                    >
-                      <Hash class="w-3 h-3 text-gray-400" />
-                      {tag}
-                    </button>
-                  {/each}
+          
+          <!-- Selected tags -->
+          {#if tags.length > 0}
+            <div class="flex flex-wrap gap-2 mb-2">
+              {#each tags as tag}
+                <div class="flex items-center gap-2 bg-gray-700 rounded-lg px-3 py-2 text-sm">
+                  <Hash class="w-3 h-3 text-gray-400" />
+                  <span class="text-white text-sm">{tag}</span>
+                  <button 
+                    onclick={() => onTagsChange(tags.filter(t => t !== tag))} 
+                    class="text-gray-400 hover:text-gray-200 transition-colors" 
+                    aria-label="Remove tag"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
                 </div>
-              {/if}
+              {/each}
             </div>
+          {/if}
+
+          <!-- Search input for adding tags -->
+          <div class="relative">
+            <input
+              bind:this={hashtagInputElement}
+              type="text"
+              bind:value={hashtagSearchQuery}
+              onfocus={() => {
+                if (hashtagSearchQuery.trim()) {
+                  showHashtagAutocomplete = hashtagSearchResults.length > 0 || canCreateCustomTag();
+                }
+              }}
+              onblur={() => {
+                // Delay closing to allow click events on suggestions to fire first
+                setTimeout(() => {
+                  showHashtagAutocomplete = false;
+                  highlightedHashtagIndex = -1;
+                }, 250);
+              }}
+              onkeydown={handleHashtagKeydown}
+              autocomplete="off"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
+              placeholder="Search or type to add tags (press Enter)"
+            />
+            {#if showHashtagAutocomplete}
+              <div 
+                id="hashtag-suggestions-listbox"
+                role="listbox"
+                aria-label="Hashtag suggestions"
+                class="absolute z-[50] w-full mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                {#each hashtagSearchResults as tag, index}
+                  {@const isAlreadyAdded = tagExists(tag)}
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={index === highlightedHashtagIndex}
+                    disabled={isAlreadyAdded}
+                    onmousedown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onclick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (!isAlreadyAdded) {
+                        addHashtag(tag);
+                      }
+                    }}
+                    class="w-full text-left px-3 py-2 text-sm flex items-center gap-2 
+                           {index === highlightedHashtagIndex ? 'bg-gray-700' : 'hover:bg-gray-700'}
+                           {isAlreadyAdded ? 'opacity-50 cursor-not-allowed' : ''}"
+                  >
+                    <Hash class="w-3 h-3 text-gray-400" />
+                    <span class="flex-1">{tag}</span>
+                    {#if isAlreadyAdded}
+                      <span class="text-xs text-gray-500">(already added)</span>
+                    {/if}
+                  </button>
+                {/each}
+                {#if canCreateCustomTag()}
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={highlightedHashtagIndex === hashtagSearchResults.length}
+                    onmousedown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onclick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      addHashtag(hashtagSearchQuery);
+                    }}
+                    class="w-full text-left px-3 py-2 text-sm flex items-center gap-2 border-t border-gray-700
+                           {highlightedHashtagIndex === hashtagSearchResults.length ? 'bg-gray-700' : 'hover:bg-gray-700'}"
+                  >
+                    <Plus class="w-3 h-3 text-blue-400" />
+                    <span class="text-blue-400 font-medium">Create tag: {getNormalizedQuery()}</span>
+                  </button>
+                {/if}
+              </div>
+            {/if}
           </div>
           <p class="mt-1 text-sm text-gray-400">Add tags or topics for this repository</p>
         </fieldset>
@@ -403,19 +541,34 @@
             {#if searchRelays}
               <div class="relative">
                 <input
+                  bind:this={relayInputElement}
                   type="text"
                   bind:value={relaySearchQuery}
                   onfocus={() => showRelayAutocomplete = relaySearchResults.length > 0}
-                  onblur={() => setTimeout(() => showRelayAutocomplete = false, 200)}
+                  onblur={(e) => {
+                    // Delay closing to allow click events on suggestions to fire first
+                    setTimeout(() => {
+                      if (!e.relatedTarget || !(e.relatedTarget as HTMLElement).closest('#relay-suggestions-listbox')) {
+                        showRelayAutocomplete = false;
+                      }
+                    }, 200);
+                  }}
                   autocomplete="off"
                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100"
                   placeholder="Search for relays..."
                 />
                 {#if showRelayAutocomplete && relaySearchResults.length > 0}
-                  <div class="fixed z-50 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto" style="width: {document.activeElement?.getBoundingClientRect().width}px; left: {document.activeElement?.getBoundingClientRect().left}px; top: {(document.activeElement?.getBoundingClientRect().bottom || 0) + 4}px;">
+                  <div 
+                    id="relay-suggestions-listbox"
+                    class="fixed z-50 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto" 
+                    style="width: {relayInputElement?.getBoundingClientRect().width || '100%'}px; left: {relayInputElement?.getBoundingClientRect().left || 0}px; top: {(relayInputElement?.getBoundingClientRect().bottom || 0) + 4}px;">
                     {#each relaySearchResults as relayUrl}
                       <button
                         type="button"
+                        onmousedown={(e) => {
+                          // Prevent input blur from firing before click
+                          e.preventDefault();
+                        }}
                         onclick={() => {
                           if (!relays.includes(relayUrl)) {
                             onRelaysChange([...relays, relayUrl]);

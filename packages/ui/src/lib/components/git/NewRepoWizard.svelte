@@ -157,14 +157,10 @@
     const availabilityHost = providerResult?.host;
 
     // 1) webUrls (primary web URL default)
-    if (
-      !userEditedWebUrl &&
-      (advancedSettings.webUrls.length === 0 || !advancedSettings.webUrls[0])
-    ) {
+    if (!userEditedWebUrl) {
       let url = "";
       if (selectedProvider === "grasp") {
-        // For GRASP, use a placeholder URL - EventIO will handle the actual pubkey
-        url = `https://gitworkshop.dev/[pubkey]/${name}`;
+        url = `https://gitworkshop.dev/${userPubkey ?? '[pubkey]'}/${name}`
       } else if (selectedProvider) {
         const host = availabilityHost || providerHost(selectedProvider);
         if (host && username) {
@@ -183,13 +179,12 @@
       const host = availabilityHost || providerHost(selectedProvider);
 
       if (selectedProvider === "grasp") {
-        // For GRASP, use nostr URL with placeholder - EventIO will handle actual pubkey
-        const nostrUrl = `nostr://[pubkey]/${name}`;
+        const nostrUrl = `nostr://${userPubkey ?? '[pubkey]'}/${name}`;
         advancedSettings.cloneUrls = [nostrUrl];
       } else {
         // For non-GRASP: prefer HTTPS primary (when derivable), plus nostr secondary
         const httpsUrl = host && username ? `https://${host}/${username}/${name}.git` : undefined;
-        const nostrUrl = `nostr://[pubkey]/${name}`; // EventIO will handle actual pubkey
+        const nostrUrl = `nostr://${userPubkey ?? '[pubkey]'}/${name}`;
 
         if (httpsUrl) {
           advancedSettings.cloneUrls = nostrUrl ? [httpsUrl, nostrUrl] : [httpsUrl];
@@ -203,6 +198,7 @@
 
   // Step management (1: Choose Service, 2: Repo Details, 3: Advanced, 4: Create)
   let currentStep = $state(1);
+  let stepContentContainer: HTMLDivElement | undefined = undefined;
 
   // Repository details (Step 1)
   let repoDetails = $state({
@@ -533,6 +529,14 @@
       } catch {}
     };
   });
+
+  // Scroll to top when step changes
+  $effect(() => {
+    void currentStep; // Track currentStep changes
+    if (stepContentContainer) {
+      stepContentContainer.scrollTop = 0;
+    }
+  });
 </script>
 
 <div
@@ -609,6 +613,7 @@
 
   <!-- Step Content -->
   <div
+    bind:this={stepContentContainer}
     class="bg-card text-card-foreground rounded-lg border shadow-sm p-6 max-h-[70vh] overflow-auto"
   >
     {#if currentStep === 1}
