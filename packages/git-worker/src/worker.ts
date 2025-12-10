@@ -525,11 +525,12 @@ const clone = async ({ repoId, cloneUrls }: { repoId: string; cloneUrls: string[
     }
 
     // If we got data from cache and it's already shallow/full, we're done
-    if (initResult.fromCache && 'dataLevel' in initResult && initResult.dataLevel !== 'refs') {
+    if (initResult.fromCache &&
+      'dataLevel' in initResult &&
+      initResult.dataLevel !== 'refs') {
       return initResult;
     }
 
-      initResult.fromCache &&
       'dataLevel' in initResult &&
       initResult.dataLevel !== 'refs'
     ) {
