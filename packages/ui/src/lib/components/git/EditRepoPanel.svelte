@@ -693,7 +693,7 @@
           </label>
 
           <PeoplePicker
-            bind:selected={formData.maintainers}
+            selected={formData.maintainers as any}
             placeholder="Add maintainer (npub or search)..."
             disabled={isEditing}
             maxSelections={50}
@@ -701,6 +701,21 @@
             compact={false}
             {getProfile}
             {searchProfiles}
+            add={(pubkey: string) => {
+              if (!formData.maintainers.includes(pubkey)) {
+                formData.maintainers = [...formData.maintainers, pubkey];
+              }
+            }}
+            {...({ remove: (pubkey: string) => {
+              formData.maintainers = formData.maintainers.filter(p => p !== pubkey);
+            } } as any)}
+            onDeleteLabel={(evt) => {
+              // Handle LabelEvent deletion - extract pubkey and remove from array
+              const pubkey = evt.tags?.find(t => t[0] === "p")?.[1];
+              if (pubkey) {
+                formData.maintainers = formData.maintainers.filter(p => p !== pubkey);
+              }
+            }}
           />
 
           {#if validationErrors.maintainers}

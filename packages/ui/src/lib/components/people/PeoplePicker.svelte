@@ -17,7 +17,7 @@
 	}
 
 	export interface Props {
-		selected?: LabelEvent[];
+		selected?: LabelEvent[] | string[];
 		placeholder?: string;
 		disabled?: boolean;
 		maxSelections?: number;
@@ -27,6 +27,7 @@
 		getProfile?: (pubkey: string) => Promise<PersonProfile | null>;
 		searchProfiles?: (query: string) => Promise<PersonSuggestion[]>;
 		add?: (pubkey: string) => void | Promise<void>;
+		remove?: (pubkey: string) => void | Promise<void>;
 		onDeleteLabel?: (evt: LabelEvent) => void | Promise<void>;
 	}
 
@@ -41,6 +42,7 @@
 		getProfile,
 		searchProfiles,
 		add,
+		remove,
 		onDeleteLabel
 	}: Props = $props();
 
@@ -113,13 +115,42 @@
 		add?.(normalized);
 	}
 
-	function getEventPubkey(evt: LabelEvent): string | undefined {
-		const p = evt.tags.find(t => t[0] === "p")
-		return p?.[1]
+	function getEventPubkey(evt: LabelEvent | string): string | undefined {
+		// Handle string (pubkey) directly
+		if (typeof evt === 'string') {
+			return normalizePubkey(evt)
+		}
+		// Handle LabelEvent
+		if (evt && typeof evt === 'object' && 'tags' in evt && Array.isArray(evt.tags)) {
+			const p = evt.tags.find(t => t[0] === "p")
+			return p?.[1]
+		}
+		return undefined
 	}
 
-	function removeSelection(evt: LabelEvent) {
-		if (evt && onDeleteLabel) onDeleteLabel(evt)
+	function removeSelection(evt: LabelEvent | string) {
+		if (typeof evt === 'string') {
+			// For string arrays, use remove callback if provided
+			if (remove) {
+				remove(normalizePubkey(evt));
+			} else if (selected && Array.isArray(selected)) {
+				// If remove is not provided, try to find matching LabelEvent
+				const isStringArray = selected.length === 0 || typeof selected[0] === 'string';
+				if (!isStringArray) {
+					// Find the matching LabelEvent and call onDeleteLabel
+					const eventArray = selected as LabelEvent[];
+					const matchingEvent = eventArray.find((item) => {
+						const itemPubkey = getEventPubkey(item);
+						return itemPubkey === normalizePubkey(evt);
+					});
+					if (matchingEvent && onDeleteLabel) {
+						onDeleteLabel(matchingEvent);
+					}
+				}
+			}
+		} else if (evt && onDeleteLabel) {
+			onDeleteLabel(evt)
+		}
 	}
 
 	function onKeydown(e: KeyboardEvent) {
@@ -149,9 +180,9 @@
 				highlighted = -1;
 				break;
 			case 'Backspace':
-				if (!inputValue && (selected?.length || 0) > 0) {
+				if (!inputValue && (selected?.length || 0) > 0 && selected) {
 					e.preventDefault();
-					removeSelection(selected[selected.length - 1]);
+					removeSelection(selected[selected.length - 1] as LabelEvent | string);
 				}
 				break;
 		}
@@ -159,11 +190,15 @@
 
 	// Ensure profiles are cached for selected and suggestions
 	$effect(() => {
-		const keys = (selected || []).map(getEventPubkey).filter(Boolean) as string[]
+		const keys = (selected || []).map(item => {
+			if (typeof item === 'string') {
+				return normalizePubkey(item)
+			}
+			return getEventPubkey(item as LabelEvent)
+		}).filter(Boolean) as string[]
 		;[...keys, ...suggestions.map(s => s.pubkey)].forEach(pubkey => {
 			ensureProfile(pubkey || "")
 		})
-	});
 </script>
 
 <div class="space-y-2">
