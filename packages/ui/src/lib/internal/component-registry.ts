@@ -30,10 +30,10 @@ export type Registry = {
   EventActions: typeof import("../components/EventActions.svelte").default;
   ReactionSummary: typeof import("../components/ReactionSummary.svelte").default;
   Spinner: typeof import("../components/editor/Spinner.svelte").default;
+  Markdown?: any; // Optional component provided by consuming app
 };
 
 import Alert from "../components/ui/alert/alert.svelte";
-import AlertDescription from "../components/ui/alert/alert-description.svelte";
 import AlertTitle from "../components/ui/alert/alert-title.svelte";
 import Avatar from "../components/ui/avatar/avatar.svelte";
 import AvatarFallback from "../components/ui/avatar/avatar-fallback.svelte";

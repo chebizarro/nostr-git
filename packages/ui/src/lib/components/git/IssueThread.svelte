@@ -6,7 +6,7 @@
   import { useRegistry } from "../../useRegistry";
   import { slide } from "svelte/transition";
   import RichText from "../RichText.svelte";
-  const { Button, Textarea, Card, ProfileComponent } = useRegistry();
+  const { Button, Textarea, Card, ProfileComponent, Markdown } = useRegistry();
 
   interface Props {
     issueId: string;
@@ -66,7 +66,11 @@
           </div>
           <div class="w-full flex flex-col gap-y-2 mt-2">
             <div class="text-muted-foreground">
-              <RichText content={c.content} prose={false} />
+              {#if Markdown}
+                <Markdown content={c.content} />
+              {:else}
+                <RichText content={c.content} prose={false} />
+              {/if}
             </div>
           </div>
         </div>

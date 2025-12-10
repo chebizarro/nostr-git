@@ -524,11 +524,11 @@ const clone = async ({ repoId, cloneUrls }: { repoId: string; cloneUrls: string[
       return initResult;
     }
 
-    // If we got data from cache and it's already shallow/full, we're done.
-    // smartInitializeRepoUtil returns objects where dataLevel is present on
-    // successful responses, but TypeScript can't see that across the union,
-    // so we guard on the property explicitly.
-    if (
+    // If we got data from cache and it's already shallow/full, we're done
+    if (initResult.fromCache && 'dataLevel' in initResult && initResult.dataLevel !== 'refs') {
+      return initResult;
+    }
+
       initResult.fromCache &&
       'dataLevel' in initResult &&
       initResult.dataLevel !== 'refs'
