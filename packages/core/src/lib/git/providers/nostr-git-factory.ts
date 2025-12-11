@@ -78,7 +78,7 @@ export function createNostrGitProvider(options: NostrGitFactoryOptions): NostrGi
 
   // Create GRASP API if enabled
   let graspApi;
-  if (__GRASP__) {
+  if (typeof __GRASP__ !== 'undefined' && __GRASP__) {
     if (enableGrasp) {
       const graspConfig: GraspApiConfig = {
         relays: graspRelays,
@@ -122,8 +122,8 @@ export function createNostrGitProviderFromEnv(options: {
   // Read configuration from environment variables
   const defaultRelays = process.env.NOSTR_DEFAULT_RELAYS?.split(';') || DEFAULT_RELAYS.default;
   const fallbackRelays = process.env.NOSTR_FALLBACK_RELAYS?.split(';') || DEFAULT_RELAYS.fallback;
-  const graspRelays = __GRASP__ ? (process.env.NOSTR_GRASP_RELAYS?.split(';') || DEFAULT_RELAYS.grasp) : [];
-  const enableGrasp = __GRASP__ && process.env.NOSTR_ENABLE_GRASP !== 'false';
+  const graspRelays = (typeof __GRASP__ !== 'undefined' && __GRASP__) ? (process.env.NOSTR_GRASP_RELAYS?.split(';') || DEFAULT_RELAYS.grasp) : [];
+  const enableGrasp = (typeof __GRASP__ !== 'undefined' && __GRASP__) && process.env.NOSTR_ENABLE_GRASP !== 'false';
   const publishRepoState = process.env.NOSTR_PUBLISH_REPO_STATE !== 'false';
   const publishRepoAnnouncements = process.env.NOSTR_PUBLISH_REPO_ANNOUNCEMENTS === 'true';
   const corsProxy = process.env.GIT_DEFAULT_CORS_PROXY === 'none' ? undefined :
@@ -216,7 +216,7 @@ export function selectProvider(
   }
 
   // Check if URL contains GRASP indicators
-  if (__GRASP__) {
+  if (typeof __GRASP__ !== 'undefined' && __GRASP__) {
     if (enableGrasp && (
       url.includes('relay.ngit.dev') ||
       url.includes('gitnostr.com') ||

@@ -108,7 +108,7 @@ export const git = {
     GiteaApi,
     BitbucketApi,
     NostrGitProvider,
-    ...__GRASP__ ? { GraspApi } : {},
+    ...(typeof __GRASP__ !== 'undefined' && __GRASP__ ? { GraspApi } : {}),
     createNostrGitProvider,
     createNostrGitProviderFromEnv,
     createNostrGitProviderFromGitConfig,
