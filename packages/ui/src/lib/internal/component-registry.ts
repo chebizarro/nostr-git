@@ -92,4 +92,5 @@ export const defaultRegistry: Registry = {
   EventActions,
   ReactionSummary,
   Spinner,
+  Markdown,
 };
