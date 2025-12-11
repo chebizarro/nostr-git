@@ -6,6 +6,8 @@ import {
   getTagValue,
 } from "@nostr-git/shared-types";
 import { git } from "@nostr-git/core";
+import { tokens as tokensStore, type Token } from "../stores/tokens.js";
+import { tryTokensForHost } from "../utils/tokenHelpers.js";
 
 const { detectVendorFromUrl } = git;
 
@@ -57,14 +59,13 @@ export function useEditRepo(hookOptions: UseEditRepoOptions = {}) {
     currentState: RepoStateEvent,
     config: EditConfig,
     editOptions: {
-      token: string;
       repoDir: string;
       onSignEvent: (event: Partial<Event>) => Promise<Event>;
       onPublishEvent: (event: Event) => Promise<void>;
       onUpdateStore?: (repoId: string, updates: any) => Promise<void>;
     }
   ): Promise<void> {
-    const { token, repoDir, onSignEvent, onPublishEvent, onUpdateStore } = editOptions;
+    const { repoDir, onSignEvent, onPublishEvent, onUpdateStore } = editOptions;
 
     // Reset state
     error = undefined;
@@ -90,12 +91,26 @@ export function useEditRepo(hookOptions: UseEditRepoOptions = {}) {
       const currentName = getTagValue(currentAnnouncement as any, "name") || "";
       const cloneUrl = getTagValue(currentAnnouncement as any, "clone") || "";
 
-      // Parse owner/repo from clone URL
-      const urlMatch = cloneUrl.match(/github\.com[\/:]([^\/]+)\/([^\/\.]+)/);
-      if (!urlMatch) {
-        throw new Error("Unable to parse repository owner/name from clone URL");
+      // Parse owner/repo from clone URL and extract hostname
+      let owner: string, repo: string, providerHost: string;
+      try {
+        const url = new URL(cloneUrl);
+        providerHost = url.hostname;
+        const pathParts = url.pathname.split("/").filter(Boolean);
+        if (pathParts.length < 2) {
+          throw new Error("Invalid repository URL format");
+        }
+        owner = pathParts[pathParts.length - 2];
+        repo = pathParts[pathParts.length - 1].replace(/\.git$/, "");
+      } catch (error) {
+        // Fallback to regex parsing for GitHub URLs
+        const urlMatch = cloneUrl.match(/github\.com[\/:]([^\/]+)\/([^\/\.]+)/);
+        if (!urlMatch) {
+          throw new Error("Unable to parse repository owner/name from clone URL");
+        }
+        [, owner, repo] = urlMatch;
+        providerHost = "github.com";
       }
-      const [, owner, repo] = urlMatch;
 
       // Progress callback to update UI
       const onProgress = (stage: string) => {
@@ -118,17 +133,27 @@ export function useEditRepo(hookOptions: UseEditRepoOptions = {}) {
           percentage: 10,
           isComplete: false,
         };
-
-        const metadataResult: EditResult = await gitWorker.api.updateRemoteRepoMetadata({
-          owner,
-          repo,
-          updates: {
-            name: config.name !== currentName ? config.name : undefined,
-            description: config.description,
-            private: config.visibility === "private",
-          },
-          token,
-        });
+        
+        
+        // Get tokens from store and use fallback retry
+        const tokens = await tokensStore.waitForInitialization();
+        const metadataResult = await tryTokensForHost(
+          tokens,
+          providerHost,
+          async (token: string, host: string) => {
+            return await gitWorker.api.updateRemoteRepoMetadata({
+              owner,
+              repo,
+              updates: {
+                name: config.name !== currentName ? config.name : undefined,
+                description: config.description,
+                private: config.visibility === "private",
+              },
+              token,
+            });
+          }
+        );
+        
 
         if (!metadataResult.success) {
           throw new Error(metadataResult.error || "Failed to update repository metadata");
@@ -149,7 +174,7 @@ export function useEditRepo(hookOptions: UseEditRepoOptions = {}) {
           isComplete: false,
         };
 
-        const filesToUpdate = [];
+        const filesToUpdate: Array<{ path: string; content: string }> = [];
 
         // Add README if changed
         if (config.readmeContent) {
@@ -163,14 +188,22 @@ export function useEditRepo(hookOptions: UseEditRepoOptions = {}) {
           // Determine provider from clone URL
           const provider = detectVendorFromUrl(cloneUrl);
 
-          const pushResult: EditResult = await gitWorker.api.updateAndPushFiles({
-            dir: repoDir,
-            files: filesToUpdate,
-            commitMessage: `Update repository files via Nostr Git\n\n- Updated README.md\n- Updated repository metadata`,
-            token,
-            provider,
-            onProgress,
-          });
+          // Get tokens from store and use fallback retry
+          const tokens = await tokensStore.waitForInitialization();
+          const pushResult = await tryTokensForHost(
+            tokens,
+            providerHost,
+            async (token: string, host: string) => {
+              return await gitWorker.api.updateAndPushFiles({
+                dir: repoDir,
+                files: filesToUpdate,
+                commitMessage: `Update repository files via Nostr Git\n\n- Updated README.md\n- Updated repository metadata`,
+                token,
+                provider,
+                onProgress,
+              });
+            }
+          );
 
           if (!pushResult.success) {
             throw new Error(pushResult.error || "Failed to update repository files");

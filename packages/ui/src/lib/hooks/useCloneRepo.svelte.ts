@@ -1,5 +1,7 @@
 import type { NostrEvent } from "nostr-tools";
 import { GIT_REPO_STATE, type RepoStateTag } from "@nostr-git/shared-types";
+import { tokens as tokensStore } from "../stores/tokens.js";
+import { tryTokensForHost, getTokensForHost } from "../utils/tokenHelpers.js";
 
 // Note: This import will need to be updated based on the actual git-worker export location
 // For now, we'll use a dynamic import in the function
@@ -73,30 +75,47 @@ export function useCloneRepo(options: CloneRepoOptions): CloneRepoHook {
 
       onProgress?.("Preparing to clone repository...", 5);
 
-      // TODO: Get authentication token from app-level token store
-      // This should be injected from the parent application
-      let authToken: string | undefined;
+      // Extract hostname from URL for token matching
+      const urlObj = new URL(url);
+      const hostname = urlObj.hostname;
 
-      try {
-        // Try to get token from the global token store if available
-        // This is a placeholder - the actual implementation should be injected
-        // authToken = getTokenForHost(hostname);
-      } catch (error) {
-        console.warn("Could not determine auth token for clone operation:", error);
-      }
+      // Wait for tokens to be initialized
+      const tokens = await tokensStore.waitForInitialization();
+      const matchingTokens = getTokensForHost(tokens, hostname);
 
       onProgress?.("Starting clone operation...", 10);
 
-      // Perform the clone operation using the git worker
-      const result = await api.cloneRemoteRepo({
-        url,
-        dir: sanitizedPath,
-        depth,
-        token: authToken,
-        onProgress: (stage: string, pct?: number) => {
-          onProgress?.(stage, pct);
-        },
-      });
+      // Perform the clone operation with token retry logic if tokens are available
+      // For public repos, allow cloning without tokens
+      let result;
+      if (matchingTokens.length > 0) {
+        // Try all tokens for this host until one succeeds
+        result = await tryTokensForHost(
+          tokens,
+          hostname,
+          async (token: string, host: string) => {
+            return await api.cloneRemoteRepo({
+              url,
+              dir: sanitizedPath,
+              depth,
+              token,
+              onProgress: (stage: string, pct?: number) => {
+                onProgress?.(stage, pct);
+              },
+            });
+          }
+        );
+      } else {
+        // No tokens available - try cloning without authentication (public repos)
+        result = await api.cloneRemoteRepo({
+          url,
+          dir: sanitizedPath,
+          depth,
+          onProgress: (stage: string, pct?: number) => {
+            onProgress?.(stage, pct);
+          },
+        });
+      }
 
       onProgress?.("Clone completed, creating repository announcement...", 95);
 

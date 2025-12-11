@@ -1444,41 +1444,19 @@ const createRemoteRepo = async ({
   baseUrl?: string;
 }) => {
   try {
-    console.log(`Creating remote repository on ${provider}: ${name}`);
-    console.log(`Token provided: ${token ? 'YES (length: ' + token.length + ')' : 'NO/EMPTY'}`);
-
     if (!token || token.trim() === '') {
       throw new Error('No authentication token provided');
     }
 
-    // Use GitServiceApi abstraction instead of hardcoded API calls
-    let api;
-
-    if (provider === 'grasp') {
-      if (!baseUrl) {
-        throw new Error('GRASP provider requires a relay URL as baseUrl parameter');
-      }
-      // For GRASP, we use EventIO (no more signer passing!)
-      api = getGitServiceApi(provider, token, baseUrl);
-    } else {
-      // Standard Git providers
-      api = getGitServiceApi(provider, token, baseUrl);
-    }
-
-    // Create repository using unified API
-    console.log(`[createRemoteRepo] Calling api.createRepo with:`, {
-      name,
-      description,
-      private: isPrivate,
-      autoInit: false
-    });
+    // Use provided token directly - UI layer handles token retry
+    const { getGitServiceApi } = await import('./git/factory.js');
+    const api = getGitServiceApi(provider, token, baseUrl);
     const repoMetadata = await api.createRepo({
       name,
       description,
       private: isPrivate,
       autoInit: false // We'll push our own initial commit
     });
-    console.log(`[createRemoteRepo] api.createRepo returned:`, repoMetadata);
 
     let remoteUrl = repoMetadata.cloneUrl;
     console.log(`[createRemoteRepo] Original cloneUrl from API: ${remoteUrl}`);
@@ -1486,10 +1464,7 @@ const createRemoteRepo = async ({
     // For GRASP, ensure clone URL uses HTTP(S) scheme, not WS(S)
     if (provider === 'grasp') {
       remoteUrl = remoteUrl.replace(/^ws:\/\//, 'http://').replace(/^wss:\/\//, 'https://');
-      console.log(`[createRemoteRepo] Converted GRASP URL: ${remoteUrl}`);
     }
-
-    console.log(`Remote repository created: ${remoteUrl}`);
 
     return {
       success: true,
@@ -1857,39 +1832,16 @@ async function forkAndCloneRepo(options: {
       dir
     });
 
-    // Step 1: Create remote fork using GitServiceApi abstraction
+    // Step 1: Create remote fork using GitServiceApi - UI layer handles token retry
     const { getGitServiceApi } = await import('./git/factory.js');
-    const gitServiceApi = getGitServiceApi(provider as any, token, baseUrl);
-
-    // Determine source URL based on provider (for diagnostics only)
-    const providerHost =
-      provider === 'github'
-        ? 'github.com'
-        : provider === 'gitlab'
-          ? 'gitlab.com'
-          : provider === 'gitea'
-            ? 'gitea.com'
-            : provider === 'bitbucket'
-              ? 'bitbucket.org'
-              : 'github.com';
-
-    const sourceUrl = `https://${providerHost}/${owner}/${repo}`;
-    console.log('[forkAndCloneRepo] Creating fork via API', { sourceUrl });
-
+    const api = getGitServiceApi(provider as GitVendor, token, baseUrl);
+    
     let forkResult;
     try {
-      forkResult = await gitServiceApi.forkRepo(owner, repo, { name: forkName });
+      forkResult = await api.forkRepo(owner, repo, { name: forkName });
     } catch (e: any) {
       const msg = e?.message || String(e);
-      console.error('[forkAndCloneRepo] forkRepo failed', {
-        owner,
-        repo,
-        forkName,
-        provider,
-        baseUrl,
-        error: msg
-      });
-      throw e;
+      throw new Error(`Fork operation failed: ${msg}`);
     }
 
     // Check if the fork name was honored
@@ -1913,13 +1865,13 @@ async function forkAndCloneRepo(options: {
     let pollAttempts = 0;
     const maxPollAttempts = 30; // 30 seconds max
 
-    // Use GitServiceApi abstraction for fork polling
-    const api = gitServiceApi; // Reuse the same API instance
+    // Get API instance for polling (use provided token)
+    const pollApi = getGitServiceApi(provider as GitVendor, token, baseUrl);
 
     while (pollAttempts < maxPollAttempts) {
       try {
         // Use GitServiceApi to check if fork is ready
-        const repoMetadata = await api.getRepo(forkOwner.login, forkName);
+        const repoMetadata = await pollApi.getRepo(forkOwner.login, forkName);
 
         if (repoMetadata && repoMetadata.id) {
           break; // Fork is ready
@@ -2031,27 +1983,24 @@ async function updateRemoteRepoMetadata(options: {
     private?: boolean;
   };
   token: string;
+  provider?: GitVendor;
+  baseUrl?: string;
 }): Promise<{
   success: boolean;
   updatedRepo?: any;
   error?: string;
 }> {
-  const { owner, repo, updates, token } = options;
+  const { owner, repo, updates, token, provider = 'github', baseUrl } = options;
 
   try {
-    console.log(`Updating remote repository metadata for ${owner}/${repo}...`);
-
-    // Use GitServiceApi abstraction instead of hardcoded GitHub API calls
-    const api = getGitServiceApi('github', token);
-
-    // Update repository using unified API
+    // Use provided token directly - UI layer handles token retry
+    const { getGitServiceApi } = await import('./git/factory.js');
+    const api = getGitServiceApi(provider, token, baseUrl);
     const updatedRepo = await api.updateRepo(owner, repo, {
       name: updates.name,
       description: updates.description,
       private: updates.private
     });
-
-    console.log(`Successfully updated remote repository metadata`);
 
     return {
       success: true,
@@ -2127,6 +2076,10 @@ async function updateAndPushFiles(options: {
     // Push to remote with authentication
     const remoteUrl = await git.getConfig({ dir, path: 'remote.origin.url' });
 
+    if (!remoteUrl) {
+      throw new Error('No remote URL configured');
+    }
+
     // Handle GRASP provider with message-based signing
     if (provider === 'grasp') {
       if (!token) {
@@ -2148,7 +2101,7 @@ async function updateAndPushFiles(options: {
         force: false
       });
     } else {
-      // Standard Git providers
+      // Standard Git providers - use provided token directly (UI layer handles retry)
       await git.push({
         dir,
         onAuth: () => ({

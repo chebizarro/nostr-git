@@ -9,7 +9,7 @@
     useNewRepo,
     type NewRepoResult,
     checkProviderRepoAvailability,
-  } from "../../useNewRepo.svelte";
+  } from "../../hooks/useNewRepo.svelte";
   import { tokens as tokensStore, type Token } from "../../stores/tokens.js";
   import { graspServersStore } from "../../stores/graspServers.js";
   const { Button } = useRegistry();

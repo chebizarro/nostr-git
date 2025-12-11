@@ -1,13 +1,13 @@
 import { type Event as NostrEvent } from "nostr-tools";
 import { getGitServiceApi, canonicalRepoKey, createEventIO } from "@nostr-git/core";
-import { toast } from "./stores/toast.js";
-import { tokens as tokensStore, type Token } from "./stores/tokens.js";
+import { toast } from "../stores/toast.js";
+import { tokens as tokensStore, type Token } from "../stores/tokens.js";
 import {
   createRepoAnnouncementEvent as createAnnouncementEventShared,
   createRepoStateEvent as createStateEventShared,
   sanitizeRelays,
 } from "@nostr-git/shared-types";
-import { tryTokensForHost, getTokensForHost } from "./utils/tokenHelpers.js";
+import { tryTokensForHost, getTokensForHost } from "../utils/tokenHelpers.js";
 
 /**
  * Normalize GRASP URLs to ensure proper protocol handling.
@@ -137,16 +137,16 @@ export async function checkProviderRepoAvailability(
     };
   }
 
-  // Map provider to token host matching strategy (aligns with ProviderSelectionStep)
-  const hostMatchers: Record<string, (host: string) => boolean> = {
-    github: (h) => h === "github.com",
-    gitlab: (h) => h === "gitlab.com" || h.endsWith(".gitlab.com"),
-    gitea: (h) => h.includes("gitea"),
-    bitbucket: (h) => h === "bitbucket.org",
+  // Map provider to default hostname for token matching
+  const defaultHosts: Record<string, string> = {
+    github: "github.com",
+    gitlab: "gitlab.com",
+    gitea: "gitea.com",
+    bitbucket: "bitbucket.org",
   };
 
-  const match = hostMatchers[provider as keyof typeof hostMatchers];
-  const matchingTokens = getTokensForHost(tokens, match || (() => false));
+  const defaultHost = defaultHosts[provider as keyof typeof defaultHosts] || provider;
+  const matchingTokens = getTokensForHost(tokens, defaultHost);
 
   if (matchingTokens.length === 0) {
     // No token: we cannot query provider API, treat as unknown but do not block
@@ -169,7 +169,7 @@ export async function checkProviderRepoAvailability(
   try {
     const result = await tryTokensForHost(
       tokens,
-      match || (() => false),
+      defaultHost,
       async (token: string, host: string) => {
         const api = getGitServiceApi(provider as any, token);
         const currentUser = await api.getCurrentUser();
@@ -846,28 +846,23 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
         providerHost = providerHosts[config.provider] || config.provider;
 
         // Get token for the selected provider from the reactive token store
-        console.log("🔐 Current tokens in store:", tokens.length, "tokens");
         console.log(
           "🔐 Token hosts:",
           tokens.map((t) => t.host)
         );
         console.log("🔐 Looking for provider:", config.provider, "with host:", providerHost);
 
-        const matchingTokens = getTokensForHost(tokens, (h) => h === providerHost);
+        const matchingTokens = getTokensForHost(tokens, providerHost);
 
         if (matchingTokens.length === 0) {
           // Try to wait for tokens to load if they're not available yet
-          console.log("🔐 No token found for provider, waiting for token store initialization...");
           await tokensStore.waitForInitialization();
 
           // Refresh tokens after waiting
           await tokensStore.refresh();
 
           // Try again after waiting and refreshing
-          const refreshedTokens = getTokensForHost(tokens, (h) => h === providerHost);
-
-          console.log("🔐 Tokens after refresh:", tokens.length, "tokens");
-          console.log("🔐 Matching tokens found after retry:", refreshedTokens.length);
+          const refreshedTokens = getTokensForHost(tokens, providerHost);
 
           if (refreshedTokens.length === 0) {
             throw new Error(
@@ -879,7 +874,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
         // Try all tokens until one succeeds (for both availability check and repo creation)
         const result = await tryTokensForHost(
           tokens,
-          (h) => h === providerHost!,
+          providerHost!,
           async (token: string, host: string) => {
             // Skip availability check for GRASP; providers with tokens are checked
             if (config.provider !== "grasp") {
@@ -890,15 +885,7 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
               }
             }
 
-            console.log("🚀 Repository name is available, proceeding with creation...");
-            console.log("🚀 Calling createRemoteRepo API with:", {
-              provider: config.provider,
-              name: config.name,
-              description: config.description,
-              tokenLength: token.length,
-              tokenStart: token.substring(0, 8),
-              tokenEnd: token.substring(token.length - 8),
-            });
+            // Repository name is available, proceeding with creation
 
             // Standard Git providers - create repo with this token
             const repoResult = await api.createRemoteRepo({
@@ -1031,7 +1018,6 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
         repoPath: canonicalKey ?? config.name,
         defaultBranch: config.defaultBranch,
         remoteUrl: pushUrl,
-        tokenLength: providerToken ? providerToken.length : "No token",
       });
 
       // For GRASP, use direct push since we just created the local repo
@@ -1058,23 +1044,15 @@ export function useNewRepo(options: UseNewRepoOptions = {}) {
       pushUrl = remoteRepo.url;
       const providerHost = providerHosts[config.provider] || config.provider;
 
-      const matchingTokens = getTokensForHost(tokens, (h) => h === providerHost);
+      const matchingTokens = getTokensForHost(tokens, providerHost);
       if (matchingTokens.length === 0) {
         throw new Error(`No ${config.provider} authentication token found for push operation`);
       }
 
       const pushResult = await tryTokensForHost(
         tokens,
-        (h) => h === providerHost,
+        providerHost,
         async (token: string, host: string) => {
-          console.log("🚀 Pushing to remote with URL:", pushUrl);
-          console.log("🚀 Push config:", {
-            provider: config.provider,
-            repoPath: canonicalKey ?? config.name,
-            defaultBranch: config.defaultBranch,
-            remoteUrl: pushUrl,
-            tokenLength: token.length,
-          });
 
           // For other providers, use safePushToRemote for preflight checks
           console.log("[NEW REPO] Using safePushToRemote for non-GRASP provider");

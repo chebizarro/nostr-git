@@ -7,6 +7,8 @@
   import { WorkerManager } from "../git/WorkerManager";
   import { canonicalRepoKey } from "@nostr-git/core";
   import { parseRepoAnnouncementEvent } from "@nostr-git/shared-types";
+  import { tokens as tokensStore } from "../../stores/tokens.js";
+  import { tryTokensForHost, getTokensForHost } from "../../utils/tokenHelpers.js";
   // Instantiate worker via URL like core git-worker client does
   // Lazy import xterm only on mount to avoid SSR issues
   type Stream = "stdout" | "stderr";
@@ -620,36 +622,109 @@
             ? repoCloneUrls[0]
             : undefined);
       const useProvider = provider ?? defaultProvider;
-      const useToken = token ?? defaultToken;
       const useBranch = branch ?? currentBranch;
       if (!repoId || !remoteUrl) {
         return { text: "error: git push requires repoId and remoteUrl (or cloneUrls[])\n" };
       }
       try {
-        const res = await mgr.safePushToRemote({
-          repoId,
-          remoteUrl,
-          branch: useBranch,
-          provider: useProvider,
-          token: useToken,
-          allowForce: false,
-          preflight: {
-            blockIfUncommitted: true,
-            requireUpToDate: true,
-            blockIfShallow: true,
-          },
-        });
-        if (res?.success) {
-          const b = res.branch || useBranch || "";
+        // Extract hostname for token matching
+        let hostname: string;
+        try {
+          // Handle SSH URLs like git@github.com:owner/repo.git
+          if (remoteUrl.startsWith('git@')) {
+            const match = remoteUrl.match(/git@([^:]+):/);
+            hostname = match ? match[1] : '';
+          } else {
+            // Handle HTTPS URLs
+            const urlObj = new URL(remoteUrl);
+            hostname = urlObj.hostname;
+          }
+        } catch {
+          hostname = '';
+        }
+        const tokens = await tokensStore.waitForInitialization();
+        const matchingTokens = getTokensForHost(tokens, hostname);
+        
+        // Determine which token to use (explicit token from params, or from token store)
+        let pushResult;
+        if (token) {
+          // If token explicitly provided, use it directly (no retry)
+          pushResult = await mgr.safePushToRemote({
+            repoId,
+            remoteUrl,
+            branch: useBranch,
+            provider: useProvider,
+            token,
+            allowForce: false,
+            preflight: {
+              blockIfUncommitted: true,
+              requireUpToDate: true,
+              blockIfShallow: true,
+            },
+          });
+        } else if (matchingTokens.length > 0) {
+          // Try all tokens for this host until one succeeds
+          pushResult = await tryTokensForHost(
+            tokens,
+            hostname,
+            async (token: string, host: string) => {
+              return await mgr.safePushToRemote({
+                repoId,
+                remoteUrl,
+                branch: useBranch,
+                provider: useProvider,
+                token,
+                allowForce: false,
+                preflight: {
+                  blockIfUncommitted: true,
+                  requireUpToDate: true,
+                  blockIfShallow: true,
+                },
+              });
+            }
+          );
+        } else if (defaultToken) {
+          // Fallback to defaultToken if no matching tokens found
+          pushResult = await mgr.safePushToRemote({
+            repoId,
+            remoteUrl,
+            branch: useBranch,
+            provider: useProvider,
+            token: defaultToken,
+            allowForce: false,
+            preflight: {
+              blockIfUncommitted: true,
+              requireUpToDate: true,
+              blockIfShallow: true,
+            },
+          });
+        } else {
+          // No tokens available - try pushing without authentication (may fail for private repos)
+          pushResult = await mgr.safePushToRemote({
+            repoId,
+            remoteUrl,
+            branch: useBranch,
+            provider: useProvider,
+            allowForce: false,
+            preflight: {
+              blockIfUncommitted: true,
+              requireUpToDate: true,
+              blockIfShallow: true,
+            },
+          });
+        }
+
+        if (pushResult?.success) {
+          const b = pushResult.branch || useBranch || "";
           return { text: `Pushed ${b} to ${remoteUrl}\n` };
         }
-        if (res?.requiresConfirmation) {
+        if (pushResult?.requiresConfirmation) {
           return {
-            text: `error: push blocked: ${res?.warning || "force push requires confirmation"}\n`,
+            text: `error: push blocked: ${pushResult?.warning || "force push requires confirmation"}\n`,
           };
         }
-        const reason = res?.reason ? ` (${res.reason})` : "";
-        return { text: `error: push blocked${reason}: ${res?.error || "unknown error"}\n` };
+        const reason = pushResult?.reason ? ` (${pushResult.reason})` : "";
+        return { text: `error: push blocked${reason}: ${pushResult?.error || "unknown error"}\n` };
       } catch (e: any) {
         return { text: `error: push exception: ${e?.message || String(e)}\n` };
       }

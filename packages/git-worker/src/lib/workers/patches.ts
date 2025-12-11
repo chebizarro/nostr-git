@@ -443,13 +443,16 @@ export async function applyPatchAndPushUtil(
           skippedRemotes.push(remote.remote);
           continue;
         }
-        const authCallback = getAuthCallback(remote.url);
-        await git.push({
-          dir,
-          url: remote.url,
-          ref: effectiveTargetBranch,
-          force: true,
-          ...(authCallback && { onAuth: authCallback })
+        // Use tryPushWithTokens for fallback retry logic with multiple tokens
+        const { tryPushWithTokens } = await import('./auth.js');
+        await tryPushWithTokens(remote.url, async (authCallback) => {
+          await git.push({
+            dir,
+            url: remote.url,
+            ref: effectiveTargetBranch,
+            force: true,
+            ...(authCallback && { onAuth: authCallback })
+          });
         });
         pushedRemotes.push(remote.remote);
       } catch (pushError: any) {
@@ -466,16 +469,19 @@ export async function applyPatchAndPushUtil(
             const shortId = (patchData.id || 'patch').slice(0, 8);
             const topicBranch = `grasp/patch-${shortId}`;
             const remoteRef = `refs/heads/${topicBranch}`;
-            const authCallback = getAuthCallback(remote.url || '');
+            // Use tryPushWithTokens for fallback retry logic with multiple tokens
+            const { tryPushWithTokens } = await import('./auth.js');
             // Push local target branch to remote topic branch; avoid force on fallback
-            await git.push({
-              dir,
-              url: remote.url as string,
-              ref: effectiveTargetBranch,
-              remoteRef,
-              force: false,
-              ...(authCallback && { onAuth: authCallback })
-            } as any);
+            await tryPushWithTokens(remote.url || '', async (authCallback) => {
+              await git.push({
+                dir,
+                url: remote.url as string,
+                ref: effectiveTargetBranch,
+                remoteRef,
+                force: false,
+                ...(authCallback && { onAuth: authCallback })
+              } as any);
+            });
             pushedRemotes.push(`${remote.remote}:${topicBranch}`);
             // Record the original failure as a warning rather than fatal
             pushErrors.push({

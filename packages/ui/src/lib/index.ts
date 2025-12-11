@@ -14,6 +14,8 @@ export * from "./Template";
 export { toast } from "./stores/toast";
 export { loadTokensFromStorage, saveTokensToStorage, type TokenEntry } from "./utils/tokenLoader";
 export { tryTokensForHost, getTokensForHost } from "./utils/tokenHelpers";
+export { matchesHost, createHostMatcher } from "./utils/tokenMatcher";
+export { TokenError, AllTokensFailedError, TokenNotFoundError } from "./utils/tokenErrors";
 export { pushRepoAlert } from "./alertsAdapter";
 // Export event kind utilities
 export * from "./utils/eventKinds";

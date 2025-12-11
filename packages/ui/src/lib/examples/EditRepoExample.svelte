@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { EditRepoPanel } from "../components/git/EditRepoPanel.svelte";
-  import { useEditRepo } from "../hooks/useEditRepo.svelte.ts";
+  import  EditRepoPanel  from "../components/git/EditRepoPanel.svelte";
+  import { useEditRepo } from "../hooks/useEditRepo.svelte";
   import type { Event } from "nostr-tools";
   import type { RepoAnnouncementEvent, RepoStateEvent } from "@nostr-git/shared-types";
   import { getTagValue } from "@nostr-git/shared-types";
@@ -92,7 +92,6 @@
   async function handleSaveRepo(config: any) {
     try {
       await editRepo.editRepository(currentAnnouncement, currentState, config, {
-        token: "ghp_example_token_here", // Would come from token store
         repoDir: "/repos/example-repo", // Would come from repo manager
         onSignEvent: signEvent,
         onPublishEvent: publishEvent,

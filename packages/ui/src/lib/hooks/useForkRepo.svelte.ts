@@ -7,6 +7,7 @@ import {
 } from "@nostr-git/shared-types";
 import { tokens as tokensStore, type Token } from "$lib/stores/tokens";
 import { getGitServiceApi, createEventIO } from "@nostr-git/core";
+import { tryTokensForHost, getTokensForHost } from "../utils/tokenHelpers.js";
 
 // Types for fork configuration and progress
 export interface ForkConfig {
@@ -332,8 +333,8 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
         updateProgress("validate", "GRASP configuration validated", "completed");
       } else {
         updateProgress("validate", `Validating ${provider} token...`, "running");
-        providerToken = tokens.find((t) => t.host === providerHost)?.token;
-        if (!providerToken) {
+        const matchingTokens = getTokensForHost(tokens, providerHost);
+        if (matchingTokens.length === 0) {
           throw new Error(
             `${provider} token not found. Please add a ${provider} token in settings.`
           );
@@ -341,15 +342,8 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
         updateProgress("validate", `${provider} token validated`, "completed");
       }
 
-      // Step 2: Get current user using GitServiceApi
+      // Step 2: Get current user and fork repository using tryTokensForHost for fallback retries
       updateProgress("user", "Getting current user info...", "running");
-      const gitServiceApi = getGitServiceApi(provider as any, providerToken!, relayUrl);
-      const userData = await gitServiceApi.getCurrentUser();
-      const currentUser = userData.login;
-      updateProgress("user", `Current user: ${currentUser}`, "completed");
-
-      // Step 3: Fork and clone repository using git-worker
-      updateProgress("fork", "Creating fork and cloning repository...", "running");
       
       // Use passed workerApi if available, otherwise create new worker
       let gitWorkerApi: any, worker: Worker;
@@ -370,24 +364,69 @@ export function useForkRepo(options: UseForkRepoOptions = {}) {
       const destinationPath = config.forkName;
 
       // EventIO handles signing internally - no more signer registration needed!
+      let workerResult: any;
+      
       if (provider === "grasp") {
         // EventIO will be configured by the worker internally
         console.log("🔐 GRASP fork - EventIO handles signing internally (no more signer passing!)");
+        
+        // For GRASP, proceed directly without token retry
+        const gitServiceApi = getGitServiceApi(provider as any, providerToken!, relayUrl);
+        const userData = await gitServiceApi.getCurrentUser();
+        const currentUser = userData.login;
+        updateProgress("user", `Current user: ${currentUser}`, "completed");
+
+        // Step 3: Fork and clone repository using git-worker
+        updateProgress("fork", "Creating fork and cloning repository...", "running");
+        workerResult = await gitWorkerApi.forkAndCloneRepo({
+          owner: originalRepo.owner,
+          repo: originalRepo.name,
+          forkName: config.forkName,
+          visibility: config.visibility,
+          token: providerToken!,
+          provider: provider,
+          baseUrl: relayUrl,
+          dir: destinationPath,
+          // Note: onProgress callback removed - functions cannot be serialized through Comlink
+        });
+        console.log("[useForkRepo] forkAndCloneRepo returned", workerResult);
+      } else {
+        // For standard Git providers, use tryTokensForHost for fallback retries
+        workerResult = await tryTokensForHost(
+          tokens,
+          providerHost,
+          async (token: string, host: string) => {
+            // Get current user with this token
+            const gitServiceApi = getGitServiceApi(provider as any, token, relayUrl);
+            const userData = await gitServiceApi.getCurrentUser();
+            const currentUser = userData.login;
+            updateProgress("user", `Current user: ${currentUser}`, "completed");
+
+            // Fork and clone repository using git-worker with this token
+            updateProgress("fork", "Creating fork and cloning repository...", "running");
+            const result = await gitWorkerApi.forkAndCloneRepo({
+              owner: originalRepo.owner,
+              repo: originalRepo.name,
+              forkName: config.forkName,
+              visibility: config.visibility,
+              token: token,
+              provider: provider,
+              baseUrl: relayUrl,
+              dir: destinationPath,
+              // Note: onProgress callback removed - functions cannot be serialized through Comlink
+            });
+            console.log("[useForkRepo] forkAndCloneRepo returned", result);
+            
+            if (!result.success) {
+              const ctx = `owner=${originalRepo.owner} repo=${originalRepo.name} forkName=${config.forkName} provider=${provider}`;
+              throw new Error(`${result.error || "Fork operation failed"} (${ctx})`);
+            }
+            
+            return result;
+          }
+        );
       }
-
-      const workerResult = await gitWorkerApi.forkAndCloneRepo({
-        owner: originalRepo.owner,
-        repo: originalRepo.name,
-        forkName: config.forkName,
-        visibility: config.visibility,
-        token: providerToken!,
-        provider: provider,
-        baseUrl: relayUrl,
-        dir: destinationPath,
-        // Note: onProgress callback removed - functions cannot be serialized through Comlink
-      });
-      console.log("[useForkRepo] forkAndCloneRepo returned", workerResult);
-
+      
       if (!workerResult.success) {
         const ctx = `owner=${originalRepo.owner} repo=${originalRepo.name} forkName=${config.forkName} provider=${provider}`;
         throw new Error(`${workerResult.error || "Fork operation failed"} (${ctx})`);
