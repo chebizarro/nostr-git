@@ -78,15 +78,17 @@ export function createNostrGitProvider(options: NostrGitFactoryOptions): NostrGi
 
   // Create GRASP API if enabled
   let graspApi;
-  if (enableGrasp) {
-    const graspConfig: GraspApiConfig = {
-      relays: graspRelays,
-      timeoutMs,
-      publishEvent: (event: NostrEvent) => {
-        return eventIO.publishEvent(event);
-      }
-    };
-    graspApi = new GraspApi(graspConfig);
+  if (__GRASP__) {
+    if (enableGrasp) {
+      const graspConfig: GraspApiConfig = {
+        relays: graspRelays,
+        timeoutMs,
+        publishEvent: (event: NostrEvent) => {
+          return eventIO.publishEvent(event);
+        }
+      };
+      graspApi = new GraspApi(graspConfig);
+    }
   }
 
   // Create NostrGitProvider configuration
@@ -120,8 +122,8 @@ export function createNostrGitProviderFromEnv(options: {
   // Read configuration from environment variables
   const defaultRelays = process.env.NOSTR_DEFAULT_RELAYS?.split(';') || DEFAULT_RELAYS.default;
   const fallbackRelays = process.env.NOSTR_FALLBACK_RELAYS?.split(';') || DEFAULT_RELAYS.fallback;
-  const graspRelays = process.env.NOSTR_GRASP_RELAYS?.split(';') || DEFAULT_RELAYS.grasp;
-  const enableGrasp = process.env.NOSTR_ENABLE_GRASP !== 'false';
+  const graspRelays = __GRASP__ ? (process.env.NOSTR_GRASP_RELAYS?.split(';') || DEFAULT_RELAYS.grasp) : [];
+  const enableGrasp = __GRASP__ && process.env.NOSTR_ENABLE_GRASP !== 'false';
   const publishRepoState = process.env.NOSTR_PUBLISH_REPO_STATE !== 'false';
   const publishRepoAnnouncements = process.env.NOSTR_PUBLISH_REPO_ANNOUNCEMENTS === 'true';
   const corsProxy = process.env.GIT_DEFAULT_CORS_PROXY === 'none' ? undefined :
@@ -214,12 +216,14 @@ export function selectProvider(
   }
 
   // Check if URL contains GRASP indicators
-  if (enableGrasp && (
-    url.includes('relay.ngit.dev') ||
-    url.includes('gitnostr.com') ||
-    url.includes('grasp')
-  )) {
-    return 'nostr';
+  if (__GRASP__) {
+    if (enableGrasp && (
+      url.includes('relay.ngit.dev') ||
+      url.includes('gitnostr.com') ||
+      url.includes('grasp')
+    )) {
+      return 'nostr';
+    }
   }
 
   // Use preference or default to traditional

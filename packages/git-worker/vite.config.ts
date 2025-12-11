@@ -48,7 +48,14 @@ export default defineConfig({
     sourcemap: true
   },
   define: {
-    global: 'globalThis'
+    global: 'globalThis',
+    __PRODUCTION__: JSON.stringify(process.env.NODE_ENV === "production"),
+    __DEVELOPMENT__: JSON.stringify(process.env.NODE_ENV !== "production"),
+    __GRASP__: JSON.stringify(process.env.FEATURE_GRASP !== "0"),
+    __NIP34_PR__: JSON.stringify(process.env.FEATURE_NIP34_PR === "1"),
+    __CICD__: JSON.stringify(process.env.FEATURE_CICD === "1"),
+    __TERMINAL__: JSON.stringify(process.env.FEATURE_TERMINAL !== "0"),
+    __STRICT_NIP29__: JSON.stringify(process.env.FEATURE_STRICT_NIP29 === "1"),
   },
   resolve: {
     alias: {

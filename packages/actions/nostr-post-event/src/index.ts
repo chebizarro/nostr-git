@@ -29,9 +29,12 @@ async function run() {
     if (eventName === "issues") {
       content = `📌 Issue: ${payload.issue.title}\n\n${payload.issue.body}\n\n🔗 ${payload.issue.html_url}`
       tags.push(["issue", String(payload.issue.number)])
-    } else if (eventName === "pull_request") {
+    } else if (__CICD__ && eventName === "pull_request") {
       content = `🔀 PR: ${payload.pull_request.title}\n\n${payload.pull_request.body}\n\n🔗 ${payload.pull_request.html_url}`
       tags.push(["pr", String(payload.pull_request.number)])
+      if (__NIP34_PR__) {
+        tags.push(["pr-format", "nip34-experimental"]);
+      }
     } else if (eventName === "repository" && payload.repository) {
       const repo = payload.repository
       content = ""

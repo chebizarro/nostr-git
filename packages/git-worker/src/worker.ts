@@ -531,12 +531,6 @@ const clone = async ({ repoId, cloneUrls }: { repoId: string; cloneUrls: string[
       return initResult;
     }
 
-      'dataLevel' in initResult &&
-      initResult.dataLevel !== 'refs'
-    ) {
-      return initResult;
-    }
-
     // Otherwise, ensure we have at least shallow clone
     const shallowResult = await ensureShallowClone({ repoId });
     if (!shallowResult.success) {

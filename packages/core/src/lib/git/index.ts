@@ -100,7 +100,7 @@ export const git = {
     GiteaApi,
     BitbucketApi,
     NostrGitProvider,
-    GraspApi,
+    ...__GRASP__ ? { GraspApi } : {},
     createNostrGitProvider,
     createNostrGitProviderFromEnv,
     createNostrGitProviderFromGitConfig,

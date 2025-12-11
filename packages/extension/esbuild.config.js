@@ -99,6 +99,13 @@ const buildOptions = {
     __SHOW_DEBUG__: String(
       process.env.NOSTR_GIT_SHOW_DEBUG ? process.env.NOSTR_GIT_SHOW_DEBUG !== "false" : true,
     ),
+    __PRODUCTION__: JSON.stringify(isProd),
+    __DEVELOPMENT__: JSON.stringify(!isProd),
+    __GRASP__: JSON.stringify(process.env.FEATURE_GRASP !== "0"),
+    __NIP34_PR__: JSON.stringify(process.env.FEATURE_NIP34_PR === "1"),
+    __CICD__: JSON.stringify(process.env.FEATURE_CICD === "1"),
+    __TERMINAL__: JSON.stringify(process.env.FEATURE_TERMINAL !== "0"),
+    __STRICT_NIP29__: JSON.stringify(process.env.FEATURE_STRICT_NIP29 === "1"),
   },
   minify: isProd,
 }
