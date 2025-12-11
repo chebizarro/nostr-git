@@ -98,6 +98,10 @@ export const PatchTagSchema = z.union([
   CommitPgpSigTag,
   CommitterTag,
   HashtagTag, // allow other t tags as labels if present
+  z.tuple([z.literal("stack"), z.string()]),
+  z.tuple([z.literal("depends"), z.string()]),
+  z.tuple([z.literal("rev"), z.string()]),
+  z.tuple([z.literal("supersedes"), z.string()]),
 ])
 export const PatchTagsSchema = z.array(PatchTagSchema)
 
@@ -157,6 +161,46 @@ export const PullRequestUpdateTagsSchema = z.array(PullRequestUpdateTagSchema)
 // User Grasp List tags (kind 10317)
 export const UserGraspListTagSchema = z.tuple([z.literal("g"), z.string()])
 export const UserGraspListTagsSchema = z.array(UserGraspListTagSchema)
+
+// Stack (kind 30410)
+export const StackATag = AddressRepoTag
+export const StackIdTag = z.tuple([z.literal("stack"), z.string()])
+export const StackMemberTag = z.tuple([z.literal("member"), z.string()])
+export const StackOrderTag = z.tuple([z.literal("order"), z.string()]).rest(z.string())
+export const StackTagSchema = z.union([
+  StackATag,
+  StackIdTag,
+  StackMemberTag,
+  StackOrderTag,
+])
+export const StackTagsSchema = z.array(StackTagSchema)
+
+// Merge Metadata (kind 30411)
+export const MergeMetaATag = AddressRepoTag
+export const MergeMetaRootETag = ETagRoot
+export const MergeBaseBranchTag = z.tuple([z.literal("base-branch"), z.string()])
+export const MergeTargetBranchTag = z.tuple([z.literal("target-branch"), z.string()])
+export const MergeResultTag = z.tuple([z.literal("result"), z.union([z.literal("clean"), z.literal("ff"), z.literal("conflict")])])
+export const MergeMetaTagSchema = z.union([
+  MergeMetaATag,
+  MergeMetaRootETag,
+  MergeBaseBranchTag,
+  MergeTargetBranchTag,
+  MergeResultTag,
+  MergeCommitTag,
+])
+export const MergeMetaTagsSchema = z.array(MergeMetaTagSchema)
+
+// Conflict Metadata (kind 30412)
+export const ConflictMetaATag = AddressRepoTag
+export const ConflictMetaRootETag = ETagRoot
+export const ConflictFileTag = z.tuple([z.literal("file"), z.string()])
+export const ConflictMetaTagSchema = z.union([
+  ConflictMetaATag,
+  ConflictMetaRootETag,
+  ConflictFileTag,
+])
+export const ConflictMetaTagsSchema = z.array(ConflictMetaTagSchema)
 
 // Convenience per-kind tag validators
 export const validateRepoAnnouncementTags = (tags: unknown) =>
@@ -272,6 +316,36 @@ export const UserGraspListEventSchema = NostrEventSchema.extend({
   tags: UserGraspListTagsSchema,
 })
 
+export const StackEventSchema = NostrEventSchema.extend({
+  kind: z.literal(30410),
+  tags: StackTagsSchema,
+}).superRefine((evt, ctx) => {
+  if (!hasTagName(evt.tags as unknown[], "a")) {
+    ctx.addIssue({code: z.ZodIssueCode.custom, message: "Stack must include an 'a' tag (repo address)"})
+  }
+  if (!hasTagName(evt.tags as unknown[], "stack")) {
+    ctx.addIssue({code: z.ZodIssueCode.custom, message: "Stack must include a 'stack' tag (stack id)"})
+  }
+})
+
+export const MergeMetadataEventSchema = NostrEventSchema.extend({
+  kind: z.literal(30411),
+  tags: MergeMetaTagsSchema,
+}).superRefine((evt, ctx) => {
+  if (!hasTagName(evt.tags as unknown[], "a") || !hasTagName(evt.tags as unknown[], "e")) {
+    ctx.addIssue({code: z.ZodIssueCode.custom, message: "Merge metadata must include 'a' (repo) and 'e' (root) tags"})
+  }
+})
+
+export const ConflictMetadataEventSchema = NostrEventSchema.extend({
+  kind: z.literal(30412),
+  tags: ConflictMetaTagsSchema,
+}).superRefine((evt, ctx) => {
+  if (!hasTagName(evt.tags as unknown[], "a") || !hasTagName(evt.tags as unknown[], "e")) {
+    ctx.addIssue({code: z.ZodIssueCode.custom, message: "Conflict metadata must include 'a' (repo) and 'e' (root) tags"})
+  }
+})
+
 export const validateRepoAnnouncementEvent = (evt: unknown) =>
   RepoAnnouncementEventSchema.safeParse(evt)
 export const validateRepoStateEvent = (evt: unknown) => RepoStateEventSchema.safeParse(evt)
@@ -283,3 +357,6 @@ export const validateStatusEvent = (evt: unknown) => StatusEventSchema.safeParse
 export const validatePullRequestEvent = (evt: unknown) => PullRequestEventSchema.safeParse(evt)
 export const validatePullRequestUpdateEvent = (evt: unknown) => PullRequestUpdateEventSchema.safeParse(evt)
 export const validateUserGraspListEvent = (evt: unknown) => UserGraspListEventSchema.safeParse(evt)
+export const validateStackEvent = (evt: unknown) => StackEventSchema.safeParse(evt)
+export const validateMergeMetadataEvent = (evt: unknown) => MergeMetadataEventSchema.safeParse(evt)
+export const validateConflictMetadataEvent = (evt: unknown) => ConflictMetadataEventSchema.safeParse(evt)

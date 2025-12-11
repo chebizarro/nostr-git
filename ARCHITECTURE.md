@@ -4,6 +4,8 @@
 
 The Nostr-Git platform is designed as a modular monorepo that bridges Git version control with the Nostr protocol, enabling decentralized code collaboration through NIP-34 events.
 
+See also: [Git Stacking and Merge Metadata](docs/nostr-git-stacking.md)
+
 ## High-Level Architecture
 
 ```

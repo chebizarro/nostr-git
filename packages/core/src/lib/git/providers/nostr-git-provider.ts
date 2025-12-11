@@ -20,7 +20,9 @@ import {
   RepoAnnouncementEvent, 
   RepoStateEvent,
   createRepoStateEvent,
-  createRepoAnnouncementEvent
+  createRepoAnnouncementEvent,
+  createMergeMetadataEvent,
+  createConflictMetadataEvent
 } from '@nostr-git/shared-types';
 
 export interface NostrGitConfig {
@@ -72,6 +74,136 @@ export class NostrGitProvider {
     
     // Create the underlying git provider (isomorphic-git or libgit2)
     this.baseGitProvider = getGitProvider();
+  }
+
+  /**
+   * Wrap a merge operation and publish corresponding metadata events.
+   * If merge succeeds without throwing, publishes result 'clean' with merge commit when available.
+   * If the underlying merge reports conflicts or throws, publishes 'conflict'.
+   */
+  async mergeAndPublishMetadata(params: {
+    mergeArgs: any
+    repoAddr: string
+    rootId: string
+    targetBranch: string
+    baseBranch?: string
+  }): Promise<{ mergeResult: any; published: { mergeEventId?: string; conflictEventId?: string } }> {
+    const { mergeArgs, repoAddr, rootId, targetBranch, baseBranch } = params
+    try {
+      const mergeResult = await (this.baseGitProvider as any).merge(mergeArgs)
+      const mergeCommit = mergeResult?.oid || mergeResult?.mergeCommit
+      const published = await this.publishMergeMetadata({
+        repoAddr,
+        rootId,
+        targetBranch,
+        baseBranch,
+        result: 'clean',
+        mergeCommit,
+      })
+      return { mergeResult, published }
+    } catch (err: any) {
+      const conflictFiles: string[] | undefined = err?.conflictFiles || err?.files
+      const conflictDetailsJson: string | undefined = err?.conflictDetailsJson
+      const published = await this.publishMergeMetadata({
+        repoAddr,
+        rootId,
+        targetBranch,
+        baseBranch,
+        result: 'conflict',
+        conflictFiles,
+        conflictDetailsJson,
+      })
+      return { mergeResult: { error: err }, published }
+    }
+  }
+
+  /**
+   * Publish metadata directly from an external merge analysis.
+   */
+  async publishAnalysisMetadata(params: {
+    repoAddr: string
+    rootId: string
+    targetBranch: string
+    baseBranch?: string
+    outcome: 'clean' | 'ff' | 'conflict'
+    mergeCommit?: string
+    conflictFiles?: string[]
+    conflictDetailsJson?: string
+  }): Promise<{ mergeEventId?: string; conflictEventId?: string }> {
+    const { repoAddr, rootId, targetBranch, baseBranch, outcome, mergeCommit, conflictFiles, conflictDetailsJson } = params
+    return this.publishMergeMetadata({
+      repoAddr,
+      rootId,
+      targetBranch,
+      baseBranch,
+      result: outcome,
+      mergeCommit,
+      conflictFiles,
+      conflictDetailsJson,
+    })
+  }
+
+  /**
+   * Fetch merge/conflict metadata events for a repository
+   */
+  async fetchMergeMetadata(repoAddr: string, opts?: { rootId?: string }): Promise<any[]> {
+    try {
+      const filters: any[] = []
+      if (opts?.rootId) {
+        filters.push({ kinds: [30411, 30412], '#a': [repoAddr], '#e': [opts.rootId] })
+      } else {
+        filters.push({ kinds: [30411, 30412], '#a': [repoAddr] })
+      }
+      const events = await this.nostrConfig.eventIO.fetchEvents(filters)
+      return events
+    } catch (error) {
+      console.error('Failed to fetch merge metadata:', error)
+      return []
+    }
+  }
+
+  /**
+   * Publish merge/conflict metadata events (30411/30412)
+   */
+  async publishMergeMetadata(params: {
+    repoAddr: string
+    rootId: string
+    targetBranch: string
+    baseBranch?: string
+    result: 'clean' | 'ff' | 'conflict'
+    mergeCommit?: string
+    conflictFiles?: string[]
+    conflictDetailsJson?: string // optional pre-built JSON payload
+    relays?: string[]
+  }): Promise<{ mergeEventId?: string; conflictEventId?: string }> {
+    const { repoAddr, rootId, targetBranch, baseBranch, result, mergeCommit, conflictFiles, conflictDetailsJson } = params
+    try {
+      const mergeEvt = createMergeMetadataEvent({
+        repoAddr,
+        rootId,
+        baseBranch,
+        targetBranch,
+        result,
+        mergeCommit,
+        content: JSON.stringify({ result, targetBranch, baseBranch, mergeCommit }),
+      })
+      const mergeRes = await this.nostrConfig.eventIO.publishEvent(mergeEvt)
+      let conflictEventId: string | undefined
+      if (result === 'conflict' && conflictFiles && conflictFiles.length) {
+        const conflictEvt = createConflictMetadataEvent({
+          repoAddr,
+          rootId,
+          files: conflictFiles,
+          content: conflictDetailsJson ?? JSON.stringify({ files: conflictFiles }),
+        })
+        const conflictRes = await this.nostrConfig.eventIO.publishEvent(conflictEvt)
+        if (conflictRes.ok) conflictEventId = conflictRes.relays?.[0] || 'published'
+      }
+      return { mergeEventId: mergeRes.ok ? mergeRes.relays?.[0] || 'published' : undefined, conflictEventId }
+    } catch (error) {
+      console.error('Failed to publish merge metadata:', error)
+      return {}
+    }
   }
 
   /**

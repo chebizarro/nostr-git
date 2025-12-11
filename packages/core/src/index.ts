@@ -42,6 +42,8 @@ export * from './lib/issues.js';
 export * from './lib/labels.js';
 export * from './lib/subscriptions.js';
 export * from './lib/status-resolver.js';
+export * from './lib/stack.js';
+export * from './lib/stack-graph.js';
 // Export from repoKeys, but exclude canonicalRepoKey to avoid conflict with utils/canonicalRepoKey
 export { 
   buildCanonicalRepoKey,

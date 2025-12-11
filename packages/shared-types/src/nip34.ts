@@ -26,6 +26,11 @@ export const GIT_REPO_STATE = 30618
 // Patch events
 export const GIT_PATCH = 1617
 
+// Stacking & merge metadata events
+export const GIT_STACK = 30410
+export const GIT_MERGE_METADATA = 30411
+export const GIT_CONFLICT_METADATA = 30412
+
 // Issue events
 export const GIT_ISSUE = 1621
 
@@ -87,11 +92,62 @@ export type PatchTag =
   | ["commit-pgp-sig", string]
   | ["committer", string, string, string, string]
   | ["in-reply-to", string]
+  // Stacking/Revision/Dependencies extensions
+  | ["stack", string]
+  | ["depends", string]
+  | ["rev", string]
+  | ["supersedes", string]
 
 export interface PatchEvent extends NostrEvent {
   kind: typeof GIT_PATCH
   content: string // git format-patch content
   tags: PatchTag[]
+}
+
+// -------------------
+// Stack (kind: 30410)
+// -------------------
+export type StackTag =
+  | ["a", string] // repo address
+  | ["stack", string] // stack id/name
+  | ["member", string] // patch event id or commit id
+  | ["order", ...string[]] // optional explicit order of members
+
+export interface StackEvent extends NostrEvent {
+  kind: typeof GIT_STACK
+  content: string // optional human description or JSON payload
+  tags: StackTag[]
+}
+
+// -------------------
+// Merge Analysis Metadata (kind: 30411)
+// -------------------
+export type MergeMetadataTag =
+  | ["a", string] // repo address
+  | ["e", string, "", "root"] // target patch/event id
+  | ["base-branch", string]
+  | ["target-branch", string]
+  | ["result", "clean" | "ff" | "conflict"]
+  | ["merge-commit", string]
+
+export interface MergeMetadataEvent extends NostrEvent {
+  kind: typeof GIT_MERGE_METADATA
+  content: string // JSON summary of analysis
+  tags: MergeMetadataTag[]
+}
+
+// -------------------
+// Conflict Details Metadata (kind: 30412)
+// -------------------
+export type ConflictMetadataTag =
+  | ["a", string] // repo address
+  | ["e", string, "", "root"] // target patch/event id
+  | ["file", string] // conflicted file path (repeatable)
+
+export interface ConflictMetadataEvent extends NostrEvent {
+  kind: typeof GIT_CONFLICT_METADATA
+  content: string // JSON with per-file conflict markers/segments
+  tags: ConflictMetadataTag[]
 }
 
 // -------------------
@@ -195,6 +251,9 @@ export type Nip34Event =
   | PullRequestUpdateEvent
   | UserGraspListEvent
   | StatusEvent
+  | StackEvent
+  | MergeMetadataEvent
+  | ConflictMetadataEvent
 
 // Utility: kind to type mapping
 

@@ -2,6 +2,8 @@
 
 This document describes the APIs provided by the Nostr-Git project, including the core library APIs, Git service APIs, and extension interfaces.
 
+See also: [Git Stacking and Merge Metadata](docs/nostr-git-stacking.md)
+
 ## Canonical Tag Helpers (Required)
 
 Always access Nostr event tags via helpers from `@nostr-git/shared-types`:

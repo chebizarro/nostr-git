@@ -10,6 +10,9 @@ import {
   type UserGraspListEvent,
   type NostrTag,
   GIT_REPO_ANNOUNCEMENT,
+  GIT_STACK,
+  GIT_MERGE_METADATA,
+  GIT_CONFLICT_METADATA,
 } from "./nip34.js"
 import type {
   RepoAnnouncementTag,
@@ -20,6 +23,12 @@ import type {
   PullRequestTag,
   PullRequestUpdateTag,
   UserGraspListTag,
+  StackTag,
+  MergeMetadataTag,
+  ConflictMetadataTag,
+  StackEvent,
+  MergeMetadataEvent,
+  ConflictMetadataEvent,
 } from "./nip34.js"
 import type {CommentEvent} from "./nip22.js"
 
@@ -35,6 +44,9 @@ type KnownTags =
   | PullRequestTag
   | PullRequestUpdateTag
   | UserGraspListTag
+  | StackTag
+  | MergeMetadataTag
+  | ConflictMetadataTag
 
 // For a given tag name T, resolve to the precise tuple type if known; otherwise fallback to a generic [T, ...string[]]
 export type TagFor<T extends string> =
@@ -51,6 +63,69 @@ type FirstValueOf<T extends string> =
  */
 export function isRepoAnnouncementEvent(event: Nip34Event): event is RepoAnnouncementEvent {
   return event.kind === 30617
+}
+
+// -------------------
+// Stacking/Metadata Builders
+// -------------------
+
+export function createStackEvent(opts: {
+  repoAddr: string
+  stackId: string
+  members?: string[]
+  order?: string[]
+  content?: string
+  created_at?: number
+}): StackEvent {
+  const tags: any[] = [["a", opts.repoAddr], ["stack", opts.stackId]]
+  if (opts.members) opts.members.forEach(m => tags.push(["member", m]))
+  if (opts.order && opts.order.length) tags.push(["order", ...opts.order])
+  return {
+    kind: GIT_STACK,
+    content: opts.content ?? "",
+    tags,
+    created_at: opts.created_at ?? Math.floor(Date.now() / 1000),
+  } as StackEvent
+}
+
+export function createMergeMetadataEvent(opts: {
+  repoAddr: string
+  rootId: string
+  baseBranch?: string
+  targetBranch?: string
+  result?: "clean" | "ff" | "conflict"
+  mergeCommit?: string
+  content?: string // JSON
+  created_at?: number
+}): MergeMetadataEvent {
+  const tags: any[] = [["a", opts.repoAddr], ["e", opts.rootId, "", "root"]]
+  if (opts.baseBranch) tags.push(["base-branch", opts.baseBranch])
+  if (opts.targetBranch) tags.push(["target-branch", opts.targetBranch])
+  if (opts.result) tags.push(["result", opts.result])
+  if (opts.mergeCommit) tags.push(["merge-commit", opts.mergeCommit])
+  return {
+    kind: GIT_MERGE_METADATA,
+    content: opts.content ?? "",
+    tags,
+    created_at: opts.created_at ?? Math.floor(Date.now() / 1000),
+  } as MergeMetadataEvent
+}
+
+export function createConflictMetadataEvent(opts: {
+  repoAddr: string
+  rootId: string
+  files?: string[]
+  content?: string // JSON with markers
+  created_at?: number
+}): ConflictMetadataEvent {
+  const tags: any[] = [["a", opts.repoAddr], ["e", opts.rootId, "", "root"]]
+  if (opts.files) opts.files.forEach(f => tags.push(["file", f]))
+  return {
+    kind: GIT_CONFLICT_METADATA,
+    content: opts.content ?? "",
+    tags,
+    created_at: opts.created_at ?? Math.floor(Date.now() / 1000),
+  } as ConflictMetadataEvent
 }
 
 /**
@@ -131,6 +206,12 @@ export function getNostrKindLabel(kind: number): string {
       return "Comment"
     case 10317:
       return "User Grasp List"
+    case 30410:
+      return "Stack"
+    case 30411:
+      return "Merge Metadata"
+    case 30412:
+      return "Conflict Metadata"
     default:
       return "Unknown"
   }
@@ -141,6 +222,21 @@ export function getNostrKindLabel(kind: number): string {
  */
 export function isCommentEvent(event: {kind: number}): event is CommentEvent {
   return event.kind === 1111
+}
+
+/** Type guard for StackEvent (kind: 30410) */
+export function isStackEvent(event: Nip34Event): event is StackEvent {
+  return event.kind === 30410
+}
+
+/** Type guard for MergeMetadataEvent (kind: 30411) */
+export function isMergeMetadataEvent(event: Nip34Event): event is MergeMetadataEvent {
+  return event.kind === 30411
+}
+
+/** Type guard for ConflictMetadataEvent (kind: 30412) */
+export function isConflictMetadataEvent(event: Nip34Event): event is ConflictMetadataEvent {
+  return event.kind === 30412
 }
 
 /**

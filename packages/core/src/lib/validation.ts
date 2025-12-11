@@ -1,5 +1,5 @@
-import type { RepoAnnouncementEvent, RepoStateEvent } from '@nostr-git/shared-types';
-import { validateRepoAnnouncementEvent, validateRepoStateEvent } from '@nostr-git/shared-types';
+import type { RepoAnnouncementEvent, RepoStateEvent, StackEvent, MergeMetadataEvent, ConflictMetadataEvent } from '@nostr-git/shared-types';
+import { validateRepoAnnouncementEvent, validateRepoStateEvent, validateStackEvent, validateMergeMetadataEvent, validateConflictMetadataEvent } from '@nostr-git/shared-types';
 
 /**
  * Feature flag for runtime event validation.
@@ -38,5 +38,29 @@ export function assertRepoStateEvent(evt: unknown): asserts evt is RepoStateEven
   const res = validateRepoStateEvent(evt);
   if (!res.success) {
     throw new Error(`Invalid RepoStateEvent: ${res.error.message}`);
+  }
+}
+
+export function assertStackEvent(evt: unknown): asserts evt is StackEvent {
+  if (!shouldValidateEvents()) return;
+  const res = validateStackEvent(evt);
+  if (!res.success) {
+    throw new Error(`Invalid StackEvent: ${res.error.message}`);
+  }
+}
+
+export function assertMergeMetadataEvent(evt: unknown): asserts evt is MergeMetadataEvent {
+  if (!shouldValidateEvents()) return;
+  const res = validateMergeMetadataEvent(evt);
+  if (!res.success) {
+    throw new Error(`Invalid MergeMetadataEvent: ${res.error.message}`);
+  }
+}
+
+export function assertConflictMetadataEvent(evt: unknown): asserts evt is ConflictMetadataEvent {
+  if (!shouldValidateEvents()) return;
+  const res = validateConflictMetadataEvent(evt);
+  if (!res.success) {
+    throw new Error(`Invalid ConflictMetadataEvent: ${res.error.message}`);
   }
 }

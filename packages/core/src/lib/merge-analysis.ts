@@ -1,12 +1,68 @@
 import type { GitProvider } from '@nostr-git/git-wrapper';
 import parseDiff from 'parse-diff';
 import type { Patch } from '@nostr-git/shared-types';
+import { createMergeMetadataEvent, createConflictMetadataEvent } from '@nostr-git/shared-types';
 
 export interface SimplifiedPatch {
   id: string;
   commits: Array<{ oid: string; message: string; author: { name: string; email: string } }>;
   baseBranch: string;
   raw: { content: string };
+}
+
+/**
+ * Build a Merge Metadata event (kind 30411) from a merge analysis result.
+ * repoAddr: shared-types RepoAddressA ("30617:<pubkey>:<d>")
+ * rootId: the root patch event id or thread root this analysis pertains to
+ */
+export function buildMergeMetadataEventFromAnalysis(params: {
+  repoAddr: string;
+  rootId: string;
+  targetBranch: string;
+  baseBranch?: string;
+  result: MergeAnalysisResult;
+}): ReturnType<typeof createMergeMetadataEvent> {
+  const { repoAddr, rootId, targetBranch, baseBranch, result } = params;
+  const outcome: 'clean' | 'ff' | 'conflict' = result.fastForward
+    ? 'ff'
+    : result.hasConflicts
+    ? 'conflict'
+    : 'clean';
+  const content = JSON.stringify({
+    analysis: result.analysis,
+    canMerge: result.canMerge,
+    fastForward: result.fastForward,
+    upToDate: result.upToDate,
+    mergeBase: result.mergeBase,
+    targetCommit: result.targetCommit,
+    remoteCommit: result.remoteCommit,
+    patchCommits: result.patchCommits,
+    conflictFiles: result.conflictFiles,
+  });
+  return createMergeMetadataEvent({
+    repoAddr,
+    rootId,
+    baseBranch,
+    targetBranch,
+    result: outcome,
+    mergeCommit: result.targetCommit,
+    content,
+  });
+}
+
+/**
+ * Build a Conflict Metadata event (kind 30412) from a merge analysis result with conflicts.
+ */
+export function buildConflictMetadataEventFromAnalysis(params: {
+  repoAddr: string;
+  rootId: string;
+  result: MergeAnalysisResult;
+}): ReturnType<typeof createConflictMetadataEvent> | undefined {
+  const { repoAddr, rootId, result } = params;
+  if (!result.hasConflicts || result.conflictFiles.length === 0) return undefined;
+  const files = result.conflictFiles;
+  const content = JSON.stringify({ details: result.conflictDetails });
+  return createConflictMetadataEvent({ repoAddr, rootId, files, content });
 }
 
 export interface MergeAnalysisResult {

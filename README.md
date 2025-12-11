@@ -2,6 +2,8 @@
 
 A comprehensive TypeScript monorepo for integrating Git workflows with the Nostr protocol, enabling decentralized Git collaboration through NIP-34 events.
 
+See also: [Git Stacking and Merge Metadata](docs/nostr-git-stacking.md)
+
 ## 🎯 Purpose
 
 This platform bridges Git version control with Nostr's decentralized network, allowing developers to:
