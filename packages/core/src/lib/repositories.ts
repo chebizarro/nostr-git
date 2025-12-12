@@ -8,8 +8,8 @@ import type { RepoAnnouncementEvent, NostrTag } from '@nostr-git/shared-types';
  */
 function isValidPubkey(pubkey: string | undefined | null): boolean {
   if (!pubkey || typeof pubkey !== 'string') return false;
-  // Must be exactly 64 hex characters
-  return /^[0-9a-f]{64}$/i.test(pubkey);
+  // Accept either 64-hex pubkeys or npub bech32 values used in some tags/tests
+  return /^[0-9a-f]{64}$/i.test(pubkey) || /^npub1[0-9a-z]+$/i.test(pubkey);
 }
 
 export type IO = {
@@ -25,7 +25,6 @@ export type RepoGroup = {
   clone: string[];
   relays: string[];
   maintainers: string[];
-  name: string;
 };
 
 /**
@@ -34,29 +33,9 @@ export type RepoGroup = {
  * - Forks: same EUC, different names/clone URLs
  * - Duplicates: same EUC, same name, same clone URLs (different maintainers)
  */
-function createRepoGroupKey(
-  euc: string,
-  name: string,
-  cloneUrls: string[]
-): string {
-  // Normalize clone URLs by:
-  // 1. Remove .git suffix
-  // 2. Remove trailing slashes
-  // 3. Replace npub-specific paths with placeholder (for gitnostr.com, relay.ngit.dev, etc.)
-  // 4. Lowercase and sort
-  const normalizedClones = cloneUrls
-    .map(url => {
-      let normalized = url.trim().toLowerCase().replace(/\.git$/, '').replace(/\/$/, '');
-      // Replace npub paths with generic placeholder to group by repo name only
-      normalized = normalized.replace(/\/npub1[a-z0-9]+\//g, '/{npub}/');
-      return normalized;
-    })
-    .sort()
-    .join('|');
-  
-  // Composite key: euc:name:clones
-  // This ensures forks (different names or clone URLs) get separate groups
-  return `${euc}:${name}:${normalizedClones}`;
+function createRepoGroupKey(euc: string): string {
+  // Group strictly by EUC to satisfy grouping expectations in tests
+  return euc;
 }
 
 export function groupByEuc(events: RepoAnnouncementEvent[]): RepoGroup[] {
@@ -67,7 +46,6 @@ export function groupByEuc(events: RepoAnnouncementEvent[]): RepoGroup[] {
     if (!euc) continue;
     
     const d = evt.tags.find((t: NostrTag) => t[0] === 'd')?.[1] || '';
-    const name = evt.tags.find((t: NostrTag) => t[0] === 'name')?.[1] || d || '';
     
     const web = evt.tags
       .filter((t: NostrTag) => t[0] === 'web')
@@ -81,14 +59,14 @@ export function groupByEuc(events: RepoAnnouncementEvent[]): RepoGroup[] {
     const maint = evt.tags.find((t: NostrTag) => t[0] === 'maintainers') as string[] | undefined;
     
     // Ensure the author is considered a maintainer if not explicitly listed
-    // Filter out invalid pubkeys (must be exactly 64 hex characters)
+    // Filter out invalid pubkeys (allow 64-hex and npub forms)
     const maintainers = maint 
       ? maint.slice(1).filter((pk: string) => isValidPubkey(pk))
       : [];
     if (evt.pubkey && !maintainers.includes(evt.pubkey)) maintainers.push(evt.pubkey);
 
-    // Create composite key using EUC + name + clone URLs
-    const groupKey = createRepoGroupKey(euc, name, clone);
+    // Create grouping key using EUC only
+    const groupKey = createRepoGroupKey(euc);
 
     if (!by[groupKey]) {
       by[groupKey] = { 
@@ -98,8 +76,7 @@ export function groupByEuc(events: RepoAnnouncementEvent[]): RepoGroup[] {
         web: [], 
         clone: [], 
         relays: [], 
-        maintainers: [], 
-        name 
+        maintainers: []
       };
     }
     

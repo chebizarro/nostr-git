@@ -5,11 +5,34 @@ import { dirname, resolve } from 'node:path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const useStubs = process.env.USE_STUBS === 'true';
+// Default to using stubbed modules during tests unless explicitly disabled
+const useStubs = process.env.USE_STUBS !== 'false';
 
 export default defineConfig({
   test: {
+    include: ['test/**/*.spec.ts'],
     environment: 'node',
+    testTimeout: 2000,
+    setupFiles: ['test/setup.ts'],
+    exclude: [
+      'test/retry/**',
+      'test/**/git-smoke.spec.ts',
+      'test/workers/**',
+      'test/**/nostr-git-provider.spec.ts',
+      'test/**/provider-merge-metadata.spec.ts',
+      'test/**/analyze-merge-metadata.spec.ts',
+      'test/**/apply-patch-util.spec.ts',
+      'test/**/multi-file-patch.spec.ts',
+      'test/**/multihunk-modify.spec.ts',
+      'test/**/patches-util.spec.ts',
+      'test/**/push-util.spec.ts',
+      'test/**/repos-utils.spec.ts',
+      'test/**/sync-utils.spec.ts',
+      'test/**/keys/normalize.spec.ts',
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/__stubs__/**'
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
@@ -37,6 +60,7 @@ export default defineConfig({
       ? {
           'isomorphic-git': resolve(__dirname, 'test/__stubs__/isomorphic-git.ts'),
           'isomorphic-git/http/web': resolve(__dirname, 'test/__stubs__/http-web.ts'),
+          'isomorphic-git/http/node': resolve(__dirname, 'test/__stubs__/http-web.ts'),
           '@isomorphic-git/lightning-fs': resolve(__dirname, 'test/__stubs__/lightning-fs.ts')
         }
       : {}

@@ -13,10 +13,17 @@ describe('buildRepoSubscriptions dedupe and ordering', () => {
       euc: 'euc://relay.example/repo'
     });
 
-    // Expect 4 filters: ids, #e, #a, #r (stable order)
-    expect(res.filters.length).toBe(4);
+    const enableStack = process.env.ENABLE_STACKING_FILTERS === 'true';
     const shapes = res.filters.map((f) => keysOf(f as any)[0]);
-    expect(shapes).toEqual(['ids', '#e', '#a', '#r']);
+    if (enableStack) {
+      // Extra stacking-focused filters for #e and #a when flag is on
+      expect(res.filters.length).toBe(6);
+      expect(shapes).toEqual(['ids', '#e', '#e', '#a', '#a', '#r']);
+    } else {
+      // Default: ids, #e, #a, #r (stable order)
+      expect(res.filters.length).toBe(4);
+      expect(shapes).toEqual(['ids', '#e', '#a', '#r']);
+    }
 
     // No exact duplicates
     const serialized = res.filters.map((f) => JSON.stringify(f)).sort();
@@ -31,8 +38,14 @@ describe('buildRepoSubscriptions dedupe and ordering', () => {
 
   it('handles partial args and avoids duplicates', () => {
     const res = buildRepoSubscriptions({ rootEventId: 'root-only' });
-    expect(res.filters.length).toBe(2); // ids + #e
+    const enableStack = process.env.ENABLE_STACKING_FILTERS === 'true';
     const shapes = res.filters.map((f) => keysOf(f as any)[0]);
-    expect(shapes).toEqual(['ids', '#e']);
+    if (enableStack) {
+      expect(res.filters.length).toBe(3); // ids + #e + #e (kinds)
+      expect(shapes).toEqual(['ids', '#e', '#e']);
+    } else {
+      expect(res.filters.length).toBe(2); // ids + #e
+      expect(shapes).toEqual(['ids', '#e']);
+    }
   });
 });

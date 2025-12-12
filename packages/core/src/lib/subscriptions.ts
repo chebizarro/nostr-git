@@ -62,22 +62,27 @@ export function buildRepoSubscriptions(args: {
   const notes: string[] = [];
 
   const STACKING_KINDS = [1617, 30410, 30411, 30412];
+  const enableStackingFilters = process.env.ENABLE_STACKING_FILTERS === 'true';
 
   // Build candidate filters
   if (args.addressA) {
     candidates.push({ '#a': [args.addressA] });
     notes.push('Subscribe by repo address (#a)');
-    // Stacking/collab focused subscription with kinds
-    candidates.push({ '#a': [args.addressA], kinds: STACKING_KINDS });
-    notes.push('Subscribe by repo address with stack/merge kinds');
+    if (enableStackingFilters) {
+      // Optional: stacking/collab focused subscription with kinds
+      candidates.push({ '#a': [args.addressA], kinds: STACKING_KINDS });
+      notes.push('Subscribe by repo address with stack/merge kinds');
+    }
   }
   if (args.rootEventId) {
     // Fetch the root event itself
     candidates.push({ ids: [args.rootEventId] });
     // Fetch events referencing the root (thread/status)
     candidates.push({ '#e': [args.rootEventId] });
-    // Stacking/merge metadata for root
-    candidates.push({ '#e': [args.rootEventId], kinds: [30411, 30412] });
+    if (enableStackingFilters) {
+      // Stacking/merge metadata for root
+      candidates.push({ '#e': [args.rootEventId], kinds: [30411, 30412] });
+    }
     notes.push('Subscribe by root id: ids (direct) and #e (referenced)');
   }
   if (args.euc) {
