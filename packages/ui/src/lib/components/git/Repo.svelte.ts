@@ -332,9 +332,9 @@ export class Repo {
         await this.workerManager.initialize();
 
         // Wait for tokens to be loaded from localStorage before configuring auth
-        if (loadedTokens.length > 0) {
-          await this.workerManager.setAuthConfig({ tokens: loadedTokens });
-          console.log("Configured git authentication for", loadedTokens.length, "hosts");
+        if (this.tokens.length > 0) {
+          await this.workerManager.setAuthConfig({ tokens: this.tokens });
+          console.log("Configured git authentication for", this.tokens.length, "hosts");
         } else {
           console.log("No authentication tokens found");
         }
