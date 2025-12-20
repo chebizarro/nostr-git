@@ -956,6 +956,9 @@ export class Repo {
         // Gather clone URLs for remote operations
         const cloneUrls = [...(this.#repo?.clone || [])];
 
+        // Track if we need to clear cache (only if branch content actually changed)
+        let shouldClearCache = false;
+
         // 1) Ask worker to sync local repo with remote for the selected branch (switch/checkout)
         if (this.key && cloneUrls.length > 0) {
           try {
@@ -964,8 +967,18 @@ export class Repo {
               cloneUrls,
               branch: shortBranch,
             });
+            
+            // Only clear cache if remote had updates or if sync reports it needs update
+            if (this.syncStatus?.needsUpdate) {
+              console.log("Branch content changed, will clear cache");
+              shouldClearCache = true;
+            } else {
+              console.log("Branch already up-to-date, preserving cache for instant load");
+            }
           } catch (syncErr) {
             console.warn("syncWithRemote failed, will try ensureFullClone:", syncErr);
+            // If sync fails, play it safe and clear cache
+            shouldClearCache = true;
           }
         }
 
@@ -974,8 +987,13 @@ export class Repo {
           await this.workerManager.ensureFullClone({ repoId: this.key, branch: shortBranch });
         }
 
-        // 3) Clear caches impacted by branch change
-        try { await this.fileManager.clearCache(this.key); } catch {}
+        // 3) Clear caches only if branch content actually changed
+        if (shouldClearCache) {
+          console.log("Clearing file cache due to branch update");
+          try { await this.fileManager.clearCache(this.key); } catch {}
+        } else {
+          console.log("Preserving file cache - branch unchanged");
+        }
 
         // 4) Load commits for new branch
         // DON'T reset() - keep old commits visible for instant perceived performance
