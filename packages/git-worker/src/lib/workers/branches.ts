@@ -6,11 +6,25 @@ export async function resolveRobustBranch(
   dir: string,
   requestedBranch?: string
 ): Promise<string> {
-  const branchesToTry = [requestedBranch, 'main', 'master', 'develop', 'dev'].filter(
-    Boolean
-  ) as string[];
+  // If a specific branch was requested, try it first and return it directly
+  // This is important for user-selected branches that may not exist locally yet
+  if (requestedBranch) {
+    try {
+      await git.resolveRef({ dir, ref: requestedBranch });
+      console.log(`[resolveRobustBranch] Successfully resolved requested branch: ${requestedBranch}`);
+      return requestedBranch;
+    } catch (error) {
+      // If the requested branch doesn't exist locally, still return it
+      // The calling code will handle fetching/syncing it
+      console.log(`[resolveRobustBranch] Requested branch "${requestedBranch}" not found locally, but returning it anyway for sync/fetch`);
+      return requestedBranch;
+    }
+  }
   
-  // First try the specific branches
+  // Only use fallback logic when no specific branch was requested
+  const branchesToTry = ['main', 'master', 'develop', 'dev'];
+  
+  // Try the fallback branches
   for (const branchName of branchesToTry) {
     try {
       await git.resolveRef({ dir, ref: branchName });

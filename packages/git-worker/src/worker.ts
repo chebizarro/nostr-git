@@ -739,7 +739,7 @@ const getCommitHistory = async ({
   const targetBranch = await resolveRobustBranchInWorker(dir, branch);
   console.log(`[getCommitHistory] Resolved branch: ${targetBranch}`);
 
-  // Check IndexedDB cache first
+  // Check IndexedDB cache first - prioritize instant loading
   try {
     const cachedCommits = await cacheManager.getCommitHistory(key, targetBranch);
     if (cachedCommits && cachedCommits.commits.length >= depth) {
@@ -748,7 +748,22 @@ const getCommitHistory = async ({
 
       if (cacheAge < maxCacheAge) {
         const duration = Date.now() - startTime;
-        console.log(`[getCommitHistory] Returning ${cachedCommits.commits.length} commits from IndexedDB cache (age: ${Math.round(cacheAge / 1000)}s)`);
+        console.log(`[getCommitHistory] ⚡ Returning ${cachedCommits.commits.length} commits from cache (age: ${Math.round(cacheAge / 1000)}s)`);
+        
+        // Optionally sync in background if cache is getting old (> 5 min)
+        // This keeps cache fresh without blocking the user
+        if (cacheAge > maxCacheAge) {
+          console.log(`[getCommitHistory] Cache is ${Math.round(cacheAge / 1000)}s old, scheduling background sync`);
+          const cache = await cacheManager.getRepoCache(key);
+          const cloneUrls = cache?.cloneUrls || [];
+          if (cloneUrls.length > 0) {
+            // Fire and forget - don't await
+            syncWithRemote({ repoId, cloneUrls, branch }).catch(err => 
+              console.warn('[getCommitHistory] Background sync failed:', err)
+            );
+          }
+        }
+        
         return {
           success: true,
           commits: cachedCommits.commits.slice(0, depth),
@@ -767,7 +782,7 @@ const getCommitHistory = async ({
     console.warn(`[getCommitHistory] Cache check failed:`, cacheCheckError);
   }
 
-  // Check if we need to sync first to get latest commits
+  // Only sync if we don't have valid cached data
   try {
     const cache = await cacheManager.getRepoCache(key);
     const cloneUrls = cache?.cloneUrls || [];

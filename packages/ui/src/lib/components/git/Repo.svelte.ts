@@ -17,6 +17,7 @@ import { type MergeAnalysisResult } from "@nostr-git/core";
 import { canonicalRepoKey } from "@nostr-git/core";
 import { type Readable } from "svelte/store";
 import { context } from "$lib/stores/context";
+import { toast } from "$lib/stores/toast";
 import { Token, tokens } from "$lib/stores/tokens";
 import { WorkerManager, type WorkerProgressEvent, type CloneProgress } from "./WorkerManager";
 import { CacheManager, MergeAnalysisCacheManager, CacheType } from "./CacheManager";
@@ -53,6 +54,7 @@ export class Repo {
   #state: RepoState | undefined = $state(undefined);
   // Reactive selected branch so UI can respond to changes
   #selectedBranchState: string | undefined = $state(undefined);
+  #branchSwitching: boolean = $state(false);
   #refsLoading: boolean = $state(false);
   // Optional multi-state/status/comments/labels streams
   #repoStateEventsArr = $state<RepoStateEvent[] | undefined>(undefined);
@@ -916,7 +918,14 @@ export class Repo {
     return this.#selectedBranchState ?? this.branchManager.getSelectedBranch();
   }
 
-  async setSelectedBranch(branchName: string) {
+  get isBranchSwitching() {
+    return this.#branchSwitching;
+  }
+
+  async setSelectedBranch(branchName: string) {    
+    // Set switching flag to prevent premature loads
+    this.#branchSwitching = true;
+    
     // Update in BranchManager first
     this.branchManager.setSelectedBranch(branchName);
 
@@ -968,9 +977,26 @@ export class Repo {
         // 3) Clear caches impacted by branch change
         try { await this.fileManager.clearCache(this.key); } catch {}
 
-        // Refresh commits on the newly selected branch
-        // Use explicit branch to override default selection in CommitManager
-        await this.commitManager.loadCommits(this.repoId, shortBranch, this.branchManager.getMainBranch());
+        // 4) Load commits for new branch
+        // DON'T reset() - keep old commits visible for instant perceived performance
+        // CommitManager's cache will make this fast for recently visited branches
+        const originalLoadCommits = this.commitManager.loadCommits.bind(this.commitManager);
+        this.commitManager.loadCommits = async () => {
+          return await originalLoadCommits(
+            this.repoId,
+            shortBranch,
+            this.branchManager.getMainBranch()
+          );
+        };
+        
+        try {
+          await this.commitManager.loadPage(1); // Reset to page 1 for the new branch
+        } finally {
+          this.commitManager.loadCommits = originalLoadCommits;
+        }
+        
+        // Note: We rely on CommitManager's built-in caching (IndexedDB)
+        // which is per-branch, so switching back to a recent branch is instant
       }
 
       // Invalidate cached resolved default branch so future calls re-resolve against new selection
@@ -992,6 +1018,13 @@ export class Repo {
       } catch {}
     } catch (e) {
       console.error("Failed to switch branch in worker or refresh commits:", e);
+      toast.push({
+        message: `Failed to switch branch: ${e instanceof Error ? e.message : String(e)}`,
+        theme: "error"
+      });
+    } finally {
+      // Clear switching flag
+      this.#branchSwitching = false;
     }
   }
 
@@ -1047,12 +1080,14 @@ export class Repo {
 
       // Use the CommitManager's loadPage method which sets the page and calls loadCommits
       const originalLoadCommits = this.commitManager.loadCommits.bind(this.commitManager);
+      
+      const branchToLoad = this.selectedBranch || effectiveMainBranch;
 
       // Temporarily override loadCommits to provide the required parameters
       this.commitManager.loadCommits = async () => {
         return await originalLoadCommits(
           effectiveRepoId!, // Use the effective repository ID
-          undefined, // branch (will use mainBranch)
+          branchToLoad, // Use selected branch if available, fallback to main
           effectiveMainBranch!
         );
       };

@@ -322,27 +322,42 @@ export async function ensureRepoFromEvent(
         `Repository exists at ${dir}, attempting to fetch more history (depth: ${depth})`
       );
 
-      // Use robust branch resolution instead of hardcoded fallback
-      const resolvedBranch = await resolveRobustBranch(git, dir, targetBranch);
-
-      try {
-        await git.fetch({
-          dir,
-          url: cloneUrl,
-          ref: resolvedBranch,
-          depth,
-          singleBranch: true
-        });
-        console.log(
-          `Successfully deepened repository using resolved branch '${resolvedBranch}' to depth ${depth}`
-        );
-      } catch (fetchError: any) {
-        console.log(
-          `Failed to fetch resolved branch '${resolvedBranch}':`,
-          fetchError.message || String(fetchError)
-        );
-        throw fetchError;
+      // If a specific branch was requested, try to fetch it first before falling back
+      let resolvedBranch: string;
+      if (targetBranch) {
+        try {
+          // Try to fetch the requested branch from remote
+          console.log(`Attempting to fetch requested branch '${targetBranch}' from remote`);
+          await git.fetch({
+            dir,
+            url: cloneUrl,
+            ref: targetBranch,
+            depth,
+            singleBranch: true
+          });
+          
+          // If fetch succeeded, try to resolve the branch locally
+          try {
+            resolvedBranch = await git.resolveRef({ dir, ref: targetBranch });
+            console.log(`Successfully resolved requested branch '${targetBranch}' to OID: ${resolvedBranch.substring(0, 8)}`);
+          } catch {
+            // Branch might be in refs/remotes/origin/
+            resolvedBranch = await git.resolveRef({ dir, ref: `refs/remotes/origin/${targetBranch}` });
+            console.log(`Successfully resolved requested branch '${targetBranch}' from remote tracking to OID: ${resolvedBranch.substring(0, 8)}`);
+          }
+        } catch (fetchError: any) {
+          // If fetch failed, fall back to robust resolution
+          console.log(`Failed to fetch requested branch '${targetBranch}':`, fetchError.message || String(fetchError));
+          resolvedBranch = await resolveRobustBranch(git, dir, targetBranch);
+        }
+      } else {
+        // No specific branch requested, use robust resolution
+        resolvedBranch = await resolveRobustBranch(git, dir, targetBranch);
       }
+
+      console.log(
+        `Successfully deepened repository using resolved branch '${resolvedBranch}' to depth ${depth}`
+      );
     } catch (error) {
       console.warn(`Failed to deepen repository, continuing with existing clone:`, error);
       // Continue with existing clone even if deepening fails

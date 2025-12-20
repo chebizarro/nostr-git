@@ -76,11 +76,7 @@ export async function syncWithRemoteUtil(
       throw new Error(error);
     }
 
-    // 2. Resolve target branch
-    const targetBranch = await resolveRobustBranch(dir, branch);
-    console.log(`[syncWithRemote] Resolved branch: ${targetBranch}`);
-
-    // 3. Get remote URL
+    // 2. Get remote URL first
     const remotes = await git.listRemotes({ dir });
     const originRemote = remotes.find((r: any) => r.remote === 'origin');
     const remoteUrl = originRemote?.url || cloneUrls[0];
@@ -90,45 +86,119 @@ export async function syncWithRemoteUtil(
     }
     console.log(`[syncWithRemote] Using remote URL: ${remoteUrl}`);
 
-    // 4. Fetch from remote
-    console.log(`[syncWithRemote] Fetching from remote...`);
-    try {
-      await git.fetch({
-        dir,
-        url: remoteUrl,
-        ref: targetBranch,
-        singleBranch: true,
-        depth: 1,
-        prune: true
-      });
-      console.log(`[syncWithRemote] Fetch completed`);
-    } catch (fetchError: any) {
-      // Handle CORS and network errors gracefully
-      const errorMessage = fetchError?.message || String(fetchError);
-      if (errorMessage.includes('CORS') || 
-          errorMessage.includes('NetworkError') || 
-          errorMessage.includes('Failed to fetch') ||
-          errorMessage.includes('Access-Control')) {
-        console.warn(`[syncWithRemote] CORS/Network error during fetch (this is expected for some remotes):`, errorMessage);
-        // For CORS errors, we'll continue with what we have locally
-        // This allows the app to work with local data even when remote is inaccessible
-        return toPlain({
-          success: true,
-          repoId,
-          branch: targetBranch,
-          headCommit: null, // We couldn't get remote HEAD
-          localCommit: null,
-          needsUpdate: false, // Assume no update since we can't check
-          synced: false, // Not fully synced due to network issues
-          duration: Date.now() - startTime,
-          warning: `Could not fetch from remote due to CORS/network restrictions. Using local data only.`,
-          serializable: true
+    // 3. Try to fetch the requested branch from remote first
+    let targetBranch = branch;
+    let fetchSuccess = false;
+    
+    if (targetBranch) {
+      console.log(`[syncWithRemote] Attempting to fetch requested branch: ${targetBranch}`);
+      try {
+        await git.fetch({
+          dir,
+          url: remoteUrl,
+          ref: targetBranch,
+          singleBranch: true,
+          depth: 1,
+          prune: true
         });
+        console.log(`[syncWithRemote] Successfully fetched requested branch: ${targetBranch}`);
+        fetchSuccess = true;
+      } catch (fetchError: any) {
+        const errorMessage = fetchError?.message || String(fetchError);
+        
+        // Handle CORS and network errors gracefully
+        if (errorMessage.includes('CORS') || 
+            errorMessage.includes('NetworkError') || 
+            errorMessage.includes('Failed to fetch') ||
+            errorMessage.includes('Access-Control')) {
+          console.warn(`[syncWithRemote] CORS/Network error during fetch (this is expected for some remotes):`, errorMessage);
+          // For CORS errors, we'll continue with what we have locally
+          return toPlain({
+            success: true,
+            repoId,
+            branch: targetBranch,
+            headCommit: null,
+            localCommit: null,
+            needsUpdate: false,
+            synced: false,
+            duration: Date.now() - startTime,
+            warning: `Could not fetch from remote due to CORS/network restrictions. Using local data only.`,
+            serializable: true
+          });
+        }
+        
+        // If fetch failed for other reasons (branch not found on remote), fall back to robust resolution
+        console.warn(`[syncWithRemote] Failed to fetch requested branch '${targetBranch}':`, errorMessage);
       }
-      throw fetchError;
+    }
+    
+    // 4. If requested branch fetch failed or no branch specified, use robust branch resolution
+    if (!fetchSuccess) {
+      targetBranch = await resolveRobustBranch(dir, branch);
+      console.log(`[syncWithRemote] Resolved fallback branch: ${targetBranch}`);
+      
+      console.log(`[syncWithRemote] Fetching fallback branch from remote...`);
+      try {
+        await git.fetch({
+          dir,
+          url: remoteUrl,
+          ref: targetBranch,
+          singleBranch: true,
+          depth: 1,
+          prune: true
+        });
+        console.log(`[syncWithRemote] Fetch completed for fallback branch`);
+      } catch (fetchError: any) {
+        const errorMessage = fetchError?.message || String(fetchError);
+        if (errorMessage.includes('CORS') || 
+            errorMessage.includes('NetworkError') || 
+            errorMessage.includes('Failed to fetch') ||
+            errorMessage.includes('Access-Control')) {
+          console.warn(`[syncWithRemote] CORS/Network error during fetch (this is expected for some remotes):`, errorMessage);
+          return toPlain({
+            success: true,
+            repoId,
+            branch: targetBranch,
+            headCommit: null,
+            localCommit: null,
+            needsUpdate: false,
+            synced: false,
+            duration: Date.now() - startTime,
+            warning: `Could not fetch from remote due to CORS/network restrictions. Using local data only.`,
+            serializable: true
+          });
+        }
+        throw fetchError;
+      }
     }
 
-    // 5. Resolve remote HEAD
+    // 5. Ensure the branch is checked out locally so it's available for file operations
+    try {
+      // Check if local branch exists
+      const localBranches = await git.listBranches({ dir });
+      if (!localBranches.includes(targetBranch)) {
+        // Create local branch from remote tracking branch
+        console.log(`[syncWithRemote] Creating local branch '${targetBranch}' from remote`);
+        try {
+          const remoteRef = `refs/remotes/origin/${targetBranch}`;
+          const remoteCommit = await git.resolveRef({ dir, ref: remoteRef });
+          await git.branch({ dir, ref: targetBranch, checkout: false, object: remoteCommit });
+          console.log(`[syncWithRemote] Local branch '${targetBranch}' created`);
+        } catch (branchError) {
+          console.warn(`[syncWithRemote] Could not create local branch:`, branchError);
+        }
+      }
+      
+      // Checkout the branch
+      console.log(`[syncWithRemote] Checking out branch: ${targetBranch}`);
+      await git.checkout({ dir, ref: targetBranch });
+      console.log(`[syncWithRemote] Branch checked out successfully`);
+    } catch (checkoutError) {
+      console.warn(`[syncWithRemote] Checkout warning (continuing anyway):`, checkoutError);
+      // Don't fail the entire sync if checkout has issues
+    }
+
+    // 6. Resolve remote HEAD
     const remoteCommit = await git
       .resolveRef({ dir, ref: `refs/remotes/origin/${targetBranch}` })
       .catch(async () => {
@@ -137,12 +207,12 @@ export async function syncWithRemoteUtil(
       });
     console.log(`[syncWithRemote] Remote HEAD: ${remoteCommit}`);
 
-    // 6. Get local HEAD for comparison
+    // 7. Get local HEAD for comparison
     const localCommit = await git.resolveRef({ dir, ref: 'HEAD' }).catch(() => null);
     const needsUpdate = localCommit !== remoteCommit;
     console.log(`[syncWithRemote] Local HEAD: ${localCommit}, needs update: ${needsUpdate}`);
 
-    // 7. Update cache with comprehensive data
+    // 8. Update cache with comprehensive data
     const branchNames = await git.listBranches({ dir });
     const branchEntries: Array<{ name: string; commit: string }> = [];
     for (const name of branchNames) {

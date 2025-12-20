@@ -137,15 +137,61 @@ export async function listRepoFilesFromEvent(opts: {
     }
   } else {
     // Prefer a full OID for subsequent tree/blob reads
+    // Try to resolve branch, but if it fails, attempt to fetch from remote first
     try {
       oid = await git.resolveRef({ dir, ref: branch });
-    } catch (e) {
-      // Fallback to robust resolver if direct ref resolution fails
-      oid = await resolveRobustBranch(git, dir, branch, {
-        onBranchNotFound: (branchName, error) => {
-          throw error;
+    } catch (resolveError) {
+      // Branch not found locally - try to fetch it from remote before falling back
+      console.log(`Branch '${branch}' not found locally, attempting to fetch from remote...`);
+      
+      let fetchAttempted = false;
+      try {
+        // Get clone URL
+        const selectCloneUrl = () => {
+          let url = event.clone?.find((u: string) => u.startsWith('https://'));
+          if (!url && event.clone?.length) {
+            const ssh = event.clone.find((u: string) => u.startsWith('git@'));
+            if (ssh) {
+              const m = ssh.match(/^git@([^:]+):(.+?)(\.git)?$/);
+              if (m) url = `https://${m[1]}/${m[2]}.git`;
+            }
+          }
+          return url;
+        };
+        
+        const url = selectCloneUrl();
+        if (url) {
+          // Try to fetch the specific branch from remote
+          await git.fetch({
+            dir,
+            url,
+            ref: branch,
+            depth: 10,
+            singleBranch: true
+          });
+          fetchAttempted = true;
+          console.log(`Successfully fetched branch '${branch}' from remote`);
+          
+          // Try resolving again after fetch
+          try {
+            oid = await git.resolveRef({ dir, ref: branch });
+          } catch {
+            // Might be in refs/remotes/origin/
+            oid = await git.resolveRef({ dir, ref: `refs/remotes/origin/${branch}` });
+          }
+        } else {
+          throw resolveError; // No URL available, use fallback
         }
-      });
+      } catch (fetchError) {
+        // Fetch failed or not attempted - use robust fallback
+        console.log(`Failed to fetch branch '${branch}', using robust fallback:`, fetchAttempted ? fetchError : 'not attempted');
+        oid = await resolveRobustBranch(git, dir, branch, {
+          onBranchNotFound: (branchName, error) => {
+            // Don't throw on fallback attempts, only if all fail
+            console.log(`Fallback: Branch '${branchName}' not found`);
+          }
+        });
+      }
     }
   }
 
@@ -309,15 +355,59 @@ export async function getRepoFileContentFromEvent(opts: {
       }
     }
   } else {
-    oid = await resolveRobustBranch(git, dir, branch, {
-      onBranchNotFound: (branchName, error) => {
-        // This will be handled by the UI layer if they provide a callback
-        console.warn(
-          `Branch '${branchName}' from repository state not found in local git:`,
-          error.message
-        );
+    // Try to resolve branch, but if it fails, attempt to fetch from remote first
+    try {
+      oid = await git.resolveRef({ dir, ref: branch });
+    } catch (resolveError) {
+      // Branch not found locally - try to fetch it from remote before falling back
+      console.log(`Branch '${branch}' not found locally, attempting to fetch from remote...`);
+      
+      try {
+        // Get clone URL
+        const selectCloneUrl = () => {
+          let url = event.clone?.find((u: string) => u.startsWith('https://'));
+          if (!url && event.clone?.length) {
+            const ssh = event.clone.find((u: string) => u.startsWith('git@'));
+            if (ssh) {
+              const m = ssh.match(/^git@([^:]+):(.+?)(\.git)?$/);
+              if (m) url = `https://${m[1]}/${m[2]}.git`;
+            }
+          }
+          return url;
+        };
+        
+        const url = selectCloneUrl();
+        if (url) {
+          // Try to fetch the specific branch from remote
+          await git.fetch({
+            dir,
+            url,
+            ref: branch,
+            depth: 10,
+            singleBranch: true
+          });
+          console.log(`Successfully fetched branch '${branch}' from remote`);
+          
+          // Try resolving again after fetch
+          try {
+            oid = await git.resolveRef({ dir, ref: branch });
+          } catch {
+            // Might be in refs/remotes/origin/
+            oid = await git.resolveRef({ dir, ref: `refs/remotes/origin/${branch}` });
+          }
+        } else {
+          throw resolveError; // No URL available, use fallback
+        }
+      } catch (fetchError) {
+        // Fetch failed - use robust fallback
+        console.log(`Failed to fetch branch '${branch}', using robust fallback`);
+        oid = await resolveRobustBranch(git, dir, branch, {
+          onBranchNotFound: (branchName, error) => {
+            console.log(`Fallback: Branch '${branchName}' not found`);
+          }
+        });
       }
-    });
+    }
   }
 
   try {
