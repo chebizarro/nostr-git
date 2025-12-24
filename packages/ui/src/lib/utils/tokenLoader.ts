@@ -79,7 +79,7 @@ export async function loadTokensFromStorage(tokenKey: string): Promise<TokenEntr
       return [];
     }
 
-    const tokens = JSON.parse(decrypted) as TokenEntry[];
+    const tokens = JSON.parse(JSON.parse(decrypted)) as TokenEntry[];
     return tokens;
 
   } catch (error) {
