@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onDestroy } from "svelte";
 	import UserAvatar from "../UserAvatar.svelte";
-	import UserProfile from "../UserProfile.svelte";
 	import { nip19 } from "nostr-tools";
 	import type { LabelEvent } from "@nostr-git/shared-types";
 
@@ -37,7 +36,6 @@
 		disabled = false,
 		maxSelections = 10,
 		showAvatars = true,
-		compact = false,
 		suggestionLimit = 10,
 		getProfile,
 		searchProfiles,
@@ -190,7 +188,7 @@
 
 	// Ensure profiles are cached for selected and suggestions
 	$effect(() => {
-		const keys = (selected || []).map(item => {
+		const keys = (selected || []).map((item: LabelEvent | string) => {
 			if (typeof item === 'string') {
 				return normalizePubkey(item)
 			}
@@ -198,7 +196,7 @@
 		}).filter(Boolean) as string[]
 		;[...keys, ...suggestions.map(s => s.pubkey)].forEach(pubkey => {
 			ensureProfile(pubkey || "")
-		})
+		})})
 </script>
 
 <div class="space-y-2">
@@ -310,7 +308,7 @@
 	{/if}
 </div>
 
-<style>
+<style lang="postcss">
 	/* Ensure dropdown appears above other elements */
 	.relative {
 		position: relative;
