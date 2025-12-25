@@ -34,6 +34,7 @@ export type Registry = {
 };
 
 import Alert from "../components/ui/alert/alert.svelte";
+import AlertDescription from "../components/ui/alert/alert-description.svelte";
 import AlertTitle from "../components/ui/alert/alert-title.svelte";
 import Avatar from "../components/ui/avatar/avatar.svelte";
 import AvatarFallback from "../components/ui/avatar/avatar-fallback.svelte";
@@ -92,5 +93,5 @@ export const defaultRegistry: Registry = {
   EventActions,
   ReactionSummary,
   Spinner,
-  Markdown,
+  Markdown: undefined,
 };
