@@ -21,6 +21,7 @@
     class?: string;
     rounded?: boolean; // default true
     title?: string;
+    responsive?: boolean; // enable responsive sizing for mobile/desktop
   }
 
   let {
@@ -34,6 +35,7 @@
     class: className = "",
     rounded = true,
     title = displayName || "",
+    responsive = false,
   }: Props = $props();
 
   // Choose best source:
@@ -44,6 +46,30 @@
   // 5) fallback icon/initials
   const pix: number = size ?? 24;
   const shape = rounded ? "rounded-full" : "rounded";
+
+  // Calculate responsive sizes if responsive prop is true
+  const mobileSize = $derived(responsive ? Math.max(16, Math.round(size * 0.6)) : size);
+  const mobileSizePx = $derived(mobileSize);
+  const desktopSizePx = $derived(size);
+
+  // Responsive classes for Tailwind using CSS custom properties
+  const responsiveClasses = $derived(
+    responsive
+      ? "!w-[var(--avatar-size-mobile)] !h-[var(--avatar-size-mobile)] !min-w-[var(--avatar-size-mobile)] sm:!w-[var(--avatar-size-desktop)] sm:!h-[var(--avatar-size-desktop)] sm:!min-w-[var(--avatar-size-desktop)]"
+      : ""
+  );
+
+  // Responsive style with CSS custom properties
+  const responsiveStyle = $derived(
+    responsive
+      ? `--avatar-size-mobile: ${mobileSizePx}px; --avatar-size-desktop: ${desktopSizePx}px;`
+      : ""
+  );
+
+  // Inline size styles - only needed when not responsive (responsive uses Tailwind classes)
+  const sizeStyle = $derived(
+    responsive ? "" : `width: ${pix}px; height: ${pix}px; min-width: ${pix}px;`
+  );
 
   function getNip39Url(): string | undefined {
     if (!nip39) return undefined;
@@ -72,9 +98,10 @@
   <img
     src={avatarUrl}
     alt={displayName || "avatar"}
-    width={pix}
-    height={pix}
-    class={`inline-block ${shape} object-cover ${className}`}
+    width={responsive ? undefined : pix}
+    height={responsive ? undefined : pix}
+    class={`inline-block ${shape} object-cover ${className} ${responsiveClasses}`}
+    style={responsiveStyle}
     title={title}
     decoding="async"
     loading="lazy"
@@ -83,9 +110,10 @@
   <img
     src={getNip39Url()}
     alt={displayName || "avatar"}
-    width={pix}
-    height={pix}
-    class={`inline-block ${shape} object-cover ${className}`}
+    width={responsive ? undefined : pix}
+    height={responsive ? undefined : pix}
+    class={`inline-block ${shape} object-cover ${className} ${responsiveClasses}`}
+    style={responsiveStyle}
     title={title}
     decoding="async"
     loading="lazy"
@@ -94,17 +122,18 @@
   <img
     src={getGravatarFromNip05()}
     alt={displayName || "avatar"}
-    width={pix}
-    height={pix}
-    class={`inline-block ${shape} object-cover ${className}`}
+    width={responsive ? undefined : pix}
+    height={responsive ? undefined : pix}
+    class={`inline-block ${shape} object-cover ${className} ${responsiveClasses}`}
+    style={responsiveStyle}
     title={title}
     decoding="async"
     loading="lazy"
   />
 {:else}
   <div
-    class={`inline-flex items-center justify-center bg-muted text-muted-foreground ${shape} ${className}`}
-    style={`width:${pix}px;height:${pix}px;`}
+    class={`inline-flex items-center justify-center bg-muted text-muted-foreground ${shape} ${className} ${responsiveClasses}`}
+    style={`${sizeStyle} ${responsiveStyle}`}
     title={title}
     aria-label="avatar"
   >

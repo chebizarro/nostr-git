@@ -3,7 +3,7 @@
   import { MessageSquare, Heart, Copy, Check, User } from "@lucide/svelte";
   import { useRegistry } from "../../useRegistry";
   import NostrAvatar from "./NostrAvatar.svelte";
-  const { Button, Card, CardContent, Textarea, Separator } = useRegistry();
+  const { Button, Card, CardContent, Textarea } = useRegistry();
   import BaseItemCard from "../BaseItemCard.svelte";
 
   // Real git commit data structure
@@ -102,35 +102,48 @@
     {commit.commit.message}
   {/snippet}
 
-  <!-- meta row: author + time -->
+  <!-- body content (empty for commits) -->
+  {#snippet children()}{/snippet}
+
+  <!-- meta row: author + time + commit hash -->
   {#snippet slotMeta()}
-    <span class="font-semibold text-sm truncate">{displayName || commit.commit.author.name}</span>
-    <span class="text-xs text-muted-foreground whitespace-nowrap">• {formatDate(commit.commit.author.timestamp)}</span>
-  {/snippet}
-
-  <!-- actions: copy hash -->
-  {#snippet slotActions()}
-    <button
-      onclick={copyHash}
-      class="font-mono text-xs bg-muted px-2 py-1 rounded hover:bg-muted/80 transition-colors flex items-center gap-1"
-      aria-label="Copy commit hash"
-      title={commit.oid}
-    >
-      {truncateHash(commit.oid)}
-      {#if copied}
-        <Check class="h-3 w-3 text-green-500" />
-      {:else}
-        <Copy class="h-3 w-3" />
+    <div class="flex items-center flex-wrap gap-2">
+      <NostrAvatar
+        pubkey={pubkey}
+        avatarUrl={avatarUrl}
+        nip05={nip05}
+        nip39={nip39}
+        email={commit.commit.author.email || commit.commit.committer?.email}
+        displayName={displayName || commit.commit.author.name}
+        size={40}
+        class="h-10 w-10"
+        title={displayName || commit.commit.author.name}
+        responsive={true}
+      />
+      <span class="font-semibold text-sm truncate">{displayName || commit.commit.author.name}</span>
+      {#if commit.commit.author.email}
+        <span class="truncate text-xs text-muted-foreground" title={commit.commit.author.email}>
+          {commit.commit.author.email}
+        </span>
       {/if}
-    </button>
-  {/snippet}
-
-  <!-- body: email (if present) -->
-  {#if commit.commit.author.email}
-    <div class="text-xs text-muted-foreground overflow-hidden">
-      <span class="truncate" title={commit.commit.author.email}>{commit.commit.author.email}</span>
+      <span class="text-xs text-muted-foreground whitespace-nowrap">
+        • {formatDate(commit.commit.author.timestamp)}
+      </span>
+      <button
+        onclick={copyHash}
+        class="font-mono text-xs bg-muted px-2 py-1 rounded hover:bg-muted/80 transition-colors flex items-center gap-1"
+        aria-label="Copy commit hash"
+        title={commit.oid}
+      >
+        {truncateHash(commit.oid)}
+        {#if copied}
+          <Check class="h-3 w-3 text-green-500" />
+        {:else}
+          <Copy class="h-3 w-3" />
+        {/if}
+      </button>
     </div>
-  {/if}
+  {/snippet}
 
   <!-- footer actions: react/comment and parent -->
   {#snippet slotFooter()}
@@ -164,21 +177,6 @@
       {/if}
     </div>
   {/snippet}
-
-  <!-- right side avatar -->
-  {#snippet slotSide()}
-    <NostrAvatar
-      pubkey={pubkey}
-      avatarUrl={avatarUrl}
-      nip05={nip05}
-      nip39={nip39}
-      email={commit.commit.author.email || commit.commit.committer?.email}
-      displayName={displayName || commit.commit.author.name}
-      size={40}
-      class="h-10 w-10"
-      title={displayName || commit.commit.author.name}
-    />
-  {/snippet}
 </BaseItemCard>
 
 {#if showComments}
@@ -186,7 +184,9 @@
     <CardContent class="p-4">
       <div class="space-y-3">
         <div class="flex gap-2">
-          <div class="w-6 h-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-1">
+          <div
+            class="w-6 h-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-1"
+          >
             <User class="h-3 w-3 text-muted-foreground" />
           </div>
           <div class="flex-1 space-y-2">

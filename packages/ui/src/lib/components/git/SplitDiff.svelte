@@ -94,13 +94,13 @@
 {#if hunks.length === 0}
   <div class="p-4 text-center text-muted-foreground">No changes to display</div>
 {:else}
-  <div class="overflow-hidden rounded-md border border-border">
+  <div class="min-w-fit rounded-md border border-border">
     {#each hunks as hunk, hunkIndex}
       {@const lines = calculateLineNumbers(hunk)}
 
       <!-- Hunk Header -->
       <div
-        class="bg-muted px-4 py-2 text-sm font-mono text-muted-foreground border-b border-border"
+        class="bg-muted px-4 py-2 text-sm font-mono text-muted-foreground border-b border-border whitespace-nowrap"
       >
         @@
         {#if hunk.oldLines > 0}
@@ -145,7 +145,7 @@
 
             <!-- Change Indicator -->
             <div
-              class="w-6 px-1 py-1 text-center text-xs font-mono {getLineNumClass(
+              class="w-6 px-1 py-1 text-center text-xs font-mono shrink-0 {getLineNumClass(
                 line.type
               )} border-r border-border"
             >
@@ -159,12 +159,12 @@
             </div>
 
             <!-- Line Content -->
-            <div class="flex-1 px-2 py-1 font-mono text-sm overflow-x-auto">
-              <pre class="whitespace-pre-wrap break-all">{line.content}</pre>
+            <div class="flex-1 px-2 py-1 font-mono text-sm whitespace-nowrap">
+              <pre class="whitespace-pre m-0 inline">{line.content}</pre>
             </div>
 
             <!-- Add Comment Button (placeholder) -->
-            <div class="w-8 px-1 py-1 opacity-0 hover:opacity-100 transition-opacity">
+            <div class="w-8 px-1 py-1 shrink-0 opacity-0 hover:opacity-100 transition-opacity">
               <button
                 onclick={() => handleAddComment(line.newLineNum || line.oldLineNum || 0)}
                 class="w-6 h-6 rounded-sm bg-background border border-border hover:bg-muted flex items-center justify-center"
