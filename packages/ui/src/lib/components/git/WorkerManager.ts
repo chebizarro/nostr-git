@@ -1,6 +1,6 @@
-import { getGitWorker } from "@nostr-git/git-worker";
 import type { EventIO } from "@nostr-git/shared-types";
 import {
+  getGitWorker,
   listBranchesFromEvent,
   listRepoFilesFromEvent,
   getRepoFileContentFromEvent,

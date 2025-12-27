@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { type NostrEvent } from "nostr-tools";
   import { onMount } from "svelte";
+  import { type NostrEvent, type Nip34Event, isStatusEvent, type StatusEvent } from "@nostr-git/shared-types";
 
   import GitRepoComponent from "./GitRepoComponent.svelte";
   import GitRepoStateComponent from "./GitRepoStateComponent.svelte";
@@ -89,7 +89,11 @@
   {:else if componentType === "git-comment"}
     <GitCommentFeed event={event} />
   {:else if componentType === "git-status"}
-    <GitStatusFeed event={event} />
+    {#if isStatusEvent(event as unknown as Nip34Event)}
+      <GitStatusFeed event={event as StatusEvent} />
+    {:else}
+      <UnknownEventComponent event={event} />
+    {/if}
   {:else if componentType === "git-repo"}
     <GitRepoComponent event={event} />
   {:else if componentType === "git-repo-state"}

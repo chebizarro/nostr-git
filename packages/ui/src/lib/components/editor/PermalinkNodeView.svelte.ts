@@ -8,6 +8,7 @@ import {
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { createNeventFromPermalink } from "@nostr-git/core";
 import type { EventTemplate, NostrEvent } from "nostr-tools";
+import type { EventIO } from "@nostr-git/shared-types";
 import type { MarkdownSerializerState } from "@tiptap/pm/markdown";
 import { mount, unmount, type Component } from "svelte";
 import Spinner from "./Spinner.svelte";
@@ -148,9 +149,22 @@ export const PermalinkNode = Node.create<PermalinkNodeOptions>({
       async function maybeFetch(options: PermalinkNodeOptions) {
         if (!currentNode.attrs.nevent && currentNode.attrs.permalink) {
           try {
+            const eventIO: EventIO = {
+              fetchEvents: async () => [],
+              publishEvent: async (unsigned) => {
+                await options.signer(unsigned as unknown as EventTemplate);
+                return { ok: true, relays: options.relays };
+              },
+              publishEvents: async (events) => {
+                await Promise.all(events.map((e) => options.signer(e as unknown as EventTemplate)));
+                return events.map(() => ({ ok: true, relays: options.relays }));
+              },
+              getCurrentPubkey: () => null,
+            };
+
             const nevent = await createNeventFromPermalink(
               currentNode.attrs.permalink,
-              options.signer,
+              eventIO,
               options.relays
             );
             console.log(nevent);

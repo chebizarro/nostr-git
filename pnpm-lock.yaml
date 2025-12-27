@@ -519,6 +519,9 @@ importers:
       debug:
         specifier: ^4.3.7
         version: 4.4.1(supports-color@5.5.0)
+      markdown-it:
+        specifier: ^14.1.0
+        version: 14.1.0
       parse-diff:
         specifier: ^0.11.1
         version: 0.11.1
@@ -528,9 +531,6 @@ importers:
       parse-patch:
         specifier: ^0.1.4
         version: 0.1.4
-      svelte:
-        specifier: ^5.28.2
-        version: 5.38.1
       svelte-codemirror-editor:
         specifier: ^2.0.0
         version: 2.0.0(codemirror@6.0.2)(svelte@5.38.1)
@@ -553,6 +553,9 @@ importers:
       '@tailwindcss/typography':
         specifier: ^0.5.16
         version: 0.5.16(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@24.3.0)(typescript@5.8.3)))
+      '@types/markdown-it':
+        specifier: ^14.1.2
+        version: 14.1.2
       autoprefixer:
         specifier: ^10.4.21
         version: 10.4.21(postcss@8.5.6)
@@ -577,6 +580,9 @@ importers:
       prettier-plugin-svelte:
         specifier: ^3.0.0
         version: 3.4.0(prettier@3.6.2)(svelte@5.38.1)
+      svelte:
+        specifier: ^5.28.2
+        version: 5.38.1
       svelte-check:
         specifier: ^4.1.6
         version: 4.1.6(picomatch@4.0.3)(svelte@5.38.1)(typescript@5.8.3)

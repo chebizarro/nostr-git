@@ -29,7 +29,7 @@
       } catch (err) {
         console.error("Failed to create data URL for image:", err);
         error = "Failed to process image data";
-        dataUrl = null;
+        dataUrl = "";
       }
     }
   });

@@ -85,10 +85,10 @@
 
   // Parse event tags
   $effect(() => {
-    const tags = event.tags || [];
+    const tags = (event.tags || []) as unknown as string[][];
     
     for (const tag of tags) {
-      switch (tag[0]) {
+      switch (tag[0] as string) {
         case "title":
           targetTitle = tag[1] || "";
           break;

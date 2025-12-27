@@ -1,5 +1,10 @@
 import { writable } from "svelte/store";
-import type { BookmarkedRepo } from "@nostr-git/shared-types";
+
+export type BookmarkedRepo = {
+  address: string;
+  event: any;
+  relayHint: string;
+};
 
 // Singleton store for bookmarked repositories
 function createBookmarksStore() {
