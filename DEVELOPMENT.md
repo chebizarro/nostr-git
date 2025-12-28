@@ -219,16 +219,6 @@ pnpm watch:ui        # UI components only
 pnpm watch:shared-types  # Types package only
 ```
 
-### Working with Storybook
-
-```bash
-# Start Storybook for UI development
-cd packages/storybook
-pnpm storybook
-
-# Storybook will be available at http://localhost:6006
-```
-
 ### Package-Specific Development
 
 ```bash
@@ -467,15 +457,6 @@ rm -rf node_modules packages/*/node_modules
 pnpm install
 ```
 
-#### Storybook Build Failures
-
-```bash
-# Clear Storybook cache
-cd packages/storybook
-rm -rf node_modules/.cache
-pnpm storybook
-```
-
 #### Extension Loading Issues
 
 ```bash
@@ -508,7 +489,6 @@ pnpm validate-manifest
 
 ```bash
 # Check for processes using ports
-lsof -i :6006  # Storybook
 lsof -i :3000  # Development server
 
 # Kill processes if needed

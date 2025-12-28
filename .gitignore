@@ -57,5 +57,3 @@ coverage/
 *.orig
 *.patch
 *.vsix
-
-*storybook.log

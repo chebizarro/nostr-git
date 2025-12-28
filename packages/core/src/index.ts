@@ -22,7 +22,6 @@ export * from './lib/git.js';
 export * from './lib/permalink.js';
 export * from './lib/event.js';
 export * from './lib/fork-handler.js';
-export * from './lib/git-provider.js';
 
 // Event publishing interfaces
 export { 
@@ -67,8 +66,6 @@ export {
 } from './lib/repoKeys.js';
 export { buildPatchDAG } from './lib/repoDAG.js';
 export * from './lib/status163x.js';
-export type { LabelNS } from './lib/labels32.js';
-export { mergeEffectiveLabels as mergeEffectiveLabels32 } from './lib/labels32.js';
 export * from './lib/grasp.js';
 export * from './utils/groupByRepoIdentity.js';
 

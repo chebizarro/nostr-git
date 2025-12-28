@@ -27,7 +27,6 @@
     pubkey: string;
     onPublishEvent: (event: RepoAnnouncementEvent | RepoStateEvent) => Promise<void>;
     graspServerUrls?: string[]; // Optional list of known GRASP servers to display
-    // Optional DI: override the useForkRepo hook (for Storybook/tests)
     useForkRepoImpl?: typeof useForkRepo;
   }
 

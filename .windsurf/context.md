@@ -23,7 +23,6 @@ pnpm install          # Install dependencies
 pnpm build           # Build all packages
 pnpm watch:all       # Development mode
 pnpm -r typecheck    # Type checking
-cd packages/storybook && pnpm storybook  # UI development
 ```
 
 ### Package Structure

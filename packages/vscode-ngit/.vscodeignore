@@ -18,7 +18,6 @@ vsc-extension-quickstart.md
 ../core/**
 ../git-wrapper/**
 ../shared-types/**
-../storybook/**
 ../ui/**
 
 # Exclude development files

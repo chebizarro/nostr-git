@@ -138,7 +138,6 @@ For detailed component documentation, see:
 
 - [API Reference](API_REFERENCE.md) - Complete component API
 - [Architecture Guide](ARCHITECTURE.md) - Component design patterns
-- [Storybook](../storybook/) - Interactive component examples
 
 ### Key Components
 
@@ -224,10 +223,6 @@ pnpm watch
 
 # Build components
 pnpm build
-
-# Run Storybook
-cd ../storybook
-pnpm storybook
 ```
 
 ### Testing Components
@@ -319,8 +314,7 @@ See the main project's [DEVELOPMENT.md](../../DEVELOPMENT.md) for development se
 1. **Props Interface**: Always define a clear Props interface
 2. **Accessibility**: Include proper ARIA attributes
 3. **Responsive**: Design mobile-first with responsive breakpoints
-4. **Documentation**: Add Storybook stories for all components
-5. **Testing**: Write comprehensive component tests
+4. **Testing**: Write comprehensive component tests
 
 ## 📄 License
 

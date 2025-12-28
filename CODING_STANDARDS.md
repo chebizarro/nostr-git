@@ -462,7 +462,6 @@ Brief description of changes
 - Svelte 5 with TypeScript
 - TailwindCSS for styling
 - Accessible components (ARIA attributes)
-- Storybook stories for all components
 
 ### Shared Types Package
 

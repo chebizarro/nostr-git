@@ -27,8 +27,6 @@ This platform bridges Git version control with Nostr's decentralized network, al
 - **[Extension](packages/extension/)** – Browser extension that adds Nostr publishing capabilities to GitHub
 - **[VSCode-ngit](packages/vscode-ngit/)** – VS Code extension adding Nostr Git (`ngit`) support to the IDE
 - **[Actions](packages/actions/)** – GitHub Actions for automatically publishing Nostr Git events on push, issue creation, etc.
-- **[Storybook](packages/storybook/)** – Component development and documentation environment
-
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -59,10 +57,6 @@ pnpm watch:all
 # Or watch specific packages
 pnpm watch:core
 pnpm watch:ui
-
-# Run Storybook for UI development
-cd packages/storybook
-pnpm storybook
 ```
 
 ## 🏗️ Architecture

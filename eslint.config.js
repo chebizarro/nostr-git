@@ -8,7 +8,6 @@ export default [
       "**/out/**",
       "**/.svelte-kit/**",
       "**/tools/**",
-      "packages/storybook/**",
       "packages/actions/**",
     ],
     languageOptions: {

@@ -336,6 +336,5 @@ export const logger = {
 
 - Use browser DevTools for extension debugging
 - VSCode debugger for Node.js components
-- Storybook for component development
 
 This context should help LLMs understand the project's patterns, conventions, and architectural decisions when working on the Nostr-Git codebase.

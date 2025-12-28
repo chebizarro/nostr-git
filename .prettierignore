@@ -4,7 +4,6 @@
 **/.svelte-kit/
 **/.next/
 **/.vite/
-**/storybook-static/
 **/coverage/
 
 # Dependencies
