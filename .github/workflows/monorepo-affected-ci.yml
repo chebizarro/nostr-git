@@ -36,8 +36,6 @@ jobs:
               - 'packages/shared-types/**'
             git_wrapper:
               - 'packages/git-wrapper/**'
-            actions:
-              - 'packages/actions/**'
             extension:
               - 'packages/extension/**'
             workflows:
@@ -52,13 +50,12 @@ jobs:
           # Build an array of package names to run
           PKGS=()
           if [ "$RUN_ALL" = "true" ]; then
-            PKGS=("@nostr-git/shared-types" "@nostr-git/core" "@nostr-git/git-wrapper" "@nostr-git/extension" "@nostr-git/actions")
+            PKGS=("@nostr-git/shared-types" "@nostr-git/core" "@nostr-git/git-wrapper" "@nostr-git/extension")
           else
             if [ "${{ steps.changes.outputs.shared_types }}" = "true" ]; then PKGS+=("@nostr-git/shared-types"); fi
             if [ "${{ steps.changes.outputs.core }}" = "true" ]; then PKGS+=("@nostr-git/core"); fi
             if [ "${{ steps.changes.outputs.git_wrapper }}" = "true" ]; then PKGS+=("@nostr-git/git-wrapper"); fi
             if [ "${{ steps.changes.outputs.extension }}" = "true" ]; then PKGS+=("@nostr-git/extension"); fi
-            if [ "${{ steps.changes.outputs.actions }}" = "true" ]; then PKGS+=("@nostr-git/actions"); fi
             # If only workflows or root files changed, run a lightweight all-packages check
             if [ ${#PKGS[@]} -eq 0 ] && { [ "${{ steps.changes.outputs.workflows }}" = "true" ] || [ "${{ steps.changes.outputs.root }}" = "true" ]; }; then
               PKGS=("@nostr-git/shared-types" "@nostr-git/core" "@nostr-git/git-wrapper" "@nostr-git/extension" "@nostr-git/actions")

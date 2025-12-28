@@ -293,16 +293,6 @@ This document identifies all places where authentication tokens are used in the 
 - **Usage**: Saves encrypted tokens to localStorage using NIP-04 encryption
 - **Storage Key**: Uses app-specific key for localStorage
 
-### 34. GitActions Component (`src/app/components/GitActions.svelte`)
-
-- **Token Usage**:
-  - Line ~216: Gets tokens from store and filters by hostname
-  - Line ~220-235: Uses `tryTokensForHost()` for push operations with fallback retry
-  - Falls back to pushing without token if none available
-- **Purpose**: Push local changes to remote from repository actions
-- **Fallback Retry**: ✅ Yes - UI layer handles token retry via `tryTokensForHost()`
-
-## Token Usage Patterns
 
 ### Pattern 1: UI Layer Token Retry (Primary Pattern)
 

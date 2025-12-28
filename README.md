@@ -26,7 +26,6 @@ This platform bridges Git version control with Nostr's decentralized network, al
 
 - **[Extension](packages/extension/)** – Browser extension that adds Nostr publishing capabilities to GitHub
 - **[VSCode-ngit](packages/vscode-ngit/)** – VS Code extension adding Nostr Git (`ngit`) support to the IDE
-- **[Actions](packages/actions/)** – GitHub Actions for automatically publishing Nostr Git events on push, issue creation, etc.
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -66,7 +65,6 @@ This monorepo follows a modular architecture where each package serves a specifi
 - **Core**: Event creation, parsing, and Nostr protocol integration
 - **UI**: Reusable Svelte components for Git/Nostr interfaces
 - **Extensions**: Platform-specific integrations (GitHub, VSCode)
-- **Actions**: CI/CD automation for Nostr event publishing
 
 ## 📖 Documentation
 

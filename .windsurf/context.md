@@ -32,7 +32,6 @@ pnpm -r typecheck    # Type checking
 - `@nostr-git/shared-types` - TypeScript definitions
 - `@nostr-git/git-wrapper` - Git operations
 - Extensions for GitHub, VSCode
-- GitHub Actions automation
 
 ### Important Files
 

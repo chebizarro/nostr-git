@@ -8,7 +8,6 @@ export default [
       "**/out/**",
       "**/.svelte-kit/**",
       "**/tools/**",
-      "packages/actions/**",
     ],
     languageOptions: {
       parser: ts.parser,

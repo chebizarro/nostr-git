@@ -17,9 +17,6 @@ packages/extension/dist/
 packages/vscode-ngit/out/
 packages/vscode-ngit/.vsix/
 
-# Actions
-packages/actions/dist/
-
 # Env/Secrets
 .env
 .env.*

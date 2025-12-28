@@ -5,8 +5,6 @@
 packages:
   # Main packages directory containing core libraries and applications
   - packages/*
-  # GitHub Actions workflows (separate subdirectory structure)
-  - packages/actions/*
 
 # Dependencies that should only be built from source, not downloaded as pre-built binaries
 # This ensures consistent builds across different platforms and environments

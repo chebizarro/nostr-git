@@ -14,7 +14,6 @@ vsc-extension-quickstart.md
 **/*.ts
 
 # Exclude parent directories and other packages
-../actions/**
 ../core/**
 ../git-wrapper/**
 ../shared-types/**

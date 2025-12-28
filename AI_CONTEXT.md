@@ -302,12 +302,6 @@ export interface WorkerResponse {
 - Use content scripts for DOM manipulation
 - Background scripts for Nostr operations
 
-### GitHub Actions Integration
-
-- Webhook-driven event publishing
-- Environment-based configuration
-- Secure secret management
-
 ### VSCode Integration
 
 - Language server protocol for Git operations

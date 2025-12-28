@@ -14,8 +14,8 @@ See also: [Git Stacking and Merge Metadata](docs/nostr-git-stacking.md)
 ├─────────────────────────────────────────────────────────────┤
 │  Applications & Extensions                                  │
 │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐          │
-│  │   Browser   │ │   VSCode    │ │   GitHub    │          │
-│  │  Extension  │ │  Extension  │ │   Actions   │          │
+│  │   Browser   │ │   VSCode    │ │   CLI       │          │
+│  │  Extension  │ │  Extension  │ │             │          │
 │  └─────────────┘ └─────────────┘ └─────────────┘          │
 ├─────────────────────────────────────────────────────────────┤
 │  UI Layer                                                   │
