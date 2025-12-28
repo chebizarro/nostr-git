@@ -1,5 +1,4 @@
 // Core: labels resolver using shared-types nip32 helpers
-
 import type { NostrEvent } from 'nostr-tools';
 import {
   extractSelfLabels,
@@ -16,3 +15,4 @@ export function effectiveLabelsFor(target: { self: NostrEvent; external: NostrEv
   const merged = mergeEffectiveLabels({ self, external, t });
   return { normalized: [...merged.flat] };
 }
+

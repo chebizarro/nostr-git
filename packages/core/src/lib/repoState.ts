@@ -1,5 +1,4 @@
 // Core: repo state merge (30618) bounded by maintainers
-
 import type { RepoStateEvent, NostrTag } from '@nostr-git/shared-types';
 
 export type RefHeads = Record<

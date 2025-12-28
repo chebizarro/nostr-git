@@ -2,11 +2,6 @@
 import { getGitProvider } from './git-provider.js';
 import { rootDir } from './git.js';
 
-export interface Remote {
-  name: string;
-  url: string;
-}
-
 /**
  * Fetch from a remote.
  */

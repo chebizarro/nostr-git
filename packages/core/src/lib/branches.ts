@@ -1,14 +1,8 @@
 import { getGitProvider } from './git-provider.js';
 import { rootDir } from './git.js';
-import { canonicalRepoKey } from './utils/canonicalRepoKey.js';
-import { parseRepoAnnouncementEvent, RepoAnnouncementEvent } from '@nostr-git/shared-types';
+import { canonicalRepoKey } from '../utils/canonicalRepoKey.js';
+import { parseRepoAnnouncementEvent, RepoAnnouncementEvent, Branch } from '@nostr-git/shared-types';
 import { assertRepoAnnouncementEvent } from './validation.js';
-
-export interface Branch {
-  name: string;
-  oid?: string; // commit hash
-  isHead: boolean;
-}
 
 export async function listBranchesFromEvent(opts: {
   repoEvent: RepoAnnouncementEvent;

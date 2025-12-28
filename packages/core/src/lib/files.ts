@@ -6,8 +6,12 @@ import {
   getDefaultBranch,
   resolveRobustBranch
 } from './git.js';
-import { canonicalRepoKey } from './utils/canonicalRepoKey.js';
-import { parseRepoAnnouncementEvent, type RepoAnnouncementEvent } from '@nostr-git/shared-types';
+import { canonicalRepoKey } from '../utils/canonicalRepoKey.js';
+import {
+  parseRepoAnnouncementEvent, 
+  type RepoAnnouncementEvent, 
+  type FileEntry 
+} from '@nostr-git/shared-types';
 import { Buffer } from 'buffer';
 import { assertRepoAnnouncementEvent } from './validation.js';
 
@@ -20,28 +24,6 @@ declare global {
 
 if (typeof globalThis.Buffer === 'undefined') {
   globalThis.Buffer = Buffer;
-}
-
-/**
- * Represents a file or directory in a Git repository.
- */
-export interface FileEntry {
-  /**
-   * The name of the file or directory.
-   */
-  name: string;
-  /**
-   * The path of the file or directory.
-   */
-  path: string;
-  /**
-   * The type of the file or directory.
-   */
-  type: 'file' | 'directory' | 'submodule' | 'symlink';
-  /**
-   * The object ID of the file or directory, if applicable.
-   */
-  oid?: string;
 }
 
 /**

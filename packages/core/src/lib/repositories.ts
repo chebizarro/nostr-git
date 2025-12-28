@@ -1,7 +1,8 @@
 // Core: repositories grouping & maintainers
-// All I/O via injected closures.
-
-import type { RepoAnnouncementEvent, NostrTag } from '@nostr-git/shared-types';
+import type {
+  RepoAnnouncementEvent,
+  NostrTag
+} from '@nostr-git/shared-types';
 
 /**
  * Validate that a string is a valid hex pubkey (exactly 64 hex characters)

@@ -1,6 +1,5 @@
 // @nostr-git/core: repoDAG.ts
 // Build a Patch DAG from NIP-34 Patch events
-
 import type { NostrEvent } from "@nostr-git/shared-types";
 import type { PatchEvent } from "@nostr-git/shared-types";
 

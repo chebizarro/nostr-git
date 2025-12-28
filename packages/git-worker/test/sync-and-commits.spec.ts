@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { syncWithRemoteUtil, needsUpdateUtil } from '../../src/lib/workers/sync.js';
+import { syncWithRemoteUtil, needsUpdateUtil } from '../src/lib/workers/sync.js';
 import type { GitProvider } from '@nostr-git/git-wrapper';
-import type { RepoCacheManager, RepoCache } from '../../src/lib/workers/cache.js';
+import type { RepoCacheManager, RepoCache } from '../src/lib/workers/cache.js';
 
 describe('syncWithRemote with Enhanced Logging', () => {
   let mockGit: Partial<GitProvider>;

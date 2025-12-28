@@ -1,5 +1,3 @@
-import { getGitWorker } from '@nostr-git/git-worker';
-
 export interface ForkOptions {
   sourceUrl: string;
   targetHost: 'github' | 'gitlab' | 'gitea';
@@ -11,7 +9,8 @@ export interface ForkOptions {
 }
 
 export async function forkViaWorker(opts: ForkOptions): Promise<string> {
-  const { api } = await getGitWorker();
+  const { getGitWorker } = await import('@nostr-git/git-worker');
+  const { api } = getGitWorker();
   const url = await api.cloneAndFork(opts);
   return url;
 }

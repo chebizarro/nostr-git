@@ -1,5 +1,4 @@
 // Core: Patch DAG builder using NIP-34 patch tags (commit / parent-commit)
-
 import type { PatchEvent } from '@nostr-git/shared-types';
 
 export type PatchNode = {

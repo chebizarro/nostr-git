@@ -1,4 +1,5 @@
 // Canonical shared types for nostr-git
+import { NostrEvent } from "nostr-tools";
 
 /**
  * Canonical Commit type (from core)
@@ -70,4 +71,52 @@ export interface Patch {
   raw: any
   diff: any
   commits: Commit[]
+}
+
+/**
+ * Branch: describes a branch in a repository
+ */
+export interface Branch {
+  name: string;
+  oid?: string; // commit hash
+  isHead: boolean;
+}
+
+/**
+ * Represents a file or directory in a Git repository.
+ */
+export interface FileEntry {
+  /**
+   * The name of the file or directory.
+   */
+  name: string;
+  /**
+   * The path of the file or directory.
+   */
+  path: string;
+  /**
+   * The type of the file or directory.
+   */
+  type: 'file' | 'directory' | 'submodule' | 'symlink';
+  /**
+   * The object ID of the file or directory, if applicable.
+   */
+  oid?: string;
+}
+
+/**
+ * IssueThread: represents a thread of events related to an issue
+ */
+export type IssueThread = {
+  root: NostrEvent;
+  comments: NostrEvent[];
+  statuses: NostrEvent[];
+};
+
+/**
+ * Remote: describes a remote repository
+ */
+export interface Remote {
+  name: string;
+  url: string;
 }

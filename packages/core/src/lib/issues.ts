@@ -1,13 +1,6 @@
-// Core: Issue + NIP-22 comment assembler
-
 import type { NostrEvent } from 'nostr-tools';
 import { resolveStatus } from './status-resolver.js';
-
-export type IssueThread = {
-  root: NostrEvent;
-  comments: NostrEvent[];
-  statuses: NostrEvent[];
-};
+import type { IssueThread } from '@nostr-git/shared-types';
 
 function asSet<T>(arr: T[]): Set<T> {
   return new Set(arr);

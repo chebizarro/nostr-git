@@ -117,6 +117,10 @@ export type {
   FileDiff,
   CommitDiff,
   CommitMeta,
+  Branch,
+  FileEntry,
+  IssueThread,
+  Remote,
 } from "./core.js"
 
 // Relay sanitizer

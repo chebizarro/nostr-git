@@ -6,7 +6,7 @@ import { getTagValue, getTag, type EventIO } from '@nostr-git/shared-types';
 export type HexString = Uint8Array<ArrayBufferLike>;
 
 /**
- * Creates a NIP-34 permalink event from a URL - CLEAN VERSION
+ * Creates a NIP-34 permalink event from a URL
  * Uses EventIO instead of passing signers around
  *
  * @param permalink - The permalink, as copied directly from GitHub/Gitea/GitLab.

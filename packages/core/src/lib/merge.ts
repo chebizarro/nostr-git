@@ -1,4 +1,3 @@
-import { getGitWorker } from '@nostr-git/git-worker';
 import type { MergeAnalysisResult } from './merge-analysis.js';
 import { buildMergeMetadataEventFromAnalysis, buildConflictMetadataEventFromAnalysis } from './merge-analysis.js';
 import type { RepoAddressA } from '@nostr-git/shared-types';
@@ -13,7 +12,8 @@ export async function analyzePatchMerge(
   targetBranch?: string,
   onProgress?: (event: any) => void
 ): Promise<MergeAnalysisResult> {
-  const { api, worker } = await getGitWorker(onProgress);
+  const { getGitWorker } = await import('@nostr-git/git-worker');
+  const { api, worker } = getGitWorker(onProgress);
 
   try {
     // Serialize patch data for worker communication

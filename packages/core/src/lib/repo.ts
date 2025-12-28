@@ -2,12 +2,13 @@ import type {
   RepoAnnouncementEvent,
   RepoStateEvent,
   RepoAnnouncement,
-  RepoState
+  RepoState,
+  Branch
 } from '@nostr-git/shared-types';
 import type { GitProvider } from '@nostr-git/git-wrapper';
 import { parseRepoAnnouncementEvent, parseRepoStateEvent } from '@nostr-git/shared-types';
 import { getGitProvider } from './git-provider.js';
-import { Branch, listBranches } from './branches.js';
+import { listBranches } from './branches.js';
 import { rootDir } from './git.js';
 import { assertRepoAnnouncementEvent, assertRepoStateEvent } from './validation.js';
 

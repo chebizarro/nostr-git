@@ -1,5 +1,4 @@
 // Core: status precedence resolver (separate from existing git status utilities)
-
 import type { NostrEvent } from 'nostr-tools';
 
 export type LocalStatusEvent = NostrEvent; // refine when wired to shared-types

@@ -1,9 +1,22 @@
 // Entry point for @nostr-git/core
 // Export all main public APIs from core/src/lib
 
-// Re-export worker functionality from git-worker package
-export { getGitWorker, configureWorkerEventIO } from '@nostr-git/git-worker';
+// Worker functionality from git-worker package
+// NOTE: This must be lazy-imported because the git-worker client uses bundler-only
+// module specifiers (e.g. '?worker&url') that crash in pure Node runtimes.
 export type { CloneProgressEvent } from '@nostr-git/git-worker';
+
+export async function getGitWorker(
+  onProgress?: (event: MessageEvent | import('@nostr-git/git-worker').CloneProgressEvent) => void
+) {
+  const mod = await import('@nostr-git/git-worker');
+  return mod.getGitWorker(onProgress);
+}
+
+export async function configureWorkerEventIO(api: any, io: import('@nostr-git/shared-types').EventIO): Promise<void> {
+  const mod = await import('@nostr-git/git-worker');
+  return mod.configureWorkerEventIO(api, io);
+}
 
 export * from './lib/git.js';
 export * from './lib/permalink.js';
@@ -11,7 +24,7 @@ export * from './lib/event.js';
 export * from './lib/fork-handler.js';
 export * from './lib/git-provider.js';
 
-// Clean event publishing interfaces
+// Event publishing interfaces
 export { 
   createEventPublisher, 
   createBatchEventPublisher, 
@@ -31,8 +44,7 @@ export * from './lib/branches.js';
 export * from './lib/patches.js';
 export * from './lib/merge-analysis.js';
 export * from './lib/merge.js';
-export * from './lib/git/index.js';
-export * from './lib/utils/binaryUtils.js';
+export * from './utils/binaryUtils.js';
 export * from './lib/validation.js';
 // NIP-34 alignment scaffolding exports
 export * from './lib/repositories.js';
@@ -58,7 +70,7 @@ export * from './lib/status163x.js';
 export type { LabelNS } from './lib/labels32.js';
 export { mergeEffectiveLabels as mergeEffectiveLabels32 } from './lib/labels32.js';
 export * from './lib/grasp.js';
-export * from './lib/utils/groupByRepoIdentity.js';
+export * from './utils/groupByRepoIdentity.js';
 
 // Git Interface Hardening - New modules
 export * from './keys/index.js';
@@ -69,23 +81,3 @@ export * from './trace/index.js';
 
 // Re-export Comlink proxy for worker communication
 export { proxy } from 'comlink';
-
-// NostrGitProvider and GRASP Integration exports
-export {
-  NostrGitProvider,
-  type NostrGitConfig,
-  type RepoDiscovery,
-  type NostrPushResult
-} from './lib/git/providers/nostr-git-provider.js';
-export {
-  GraspApi,
-  type GraspApiConfig
-} from './lib/git/providers/grasp-api.js';
-export {
-  createNostrGitProvider,
-  createNostrGitProviderFromEnv,
-  createNostrGitProviderFromGitConfig,
-  selectProvider,
-  createProviderForUrl,
-  DEFAULT_RELAYS
-} from './lib/git/providers/nostr-git-factory.js';

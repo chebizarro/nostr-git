@@ -296,24 +296,6 @@ function extractRepoName(repoId: string): string {
 }
 
 /**
-// export function createCommentEvent(opts: {
-//   content: string;
-//   tags: CommentTag[];
-//   created_at?: number;
-//   pubkey?: string;
-//   id?: string;
-// }): CommentEvent {
-//   return {
-//     kind: 1111,
-//     content: opts.content,
-//     tags: opts.tags,
-//     created_at: opts.created_at ?? Math.floor(Date.now() / 1000),
-//     ...(opts.pubkey ? { pubkey: opts.pubkey } : {}),
-//     ...(opts.id ? { id: opts.id } : {}),
-//   } as CommentEvent;
-// }
-
-/**
  * Create a repo announcement event (kind 30617)
  */
 export function createRepoAnnouncementEvent(opts: {
