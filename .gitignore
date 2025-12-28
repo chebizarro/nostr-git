@@ -14,8 +14,6 @@ build/
 
 # Extensions
 packages/extension/dist/
-packages/vscode-ngit/out/
-packages/vscode-ngit/.vsix/
 
 # Env/Secrets
 .env
@@ -38,9 +36,6 @@ pnpm-debug.log*
 
 # SvelteKit
 .svelte-kit/
-
-# VS Code Webview build artifacts (optional if you inline them)
-packages/vscode-ngit/media/
 
 # Test / Coverage
 coverage/

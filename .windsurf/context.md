@@ -31,7 +31,7 @@ pnpm -r typecheck    # Type checking
 - `@nostr-git/ui` - Svelte components
 - `@nostr-git/shared-types` - TypeScript definitions
 - `@nostr-git/git-wrapper` - Git operations
-- Extensions for GitHub, VSCode
+- Extensions for GitHub
 
 ### Important Files
 

@@ -302,12 +302,6 @@ export interface WorkerResponse {
 - Use content scripts for DOM manipulation
 - Background scripts for Nostr operations
 
-### VSCode Integration
-
-- Language server protocol for Git operations
-- Command palette integration
-- Status bar indicators
-
 ## Debugging Guidelines
 
 ### Logging Strategy

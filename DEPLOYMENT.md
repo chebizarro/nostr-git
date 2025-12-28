@@ -36,10 +36,6 @@ cd packages/extension
 # Production builds (Chrome/Firefox)
 pnpm build:chrome:prod
 pnpm build:firefox:prod
-
-# VSCode extension
-cd packages/vscode-ngit
-pnpm package        # Creates .vsix file
 ```
 
 ### Build Optimization
@@ -113,19 +109,6 @@ Notes:
   ```
   The release:zip script can also be run with the env var to produce a debugless Chrome bundle.
 
-#### VSCode Marketplace
-
-```bash
-# Package extension
-cd packages/vscode-ngit
-pnpm package
-
-# Publish to marketplace
-vsce publish
-
-# Or publish manually via:
-# https://marketplace.visualstudio.com/manage
-```
 
 ## Environment Configuration
 
@@ -216,19 +199,6 @@ export function trackEvent(event: string, properties?: object) {
 }
 ```
 
-#### VSCode Extension Telemetry
-
-```typescript
-// packages/vscode-ngit/src/telemetry.ts
-import * as vscode from "vscode"
-
-export function trackCommand(command: string) {
-  // VSCode built-in telemetry
-  vscode.env.telemetryLevel !== vscode.TelemetryLevel.Off &&
-    console.log(`Command executed: ${command}`)
-}
-```
-
 ## Security Considerations
 
 ### Build Security
@@ -285,7 +255,6 @@ npm deprecate @nostr-git/core@1.2.3 "Security vulnerability, use 1.2.4+"
 
 ```bash
 # Chrome Web Store: Use developer dashboard to rollback
-# VSCode Marketplace: Unpublish via marketplace portal
 
 # Emergency: Remove from stores and notify users
 ```

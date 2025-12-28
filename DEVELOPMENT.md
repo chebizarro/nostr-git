@@ -9,7 +9,6 @@ This guide covers local development setup, workflows, and best practices for the
 - **Node.js**: Version 18.0.0 or higher
 - **pnpm**: Version 8.0.0 or higher (preferred package manager)
 - **Git**: Version 2.30.0 or higher
-- **VSCode**: Recommended IDE with extensions
 
 ### Recommended VSCode Extensions
 
@@ -271,7 +270,6 @@ DEBUG=nostr-git:*
 #### Extensions
 
 - Manifest V3 for browser extension
-- VSCode extension API for IDE integration
 
 ## Testing
 
@@ -347,17 +345,6 @@ Notes:
 - **Confirm dialogs**: shown before repo announcements and permalinks; cancel shows a gentle cancel snackbar.
 - **Snackbars**: persistent until dismissed; auto-dismiss 5s (success/error) or 3s (cancel). Animated fade/slide; respects reduced motion.
 - **Debug option visibility**: a compile-time flag controls visibility in the popup. In development it is visible by default; in release builds it can be hidden with `NOSTR_GIT_SHOW_DEBUG=false`.
-
-### VSCode Extension Debugging
-
-```bash
-# Open extension in development mode
-cd packages/vscode-ngit
-code .
-
-# Press F5 to launch Extension Development Host
-# Set breakpoints in TypeScript files
-```
 
 ### Core Library Debugging
 

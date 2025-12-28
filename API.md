@@ -297,10 +297,6 @@ interface BackgroundAPI {
 }
 ```
 
-### VSCode Extension API
-
-The VSCode extension provides commands and UI integration for Nostr-Git operations.
-
 #### Commands
 
 ```typescript
