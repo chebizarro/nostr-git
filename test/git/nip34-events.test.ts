@@ -7,7 +7,11 @@ import {
   type PullRequestEvent,
   createPatchEvent,
   createPullRequestEvent,
-} from '@nostr-git/shared-types';
+} from '@nostr-git/types';
+import {
+  createPatchEvent,
+  createPullRequestEvent,
+} from '@nostr-git/events';
 
 function freezeEvent<T extends NostrEvent>(evt: T): T {
   return {

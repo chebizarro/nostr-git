@@ -58,7 +58,7 @@
   });
 </script>
 
-<div class="unknown-event border-l-4 border-yellow-500 bg-yellow-50 p-4 rounded-r-lg">
+<div class="unknown-event border-l-4 border-yellow-500 bg-yellow-50 p-4 rounded-r-lg transition-all duration-200 ease-in-out hover:shadow-md">
   <div class="flex items-start gap-3">
     <HelpCircle class="text-yellow-600 mt-1" size={20} />
 
@@ -73,7 +73,7 @@
       </div>
 
       {#if eventContent}
-        <div class="prose prose-sm max-w-none mb-3">
+        <div class="prose prose-sm max-w-none mb-3 break-words overflow-wrap-anywhere">
           <div class="bg-gray-50 p-3 rounded border">
             <p class="text-gray-800 whitespace-pre-wrap">{eventContent}</p>
           </div>
@@ -153,31 +153,9 @@
 
       {#if expandedRaw}
         <div class="mt-3 bg-gray-900 text-green-400 p-3 rounded text-xs font-mono overflow-x-auto">
-          <pre>{JSON.stringify(event, null, 2)}</pre>
+          <pre class="whitespace-pre-wrap break-words max-h-[300px] overflow-y-auto">{JSON.stringify(event, null, 2)}</pre>
         </div>
       {/if}
     </div>
   </div>
 </div>
-
-<style>
-  .unknown-event {
-    transition: all 0.2s ease-in-out;
-  }
-
-  .unknown-event:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  }
-
-  .prose {
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-  }
-
-  pre {
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    max-height: 300px;
-    overflow-y: auto;
-  }
-</style>

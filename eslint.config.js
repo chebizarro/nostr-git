@@ -20,7 +20,7 @@ export default [
           selector:
             "CallExpression[callee.type='MemberExpression'][callee.property.name=/^(find|filter)$/] > *.object[type='MemberExpression'][property.name='tags']",
           message:
-            "Do not use event.tags.find/filter directly. Use getTag/getTags/getTagValue from @nostr-git/shared-types.",
+            "Do not use event.tags.find/filter directly. Use getTag/getTags/getTagValue from @nostr-git/events.",
         },
         {
           selector:
@@ -54,7 +54,7 @@ export default [
   },
   // Allow helper implementation code to access tags directly
   {
-    files: ["packages/shared-types/src/**/*.*"],
+    files: ["packages/events/src/**/*.*"],
     rules: {
       "no-restricted-syntax": "off",
     },

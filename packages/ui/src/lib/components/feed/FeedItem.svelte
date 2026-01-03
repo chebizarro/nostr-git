@@ -49,16 +49,10 @@
   };
 </script>
 
-<style>
-  .highlighted {
-    background-color: rgba(59, 130, 246, 0.05);
-    border-left: 2px solid rgb(59, 130, 246);
-  }
-</style>
-
 <div
-  class="group relative px-4 py-2.5 hover:bg-gray-800/20 transition-colors duration-150"
-  class:highlighted={isHighlighted}
+  class={`group relative px-4 py-2.5 hover:bg-gray-800/20 transition-colors duration-150 ${
+    isHighlighted ? "bg-blue-500/5 border-l-2 border-blue-500" : ""
+  }`}
   onmouseenter={() => isHovered = true}
   onmouseleave={() => isHovered = false}
   role="article"

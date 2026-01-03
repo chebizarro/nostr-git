@@ -38,11 +38,14 @@
 
     // Path mapping for workspace packages to enable cross-package imports
     "paths": {
-      "@nostr-git/core": ["packages/core/src"],
-      "@nostr-git/git-worker": ["packages/git-worker/src"],
-      "@nostr-git/ui": ["packages/ui/src/lib"],
-      "@nostr-git/shared-types": ["packages/shared-types/src"],
-      "@nostr-git/git-wrapper": ["packages/git-wrapper/src"]
+      "@nostr-git/types": ["packages/types/src"],
+      "@nostr-git/events": ["packages/events/src"],
+      "@nostr-git/git": ["packages/git/src/index.ts"],
+      "@nostr-git/git-impl": ["packages/git-impl/src/index.ts"],
+      "@nostr-git/flows": ["packages/flows/src"],
+      "@nostr-git/sdk": ["packages/sdk/src"],
+      "@nostr-git/worker": ["packages/worker/src"],
+      "@nostr-git/ui": ["packages/ui/src/lib"]
     }
   }
 }

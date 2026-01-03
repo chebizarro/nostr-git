@@ -54,9 +54,6 @@
     "nostr"
   ],
   "dependencies": {
-    "@nostr-git/git-wrapper": "workspace:*",
-    "@nostr-git/git-worker": "workspace:*",
-    "@nostr-git/shared-types": "workspace:*",
     "isomorphic-git": "https://github.com/chebizarro/isomorphic-git/releases/download/v2.0.0-alpha/isomorphic-git-2.0.0-alpha.tgz",
     "axios": "^1.9.0",
     "buffer": "^6.0.3",

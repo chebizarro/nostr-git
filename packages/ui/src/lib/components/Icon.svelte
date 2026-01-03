@@ -30,17 +30,9 @@
 </script>
 
 <span
-  class="inline-flex items-center justify-center {className}"
+  class="inline-flex items-center justify-center align-middle leading-none {className}"
   style="font-size: {typeof size === 'number' ? size + 'px' : size};"
   title={name}
 >
   {iconSymbol}
 </span>
-
-<style>
-  span {
-    /* Basic icon styling */
-    line-height: 1;
-    vertical-align: middle;
-  }
-</style>

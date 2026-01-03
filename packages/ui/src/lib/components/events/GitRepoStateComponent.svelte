@@ -89,7 +89,7 @@
   });
 </script>
 
-<div class="git-repo-state-event border-l-4 border-green-500 bg-green-50 p-4 rounded-r-lg">
+<div class="git-repo-state-event border-l-4 border-green-500 bg-green-50 p-4 rounded-r-lg transition-all duration-200 ease-in-out hover:shadow-md">
   <div class="flex items-start gap-3">
     <GitBranch class="text-green-600 mt-1" size={20} />
 
@@ -188,14 +188,3 @@
     </div>
   </div>
 </div>
-
-<style>
-  .git-repo-state-event {
-    /* Custom styling for git repository state events */
-    transition: all 0.2s ease-in-out;
-  }
-
-  .git-repo-state-event:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  }
-</style>

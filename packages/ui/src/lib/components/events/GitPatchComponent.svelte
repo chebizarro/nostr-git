@@ -192,7 +192,7 @@
       {:else}
         <div class="bg-muted/30 p-3 rounded border text-sm mb-3">
           <pre
-            class="whitespace-pre-wrap overflow-x-auto max-h-48 overflow-y-auto">{patchContent}</pre>
+            class="whitespace-pre-wrap overflow-x-auto max-h-48 overflow-y-auto font-mono text-xs leading-snug">{patchContent}</pre>
         </div>
 
         <div class="grid grid-cols-2 gap-2 text-xs mb-3">
@@ -253,11 +253,3 @@
     </div>
   </div>
 </Card>
-
-<style>
-  pre {
-    font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
-    font-size: 0.75rem;
-    line-height: 1.4;
-  }
-</style>

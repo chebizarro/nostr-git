@@ -55,7 +55,7 @@
   }
 </script>
 
-<div class="container">
+<div class="flex flex-col gap-3 max-w-[600px] my-4">
   <label>
     Paste a GitHub/GitLab/Gitea permalink:
     <textarea
@@ -63,6 +63,7 @@
       bind:value={permalinkText}
       onpaste={handlePaste}
       placeholder="https://github.com/user/repo/blob/main/path/to/file.ts#L10-L20"
+      class="w-full font-inherit"
     >
     </textarea>
   </label>
@@ -70,25 +71,6 @@
   {#if loading}
     <p>Loading...</p>
   {:else if errorMessage}
-    <pre class="error">{errorMessage}</pre>
+    <pre class="text-red-600 bg-[#ffd3d3] p-2">{errorMessage}</pre>
   {/if}
 </div>
-
-<style>
-  .container {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    max-width: 600px;
-    margin: 1rem 0;
-  }
-  textarea {
-    width: 100%;
-    font-family: inherit;
-  }
-  .error {
-    color: red;
-    background: #ffd3d3;
-    padding: 0.5rem;
-  }
-</style>

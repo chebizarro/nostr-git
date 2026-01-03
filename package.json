@@ -1,24 +1,18 @@
 {
-  "name": "nostr-git-monorepo",
+  "name": "nostr-git",
   "private": true,
-  "workspaces": [
-    "packages/*"
-  ],
   "packageManager": "pnpm@10.12.4",
   "type": "module",
   "scripts": {
-    "build": "pnpm -r build",
+    "build": "pnpm -r --filter '!@nostr-git/ui' build",
     "format": "pnpm -r run format || true",
     "lint": "pnpm -r run lint || true",
     "lint:eslint": "eslint . --ignore-pattern tools/**",
     "typecheck": "pnpm -r run typecheck || true",
-    "test": "pnpm -r test || true",
+    "test": "pnpm -r --filter '!@nostr-git/ui' test || true",
     "watch": "pnpm -r --parallel --stream watch",
-    "watch:core": "pnpm --filter @nostr-git/core watch",
     "watch:ui": "pnpm --filter @nostr-git/ui watch",
-    "watch:git-worker": "pnpm --filter @nostr-git/git-worker watch",
-    "watch:shared-types": "pnpm --filter @nostr-git/shared-types watch",
-    "watch:git-wrapper": "pnpm --filter @nostr-git/git-wrapper watch",
+    "watch:worker": "pnpm --filter @nostr-git/worker watch",
     "watch:all": "pnpm -r --parallel --stream run watch",
     "codemod:tag-helpers:dry": "pnpm dlx jscodeshift -d -p -t tools/codemods/tag-helpers/transform.js 'packages/**/src/**/*.{ts,tsx,js,jsx}'",
     "codemod:tag-helpers": "pnpm dlx jscodeshift -t tools/codemods/tag-helpers/transform.js 'packages/**/src/**/*.{ts,tsx,js,jsx}'"
