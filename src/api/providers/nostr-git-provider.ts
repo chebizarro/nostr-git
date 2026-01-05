@@ -3,21 +3,16 @@
  * 
  * This provider integrates with the upgraded @nostr-git/git-wrapper package to provide
  * full GRASP support, multi-relay coordination, and ngit-compatible functionality.
- * 
- * Based on ngit reference implementation:
- * - src/lib/git/mod.rs (RepoActions trait)
- * - src/lib/repo_state.rs (RepoState management)
- * - src/lib/client.rs (multi-relay coordination)
  */
 
 import type { 
   GitProvider, 
   HttpOverrides
-} from '@nostr-git/git';
-import { getGitProvider } from '@nostr-git/git-impl';
-import type { EventIO } from '@nostr-git/types';
-import type { RepoAnnouncementEvent, RepoStateEvent } from '@nostr-git/events';
-import { createRepoStateEvent, createRepoAnnouncementEvent } from '@nostr-git/events';
+} from '../../git/provider.js';
+import { getGitProvider } from '../../git/factory.js';
+import type { EventIO } from '../../types/index.js';
+import type { RepoAnnouncementEvent, RepoStateEvent } from '../../events/index.js';
+import { createRepoStateEvent, createRepoAnnouncementEvent, getTags } from '../../events/index.js';
 
 export interface NostrGitConfig {
   eventIO: EventIO;
@@ -99,21 +94,10 @@ export class NostrGitProvider {
 
       // Get the latest announcement event
       const announcement = events[0] as RepoAnnouncementEvent;
-      
-      // Extract clone URLs from tags
-      const cloneUrls = announcement.tags
-        .filter((tag: any) => tag[0] === 'clone')
-        .flatMap((tag: any) => tag.slice(1));
 
-      // Extract maintainers from announcement tags
-      const maintainers = announcement.tags
-        .filter((tag: any) => tag[0] === 'maintainers')
-        .flatMap((tag: any) => tag.slice(1));
-      
-      // Extract relays from announcement tags
-      const relays = announcement.tags
-        .filter((tag: any) => tag[0] === 'relays')
-        .flatMap((tag: any) => tag.slice(1));
+      const cloneUrls = getTags(announcement as any, 'clone').flatMap((t: any) => (t as string[]).slice(1));
+      const maintainers = getTags(announcement as any, 'maintainers').flatMap((t: any) => (t as string[]).slice(1));
+      const relays = getTags(announcement as any, 'relays').flatMap((t: any) => (t as string[]).slice(1));
 
       // Try to get repo state
       const stateFilters = [

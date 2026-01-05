@@ -6,12 +6,8 @@ import {
   type PatchEvent,
   type PullRequestEvent,
   createPatchEvent,
-  createPullRequestEvent,
-} from '@nostr-git/types';
-import {
-  createPatchEvent,
-  createPullRequestEvent,
-} from '@nostr-git/events';
+  createPullRequestEvent
+} from '../../src/events/index.js';
 
 function freezeEvent<T extends NostrEvent>(evt: T): T {
   return {

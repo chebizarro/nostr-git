@@ -1,4 +1,4 @@
-import type { GitProvider } from "@nostr-git/git"
+import type { GitProvider } from "./provider.js"
 import {IsomorphicGitProvider} from "./isomorphic-git-provider.js"
 import {CachedGitProvider} from "./cached-provider.js"
 import {loadConfig, type GitWrapperConfig} from "./config.js"

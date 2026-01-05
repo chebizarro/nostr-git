@@ -1,4 +1,4 @@
-import type { GitProvider } from "@nostr-git/git"
+import type { GitProvider } from "./provider.js"
 import type {CacheMode, GitWrapperConfig} from "./config.js"
 
 // Simple per-dir cache store with TTL

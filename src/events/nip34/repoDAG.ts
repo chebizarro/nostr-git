@@ -1,14 +1,8 @@
-// @nostr-git/flows: repoDAG.ts
+// repoDAG.ts
 // Build a Patch DAG from NIP-34 Patch events
 import type { Event as NostrEvent } from "nostr-tools";
-import type { PatchEvent } from "@nostr-git/events";
-
-export interface PatchNode {
-  id: string; // commit id
-  parentIds: string[];
-  isRoot: boolean;
-  revisionRootId?: string;
-}
+import type { PatchEvent } from "./nip34.js";
+import type { PatchNode } from "./patchGraph.js";
 
 function getTagValues(e: NostrEvent, name: string): string[] {
   return (e.tags as string[][]).filter((t) => t[0] === name).map((t) => t[1]);
@@ -44,12 +38,19 @@ export function buildPatchDAG(events: NostrEvent[]): { nodes: PatchNode[]; roots
     const parents = getTagValues(effective, "parent-commit");
     const isRoot = sorted.some((e) => hasTag(e, "t", "root")) || parents.length === 0;
     const isRevisionRoot = sorted.some((e) => hasTag(e, "t", "root-revision"));
+    const allEventIds = sorted.map((evt) => (evt as any).id as string).filter(Boolean);
+    const supersededEventIds = allEventIds.slice(0, -1);
 
     const node: PatchNode = {
       id: commit,
-      parentIds: parents,
+      event: effective,
+      parents,
+      children: [],
       isRoot,
-      revisionRootId: isRevisionRoot ? commit : undefined,
+      isRevisionRoot,
+      commit,
+      allEventIds,
+      supersededEventIds,
     };
 
     nodes.push(node);

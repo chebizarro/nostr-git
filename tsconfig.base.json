@@ -1,51 +1,19 @@
 {
   "compilerOptions": {
-    // Target ES2020 for modern JavaScript features while maintaining broad compatibility
     "target": "ES2020",
-
-    // Include DOM and WebWorker libraries for browser and worker environments
     "lib": ["ES2020", "DOM", "WebWorker"],
-
-    // Use ESNext modules for tree-shaking and modern import/export syntax
-    "module": "ESNext",
-
-    // Node.js module resolution for proper package resolution in monorepo
-    "moduleResolution": "Node",
-
-    // Enable interoperability between CommonJS and ES modules
-    "esModuleInterop": true,
-
-    // Enforce consistent file name casing across different file systems
-    "forceConsistentCasingInFileNames": true,
-
-    // Enable all strict type checking options for better code quality
-    "strict": true,
-
-    // Skip type checking of declaration files to improve compilation speed
-    "skipLibCheck": true,
-
-    // Allow importing JSON files as modules (useful for package.json imports)
-    "resolveJsonModule": true,
-
-    // Generate .d.ts declaration files for TypeScript consumers
-    "declaration": true,
-
-    // Output directory for compiled files (each package overrides this)
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rootDir": "src",
     "outDir": "dist",
-
-    // Base URL for relative path resolution
-    "baseUrl": ".",
-
-    // Path mapping for workspace packages to enable cross-package imports
-    "paths": {
-      "@nostr-git/types": ["packages/types/src"],
-      "@nostr-git/events": ["packages/events/src"],
-      "@nostr-git/git": ["packages/git/src/index.ts"],
-      "@nostr-git/git-impl": ["packages/git-impl/src/index.ts"],
-      "@nostr-git/flows": ["packages/flows/src"],
-      "@nostr-git/sdk": ["packages/sdk/src"],
-      "@nostr-git/worker": ["packages/worker/src"],
-      "@nostr-git/ui": ["packages/ui/src/lib"]
-    }
-  }
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.d.ts"]
 }

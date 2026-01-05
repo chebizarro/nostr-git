@@ -7,7 +7,7 @@
  * Based on ngit's client.rs factory patterns and configuration management.
  */
 
-import type { EventIO } from '@nostr-git/types';
+import type { EventIO } from '../../types/index.js';
 import type { NostrEvent } from 'nostr-tools';
 
 import { NostrGitProvider, type NostrGitConfig } from './nostr-git-provider.js';

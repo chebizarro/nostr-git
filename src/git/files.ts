@@ -1,15 +1,20 @@
-import { getGitProvider } from '../api/git-provider';
+import { getGitProvider } from '../api/git-provider.js';
 import {
   ensureRepo,
   ensureRepoFromEvent,
   rootDir,
   resolveRobustBranch
-} from './git';
-import { canonicalRepoKey } from '../../core/src/utils/canonicalRepoKey.js';
-import { parseRepoAnnouncementEvent } from '@nostr-git/events/nip34';
-import type { RepoAnnouncementEvent } from '@nostr-git/events/nip34';
+} from './git.js';
+import { canonicalRepoKey } from '../utils/canonicalRepoKey.js';
+import { parseRepoAnnouncementEvent } from '../events/index.js';
+import type { RepoAnnouncementEvent } from '../events/index.js';
 import { Buffer } from 'buffer';
 import { assertRepoAnnouncementEvent } from '../events/nip34/validation.js';
+import {
+  createInvalidInputError,
+  wrapError,
+  type GitErrorContext,
+} from '../errors/index.js';
 
 declare global {
   // Extend globalThis to include Buffer
@@ -65,6 +70,12 @@ export async function listRepoFilesFromEvent(opts: {
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main'; // Will be resolved robustly later
   const dir = `${rootDir}/${opts.repoKey || canonicalRepoKey(event.repoId)}`;
+  const contextBase: GitErrorContext & { path?: string } = {
+    operation: 'listRepoFilesFromEvent',
+    repoKey: opts.repoKey || canonicalRepoKey(event.repoId),
+    naddr: event.repoId,
+    ref: opts.commit || branch,
+  };
 
   // Ensure adequate repository depth for file operations
   // If accessing a specific commit, we need more than shallow clone
@@ -114,25 +125,33 @@ export async function listRepoFilesFromEvent(opts: {
               // Retry reading commit after tag fetch
               await git.readCommit({ dir, oid });
             } else {
-              throw deepenError;
+              throw createInvalidInputError(
+                `Commit ${opts.commit} not found in repository.`,
+                contextBase,
+                deepenError
+              );
             }
           } catch (fetchTagsError: any) {
             // Final diagnostic: list some commits for error context
             try {
               const commits = await git.log({ dir, depth: 10 });
               const availableCommits = commits.map((c: any) => c.oid.substring(0, 8)).join(', ');
-              throw new Error(
-                `Commit ${opts.commit} not found in repository. Available recent commits: ${availableCommits}`
+              throw createInvalidInputError(
+                `Commit ${opts.commit} not found in repository. Available recent commits: ${availableCommits}`,
+                contextBase,
+                deepenError instanceof Error ? deepenError : undefined
               );
             } catch (logError) {
-              throw new Error(
-                `Commit ${opts.commit} not found in repository. Unable to list available commits.`
+              throw createInvalidInputError(
+                `Commit ${opts.commit} not found in repository. Unable to list available commits.`,
+                contextBase,
+                logError instanceof Error ? logError : undefined
               );
             }
           }
         }
       } else {
-        throw error;
+        throw wrapError(error, contextBase);
       }
     }
   } else {
@@ -142,8 +161,15 @@ export async function listRepoFilesFromEvent(opts: {
     } catch (e) {
       // Fallback to robust resolver if direct ref resolution fails
       oid = await resolveRobustBranch(git, dir, branch, {
-        onBranchNotFound: (branchName, error) => {
-          throw error;
+        onBranchNotFound: (branchName, error: unknown) => {
+          throw createInvalidInputError(
+            `Branch '${branchName}' not found in repository.`,
+            {
+              ...contextBase,
+              ref: branchName,
+            },
+            error instanceof Error ? error : undefined
+          );
         }
       });
     }
@@ -153,6 +179,10 @@ export async function listRepoFilesFromEvent(opts: {
   const rawPath = opts.path || '';
   const treePath = rawPath.replace(/^\/+|\/+$/g, ''); // Remove leading/trailing slashes
   const displayPath = treePath || '(root)';
+  const treeContext: GitErrorContext = {
+    ...contextBase,
+    path: treePath || undefined,
+  };
 
   try {
     const fp: any = treePath ? treePath : undefined;
@@ -226,12 +256,16 @@ export async function listRepoFilesFromEvent(opts: {
               try {
                 const commits = await git.log({ dir, depth: 10 });
                 const availableCommits = commits.map((c: any) => c.oid.substring(0, 8)).join(', ');
-                throw new Error(
-                  `Commit ${opts.commit} not found in repository. Available recent commits: ${availableCommits}`
+                throw createInvalidInputError(
+                  `Commit ${opts.commit} not found in repository. Available recent commits: ${availableCommits}`,
+                  treeContext,
+                  fetchTagsError instanceof Error ? fetchTagsError : undefined
                 );
               } catch (logError) {
-                throw new Error(
-                  `Commit ${opts.commit} not found in repository. Unable to list available commits.`
+                throw createInvalidInputError(
+                  `Commit ${opts.commit} not found in repository. Unable to list available commits.`,
+                  treeContext,
+                  logError instanceof Error ? logError : undefined
                 );
               }
             }
@@ -241,8 +275,10 @@ export async function listRepoFilesFromEvent(opts: {
       } catch (retry2: any) {
         const context = `commit=${oid?.slice?.(0, 8) || 'unknown'} branch=${branch}`;
         const attemptsText = attempts > 0 ? `${attempts} ${attempts === 1 ? 'attempt' : 'attempts'}` : 'retries';
-        throw new Error(
-          `Unable to access file tree at ${displayPath} after ${attemptsText}. ${context}. Original error: ${original?.message || String(original)}`
+        throw createInvalidInputError(
+          `Unable to access file tree at ${displayPath} after ${attemptsText}. ${context}. Original error: ${original?.message || String(original)}`,
+          treeContext,
+          retry2
         );
       }
     }
@@ -268,6 +304,12 @@ export async function getRepoFileContentFromEvent(opts: {
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main'; // Will be resolved robustly in git operations
   const dir = `${rootDir}/${opts.repoKey || canonicalRepoKey(event.repoId)}`;
+  const contextBase: GitErrorContext = {
+    operation: 'getRepoFileContentFromEvent',
+    repoKey: opts.repoKey || canonicalRepoKey(event.repoId),
+    naddr: event.repoId,
+    ref: opts.commit || branch,
+  };
 
   // Ensure adequate repository depth for file operations
   // If accessing a specific commit, we need more than shallow clone
@@ -295,26 +337,30 @@ export async function getRepoFileContentFromEvent(opts: {
           try {
             const commits = await git.log({ dir, depth: 10 });
             const availableCommits = commits.map((c: any) => c.oid.substring(0, 8)).join(', ');
-            throw new Error(
-              `Commit ${opts.commit} not found in repository. Available recent commits: ${availableCommits}`
+            throw createInvalidInputError(
+              `Commit ${opts.commit} not found in repository. Available recent commits: ${availableCommits}`,
+              contextBase,
+              deepenError instanceof Error ? deepenError : undefined
             );
           } catch (logError) {
-            throw new Error(
-              `Commit ${opts.commit} not found in repository. Unable to list available commits.`
+            throw createInvalidInputError(
+              `Commit ${opts.commit} not found in repository. Unable to list available commits.`,
+              contextBase,
+              logError instanceof Error ? logError : undefined
             );
           }
         }
       } else {
-        throw error;
+        throw wrapError(error, contextBase);
       }
     }
   } else {
     oid = await resolveRobustBranch(git, dir, branch, {
-      onBranchNotFound: (branchName, error) => {
+      onBranchNotFound: (branchName, error: unknown) => {
         // This will be handled by the UI layer if they provide a callback
         console.warn(
           `Branch '${branchName}' from repository state not found in local git:`,
-          error.message
+          error instanceof Error ? error.message : String(error)
         );
       }
     });
@@ -343,14 +389,28 @@ export async function getRepoFileContentFromEvent(opts: {
           .join('');
       } catch (retryError: any) {
         if (retryError.name === 'NotFoundError') {
-          throw new Error(
-            `File '${opts.path}' not found at ${opts.commit ? `commit ${opts.commit}` : `branch ${branch}`}`
+          throw createInvalidInputError(
+            `File '${opts.path}' not found at ${opts.commit ? `commit ${opts.commit}` : `branch ${branch}`}`,
+            {
+              ...contextBase,
+              operation: 'getRepoFileContentFromEvent',
+              path: opts.path,
+            },
+            retryError instanceof Error ? retryError : undefined
           );
         }
-        throw retryError;
+        throw wrapError(retryError, {
+          ...contextBase,
+          operation: 'getRepoFileContentFromEvent',
+          path: opts.path,
+        });
       }
     }
-    throw error;
+    throw wrapError(error, {
+      ...contextBase,
+      operation: 'getRepoFileContentFromEvent',
+      path: opts.path,
+    });
   }
 }
 

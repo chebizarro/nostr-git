@@ -16,9 +16,9 @@ import {
   type RepoStateEvent,
   type RepoState,
   createRepoStateEvent,
-  validateRepoStateEvent,
   parseRepoStateEvent
-} from 'nostr-git/events';
+} from '../../events/index.js';
+import {validateRepoStateEvent} from '../../utils/validation.js';
 import { nip11, SimplePool } from 'nostr-tools';
 
 

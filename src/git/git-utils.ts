@@ -1,3 +1,10 @@
+import {
+  createInvalidInputError,
+  createUnknownError,
+  wrapError,
+  type GitErrorContext,
+} from '../errors/index.js';
+
 /**
  * Git utilities mirroring ngit functionality
  * Provides additional Git operations and helpers
@@ -101,10 +108,13 @@ export async function hasOutstandingChanges(git: any): Promise<boolean> {
 /**
  * Get the root commit of a repository
  */
-export async function getRootCommit(git: any): Promise<string> {
-  const log = await git.log({ depth: Infinity })
+export async function getRootCommit(git: any, context?: GitErrorContext): Promise<string> {
+  const ctx = { operation: 'getRootCommit', ...context };
+  const log = await git.log({ depth: Infinity }).catch((error: unknown) => {
+    throw wrapError(error, ctx);
+  });
   if (log.length === 0) {
-    throw new Error("Repository has no commits")
+    throw createInvalidInputError('Repository has no commits', ctx);
   }
   const lastCommit = log[log.length - 1]
   return typeof lastCommit === "string" ? lastCommit : lastCommit.oid
@@ -154,10 +164,14 @@ export async function getCommitMessageSummary(git: any, oid: string): Promise<st
  * Create a patch from a commit (ngit style)
  */
 export async function createPatchFromCommit(git: any, oid: string, seriesCount?: {n: number, total: number}): Promise<string> {
+  const ctx: GitErrorContext = {
+    operation: 'createPatchFromCommit',
+    ref: oid,
+  };
   try {
     const commit = await git.readCommit({ oid })
     const c = commit.commit || commit
-    
+
     const subjectPrefix = seriesCount ? `PATCH ${seriesCount.n}/${seriesCount.total}` : "PATCH"
     const subject = `[${subjectPrefix}] ${getCommitMessageSummary(git, oid)}`
     
@@ -173,7 +187,11 @@ ${c.message || ""}
     
     return patch
   } catch (error) {
-    throw new Error(`Failed to create patch from commit ${oid}: ${(error as Error).message}`)
+    throw createUnknownError(
+      `Failed to create patch from commit ${oid}: ${error instanceof Error ? error.message : String(error)}`,
+      ctx,
+      error instanceof Error ? error : undefined
+    );
   }
 }
 

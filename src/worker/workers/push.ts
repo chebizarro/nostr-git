@@ -1,6 +1,6 @@
-import type { GitProvider } from '@nostr-git/git';
+import type { GitProvider } from '../../git/provider.js';
 import type { RepoCache, RepoCacheManager } from './cache.js';
-import type { GitVendor } from '../../vendor-providers.js';
+import type { GitVendor } from '../../git/vendor-providers.js';
 
 export interface SafePushOptions {
   repoId: string;

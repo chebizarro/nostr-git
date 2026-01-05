@@ -1,5 +1,5 @@
 // Core: repositories grouping & maintainers
-import type { RepoAnnouncementEvent, NostrTag } from "@nostr-git/events";
+import type { RepoAnnouncementEvent, NostrTag } from "./nip34.js";
 
 /**
  * Validate that a string is a valid hex pubkey (exactly 64 hex characters)

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import type { GitProvider } from '@nostr-git/git'
-import { analyzePatchMergeUtil, applyPatchAndPushUtil } from './lib/workers/patches'
+import type { GitProvider } from '../../src/git/provider.js'
+import { analyzePatchMergeUtil, applyPatchAndPushUtil } from '../../src/worker/workers/patches.js'
 
 function makeMergeResult(overrides: Partial<import('../../src/git/merge-analysis.js').MergeAnalysisResult> = {}) {
   return {

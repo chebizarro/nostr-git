@@ -1,6 +1,6 @@
 // Core: labels resolver using shared-types nip32 helpers
 import type { NostrEvent } from "nostr-tools";
-import { extractSelfLabels, extractLabelEvents, mergeEffectiveLabels } from "@nostr-git/events";
+import { extractSelfLabels, extractLabelEvents, mergeEffectiveLabels } from "./nip32.js";
 
 export function effectiveLabelsFor(target: { self: NostrEvent; external: NostrEvent[] }): {
   normalized: string[];

@@ -1,5 +1,5 @@
-import type { GitProvider } from '@nostr-git/git';
-import type { MergeAnalysisResult } from '../../merge-analysis.js';
+import type { GitProvider } from '../../git/provider.js';
+import type { MergeAnalysisResult } from '../../git/merge-analysis.js';
 
 export interface AnalyzePatchMergeOptions {
   repoId: string;

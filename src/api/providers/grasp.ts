@@ -22,8 +22,8 @@ import type {
   GitForkOptions
 } from '../api.js';
 import { nip19, SimplePool } from 'nostr-tools';
-import type { NostrFilter, EventIO } from '@nostr-git/types';
-import { createRepoStateEvent, getTagValue, getTags } from '@nostr-git/events';
+import type { NostrFilter, EventIO } from '../../types/index.js';
+import { createRepoStateEvent, getTagValue, getTags } from '../../events/index.js';
 import {
   fetchRelayInfo,
   graspCapabilities as detectCapabilities,
@@ -40,7 +40,8 @@ import * as git from 'isomorphic-git';
 // @ts-ignore - isomorphic-git/http/web has type issues
 import http from 'isomorphic-git/http/web';
 import type { Event as NostrEvent } from 'nostr-tools';
-import type { RepoState } from '@nostr-git/events';
+
+import type { RepoState } from '../../events/index.js';
 
 /**
  * GRASP Git Relay API Implementation
@@ -53,7 +54,7 @@ import type { RepoState } from '@nostr-git/events';
 /**
  * GRASP API client implementing GitServiceApi
  */
-export class GraspApi implements GitServiceApi {
+export class GraspApiProvider implements GitServiceApi {
   private capabilities?: GraspCapabilities;
   private httpBase?: string;
   private readonly relayUrl: string;
@@ -328,22 +329,22 @@ export class GraspApi implements GitServiceApi {
     // This method now only constructs metadata and Smart HTTP URLs.
     // The UI layer must publish RepoAnnouncementEvent and RepoStateEvent before calling this.
 
-    console.log('[GraspApi] createRepo - pubkey:', this.pubkey);
-    console.log('[GraspApi] createRepo - pubkey length:', this.pubkey.length);
-    console.log('[GraspApi] createRepo - pubkey type:', typeof this.pubkey);
+    console.log('[GraspApiProvider] createRepo - pubkey:', this.pubkey);
+    console.log('[GraspApiProvider] createRepo - pubkey length:', this.pubkey.length);
+    console.log('[GraspApiProvider] createRepo - pubkey type:', typeof this.pubkey);
 
     await this.ensureCapabilities();
     const npub = nip19.npubEncode(this.pubkey);
-    console.log('[GraspApi] createRepo - npub:', npub);
+    console.log('[GraspApiProvider] createRepo - npub:', npub);
 
     // Use derived Smart HTTP base from NIP-11 (may include path like /git). Mirrors ngit client.rs discovery
     const httpBase = this.httpBase || normalizeHttpOrigin(this.relayUrl);
-    console.log('[GraspApi] createRepo - httpBase:', httpBase);
+    console.log('[GraspApiProvider] createRepo - httpBase:', httpBase);
 
     const webUrl = `${httpBase}/${npub}/${options.name}`; // no .git
     const cloneUrl = `${webUrl}.git`;
-    console.log('[GraspApi] createRepo - webUrl:', webUrl);
-    console.log('[GraspApi] createRepo - cloneUrl:', cloneUrl);
+    console.log('[GraspApiProvider] createRepo - webUrl:', webUrl);
+    console.log('[GraspApiProvider] createRepo - cloneUrl:', cloneUrl);
     // Gather relay aliases: base relay plus optional configured aliases and ngit-relay fallback
     const aliases: string[] = [];
     // base ws(s) relay
@@ -380,7 +381,7 @@ export class GraspApi implements GitServiceApi {
         type: 'User' as const
       }
     };
-    console.log('[GraspApi] createRepo - returning result:', result);
+    console.log('[GraspApiProvider] createRepo - returning result:', result);
     return result;
   }
 
@@ -420,7 +421,7 @@ export class GraspApi implements GitServiceApi {
       const dir = '/grasp';
       await git.fetch({ fs, http, dir, url: remoteUrl, depth: options?.per_page ?? 20, singleBranch: true, ref });
       const commits = await git.log({ fs, dir, ref, depth: options?.per_page ?? 20 });
-      return commits.map((c) => ({
+      return commits.map((c: any) => ({
         sha: c.oid,
         url: `${remoteUrl}/commit/${c.oid}`,
         author: { name: c.commit.author.name, email: c.commit.author.email, date: new Date(c.commit.author.timestamp * 1000).toISOString() },

@@ -1,5 +1,5 @@
 // Canonical shared types for nostr-git
-import type { NostrEvent } from "./nostr.js";
+import type { NostrEvent } from "nostr-tools";
 
 /**
  * Canonical Commit type (from core)

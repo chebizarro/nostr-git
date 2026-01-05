@@ -1,10 +1,17 @@
 import { getGitProvider } from '../api/git-provider.js';
-import { canonicalRepoKey } from '../../core/src/utils/canonicalRepoKey.js';
+import { canonicalRepoKey } from '../utils/canonicalRepoKey.js';
 import { fileTypeFromBuffer } from 'file-type';
 import { createPatch } from 'diff';
-import type { RepoAnnouncement } from '@nostr-git/events';
+import type { RepoAnnouncement } from '../events/index.js';
 import type { PermalinkData } from './permalink.js';
 import { Buffer } from 'buffer';
+import {
+  createInvalidInputError,
+  createInvalidRefspecError,
+  createTimeoutError,
+  type GitErrorContext,
+  wrapError,
+} from '../errors/index.js';
 
 // Only set Buffer on window if we're in a browser context (not in a worker)
 if (typeof window !== 'undefined' && typeof window.Buffer === 'undefined') {
@@ -98,7 +105,7 @@ export async function resolveRobustBranch(
     Boolean
   ) as string[];
 
-  let lastError = null;
+  let lastError: unknown = null;
 
   for (const branchName of branchesToTry) {
     try {
@@ -120,7 +127,15 @@ export async function resolveRobustBranch(
     }
   }
 
-  throw lastError || new Error('Failed to resolve any common default branch');
+  const context: GitErrorContext & { repoDir?: string } = {
+    operation: 'resolveRobustBranch',
+    ref: preferredBranch,
+    repoDir: dir,
+  };
+  if (lastError) {
+    throw wrapError(lastError, context);
+  }
+  throw createInvalidRefspecError(context);
 }
 
 export async function fetchPermalink(data: PermalinkData) {
@@ -160,18 +175,23 @@ export async function ensureRepo(
 ) {
   const git = getGitProvider();
   const dir = `${rootDir}/${opts.owner}/${opts.repo}`;
+  const remoteUrl = `https://${opts.host}/${opts.owner}/${opts.repo}.git`;
+  const baseContext: GitErrorContext & { repoDir: string } = {
+    operation: 'ensureRepo',
+    remote: remoteUrl,
+    ref: opts.branch,
+    repoDir: dir,
+  };
   if (!(await isRepoCloned(dir))) {
-    console.log(
-      `Cloning https://${opts.host}/${opts.owner}/${opts.repo}.git to ${dir} (depth: ${depth})`
-    );
+    console.log(`Cloning ${remoteUrl} to ${dir} (depth: ${depth})`);
 
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Clone operation timed out after 60 seconds')), 60000);
+      setTimeout(() => reject(createTimeoutError(baseContext)), 60000);
     });
 
     const clonePromise = git.clone({
       dir,
-      url: `https://${opts.host}/${opts.owner}/${opts.repo}.git`,
+      url: remoteUrl,
       ref: opts.branch,
       depth: Math.min(depth, 1), // Force shallow clone for large repos
       noCheckout: true,
@@ -194,14 +214,14 @@ export async function ensureRepo(
       await Promise.race([clonePromise, timeoutPromise]);
       console.log(`Successfully cloned https://${opts.host}/${opts.owner}/${opts.repo}.git`);
     } catch (error) {
-      console.error(`Clone failed for https://${opts.host}/${opts.owner}/${opts.repo}.git:`, error);
+      console.error(`Clone failed for ${remoteUrl}:`, error);
       // Clean up partial clone on failure
       try {
         await git.deleteRef({ dir, ref: 'HEAD' });
       } catch (cleanupError) {
         // Ignore cleanup errors
       }
-      throw error;
+      throw wrapError(error, baseContext);
     }
   } else {
     console.log(`Repository already cloned at ${dir}`);
@@ -233,13 +253,25 @@ export async function ensureRepoFromEvent(
   }
 
   if (!cloneUrl) {
-    throw new Error('No supported clone URL found in repo announcement');
+    throw createInvalidInputError('No supported clone URL found in repo announcement', {
+      operation: 'ensureRepoFromEvent',
+      naddr: opts.repoEvent.repoId,
+      repoKey: opts.repoKey,
+      repoDir: dir,
+    });
   }
 
   const isCloned = await isRepoCloned(dir);
 
   // Determine the branch to use
   let targetBranch = opts.branch;
+  const baseContext: GitErrorContext & { repoDir: string; repoKey?: string } = {
+    operation: 'ensureRepoFromEvent',
+    remote: cloneUrl,
+    naddr: opts.repoEvent.repoId,
+    repoKey: opts.repoKey,
+    repoDir: dir,
+  };
 
   if (!targetBranch) {
     if (isCloned) {
@@ -259,12 +291,16 @@ export async function ensureRepoFromEvent(
     }
   }
 
+  if (targetBranch) {
+    baseContext.ref = targetBranch;
+  }
+
   if (!isCloned) {
     console.log(`Cloning ${cloneUrl} to ${dir} (depth: ${depth})`);
 
     // Create a timeout promise to prevent infinite stalling
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Clone operation timed out after 60 seconds')), 60000);
+      setTimeout(() => reject(createTimeoutError(baseContext)), 60000);
     });
 
     // Try to clone without specifying a branch first (let git use default)
@@ -313,7 +349,7 @@ export async function ensureRepoFromEvent(
       } catch (cleanupError) {
         // Ignore cleanup errors
       }
-      throw error;
+      throw wrapError(error, baseContext);
     }
   } else if (depth > 1) {
     // Repository exists but might be shallow - try to deepen it if we need more history
@@ -341,7 +377,11 @@ export async function ensureRepoFromEvent(
           `Failed to fetch resolved branch '${resolvedBranch}':`,
           fetchError.message || String(fetchError)
         );
-        throw fetchError;
+        throw wrapError(fetchError, {
+          ...baseContext,
+          operation: 'ensureRepoFromEvent/deepen',
+          ref: resolvedBranch,
+        });
       }
     } catch (error) {
       console.warn(`Failed to deepen repository, continuing with existing clone:`, error);
@@ -438,7 +478,12 @@ export async function produceGitDiffFromPermalink(data: PermalinkData): Promise<
   }
 
   const newOid = data.branch;
-  if (!newOid) throw new Error('No commit SHA found in permalink data');
+  if (!newOid)
+    throw createInvalidInputError('No commit SHA found in permalink data', {
+      operation: 'produceGitDiffFromPermalink',
+      repoDir: dir,
+      ref: data.branch,
+    });
   const { commit } = await git.readCommit({ dir, oid: newOid });
   const parentOid = commit.parent[0];
 
@@ -548,7 +593,7 @@ export async function githubPermalinkDiffId(filePath: string): Promise<string> {
 
 /**
  * Attempt to find which file changed in parentOid..newOid matches
- * the “diff-<sha256(path)>” anchor from GitHub blob permalink.
+ * the "diff-<sha256(path)>" anchor from GitHub blob permalink.
  */
 export async function mapDiffHashToFile(
   dir: string,

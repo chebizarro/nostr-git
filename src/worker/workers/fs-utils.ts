@@ -1,6 +1,6 @@
 // Provider FS helpers extracted from git-worker
 // These run in the worker and use the git-wrapper provider's fs when available.
-import type { GitProvider } from '@nostr-git/git';
+import type { GitProvider } from '../../git/provider.js';
 
 export function getProviderFs(git: GitProvider): any | undefined {
   // Try direct fs first

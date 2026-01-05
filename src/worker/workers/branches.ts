@@ -1,5 +1,5 @@
 // Branch resolution helpers extracted from git-worker
-import type { GitProvider } from '@nostr-git/git';
+import type { GitProvider } from '../../git/provider.js';
 
 export async function resolveRobustBranch(
   git: GitProvider,

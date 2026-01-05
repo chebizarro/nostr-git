@@ -1,5 +1,5 @@
 import * as isogit from "isomorphic-git"
-import { GitFetchResult, GitMergeResult, GitProvider } from "@nostr-git/git"
+import { GitFetchResult, GitMergeResult, GitProvider } from "./provider.js"
 
 export class IsomorphicGitProvider implements GitProvider {
   fs: any

@@ -1,6 +1,6 @@
 import type { NostrEvent } from "nostr-tools";
 import { resolveStatus } from "./status-resolver.js";
-import type { IssueThread } from "@nostr-git/types";
+import type { IssueThread } from "../../types/index.js";
 
 export type { IssueThread };
 

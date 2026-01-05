@@ -1,4 +1,4 @@
-import type { GitProvider } from '@nostr-git/git';
+import type { GitProvider } from '../../git/provider.js';
 import type { RepoCache, RepoCacheManager } from './cache.js';
 
 export async function needsUpdateUtil(

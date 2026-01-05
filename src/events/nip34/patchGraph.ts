@@ -1,5 +1,5 @@
 // Core: Patch DAG builder using NIP-34 patch tags (commit / parent-commit)
-import type { PatchEvent } from "@nostr-git/events";
+import type { PatchEvent } from "./nip34.js";
 
 export type PatchNode = {
   // Node id is the commit hash for stable graph identity

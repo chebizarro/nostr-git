@@ -1,4 +1,4 @@
-import {z} from "zod"
+import { z, RefinementCtx } from "zod"
 
 // A Nostr tag is a tuple where the first element is the tag name and
 // subsequent elements are string values. Example: ["e", "<event-id>"]
@@ -221,7 +221,7 @@ function hasTagName(tags: unknown[], name: string) {
 export const RepoAnnouncementEventSchema = NostrEventSchema.extend({
   kind: z.literal(30617),
   tags: RepoAnnouncementTagsSchema,
-}).superRefine((evt, ctx) => {
+}).superRefine((evt: NostrEventLike, ctx: RefinementCtx) => {
   if (!hasTagName(evt.tags as unknown[], "d")) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -233,7 +233,7 @@ export const RepoAnnouncementEventSchema = NostrEventSchema.extend({
 export const RepoStateEventSchema = NostrEventSchema.extend({
   kind: z.literal(30618),
   tags: RepoStateTagsSchema,
-}).superRefine((evt, ctx) => {
+}).superRefine((evt: NostrEventLike, ctx: RefinementCtx) => {
   if (!hasTagName(evt.tags as unknown[], "d")) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -245,7 +245,7 @@ export const RepoStateEventSchema = NostrEventSchema.extend({
 export const PatchEventSchema = NostrEventSchema.extend({
   kind: z.literal(1617),
   tags: PatchTagsSchema,
-}).superRefine((evt, ctx) => {
+}).superRefine((evt: NostrEventLike, ctx: RefinementCtx) => {
   if (!hasTagName(evt.tags as unknown[], "a")) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -257,7 +257,7 @@ export const PatchEventSchema = NostrEventSchema.extend({
 export const IssueEventSchema = NostrEventSchema.extend({
   kind: z.literal(1621),
   tags: IssueTagsSchema,
-}).superRefine((evt, ctx) => {
+}).superRefine((evt: NostrEventLike, ctx: RefinementCtx) => {
   if (!hasTagName(evt.tags as unknown[], "a")) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -269,7 +269,7 @@ export const IssueEventSchema = NostrEventSchema.extend({
 export const StatusEventSchema = NostrEventSchema.extend({
   kind: z.union([z.literal(1630), z.literal(1631), z.literal(1632), z.literal(1633)]),
   tags: StatusTagsSchema,
-}).superRefine((evt, ctx) => {
+}).superRefine((evt: NostrEventLike, ctx: RefinementCtx) => {
   if (!hasTagName(evt.tags as unknown[], "e")) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -288,7 +288,7 @@ export const StatusEventSchema = NostrEventSchema.extend({
 export const PullRequestEventSchema = NostrEventSchema.extend({
   kind: z.literal(1618),
   tags: PullRequestTagsSchema,
-}).superRefine((evt, ctx) => {
+}).superRefine((evt: NostrEventLike, ctx: RefinementCtx) => {
   if (!hasTagName(evt.tags as unknown[], "a")) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -301,7 +301,7 @@ export const PullRequestEventSchema = NostrEventSchema.extend({
 export const PullRequestUpdateEventSchema = NostrEventSchema.extend({
   kind: z.literal(1619),
   tags: PullRequestUpdateTagsSchema,
-}).superRefine((evt, ctx) => {
+}).superRefine((evt: NostrEventLike, ctx: RefinementCtx) => {
   if (!hasTagName(evt.tags as unknown[], "a")) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -319,7 +319,7 @@ export const UserGraspListEventSchema = NostrEventSchema.extend({
 export const StackEventSchema = NostrEventSchema.extend({
   kind: z.literal(30410),
   tags: StackTagsSchema,
-}).superRefine((evt, ctx) => {
+}).superRefine((evt: NostrEventLike, ctx: RefinementCtx) => {
   if (!hasTagName(evt.tags as unknown[], "a")) {
     ctx.addIssue({code: z.ZodIssueCode.custom, message: "Stack must include an 'a' tag (repo address)"})
   }
@@ -331,7 +331,7 @@ export const StackEventSchema = NostrEventSchema.extend({
 export const MergeMetadataEventSchema = NostrEventSchema.extend({
   kind: z.literal(30411),
   tags: MergeMetaTagsSchema,
-}).superRefine((evt, ctx) => {
+}).superRefine((evt: NostrEventLike, ctx: RefinementCtx) => {
   if (!hasTagName(evt.tags as unknown[], "a") || !hasTagName(evt.tags as unknown[], "e")) {
     ctx.addIssue({code: z.ZodIssueCode.custom, message: "Merge metadata must include 'a' (repo) and 'e' (root) tags"})
   }
@@ -340,7 +340,7 @@ export const MergeMetadataEventSchema = NostrEventSchema.extend({
 export const ConflictMetadataEventSchema = NostrEventSchema.extend({
   kind: z.literal(30412),
   tags: ConflictMetaTagsSchema,
-}).superRefine((evt, ctx) => {
+}).superRefine((evt: NostrEventLike, ctx: RefinementCtx) => {
   if (!hasTagName(evt.tags as unknown[], "a") || !hasTagName(evt.tags as unknown[], "e")) {
     ctx.addIssue({code: z.ZodIssueCode.custom, message: "Conflict metadata must include 'a' (repo) and 'e' (root) tags"})
   }

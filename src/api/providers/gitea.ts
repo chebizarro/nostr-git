@@ -21,7 +21,7 @@ import type {
   ListPullRequestsOptions,
   User,
   GitForkOptions
-} from '../../api.js';
+} from '../../api/index.js';
 
 /**
  * Gitea API client implementing GitServiceApi

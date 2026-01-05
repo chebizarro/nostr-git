@@ -1,10 +1,11 @@
-import type { Patch } from "@nostr-git/types";
-import type { PatchEvent, Profile } from "@nostr-git/events";
-import { getTagValue, getTag } from "@nostr-git/events";
+import type { Patch } from "../types/index.js";
+import type { PatchEvent, Profile } from "../events/index.js";
+import { getTagValue, getTag } from "../events/index.js";
 import { parseGitPatch } from "parse-patch";
 import parseDiff from "parse-diff";
 import { getGitProvider } from "../api/git-provider.js";
-import type { GitMergeResult } from "@nostr-git/git";
+import type { GitMergeResult } from "./provider.js";
+import { createInvalidInputError } from "../errors/index.js";
 
 export function parseGitPatchFromEvent(event: PatchEvent): Patch {
   const parsed = parseGitPatch(event.content);
@@ -43,7 +44,11 @@ export function parseGitPatchFromEvent(event: PatchEvent): Patch {
 }
 
 export async function applyPatchSet(patchSet: Patch[]) {
-  if (!patchSet.length) throw new Error("empty patch set");
+  if (!patchSet.length) {
+    throw createInvalidInputError("Attempted to apply an empty patch set", {
+      operation: "applyPatchSet",
+    });
+  }
 }
 
 export async function mergePatchSet(

@@ -1,12 +1,17 @@
-import type { GitProvider } from '@nostr-git/git';
-import { getGitProvider } from '@nostr-git/git-impl';
+import type { GitProvider } from './provider.js';
+import { getGitProvider } from './factory.js';
 import type {
   VendorProvider,
   RepoMetadata,
   CreateRepoOptions,
   UpdateRepoOptions
 } from './vendor-providers.js';
-import { resolveVendorProvider, parseRepoFromUrl } from './vendor-provider-factory.js';
+import { parseRepoFromUrl, resolveVendorProvider } from './vendor-provider-factory.js';
+import {
+  createAuthRequiredError,
+  createInvalidInputError,
+  type GitErrorContext,
+} from '../errors/index.js';
 // Core no longer imports isomorphic-git or LightningFS directly; we rely on git-wrapper factory.
 
 /**
@@ -37,7 +42,10 @@ export class MultiVendorGitProvider implements GitProvider {
   async getRepoMetadata(url: string): Promise<RepoMetadata> {
     const parsed = parseRepoFromUrl(url);
     if (!parsed) {
-      throw new Error(`Unable to parse repository URL: ${url}`);
+      throw createInvalidInputError(
+        `Unable to parse repository URL: ${url}`,
+        this.buildContext({ remote: url, operation: 'getRepoMetadata' })
+      );
     }
 
     const { provider, owner, repo } = parsed;
@@ -50,27 +58,36 @@ export class MultiVendorGitProvider implements GitProvider {
     name: string,
     options: CreateRepoOptions & { targetHost: string }
   ): Promise<RepoMetadata> {
-    const vendor = resolveVendorProvider(`https://${options.targetHost}`);
+    const { targetHost, ...createOptions } = options;
+    const vendorUrl = targetHost.startsWith('http') ? targetHost : `https://${targetHost}`;
+    const vendor = resolveVendorProvider(vendorUrl);
     const token = this.getToken(vendor.hostname);
 
     if (!token) {
-      throw new Error(`No authentication token found for ${vendor.hostname}`);
+      throw createAuthRequiredError(
+        this.buildContext({ remote: vendorUrl, operation: 'createRemoteRepo' })
+      );
     }
 
-    return vendor.createRepo(name, options, token);
+    return vendor.createRepo(name, createOptions, token);
   }
 
   async updateRemoteRepo(url: string, options: UpdateRepoOptions): Promise<RepoMetadata> {
     const parsed = parseRepoFromUrl(url);
     if (!parsed) {
-      throw new Error(`Unable to parse repository URL: ${url}`);
+      throw createInvalidInputError(
+        `Unable to parse repository URL: ${url}`,
+        this.buildContext({ remote: url, operation: 'updateRemoteRepo' })
+      );
     }
 
     const { provider, owner, repo } = parsed;
     const token = this.getToken(provider.hostname);
 
     if (!token) {
-      throw new Error(`No authentication token found for ${provider.hostname}`);
+      throw createAuthRequiredError(
+        this.buildContext({ remote: url, operation: 'updateRemoteRepo' })
+      );
     }
 
     return provider.updateRepo(owner, repo, options, token);
@@ -79,14 +96,19 @@ export class MultiVendorGitProvider implements GitProvider {
   async forkRemoteRepo(url: string, forkName: string): Promise<RepoMetadata> {
     const parsed = parseRepoFromUrl(url);
     if (!parsed) {
-      throw new Error(`Unable to parse repository URL: ${url}`);
+      throw createInvalidInputError(
+        `Unable to parse repository URL: ${url}`,
+        this.buildContext({ remote: url, operation: 'forkRemoteRepo' })
+      );
     }
 
     const { provider, owner, repo } = parsed;
     const token = this.getToken(provider.hostname);
 
     if (!token) {
-      throw new Error(`No authentication token found for ${provider.hostname}`);
+      throw createAuthRequiredError(
+        this.buildContext({ remote: url, operation: 'forkRemoteRepo' })
+      );
     }
 
     return provider.forkRepo(owner, repo, forkName, token);
@@ -94,6 +116,12 @@ export class MultiVendorGitProvider implements GitProvider {
 
   getVendorProvider(url: string): VendorProvider {
     return resolveVendorProvider(url);
+  }
+
+  private buildContext(context: GitErrorContext): GitErrorContext {
+    return {
+      ...context,
+    };
   }
 
   // Delegate all base Git operations to the underlying provider

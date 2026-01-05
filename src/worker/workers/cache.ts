@@ -1,7 +1,7 @@
 // IndexedDB-backed repo cache utilities for the worker
 // Keeps core free from large inline classes in git-worker.ts
 
-import type { MergeAnalysisResult } from '../../merge-analysis.js';
+import type { MergeAnalysisResult } from '../../git/merge-analysis.js';
 
 export interface RepoCache {
   repoId: string;

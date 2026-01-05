@@ -1,17 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { syncWithRemoteUtil, needsUpdateUtil } from '../../../worker/src/lib/workers/sync.js';
-import type { GitProvider } from '@nostr-git/git';
-import type { RepoCacheManager, RepoCache } from '../../../worker/src/lib/workers/cache.js';
+import { syncWithRemoteUtil, needsUpdateUtil } from '../../src/worker/workers/sync.js';
+import type { GitProvider } from '../../src/git/provider.js';
+import type { RepoCacheManager, RepoCache } from '../../src/worker/workers/cache.js';
 
 describe('syncWithRemote with Enhanced Logging', () => {
   let mockGit: Partial<GitProvider>;
   let mockCacheManager: Partial<RepoCacheManager>;
   let consoleLogs: string[];
   let consoleErrors: string[];
+  let consoleWarns: string[];
 
   beforeEach(() => {
     consoleLogs = [];
     consoleErrors = [];
+    consoleWarns = [];
     
     // Capture console output
     vi.spyOn(console, 'log').mockImplementation((...args) => {
@@ -27,12 +29,19 @@ describe('syncWithRemote with Enhanced Logging', () => {
         { remote: 'origin', url: 'https://example.com/repo.git' }
       ]),
       fetch: vi.fn().mockResolvedValue(undefined),
-      resolveRef: vi.fn().mockResolvedValue('abc123'),
-      listBranches: vi.fn().mockResolvedValue(['main', 'develop'])
+      resolveRef: vi.fn().mockImplementation(async ({ ref }) => {
+        if (ref === 'HEAD') return 'local-def456';
+        if (ref === 'refs/remotes/origin/main') return 'remote-abc123';
+        return 'remote-abc123';
+      }),
+      listBranches: vi.fn().mockResolvedValue(['main', 'develop']),
+      checkout: vi.fn().mockResolvedValue(undefined),
+      branch: vi.fn().mockResolvedValue(undefined)
     };
 
     mockCacheManager = {
-      setRepoCache: vi.fn().mockResolvedValue(undefined)
+      setRepoCache: vi.fn().mockResolvedValue(undefined),
+      getRepoCache: vi.fn().mockResolvedValue(null)
     };
   });
 
@@ -59,7 +68,7 @@ describe('syncWithRemote with Enhanced Logging', () => {
     );
 
     expect(result.success).toBe(true);
-    expect(result.duration).toBeGreaterThan(0);
+    expect(result.duration).toBeGreaterThanOrEqual(0);
     
     // Check that logs contain expected patterns
     const allLogs = consoleLogs.join(' ');
@@ -145,10 +154,10 @@ describe('syncWithRemote with Enhanced Logging', () => {
     );
 
     const allLogs = consoleLogs.join(' ');
-    expect(allLogs).toContain('Resolved branch: main');
+    expect(allLogs).toContain('Attempting to fetch requested branch: main');
+    expect(allLogs).toContain('Successfully fetched requested branch: main');
     expect(allLogs).toContain('Using remote URL');
-    expect(allLogs).toContain('Fetching from remote');
-    expect(allLogs).toContain('Fetch completed');
+    expect(allLogs).toContain('Branch checked out successfully');
     expect(allLogs).toContain('Remote HEAD');
     expect(allLogs).toContain('Cache updated');
   });

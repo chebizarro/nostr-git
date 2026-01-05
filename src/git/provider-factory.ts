@@ -8,13 +8,14 @@
  * The GraspApi here is a pure Smart HTTP client and does not take EventIO.
  */
 
-import type { GitServiceApi } from './api.js';
-import type { GitVendor } from '../../../worker/src/vendor-providers.js';
-import { GitHubApi } from './providers/github.js';
-import { GitLabApi } from './providers/gitlab.js';
-import { GiteaApi } from './providers/gitea.js';
-import { BitbucketApi } from './providers/bitbucket.js';
-import { GraspApi } from './providers/grasp.js';
+import type { GitServiceApi } from '../api/index.js';
+import type { GitVendor } from './vendor-providers.js';
+import { GitHubApi } from '../api/providers/github.js';
+import { GitLabApi } from '../api/providers/gitlab.js';
+import { GiteaApi } from '../api/providers/gitea.js';
+import { BitbucketApi } from '../api/providers/bitbucket.js';
+import { GraspApiProvider } from '../api/providers/grasp.js';
+import { createInvalidInputError, type GitErrorContext } from '../errors/index.js';
 
 /**
  * Create a GitServiceApi instance for the specified provider
@@ -56,20 +57,25 @@ export function getGitServiceApi(
 
     case 'grasp':
       if (!baseUrl) {
-        throw new Error('GRASP provider requires a relay URL as baseUrl parameter');
+        throw createInvalidInputError(
+          'GRASP provider requires a relay URL as baseUrl parameter',
+          buildContext({ operation: 'getGitServiceApi', remote: baseUrl })
+        );
       }
       // Note: GRASP no longer takes EventIO. Event publishing moved to the UI layer (useNewRepo.svelte.ts).
-      // This GraspApi instance only handles Smart HTTP Git operations.
-      return new GraspApi(baseUrl, token);
+      // This GraspApiProvider instance only handles Smart HTTP Git operations.
+      return new GraspApiProvider(baseUrl, token);
 
     case 'generic':
-      throw new Error(
-        'Generic Git provider does not support REST API operations. Use a specific provider (github, gitlab, gitea, bitbucket, grasp).'
+      throw createInvalidInputError(
+        'Generic Git provider does not support REST API operations. Use a specific provider (github, gitlab, gitea, bitbucket, grasp).',
+        buildContext({ operation: 'getGitServiceApi' })
       );
 
     default:
-      throw new Error(
-        `Unknown Git provider: ${provider}. Supported providers: github, gitlab, gitea, bitbucket, grasp`
+      throw createInvalidInputError(
+        `Unknown Git provider: ${provider}. Supported providers: github, gitlab, gitea, bitbucket, grasp`,
+        buildContext({ operation: 'getGitServiceApi' })
       );
   }
 }
@@ -124,8 +130,9 @@ export function getGitServiceApiFromUrl(url: string, token: string): GitServiceA
     provider = 'grasp';
     baseUrl = url; // For GRASP, the URL is the relay URL
   } else {
-    throw new Error(
-      `Unable to detect Git provider from URL: ${url}. Supported providers: GitHub, GitLab, Gitea, Bitbucket, GRASP`
+    throw createInvalidInputError(
+      `Unable to detect Git provider from URL: ${url}. Supported providers: GitHub, GitLab, Gitea, Bitbucket, GRASP`,
+      buildContext({ operation: 'getGitServiceApiFromUrl', remote: url })
     );
   }
 
@@ -164,14 +171,32 @@ export function getDefaultApiBaseUrl(provider: GitVendor): string {
     case 'gitlab':
       return 'https://gitlab.com/api/v4';
     case 'gitea':
-      throw new Error('Gitea requires a custom base URL for self-hosted instances');
+      throw createInvalidInputError(
+        'Gitea requires a custom base URL for self-hosted instances',
+        buildContext({ operation: 'getDefaultApiBaseUrl' })
+      );
     case 'bitbucket':
       return 'https://api.bitbucket.org/2.0';
     case 'grasp':
-      throw new Error('GRASP provider requires a custom relay URL');
+      throw createInvalidInputError(
+        'GRASP provider requires a custom relay URL',
+        buildContext({ operation: 'getDefaultApiBaseUrl' })
+      );
     case 'generic':
-      throw new Error('Generic provider does not have a default API base URL');
+      throw createInvalidInputError(
+        'Generic provider does not have a default API base URL',
+        buildContext({ operation: 'getDefaultApiBaseUrl' })
+      );
     default:
-      throw new Error(`Unknown provider: ${provider}`);
+      throw createInvalidInputError(
+        `Unknown provider: ${provider}`,
+        buildContext({ operation: 'getDefaultApiBaseUrl' })
+      );
   }
+}
+
+function buildContext(context: GitErrorContext): GitErrorContext {
+  return {
+    ...context,
+  };
 }

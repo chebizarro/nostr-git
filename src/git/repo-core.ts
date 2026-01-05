@@ -9,10 +9,10 @@ import type {
   PullRequestEvent,
   PullRequestUpdateEvent,
   UserGraspListEvent,
-} from "@nostr-git/events";
-import { canonicalRepoKey, parseEucTag, GitIssueStatus, parseRepoStateEvent } from "@nostr-git/events";
-import { assembleIssueThread, resolveIssueStatus, type IssueThread } from "./issues.js";
-import { buildRepoSubscriptions, type RepoSubscriptions } from "./subscriptions.js";
+} from "../events/index.js";
+import { canonicalRepoKey, parseEucTag, GitIssueStatus, parseRepoStateEvent } from "../events/index.js";
+import { assembleIssueThread, resolveIssueStatus, type IssueThread } from "../events/nip34/issues.js";
+import { buildRepoSubscriptions, type RepoSubscriptions } from "../git/subscriptions.js";
 
 // ============================================================
 // Types Re-Exports

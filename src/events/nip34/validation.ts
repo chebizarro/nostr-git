@@ -1,5 +1,5 @@
-import type { RepoAnnouncementEvent, RepoStateEvent } from '@nostr-git/events';
-import { validateRepoAnnouncementEvent, validateRepoStateEvent } from '@nostr-git/events';
+import type { RepoAnnouncementEvent, RepoStateEvent } from './nip34.js';
+import { validateRepoAnnouncementEvent, validateRepoStateEvent } from '../../utils/validation.js';
 
 /**
  * Feature flag for runtime event validation.

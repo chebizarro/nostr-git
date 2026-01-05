@@ -7,7 +7,7 @@
  * IMPORTANT: This is the CLEAN interface that uses closures instead of passing signers around.
  */
 
-import type { NostrEvent, NostrFilter } from "./nostr.js";
+import type { NostrEvent, Filter as NostrFilter } from "nostr-tools";
 
 /**
  * Re-export NostrFilter from nostr-tools for convenience.

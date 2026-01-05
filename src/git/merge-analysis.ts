@@ -1,7 +1,12 @@
-import type { GitProvider } from "@nostr-git/git";
+import type { GitProvider } from "./provider.js";
 import parseDiff from "parse-diff";
-import type { Patch } from "@nostr-git/types";
-import { createMergeMetadataEvent, createConflictMetadataEvent } from "@nostr-git/events";
+import type { Patch } from "../types/index.js";
+import { createMergeMetadataEvent, createConflictMetadataEvent } from "../events/index.js";
+import {
+  createInvalidInputError,
+  wrapError,
+  type GitErrorContext,
+} from "../errors/index.js";
 
 export interface SimplifiedPatch {
   id: string;
@@ -151,9 +156,16 @@ export async function analyzePatchMergeability(
   let targetCommit: string | undefined;
   let patchCommits: string[] = [];
 
+  const contextBase: GitErrorContext = {
+    operation: "analyzePatchMergeability",
+    repoDir,
+    ref: targetBranch,
+  };
+
   try {
     // Use robust multi-fallback branch resolution
     const resolvedBranch = await resolveRobustBranchInMergeAnalysis(git, repoDir, targetBranch);
+    contextBase.ref = resolvedBranch;
 
     // Get remote URL for fetch operation
     const remotes = await git.listRemotes({ dir: repoDir });
@@ -254,7 +266,7 @@ export async function analyzePatchMergeability(
 
     // Find merge base between patch and target
     if (!targetCommit) {
-      throw new Error("Failed to resolve target commit");
+      throw createInvalidInputError("Failed to resolve target commit", contextBase);
     }
     const mergeBase = await findMergeBase(git, repoDir, patchCommits[0], targetCommit);
 
@@ -312,6 +324,7 @@ export async function analyzePatchMergeability(
       analysis: conflictAnalysis.hasConflicts ? "conflicts" : "clean",
     };
   } catch (error) {
+    const wrapped = wrapError(error, contextBase);
     return {
       canMerge: false,
       hasConflicts: false,
@@ -323,7 +336,7 @@ export async function analyzePatchMergeability(
       remoteCommit,
       patchCommits,
       analysis: "error",
-      errorMessage: error instanceof Error ? error.message : "Unknown error",
+      errorMessage: wrapped.message,
     };
   }
 }

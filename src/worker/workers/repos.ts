@@ -1,4 +1,4 @@
-import type { GitProvider } from '@nostr-git/git';
+import type { GitProvider } from '../../git/provider.js';
 import { RepoCache, RepoCacheManager } from './cache.js';
 import { getAuthCallback, setAuthConfig } from './auth.js';
 import { resolveRobustBranch } from './branches.js';
