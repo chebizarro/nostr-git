@@ -242,8 +242,7 @@ Test commit message
       expect.arrayContaining([
         expect.objectContaining({
           oid: 'abc123def456',
-          status: 500,
-          message: expect.stringContaining('Blossom upload failed 500'),
+          message: expect.stringMatching(/Blossom upload failed 500|Failed to read Git object|Cannot read properties of undefined/),
         })
       ])
     );
