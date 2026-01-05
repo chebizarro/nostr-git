@@ -1,6 +1,6 @@
 {
   "name": "nostr-git",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "packageManager": "pnpm@10.12.4",
   "type": "module",
   "main": "./dist/index.js",
