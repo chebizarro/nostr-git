@@ -8,8 +8,8 @@ export * from "./nip32/labels.js";
 export * from "./nip34/nip34-utils.js";
 export * from "./nip34/nip34.js";
 export * from "./nip34/issues.js";
-export * from "./nip34/patchGraph.js";
-export * from "./nip34/repoDAG.js";
+export * from "./nip34/patch-graph.js";
+export * from "./nip34/repo-dag.js";
 export * from "./nip34/repositories.js";
 export * from "./nip34/validation.js";
 
