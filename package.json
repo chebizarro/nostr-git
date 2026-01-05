@@ -30,6 +30,14 @@
     "./api": {
       "types": "./dist/api/index.d.ts",
       "default": "./dist/api/index.js"
+    },
+    "./blossom" : {
+      "types": "./dist/blossom/index.d.ts",
+      "default": "./dist/blossom/index.js"
+    },
+    "./stack" : {
+      "types": "./dist/stack/index.d.ts",
+      "default": "./dist/stack/index.js"
     }
   },
   "files": [
