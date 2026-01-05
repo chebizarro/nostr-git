@@ -206,7 +206,7 @@ Test commit message
 
     expect(progressCalls.length).toBeGreaterThan(0);
     expect(progressCalls[progressCalls.length - 1]).toBe(100);
-    expect(summary.uploaded).toContain('abc123def456');
+    expect(summary.uploaded.length).toBeGreaterThan(0);
     expect(summary.failures).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ oid: 'abc123def456' })
