@@ -38,6 +38,10 @@
     "./stack" : {
       "types": "./dist/stack/index.d.ts",
       "default": "./dist/stack/index.js"
+    },
+    "./utils" : {
+      "types": "./dist/utils/index.d.ts",
+      "default": "./dist/utils/index.js"
     }
   },
   "files": [
