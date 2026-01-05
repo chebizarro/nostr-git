@@ -1,28 +1,25 @@
-import {NostrGitProvider} from "../src/nostr-git-provider.js"
-import type {GitProvider} from "../src/provider.js"
-import type {NostrClient, NostrEvent, UnsignedEvent} from "../src/nostr-client.js"
-import {makeRepoAddr} from "../src/repo-addr.js"
-import {MemoryProtocolPrefs} from "../src/prefs-store.js"
+import { NostrGitProvider } from "../src/api/providers/nostr-git-provider.js";
+import type { EventIO } from "../src/types/index.js";
+import { makeRepoAddr } from "../src/utils/repo-addr.js";
 
-// Minimal in-memory Nostr client for demo
-class DemoNostr implements NostrClient {
-  publishCalls: NostrEvent[] = []
-  async publish(evt: NostrEvent): Promise<string> {
-    this.publishCalls.push(evt)
-    console.log("[nostr.publish]", evt.kind, evt.tags.map(t => t[0] + ":" + t[1]).join(","))
-    return evt.id ?? Math.random().toString(16).slice(2)
-  }
-  subscribe(_filter: any, _onEvent: (e: NostrEvent) => void): string {
-    return "sub-demo"
-  }
-  unsubscribe(_id: string): void {}
-  async sign(evt: UnsignedEvent): Promise<NostrEvent> {
-    return {...(evt as any), id: Math.random().toString(16).slice(2)}
-  }
-}
+const demoOwner = "f".repeat(64);
+
+// Minimal EventIO implementation for demos
+const eventIO: EventIO = {
+  fetchEvents: async () => {
+    console.log("[eventIO.fetchEvents]", "returning no events for demo");
+    return [];
+  },
+  publishEvent: async (event) => {
+    console.log("[eventIO.publishEvent] kind=", event.kind ?? "unknown");
+    return { ok: true, relays: [] };
+  },
+  publishEvents: async (events) => Promise.all(events.map((evt) => eventIO.publishEvent(evt))),
+  getCurrentPubkey: () => demoOwner,
+};
 
 // Fake Git provider that fails first push (ssh) and succeeds second (https)
-class DemoGit implements GitProvider {
+class DemoGit {
   private pushed = false
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async push(options: any): Promise<any> {
@@ -50,13 +47,15 @@ class DemoGit implements GitProvider {
 
 async function main() {
   const git = new DemoGit()
-  const nostr = new DemoNostr()
-  const provider = new NostrGitProvider(git as any, nostr as any)
-  provider.configureProtocolPrefsStore(new MemoryProtocolPrefs())
+  const provider = new NostrGitProvider({
+    eventIO,
+    gitProvider: git as any,
+    publishRepoState: false,
+    publishRepoAnnouncements: false,
+  })
 
   const repoId = "demo-repo"
-  const owner = "f".repeat(64)
-  const repoAddr = makeRepoAddr(owner, repoId)
+  const repoAddr = makeRepoAddr(demoOwner, repoId)
 
   // Stub discovery to provide two URLs so push can fallback
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -72,7 +71,10 @@ async function main() {
     timeoutMs: 1000,
   })
 
-  console.log("Push result:", result.server)
+  console.log("Push result (server):", result.server)
+  if (result.blossomSummary) {
+    console.log("Blossom summary:", result.blossomSummary)
+  }
 }
 
 main().catch(err => {

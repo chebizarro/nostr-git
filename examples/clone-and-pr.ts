@@ -1,34 +1,25 @@
-import {NostrGitProvider} from "../src/nostr-git-provider.js"
-import type {NostrEvent} from "../src/nostr-client.js"
-import {makeRepoAddr} from "../src/repo-addr.js"
-import {MemoryProtocolPrefs} from "../src/prefs-store.js"
+import { NostrGitProvider } from "../src/api/providers/nostr-git-provider.js";
+import type { EventIO } from "../src/types/index.js";
+import { makeRepoAddr } from "../src/utils/repo-addr.js";
 import * as path from "node:path"
 import * as fs from "node:fs"
 import * as os from "node:os"
 import * as git from "isomorphic-git"
-import http from "isomorphic-git/http/node/index.js"
 
-// Demo Nostr client that logs publications
-class DemoNostr {
-  async publish(evt: NostrEvent): Promise<string> {
-    console.log(
-      "[nostr.publish]",
-      evt.kind,
-      "tags=",
-      evt.tags.length,
-      "content.len=",
-      evt.content?.length || 0,
-    )
-    return evt.id ?? Math.random().toString(16).slice(2)
-  }
-  subscribe(): string {
-    return "sub"
-  }
-  unsubscribe(): void {}
-  async sign(evt: any): Promise<NostrEvent> {
-    return {...(evt as any), id: Math.random().toString(16).slice(2)} as NostrEvent
-  }
-}
+const demoOwner = "f".repeat(64);
+
+const eventIO: EventIO = {
+  fetchEvents: async () => {
+    console.log("[eventIO.fetchEvents] returning no events for demo");
+    return [];
+  },
+  publishEvent: async (event) => {
+    console.log("[eventIO.publishEvent] kind=", event.kind ?? "unknown");
+    return { ok: true, relays: [] };
+  },
+  publishEvents: async (events) => Promise.all(events.map((evt) => eventIO.publishEvent(evt))),
+  getCurrentPubkey: () => demoOwner,
+};
 
 // Minimal Git provider; we don't need server push for PR path
 class DemoGit {
@@ -81,17 +72,19 @@ async function main() {
   await setupRepo(tmp)
 
   const gitProvider = new DemoGit()
-  const nostr = new DemoNostr()
-  const provider = new NostrGitProvider(gitProvider as any, nostr as any)
-  provider.configureProtocolPrefsStore(new MemoryProtocolPrefs())
+  const provider = new NostrGitProvider({
+    eventIO,
+    gitProvider: gitProvider as any,
+    publishRepoState: false,
+    publishRepoAnnouncements: false,
+  })
 
   const repoId = "demo-repo"
-  const owner = "f".repeat(64)
-  const repoAddr = makeRepoAddr(owner, repoId)
+  const repoAddr = makeRepoAddr(demoOwner, repoId)
 
   // For demonstration, discovery is not required for PR publication
   // Provide fs/dir + baseBranch so default patch content includes a unified diff
-  await provider.push({
+  const result = await provider.push({
     dir: tmp,
     fs: fs as unknown as any,
     refspecs: ["refs/heads/pr/feature-x"],
@@ -101,6 +94,9 @@ async function main() {
     timeoutMs: 1000,
   })
 
+  if (result.blossomSummary) {
+    console.log("Blossom summary:", result.blossomSummary)
+  }
   console.log("Clone-and-PR example finished")
 }
 
