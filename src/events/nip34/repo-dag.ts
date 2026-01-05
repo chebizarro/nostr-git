@@ -2,7 +2,7 @@
 // Build a Patch DAG from NIP-34 Patch events
 import type { Event as NostrEvent } from "nostr-tools";
 import type { PatchEvent } from "./nip34.js";
-import type { PatchNode } from "./patchGraph.js";
+import type { PatchNode } from "./patch-graph.js";
 
 function getTagValues(e: NostrEvent, name: string): string[] {
   return (e.tags as string[][]).filter((t) => t[0] === name).map((t) => t[1]);

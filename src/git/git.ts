@@ -1,5 +1,5 @@
 import { getGitProvider } from '../api/git-provider.js';
-import { canonicalRepoKey } from '../utils/canonicalRepoKey.js';
+import { canonicalRepoKey } from '../utils/canonical-repo-key.js';
 import { fileTypeFromBuffer } from 'file-type';
 import { createPatch } from 'diff';
 import type { RepoAnnouncement } from '../events/index.js';

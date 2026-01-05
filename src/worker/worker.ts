@@ -8,7 +8,7 @@ import { analyzePatchMergeability } from "../git/merge-analysis.js";
 import type { EventIO } from "../types/index.js";
 import { getNostrGitProvider, initializeNostrGitProvider } from "../api/git-provider.js";
 
-import { canonicalRepoKey } from "../utils/canonicalRepoKey.js";
+import { canonicalRepoKey } from "../utils/canonical-repo-key.js";
 
 import type { AuthConfig } from "./workers/auth.js";
 import { getAuthCallback, getConfiguredAuthHosts, setAuthConfig } from "./workers/auth.js";

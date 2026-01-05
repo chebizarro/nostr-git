@@ -5,7 +5,7 @@ import {
   rootDir,
   resolveRobustBranch
 } from './git.js';
-import { canonicalRepoKey } from '../utils/canonicalRepoKey.js';
+import { canonicalRepoKey } from '../utils/canonical-repo-key.js';
 import { parseRepoAnnouncementEvent } from '../events/index.js';
 import type { RepoAnnouncementEvent } from '../events/index.js';
 import { Buffer } from 'buffer';
