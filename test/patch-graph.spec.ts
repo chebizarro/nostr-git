@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPatchGraph, type PatchNode } from '../src/events/nip34/patchGraph.js';
+import { buildPatchGraph, type PatchNode } from '../src/events/nip34/patch-graph.js';
 
 function patchEvt(partial: Partial<any>): any {
   return {

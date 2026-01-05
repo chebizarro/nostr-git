@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPatchGraph } from '../../src/events/nip34/patchGraph.js';
+import { buildPatchGraph } from '../../src/events/nip34/patch-graph.js';
 
 function mkPatch(
   id: string,
