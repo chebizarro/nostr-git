@@ -6,7 +6,7 @@ import { rootDir } from "../git/git.js";
 import { analyzePatchMergeability } from "../git/merge-analysis.js";
 
 import type { EventIO } from "../types/index.js";
-import { initializeNostrGitProvider } from "../api/git-provider.js";
+import { getNostrGitProvider, initializeNostrGitProvider } from "../api/git-provider.js";
 
 import { canonicalRepoKey } from "../utils/canonicalRepoKey.js";
 
@@ -294,6 +294,53 @@ const api = {
     return toPlain(result);
   },
 
+  async pushToRemote(opts: {
+    repoId: string;
+    remoteUrl: string;
+    branch?: string;
+    token?: string;
+    provider?: string;
+    blossomMirror?: boolean;
+  }) {
+    const { repoId, remoteUrl, branch, token, provider, blossomMirror } = opts;
+    const { dir } = repoKeyAndDir(repoId);
+    const targetBranch = branch || "main";
+
+    const onAuth =
+      token != null
+        ? () => ({ username: "token", password: token })
+        : getAuthCallback(remoteUrl);
+
+    const nostrProvider = getNostrGitProvider?.();
+    if (nostrProvider) {
+      const result = await nostrProvider.push({
+        dir,
+        fs: getProviderFs(git),
+        ref: targetBranch,
+        remoteRef: targetBranch,
+        url: remoteUrl,
+        onAuth,
+        blossomMirror: blossomMirror ?? Boolean(provider === "blossom" || provider === "grasp"),
+      });
+      return toPlain({
+        success: true,
+        branch: targetBranch,
+        remoteUrl,
+        blossomSummary: result.blossomSummary,
+      });
+    }
+
+    await (git as any).push({
+      dir,
+      url: remoteUrl,
+      ref: targetBranch,
+      remoteRef: targetBranch,
+      onAuth,
+    });
+
+    return toPlain({ success: true, branch: targetBranch, remoteUrl });
+  },
+
   // Safe push wrapper (preflight checks + optional confirmation flow)
   async safePushToRemote(opts: SafePushOptions) {
     return toPlain(
@@ -317,23 +364,14 @@ const api = {
           token?: string;
           provider?: any;
         }) => {
-          const { dir } = repoKeyAndDir(args.repoId);
-          const remoteUrl = args.remoteUrl;
-          const branch = args.branch || "main";
-          const onAuth =
-            args.token != null
-              ? () => ({ username: "token", password: args.token })
-              : getAuthCallback(remoteUrl);
-
           try {
-            await (git as any).push({
-              dir,
-              url: remoteUrl,
-              ref: branch,
-              remoteRef: branch,
-              onAuth,
+            return await api.pushToRemote({
+              repoId: args.repoId,
+              remoteUrl: args.remoteUrl,
+              branch: args.branch,
+              token: args.token,
+              provider: args.provider,
             });
-            return { success: true };
           } catch (e: any) {
             return { success: false, error: e?.message || String(e) } as any;
           }

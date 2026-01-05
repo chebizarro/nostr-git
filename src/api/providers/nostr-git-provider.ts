@@ -9,6 +9,7 @@ import type {
   GitProvider, 
   HttpOverrides
 } from '../../git/provider.js';
+import type { BlossomPushSummary } from '../../blossom/index.js';
 import { getGitProvider } from '../../git/factory.js';
 import type { EventIO } from '../../types/index.js';
 import type { RepoAnnouncementEvent, RepoStateEvent } from '../../events/index.js';
@@ -23,6 +24,7 @@ export interface NostrGitConfig {
   publishRepoState?: boolean;
   publishRepoAnnouncements?: boolean;
   httpOverrides?: HttpOverrides;
+  gitProvider?: GitProvider;
 }
 
 interface GraspLike {
@@ -46,6 +48,7 @@ export interface NostrPushResult {
   server?: any;
   patchEventIds?: string[];
   stateEventId?: string;
+  blossomSummary?: BlossomPushSummary;
 }
 
 /**
@@ -62,7 +65,21 @@ export class NostrGitProvider {
     this.nostrConfig = config;
     
     // Create the underlying git provider (isomorphic-git or libgit2)
-    this.baseGitProvider = getGitProvider();
+    this.baseGitProvider = config.gitProvider ?? getGitProvider();
+  }
+
+  configureGrasp(grasp: GraspLike): void {
+    this.nostrConfig.grasp = grasp;
+    if (this.nostrConfig.publishRepoState === undefined) {
+      this.nostrConfig.publishRepoState = true;
+    }
+  }
+
+  updateConfig(config: Partial<NostrGitConfig>): void {
+    this.nostrConfig = {
+      ...this.nostrConfig,
+      ...config,
+    };
   }
 
   /**
@@ -139,22 +156,59 @@ export class NostrGitProvider {
   async push(options: any): Promise<NostrPushResult> {
     // Delegate to base provider for actual push
     const result = await this.baseGitProvider.push(options);
-    
-    // If GRASP is configured and repo state publishing is enabled
+    const pushResult: NostrPushResult = {
+      ...result,
+    };
+
+    // After successful push, optionally publish repo state via GRASP
     if (this.nostrConfig.grasp && this.nostrConfig.publishRepoState && options.dir) {
       try {
         const stateEventId = await this.publishRepoState(options.dir, this.nostrConfig.graspRelays);
-        return {
-          ...result,
-          stateEventId
-        };
+        pushResult.stateEventId = stateEventId;
       } catch (error) {
         console.warn('Failed to publish repo state after push:', error);
-        return result;
       }
     }
 
-    return result;
+    // Optionally publish repo state from local using GRASP helper when requested on push options
+    if (options.publishRepoStateFromLocal && this.nostrConfig.grasp) {
+      try {
+        const owner = options.ownerPubkey ?? options.owner ?? 'owner-unknown';
+        const repo = options.repoId ?? options.repo ?? 'repo-unknown';
+        await this.nostrConfig.grasp.publishStateFromLocal(owner, repo, options.graspOptions);
+      } catch (error) {
+        console.warn('Failed to publish repo state from local before Blossom mirror:', error);
+      }
+    }
+
+    // Handle Blossom mirroring if requested and supported
+    let blossomSummary: BlossomPushSummary | undefined;
+
+    if (options.blossomMirror && options.dir && options.fs && typeof options.fs.pushToBlossom === 'function') {
+      try {
+        const pushOptions = {
+          endpoint: options.endpoint,
+          onProgress: (pct: number) => {
+            console.log(`Blossom upload progress: ${pct.toFixed(1)}%`);
+          }
+        };
+        console.log('Starting Blossom mirror upload...');
+        const summary = await options.fs.pushToBlossom(options.dir, pushOptions);
+        blossomSummary = summary;
+        console.log('Blossom mirror upload completed');
+        if (summary.failures.length > 0) {
+          console.warn('Blossom mirror completed with failures:', summary.failures);
+        }
+      } catch (error) {
+        console.error('Error during Blossom mirror upload:', error);
+      }
+    }
+
+    if (blossomSummary) {
+      pushResult.blossomSummary = blossomSummary;
+    }
+
+    return pushResult;
   }
 
   /**

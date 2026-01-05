@@ -1,6 +1,7 @@
 import type { GitProvider } from '../../git/provider.js';
 import type { RepoCache, RepoCacheManager } from './cache.js';
 import type { GitVendor } from '../../git/vendor-providers.js';
+import type { BlossomPushSummary } from '../../blossom/index.js';
 
 export interface SafePushOptions {
   repoId: string;
@@ -35,7 +36,7 @@ export async function safePushToRemoteUtil(
       branch?: string;
       token?: string;
       provider?: GitVendor;
-    }) => Promise<{ success?: boolean }>;
+    }) => Promise<{ success?: boolean; blossomSummary?: BlossomPushSummary }>;
   }
 ): Promise<{
   success: boolean;
@@ -44,6 +45,7 @@ export async function safePushToRemoteUtil(
   reason?: string;
   warning?: string;
   error?: string;
+  blossomSummary?: BlossomPushSummary;
 }> {
   const {
     repoId,
@@ -136,7 +138,15 @@ export async function safePushToRemoteUtil(
     if (ok === undefined) {
       return { success: false, error: 'Push operation returned invalid response (no success field)' };
     }
-    return { success: !!ok, pushed: ok };
+    const result: {
+      success: boolean;
+      pushed?: boolean;
+      blossomSummary?: BlossomPushSummary;
+    } = { success: !!ok, pushed: ok };
+    if ((pushRes as any)?.blossomSummary) {
+      result.blossomSummary = (pushRes as any).blossomSummary;
+    }
+    return result;
   } catch (error: any) {
     return { success: false, error: error?.message || String(error) };
   }

@@ -10,6 +10,8 @@ export * as git from "./git/index.js";
 export * as types from "./types/index.js";
 export * as api from "./api/index.js";
 export * as worker from "./worker/index.js";
+export * as blossom from "./blossom/index.js";
+export * as stack from "./stack/index.js";
 
 // Convenience top-level exports
 export { createRepoStateEvent, createRepoAnnouncementEvent } from "./events/index.js";

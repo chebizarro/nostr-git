@@ -263,6 +263,66 @@ async function blossomGet(endpoint: string, sha256Hex: string): Promise<ArrayBuf
   return await res.arrayBuffer();
 }
 
+class BlossomUploadError extends Error {
+  status: number;
+  body: string;
+
+  constructor(status: number, body: string) {
+    const cleanedBody = (body ?? '').trim();
+    super(`Blossom upload failed ${status}${cleanedBody ? `: ${cleanedBody}` : ''}`);
+    this.name = 'BlossomUploadError';
+    this.status = status;
+    this.body = cleanedBody;
+  }
+}
+
+async function safeReadResponseText(res: any): Promise<string> {
+  if (res && typeof res.text === 'function') {
+    try {
+      const text = await res.text();
+      return typeof text === 'string' ? text : '';
+    } catch {
+      return '';
+    }
+  }
+
+  if (typeof res?.statusText === 'string') {
+    return res.statusText;
+  }
+
+  return '';
+}
+
+function describeUploadError(error: unknown): string {
+  if (error instanceof BlossomUploadError) {
+    return error.message;
+  }
+
+  if (error instanceof Error) {
+    return error.message || error.toString();
+  }
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+export interface BlossomPushFailure {
+  oid: string;
+  message: string;
+  status?: number;
+  body?: string;
+}
+
+export interface BlossomPushSummary {
+  totalObjects: number;
+  uploaded: string[];
+  skipped: string[];
+  failures: BlossomPushFailure[];
+}
+
 async function blossomUpload(
   endpoint: string,
   signer: Signer,
@@ -271,17 +331,23 @@ async function blossomUpload(
   const url = `${endpoint.replace(/\/+$/, '')}/upload`;
   const bodySha256 = await hexSha256Raw(data);
   const auth = await buildNostrAuthHeader(signer, 'PUT', url, bodySha256);
-  const res = await fetch(url, {
-    method: 'PUT',
-    headers: {
-      'Authorization': auth,
-      'Content-Type': 'application/octet-stream',
-    },
-    body: new Blob([new Uint8Array(data)]),
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Authorization': auth,
+        'Content-Type': 'application/octet-stream',
+      },
+      body: new Blob([new Uint8Array(data)]),
+    });
+  } catch (error) {
+    throw new BlossomUploadError(0, describeUploadError(error));
+  }
+
   if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    throw new Error(`Blossom upload failed ${res.status} ${txt}`);
+    const txt = await safeReadResponseText(res);
+    throw new BlossomUploadError(res.status ?? 0, txt);
   }
   // Expected descriptor: { sha256, size, ... }
   const desc = await res.json().catch(() => ({}));
@@ -455,7 +521,10 @@ export default class BlossomFS {
    * @param dir - Git repository directory path
    * @param opts - Options including endpoint override and progress callback
    */
-  async pushToBlossom(dir: string, opts?: { endpoint?: string; onProgress?: (pct: number) => void }): Promise<void> {
+  async pushToBlossom(
+    dir: string,
+    opts?: { endpoint?: string; onProgress?: (pct: number) => void }
+  ): Promise<BlossomPushSummary> {
     if (!this.signer) {
       throw new Error('pushToBlossom requires a signer for authentication');
     }
@@ -474,36 +543,79 @@ export default class BlossomFS {
     }
 
     const objectList = Array.from(allObjects);
-    let uploaded = 0;
-    let skipped = 0;
-    let errors = 0;
+    const uploadedOids: string[] = [];
+    const skippedOids: string[] = [];
+    const failureDetails: BlossomPushFailure[] = [];
 
     console.log(`pushToBlossom: Found ${objectList.length} Git objects to check`);
+
+    if (objectList.length === 0) {
+      if (onProgress) {
+        onProgress(100);
+      }
+      const emptySummary: BlossomPushSummary = {
+        totalObjects: 0,
+        uploaded: [],
+        skipped: [],
+        failures: [],
+      };
+      console.log('pushToBlossom complete: 0 uploaded, 0 skipped, 0 errors');
+      return emptySummary;
+    }
 
     // Process objects in batches with concurrency
     const uploadTasks = objectList.map((oid) => async () => {
       try {
         const exists = await this._checkBlossomObject(endpoint, oid, dir);
         if (exists) {
-          skipped++;
+          skippedOids.push(oid);
         } else {
           await this._uploadBlossomObject(endpoint, oid, dir);
-          uploaded++;
+          uploadedOids.push(oid);
         }
       } catch (error) {
-        console.error(`Failed to process object ${oid}:`, error);
-        errors++;
+        console.error(`Failed to process object ${oid}: ${describeUploadError(error)}`);
+        const failure: BlossomPushFailure = {
+          oid,
+          message: describeUploadError(error),
+        };
+        if (error instanceof BlossomUploadError) {
+          failure.status = error.status;
+          if (error.body) {
+            failure.body = error.body;
+          }
+        }
+        failureDetails.push(failure);
       }
-      
-      const total = uploaded + skipped + errors;
-      if (onProgress && total > 0) {
-        onProgress((total / objectList.length) * 100);
+
+      const processed = uploadedOids.length + skippedOids.length + failureDetails.length;
+      if (onProgress && processed > 0) {
+        onProgress(Math.min(100, (processed / objectList.length) * 100));
       }
     });
 
     await withConcurrency(5, uploadTasks);
 
-    console.log(`pushToBlossom complete: ${uploaded} uploaded, ${skipped} skipped, ${errors} errors`);
+    if (onProgress) {
+      onProgress(100);
+    }
+
+    const summary: BlossomPushSummary = {
+      totalObjects: objectList.length,
+      uploaded: uploadedOids,
+      skipped: skippedOids,
+      failures: failureDetails,
+    };
+
+    console.log(
+      `pushToBlossom complete: ${summary.uploaded.length} uploaded, ${summary.skipped.length} skipped, ${summary.failures.length} errors`
+    );
+
+    if (summary.failures.length > 0) {
+      console.warn('Blossom push encountered failures:', summary.failures);
+    }
+
+    return summary;
   }
 
   // -------------------------
