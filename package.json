@@ -48,7 +48,8 @@
     "build": "pnpm run clean && tsc -p tsconfig.base.json",
     "typecheck": "tsc -p tsconfig.base.json --noEmit",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepare": "pnpm build"
   },
   "dependencies": {
     "@isomorphic-git/lightning-fs": "^4.6.2",
