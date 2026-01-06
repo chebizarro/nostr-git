@@ -40,6 +40,23 @@ describe('grasp-capabilities helpers', () => {
     expect(uniq.size).toBe(list.length);
   });
 
+  it('deriveHttpOrigins works when fields missing and uses fallback + /git', () => {
+    const list = deriveHttpOrigins('wss://relay2.example.com');
+    expect(list[0]).toBe('https://relay2.example.com');
+    expect(list).toContain('https://relay2.example.com/git');
+  });
+
+  it('deriveHttpOrigins handles array + string and dedupes odd URLs', () => {
+    const info: RelayInfo = {
+      http: ['https://relay.example.com', 'https://relay.example.com/'],
+      smart_http: 'https://relay.example.com/git'
+    } as any;
+    const list = deriveHttpOrigins('wss://relay.example.com/', info);
+    // should normalize duplicates and include /git
+    expect(list.filter((x) => x === 'https://relay.example.com').length).toBe(1);
+    expect(list).toContain('https://relay.example.com/git');
+  });
+
   it('graspCapabilities inspects supported_grasps and derives origins', () => {
     const info: RelayInfo = { supported_grasps: ['GRASP-01'], http: 'https://relay.example.com' } as any;
     const caps = graspCapabilities(info, 'wss://relay.example.com');

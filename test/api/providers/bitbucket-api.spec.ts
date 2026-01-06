@@ -39,6 +39,48 @@ describe('BitbucketApi request/shape mapping', () => {
     expect(init.headers.Authorization).toBe(`Bearer ${token}`);
   });
 
+  it('getCommit maps author/committer, parents and urls', async () => {
+    const payload = {
+      hash: 'c1',
+      message: 'm',
+      author: { raw: 'A <a@e>', user: { display_name: 'A', email: 'a@e' } },
+      date: '2020-01-01',
+      links: { self: { href: 'u' }, html: { href: 'h' } },
+      parents: [{ hash: 'p1', links: { self: { href: 'pu1' } } }]
+    };
+    globalThis.fetch = makeFetchOk(payload) as any;
+    const api = new BitbucketApi(token);
+    const out = await api.getCommit(owner, repo, 'c1');
+    expect(out.sha).toBe('c1');
+    expect(out.author.name).toBe('A');
+    expect(out.committer.name).toBe('A');
+    expect(out.parents[0].sha).toBe('p1');
+    expect(out.url).toBe('u');
+    expect(out.htmlUrl).toBe('h');
+  });
+
+  it('listCommits maps array and passes include/pagelen params', async () => {
+    const payload = {
+      values: [
+        {
+          hash: 'c1',
+          message: 'm',
+          author: { raw: 'A <a@e>', user: { display_name: 'A', email: 'a@e' } },
+          date: '2020-01-01',
+          links: { self: { href: 'u' }, html: { href: 'h' } },
+          parents: [{ hash: 'p1', links: { self: { href: 'pu1' } } }]
+        }
+      ]
+    };
+    globalThis.fetch = makeFetchOk(payload) as any;
+    const api = new BitbucketApi(token);
+    const out = await api.listCommits(owner, repo, { sha: 'main', per_page: 1 });
+    expect(out[0].sha).toBe('c1');
+    expect(out[0].parents[0].sha).toBe('p1');
+    const url = (globalThis.fetch as any).mock.calls[0][0];
+    expect(url).toMatch(/commits\?include=main&pagelen=1/);
+  });
+
   it('respects baseUrl override for request URL', async () => {
     globalThis.fetch = makeFetchOk(bbRepo) as any;
     const api = new BitbucketApi(token, 'https://bb.example/2.0');

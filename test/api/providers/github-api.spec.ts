@@ -28,6 +28,96 @@ describe('GitHubApi request/shape mapping', () => {
   beforeEach(() => {
     origFetch = globalThis.fetch;
   });
+
+  it('getCommit propagates error text when response not ok', async () => {
+    globalThis.fetch = makeFetchErr(500, 'boom') as any;
+    const api = new GitHubApi(token);
+    await expect(api.getCommit(owner, repo, 'badsha')).rejects.toThrow(/GitHub API error 500: boom/);
+  });
+
+  it('listCommits propagates error text when response not ok', async () => {
+    globalThis.fetch = makeFetchErr(404, 'nope') as any;
+    const api = new GitHubApi(token);
+    await expect(api.listCommits(owner, repo, { sha: 'main' })).rejects.toThrow(/GitHub API error 404: nope/);
+  });
+
+  it('getCommit maps author/committer, parents and stats', async () => {
+    const payload = {
+      sha: 'c1',
+      commit: {
+        message: 'm',
+        author: { name: 'A', email: 'a@e', date: '2020-01-01' },
+        committer: { name: 'C', email: 'c@e', date: '2020-01-01' }
+      },
+      parents: [{ sha: 'p1', url: 'pu1' }],
+      url: 'u', html_url: 'h',
+      stats: { additions: 1, deletions: 2, total: 3 }
+    };
+    globalThis.fetch = makeFetchOk(payload) as any;
+    const api = new GitHubApi(token);
+    const out = await api.getCommit(owner, repo, 'c1');
+    expect(out.sha).toBe('c1');
+    expect(out.author?.name).toBe('A');
+    expect(out.committer?.name).toBe('C');
+    expect(out.parents?.[0].sha).toBe('p1');
+    expect(out.stats?.additions).toBe(1);
+  });
+
+  it('listCommits maps array of commits and passes sha/per_page params', async () => {
+    const payload = [
+      {
+        sha: 'c1',
+        commit: {
+          message: 'm',
+          author: { name: 'A', email: 'a@e', date: '2020-01-01' },
+          committer: { name: 'C', email: 'c@e', date: '2020-01-01' }
+        },
+        parents: [{ sha: 'p1', url: 'pu1' }],
+        url: 'u', html_url: 'h'
+      }
+    ];
+    globalThis.fetch = makeFetchOk(payload) as any;
+    const api = new GitHubApi(token);
+    const out = await api.listCommits(owner, repo, { sha: 'main', per_page: 1 });
+    expect(out[0].sha).toBe('c1');
+    expect(out[0].parents?.[0].sha).toBe('p1');
+    const url = (globalThis.fetch as any).mock.calls[0][0];
+    expect(url).toMatch(/\/commits\?/);
+    expect(url).toMatch(/(sha=main&per_page=1|per_page=1&sha=main)/);
+  });
+
+  it('getTag maps release tag fields to tag object', async () => {
+    const payload = {
+      tag_name: 'v1.2.3',
+      target_commitish: 'deadbeef',
+      zipball_url: 'z',
+      tarball_url: 't'
+    };
+    globalThis.fetch = makeFetchOk(payload) as any;
+    const api = new GitHubApi(token);
+    const out = await api.getTag(owner, repo, 'v1.2.3');
+    expect(out).toMatchObject({ name: 'v1.2.3', commit: { sha: 'deadbeef' }, zipballUrl: 'z', tarballUrl: 't' });
+  });
+
+  it('closeIssue delegates to updateIssue (PATCH) and returns mapped issue', async () => {
+    const payload = {
+      id: 5,
+      number: 5,
+      title: 'x',
+      body: '',
+      state: 'closed',
+      user: { login: 'alice', avatar_url: 'a' },
+      assignees: [], labels: [],
+      created_at: 'c', updated_at: 'u', closed_at: 'cl', url: 'u', html_url: 'h'
+    };
+    globalThis.fetch = makeFetchOk(payload) as any;
+    const api = new GitHubApi(token);
+    const out = await api.closeIssue(owner, repo, 5);
+    expect(out.state).toBe('closed');
+    // Verify PATCH method used in the call frame
+    const init = (globalThis.fetch as any).mock.calls[0][1];
+    expect(init.method).toBe('PATCH');
+  });
   afterEach(() => {
     globalThis.fetch = origFetch;
     vi.restoreAllMocks();
