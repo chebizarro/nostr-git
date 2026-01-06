@@ -43,6 +43,76 @@ describe('worker/repos quick tests', () => {
     expect(map.size).toBe(0);
   });
 
+  it('ensureFullCloneUtil returns error when fetch fails', async () => {
+    const git = makeGit({ fetchErr: 'network fail' });
+    const repoDataLevels = new Map<string, any>([['owner:name', 'refs']]);
+    const res = await ensureFullCloneUtil(
+      git,
+      { repoId: 'owner/name' },
+      {
+        rootDir: '/root',
+        canonicalRepoKey: (id: string) => id.replace('/', ':'),
+        repoDataLevels,
+        clonedRepos: new Set(['owner:name']),
+        isRepoCloned: async () => true,
+        resolveRobustBranch: async () => 'main',
+      },
+      () => {}
+    );
+    expect(res.success).toBe(false);
+    expect(String((res as any).error)).toMatch(/network fail/);
+  });
+
+  it('smartInitializeRepoUtil sync path uses HEAD when writeRef fails', async () => {
+    const headOid = 'head'.padEnd(40, 'h');
+    const git = makeGit({
+      refs: {
+        'refs/remotes/origin/main': 'orig'.padEnd(40, 'o'),
+        HEAD: headOid,
+      },
+    });
+    // Override writeRef to throw to trigger HEAD fallback
+    (git as any).writeRef = async () => { throw new Error('write failed'); };
+    const cache = makeCache();
+    const res = await smartInitializeRepoUtil(
+      git,
+      cache.obj as any,
+      { repoId: 'owner/name', cloneUrls: ['https://example.com/owner/name.git'] },
+      {
+        rootDir: '/root',
+        canonicalRepoKey: (id: string) => id.replace('/', ':'),
+        repoDataLevels: new Map(),
+        clonedRepos: new Set(['owner:name']),
+        isRepoCloned: async () => true,
+        resolveRobustBranch: async () => 'main',
+      },
+      () => {}
+    );
+    expect(res.success).toBe(true);
+    expect((res as any).synced).toBe(true);
+    expect((res as any).headCommit).toBe(headOid);
+  });
+
+  it('ensureShallowCloneUtil returns fromCache when level already shallow/full', async () => {
+    const git = makeGit();
+    const repoDataLevels = new Map<string, any>([['owner:name', 'shallow']]);
+    const res = await ensureShallowCloneUtil(
+      git,
+      { repoId: 'owner/name' },
+      {
+        rootDir: '/root',
+        canonicalRepoKey: (id: string) => id.replace('/', ':'),
+        repoDataLevels,
+        clonedRepos: new Set(['owner:name']),
+        isRepoCloned: async () => true,
+        resolveRobustBranch: async () => 'main',
+      },
+      () => {}
+    );
+    expect(res.success).toBe(true);
+    expect((res as any).fromCache).toBe(true);
+  });
+
   it('ensureShallowCloneUtil returns not initialized when repo missing', async () => {
     const git = makeGit();
     const res = await ensureShallowCloneUtil(

@@ -390,7 +390,7 @@ export async function ensureRepoFromEvent(
   }
 }
 
-function sshToHttps(sshUrl: string): string | null {
+export function sshToHttps(sshUrl: string): string | null {
   // Match git@host:user/repo(.git)
   const match = sshUrl.match(/^git@([^:]+):(.+?)(\.git)?$/);
   if (match) {
