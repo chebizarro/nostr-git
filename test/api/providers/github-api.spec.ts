@@ -61,4 +61,163 @@ describe('GitHubApi request/shape mapping', () => {
     const api = new GitHubApi(token);
     await expect(api.getRepo(owner, repo)).rejects.toThrow(/GitHub API error 500: boom/);
   });
+
+  it('listIssues maps fields including author, assignees, labels', async () => {
+    const payload = [
+      {
+        id: 1,
+        number: 7,
+        title: 'Bug',
+        body: 'desc',
+        state: 'open',
+        user: { login: 'alice', avatar_url: 'a.png' },
+        assignees: [{ login: 'bob', avatar_url: 'b.png' }],
+        labels: [{ name: 'bug', color: 'f00', description: 'red' }],
+        created_at: '2020-01-01',
+        updated_at: '2020-01-02',
+        closed_at: null,
+        url: 'u',
+        html_url: 'h'
+      }
+    ];
+    globalThis.fetch = makeFetchOk(payload) as any;
+    const api = new GitHubApi(token);
+    const out = await api.listIssues(owner, repo, { state: 'open' });
+    expect(out[0]).toMatchObject({
+      id: 1,
+      number: 7,
+      title: 'Bug',
+      body: 'desc',
+      state: 'open',
+      author: { login: 'alice', avatarUrl: 'a.png' },
+      assignees: [{ login: 'bob', avatarUrl: 'b.png' }],
+      labels: [{ name: 'bug', color: 'f00', description: 'red' }]
+    });
+  });
+
+  it('getIssue maps fields and state closed', async () => {
+    const payload = {
+      id: 2,
+      number: 8,
+      title: 'Closed',
+      body: 'b',
+      state: 'closed',
+      user: { login: 'eve', avatar_url: 'e.png' },
+      assignees: [],
+      labels: [],
+      created_at: '2020-02-01',
+      updated_at: '2020-02-02',
+      closed_at: '2020-02-03',
+      url: 'u2',
+      html_url: 'h2'
+    };
+    globalThis.fetch = makeFetchOk(payload) as any;
+    const api = new GitHubApi(token);
+    const out = await api.getIssue(owner, repo, 8);
+    expect(out.state).toBe('closed');
+    expect(out.number).toBe(8);
+    expect(out.htmlUrl).toBe('h2');
+  });
+
+  it('listIssues propagates errors', async () => {
+    globalThis.fetch = makeFetchErr(502, 'bad gateway') as any;
+    const api = new GitHubApi(token);
+    await expect(api.listIssues(owner, repo)).rejects.toThrow(/GitHub API error 502: bad gateway/);
+  });
+
+  it('listPullRequests maps state, head/base and urls', async () => {
+    const payload = [
+      {
+        id: 10,
+        number: 10,
+        title: 'PR title',
+        body: 'body',
+        state: 'open',
+        merged: false,
+        user: { login: 'alice', avatar_url: 'a.png' },
+        head: { ref: 'feat', sha: 'abc', repo: { name: 'hello', owner: { login: 'octo' } } },
+        base: { ref: 'main', sha: 'def', repo: { name: 'hello', owner: { login: 'octo' } } },
+        mergeable: true,
+        merged_at: null,
+        created_at: '2020-01-01',
+        updated_at: '2020-01-02',
+        url: 'u', html_url: 'h', diff_url: 'd', patch_url: 'p'
+      }
+    ];
+    globalThis.fetch = makeFetchOk(payload) as any;
+    const api = new GitHubApi(token);
+    const out = await api.listPullRequests(owner, repo, { state: 'open' });
+    expect(out[0]).toMatchObject({
+      number: 10,
+      state: 'open',
+      head: { ref: 'feat', sha: 'abc' },
+      base: { ref: 'main', sha: 'def' },
+      url: 'u', htmlUrl: 'h', diffUrl: 'd', patchUrl: 'p'
+    });
+  });
+
+  it('getPullRequest maps merged state', async () => {
+    const payload = {
+      id: 11,
+      number: 11,
+      title: 'PR2',
+      body: 'b',
+      state: 'closed',
+      merged: true,
+      user: { login: 'bob', avatar_url: 'b.png' },
+      head: { ref: 'fix', sha: '111', repo: { name: 'hello', owner: { login: 'octo' } } },
+      base: { ref: 'main', sha: '222', repo: { name: 'hello', owner: { login: 'octo' } } },
+      mergeable: true,
+      merged_at: '2020-02-02',
+      created_at: '2020-02-01',
+      updated_at: '2020-02-02',
+      url: 'u2', html_url: 'h2', diff_url: 'd2', patch_url: 'p2'
+    };
+    globalThis.fetch = makeFetchOk(payload) as any;
+    const api = new GitHubApi(token);
+    const out = await api.getPullRequest(owner, repo, 11);
+    expect(out.state).toBe('merged');
+    expect(out.merged).toBe(true);
+    expect(out.base.ref).toBe('main');
+  });
+
+  it('listPullRequests propagates errors', async () => {
+    globalThis.fetch = makeFetchErr(500, 'oops') as any;
+    const api = new GitHubApi(token);
+    await expect(api.listPullRequests(owner, repo)).rejects.toThrow(/GitHub API error 500: oops/);
+  });
+
+  it('createPullRequest propagates errors', async () => {
+    globalThis.fetch = makeFetchErr(400, 'invalid') as any;
+    const api = new GitHubApi(token);
+    await expect(
+      api.createPullRequest(owner, repo, { title: 't', body: 'b', head: 'h', base: 'm' })
+    ).rejects.toThrow(/GitHub API error 400: invalid/);
+  });
+
+  it('getFileContent propagates error text when response not ok', async () => {
+    globalThis.fetch = makeFetchErr(404, 'nope') as any;
+    const api = new GitHubApi(token);
+    await expect(api.getFileContent(owner, repo, 'missing.txt')).rejects.toThrow(/GitHub API error 404: nope/);
+  });
+
+  it('listBranches maps name and commit.sha', async () => {
+    const payload = [
+      { name: 'main', commit: { sha: 'abc', url: 'u' } }
+    ];
+    globalThis.fetch = makeFetchOk(payload) as any;
+    const api = new GitHubApi(token);
+    const out = await api.listBranches(owner, repo);
+    expect(out[0]).toMatchObject({ name: 'main', commit: { sha: 'abc' } });
+  });
+
+  it('listTags maps name and commit.sha', async () => {
+    const payload = [
+      { name: 'v1.0.0', commit: { sha: 't1', url: 'u' } }
+    ];
+    globalThis.fetch = makeFetchOk(payload) as any;
+    const api = new GitHubApi(token);
+    const out = await api.listTags(owner, repo);
+    expect(out[0]).toMatchObject({ name: 'v1.0.0', commit: { sha: 't1' } });
+  });
 });
