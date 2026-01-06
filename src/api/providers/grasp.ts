@@ -711,8 +711,29 @@ export class GraspApiProvider implements GitServiceApi {
     path: string,
     ref?: string
   ): Promise<{ content: string; encoding: string; sha: string }> {
-    // Would require Git Smart HTTP implementation to fetch file content
-    throw new Error('GRASP getFileContent not implemented - requires Git Smart HTTP parsing');
+    await this.ensureCapabilities();
+    const npub = nip19.npubEncode(owner);
+    const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl);
+    const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`;
+    try {
+      const fs = createMemFs();
+      const dir = '/grasp';
+      // Determine a ref to read from
+      let targetRef = ref;
+      if (!targetRef) {
+        try {
+          const st = await this.fetchLatestState(owner, repo);
+          targetRef = getDefaultBranchFromHead(st?.head || '') || undefined;
+        } catch {}
+      }
+      // Fetch minimal history for the target ref (or HEAD)
+      await git.fetch({ fs, http, dir, url: remoteUrl, depth: 1, ...(targetRef ? { ref: targetRef, singleBranch: true } : {}) });
+      const { oid, blob } = await (git as any).readBlob({ fs, dir, filepath: path, ...(targetRef ? { ref: targetRef } : {}) });
+      const content = Buffer.from(blob as Uint8Array).toString('base64');
+      return { content, encoding: 'base64', sha: oid };
+    } catch (err) {
+      throw new Error(`GRASP getFileContent failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   /**
@@ -722,8 +743,26 @@ export class GraspApiProvider implements GitServiceApi {
     owner: string,
     repo: string
   ): Promise<Array<{ name: string; commit: { sha: string; url: string } }>> {
-    // Would require Git Smart HTTP implementation
-    throw new Error('GRASP listBranches not implemented - requires Git Smart HTTP parsing');
+    await this.ensureCapabilities();
+    const npub = nip19.npubEncode(owner);
+    const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl);
+    const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`;
+    try {
+      const fs = createMemFs();
+      const dir = '/grasp';
+      await git.fetch({ fs, http, dir, url: remoteUrl, depth: 1, singleBranch: false });
+      const branches = await git.listBranches({ fs, dir });
+      const out: Array<{ name: string; commit: { sha: string; url: string } }> = [];
+      for (const name of branches) {
+        try {
+          const sha = await git.resolveRef({ fs, dir, ref: `refs/heads/${name}` });
+          out.push({ name, commit: { sha, url: `${remoteUrl}/commit/${sha}` } });
+        } catch {}
+      }
+      return out;
+    } catch (err) {
+      throw new Error(`GRASP listBranches failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   async getBranch(
@@ -731,7 +770,23 @@ export class GraspApiProvider implements GitServiceApi {
     repo: string,
     branch: string
   ): Promise<{ name: string; commit: { sha: string; url: string }; protected: boolean }> {
-    throw new Error('GRASP getBranch not implemented - requires Git Smart HTTP parsing');
+    await this.ensureCapabilities();
+    const npub = nip19.npubEncode(owner);
+    const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl);
+    const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`;
+    try {
+      const fs = createMemFs();
+      const dir = '/grasp';
+      await git.fetch({ fs, http, dir, url: remoteUrl, depth: 1, ref: branch, singleBranch: true });
+      const sha = await git.resolveRef({ fs, dir, ref: `refs/heads/${branch}` }).catch(async () => {
+        // Try symbolic HEAD style
+        const head = await git.resolveRef({ fs, dir, ref: 'HEAD' });
+        return head;
+      });
+      return { name: branch, commit: { sha, url: `${remoteUrl}/commit/${sha}` }, protected: false };
+    } catch (err) {
+      throw new Error(`GRASP getBranch failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   /**
@@ -741,7 +796,26 @@ export class GraspApiProvider implements GitServiceApi {
     owner: string,
     repo: string
   ): Promise<Array<{ name: string; commit: { sha: string; url: string } }>> {
-    throw new Error('GRASP listTags not implemented - requires Git Smart HTTP parsing');
+    await this.ensureCapabilities();
+    const npub = nip19.npubEncode(owner);
+    const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl);
+    const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`;
+    try {
+      const fs = createMemFs();
+      const dir = '/grasp';
+      await git.fetch({ fs, http, dir, url: remoteUrl, depth: 1, singleBranch: false, tags: true as any });
+      const tags = await git.listTags({ fs, dir });
+      const out: Array<{ name: string; commit: { sha: string; url: string } }> = [];
+      for (const name of tags) {
+        try {
+          const sha = await git.resolveRef({ fs, dir, ref: `refs/tags/${name}` });
+          out.push({ name, commit: { sha, url: `${remoteUrl}/commit/${sha}` } });
+        } catch {}
+      }
+      return out;
+    } catch (err) {
+      throw new Error(`GRASP listTags failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   async getTag(
@@ -754,7 +828,25 @@ export class GraspApiProvider implements GitServiceApi {
     zipballUrl: string;
     tarballUrl: string;
   }> {
-    throw new Error('GRASP getTag not implemented - requires Git Smart HTTP parsing');
+    await this.ensureCapabilities();
+    const npub = nip19.npubEncode(owner);
+    const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl);
+    const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`;
+    const webUrl = `${httpOrigin}/${npub}/${repo}`;
+    try {
+      const fs = createMemFs();
+      const dir = '/grasp';
+      await git.fetch({ fs, http, dir, url: remoteUrl, depth: 1, singleBranch: false, tags: true as any });
+      const sha = await git.resolveRef({ fs, dir, ref: `refs/tags/${tag}` });
+      return {
+        name: tag,
+        commit: { sha, url: `${remoteUrl}/commit/${sha}` },
+        zipballUrl: `${webUrl}/archive/${tag}.zip`,
+        tarballUrl: `${webUrl}/archive/${tag}.tar.gz`
+      };
+    } catch (err) {
+      throw new Error(`GRASP getTag failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   // Support multiple filters and dedupe results

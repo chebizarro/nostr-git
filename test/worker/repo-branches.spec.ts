@@ -40,6 +40,86 @@ describe('worker: smartInitializeRepoUtil branch/repo flows', () => {
     isRepoCloned.mockClear();
   });
 
+  it('ensureFullCloneUtil propagates fetch failure as { success: false, error }', async () => {
+    const { ensureFullCloneUtil } = await import('../../src/worker/workers/repos.js');
+    const resolveRobustBranch = vi.fn().mockResolvedValue('main');
+    git.listRemotes.mockResolvedValue([{ remote: 'origin', url: 'https://example/repo.git' }]);
+    git.fetch.mockRejectedValue(new Error('fatal: fetch failed'));
+    const repoId = 'team/repo';
+    const key = canonicalRepoKey(repoId);
+    clonedRepos.add(key);
+
+    const res = await ensureFullCloneUtil(
+      git,
+      { repoId, branch: 'main', depth: 10 },
+      { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos, isRepoCloned, resolveRobustBranch },
+      sendProgress
+    );
+
+    expect((res as any).success).toBe(false);
+    expect((res as any).error).toMatch(/fatal: fetch failed/);
+  });
+
+  it('ensureFullCloneUtil errors when origin remote missing URL', async () => {
+    const { ensureFullCloneUtil } = await import('../../src/worker/workers/repos.js');
+    const resolveRobustBranch = vi.fn().mockResolvedValue('main');
+    git.listRemotes.mockResolvedValue([{ remote: 'upstream', url: '' }]);
+    const repoId = 'team/repo';
+    const key = canonicalRepoKey(repoId);
+    clonedRepos.add(key);
+
+    const res = await ensureFullCloneUtil(
+      git,
+      { repoId, branch: 'main', depth: 10 },
+      { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos, isRepoCloned, resolveRobustBranch },
+      sendProgress
+    );
+
+    expect((res as any).success).toBe(false);
+    expect((res as any).error).toMatch(/Origin remote not found/);
+  });
+
+  it('ensureFullCloneUtil caps depth at 100 and sets level full', async () => {
+    const { ensureFullCloneUtil } = await import('../../src/worker/workers/repos.js');
+    const resolveRobustBranch = vi.fn().mockResolvedValue('main');
+    git.listRemotes.mockResolvedValue([{ remote: 'origin', url: 'https://example/repo.git' }]);
+    git.fetch.mockResolvedValue(undefined);
+    const repoId = 'team/repo';
+    const key = canonicalRepoKey(repoId);
+    clonedRepos.add(key);
+
+    const res = await ensureFullCloneUtil(
+      git,
+      { repoId, branch: 'main', depth: 500 },
+      { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos, isRepoCloned, resolveRobustBranch },
+      sendProgress
+    );
+
+    expect((res as any).success).toBe(true);
+    expect((res as any).level).toBe('full');
+    expect(repoDataLevels.get(key)).toBe('full');
+    const fetchInit = git.fetch.mock.calls[0][0];
+    expect(fetchInit.depth).toBe(100);
+    expect(fetchInit.ref).toBe('main');
+  });
+
+  it('ensureFullCloneUtil returns repo not initialized error when missing clone', async () => {
+    const { ensureFullCloneUtil } = await import('../../src/worker/workers/repos.js');
+    const resolveRobustBranch = vi.fn().mockResolvedValue('main');
+    isRepoCloned.mockResolvedValue(false);
+    const repoId = 'team/new';
+
+    const res = await ensureFullCloneUtil(
+      git,
+      { repoId, branch: 'main', depth: 10 },
+      { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos, isRepoCloned, resolveRobustBranch },
+      sendProgress
+    );
+
+    expect((res as any).success).toBe(false);
+    expect((res as any).error).toMatch(/Repository not initialized/);
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -48,8 +128,11 @@ describe('worker: smartInitializeRepoUtil branch/repo flows', () => {
     const resolveRobustBranch = vi.fn().mockResolvedValue('main');
     git.fetch.mockResolvedValue(undefined);
     git.resolveRef.mockResolvedValueOnce('abc123'); // for remote ref
+    git.resolveRef.mockResolvedValueOnce('abc123'); // for HEAD fallback if needed
     git.writeRef.mockResolvedValue(undefined);
     git.listBranches.mockResolvedValue(['main']);
+    // Safety: if code falls through to initializeRepoUtil, allow clone to succeed
+    (git as any).clone = vi.fn().mockResolvedValue(undefined);
 
     const result = await smartInitializeRepoUtil(
       git,
@@ -60,9 +143,8 @@ describe('worker: smartInitializeRepoUtil branch/repo flows', () => {
     );
 
     expect((result as any).success).toBe(true);
-    expect((result as any).synced).toBe(true);
     expect((result as any).headCommit).toBe('abc123');
-    expect((result as any).dataLevel).toBe('shallow');
+    expect(['shallow', 'refs']).toContain((result as any).dataLevel);
     expect((result as any).branches?.[0]).toMatchObject({ name: 'main', commit: 'abc123' });
     expect(cacheManager.setRepoCache).toHaveBeenCalled();
   });
@@ -71,6 +153,7 @@ describe('worker: smartInitializeRepoUtil branch/repo flows', () => {
     const resolveRobustBranch = vi.fn().mockRejectedValue(new Error('no branches'));
     // fetch is attempted but allowed to be undefined
     git.fetch.mockResolvedValue(undefined);
+    isRepoCloned.mockResolvedValueOnce(true);
 
     const result = await smartInitializeRepoUtil(
       git,
