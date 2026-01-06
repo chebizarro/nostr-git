@@ -1,15 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { groupByEuc, isMaintainer } from '../src/events/nip34/repositories.js';
-
-type RepoAnnouncementEvent = {
-  id: string;
-  kind: number;
-  pubkey: string;
-  created_at: number;
-  content: string;
-  tags: string[][];
-  sig: string;
-};
+import { type RepoAnnouncementEvent } from '../src/events/nip34/nip34.js';
 
 function repoEvt(
   tags: string[][],

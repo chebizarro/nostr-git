@@ -80,15 +80,19 @@ export function groupByEuc(events: RepoAnnouncementEvent[]): RepoGroup[] {
     g.maintainers.push(...maintainers);
   }
 
-  return Object.values(by).map((g) => ({
-    ...g,
-    handles: Array.from(new Set(g.handles)),
-    web: Array.from(new Set(g.web)),
-    clone: Array.from(new Set(g.clone)),
-    relays: Array.from(new Set(g.relays)),
-    // Filter out invalid pubkeys before deduplication
-    maintainers: Array.from(new Set(g.maintainers.filter((pk: string) => isValidPubkey(pk)))),
-  }));
+  return Object.values(by).map((g) => {
+    const hasQualified = g.handles.some((h) => h.includes('/'));
+    const handles = hasQualified ? Array.from(new Set(g.handles)) : g.handles;
+    return {
+      ...g,
+      handles,
+      web: Array.from(new Set(g.web)),
+      clone: Array.from(new Set(g.clone)),
+      relays: Array.from(new Set(g.relays)),
+      // Filter out invalid pubkeys before deduplication
+      maintainers: Array.from(new Set(g.maintainers.filter((pk: string) => isValidPubkey(pk)))),
+    };
+  });
 }
 
 export function isMaintainer(npub: string, group: RepoGroup): boolean {

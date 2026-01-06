@@ -173,7 +173,8 @@ export async function createPatchFromCommit(git: any, oid: string, seriesCount?:
     const c = commit.commit || commit
 
     const subjectPrefix = seriesCount ? `PATCH ${seriesCount.n}/${seriesCount.total}` : "PATCH"
-    const subject = `[${subjectPrefix}] ${getCommitMessageSummary(git, oid)}`
+    const summary = await getCommitMessageSummary(git, oid)
+    const subject = `[${subjectPrefix}] ${summary}`
     
     // Simple patch format (in a real implementation, this would use git format-patch)
     const patch = `From ${oid} Mon Sep 17 00:00:00 2001

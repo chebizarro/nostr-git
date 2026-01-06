@@ -231,6 +231,24 @@ export async function analyzePatchMergeability(
     // Parse patch to get commit information
     patchCommits = patch.commits.map((c) => c.oid);
 
+    // Validate patch content early
+    const rawContent: unknown = (patch as any)?.raw?.content;
+    if (typeof rawContent !== 'string' || rawContent.length === 0) {
+      return {
+        canMerge: false,
+        hasConflicts: false,
+        conflictFiles: [],
+        conflictDetails: [],
+        upToDate: false,
+        fastForward: false,
+        targetCommit,
+        remoteCommit,
+        patchCommits,
+        analysis: 'error',
+        errorMessage: 'invalid patch content error',
+      };
+    }
+
     if (patchCommits.length === 0) {
       return {
         canMerge: false,
@@ -270,8 +288,18 @@ export async function analyzePatchMergeability(
     }
     const mergeBase = await findMergeBase(git, repoDir, patchCommits[0], targetCommit);
 
-    // Check if it's a fast-forward merge
-    const isFastForward = mergeBase === targetCommit;
+    // Check if it's a fast-forward merge (target is ancestor of patch)
+    let isFastForward = false;
+    try {
+      const descendant = await git.isDescendent({
+        dir: repoDir,
+        oid: patchCommits[patchCommits.length - 1],
+        ancestor: targetCommit,
+      });
+      isFastForward = descendant || mergeBase === targetCommit;
+    } catch {
+      isFastForward = mergeBase === targetCommit;
+    }
 
     if (isFastForward) {
       return {
@@ -473,9 +501,21 @@ async function analyzeDiffForConflicts(
   const conflictFiles: string[] = [];
 
   try {
-    // Parse the patch diff
+    // Parse the patch diff (normalize literal \n sequences to real newlines)
     const patchContent = "raw" in patch ? patch.raw.content : (patch as any).raw.content;
-    const parsedDiff = parseDiff(patchContent);
+    const normalizedContent = typeof patchContent === 'string' ? patchContent.replace(/\\n/g, '\n') : '';
+    const parsedDiff = parseDiff(normalizedContent);
+
+    const decodeBlob = (res: any): string => {
+      try {
+        const b = (res && (res.blob ?? res)) as any;
+        if (typeof b === 'string') return b;
+        if (b && typeof b.byteLength === 'number') return new TextDecoder('utf-8').decode(b);
+        return String(res ?? '');
+      } catch {
+        return '';
+      }
+    };
 
     for (const file of parsedDiff) {
       if (!file.to || file.to === "/dev/null") continue;
@@ -484,7 +524,7 @@ async function analyzeDiffForConflicts(
 
       try {
         // Get current file content from target branch
-        const currentContent = await git.readBlob({
+        const currentContentBlob = await git.readBlob({
           dir: repoDir,
           oid: await git.resolveRef({
             dir: repoDir,
@@ -492,6 +532,7 @@ async function analyzeDiffForConflicts(
           }),
           filepath: filePath,
         });
+        const currentContent = decodeBlob(currentContentBlob);
 
         // Check if file has been modified since patch base
         const hasLocalChanges = await checkFileModifiedSinceBase(
@@ -504,7 +545,7 @@ async function analyzeDiffForConflicts(
 
         if (hasLocalChanges) {
           // Potential conflict - file modified in both patch and target
-          const conflictMarkers = await detectConflictMarkers(file, currentContent.toString());
+          const conflictMarkers = await detectConflictMarkers(file, currentContent);
 
           if (conflictMarkers.length > 0) {
             conflictFiles.push(filePath);
@@ -512,8 +553,24 @@ async function analyzeDiffForConflicts(
               file: filePath,
               type: "content",
               conflictMarkers,
-              headContent: currentContent.toString(),
+              headContent: currentContent,
             });
+          } else {
+            // If diff parser did not provide chunks/hunks, be conservative and
+            // flag this as a conflict because both sides changed this file.
+            const hasChunks = Array.isArray((file as any).chunks) && (file as any).chunks.length > 0;
+            const hasHunks = Array.isArray((file as any).hunks) && (file as any).hunks.length > 0;
+            if (!hasChunks && !hasHunks) {
+              conflictFiles.push(filePath);
+              conflictDetails.push({
+                file: filePath,
+                type: "content",
+                conflictMarkers: [
+                  { start: 1, end: -1, content: "Both sides modified file", type: "both-modified" },
+                ],
+                headContent: currentContent,
+              });
+            }
           }
         }
       } catch (error) {
@@ -577,8 +634,19 @@ async function checkFileModifiedSinceBase(
   targetBranch: string
 ): Promise<boolean> {
   try {
+    const decodeBlob = (res: any): string => {
+      try {
+        const b = (res && (res.blob ?? res)) as any;
+        if (typeof b === 'string') return b;
+        if (b && typeof b.byteLength === 'number') return new TextDecoder('utf-8').decode(b);
+        return String(res ?? '');
+      } catch {
+        return '';
+      }
+    };
+
     // Get file content from base branch
-    const baseContent = await git.readBlob({
+    const baseBlob = await git.readBlob({
       dir: repoDir,
       oid: await git.resolveRef({
         dir: repoDir,
@@ -586,9 +654,10 @@ async function checkFileModifiedSinceBase(
       }),
       filepath: filePath,
     });
+    const baseContent = decodeBlob(baseBlob);
 
     // Get file content from target branch
-    const targetContent = await git.readBlob({
+    const targetBlob = await git.readBlob({
       dir: repoDir,
       oid: await git.resolveRef({
         dir: repoDir,
@@ -596,8 +665,9 @@ async function checkFileModifiedSinceBase(
       }),
       filepath: filePath,
     });
+    const targetContent = decodeBlob(targetBlob);
 
-    return baseContent.toString() !== targetContent.toString();
+    return baseContent !== targetContent;
   } catch {
     // If we can't read from either branch, assume it's modified
     return true;
@@ -610,20 +680,21 @@ async function checkFileModifiedSinceBase(
 async function detectConflictMarkers(file: any, currentContent: string): Promise<ConflictMarker[]> {
   const markers: ConflictMarker[] = [];
 
-  if (!file.hunks) return markers;
+  const chunks = (file as any).chunks || (file as any).hunks;
+  if (!Array.isArray(chunks) || chunks.length === 0) return markers;
 
-  for (const hunk of file.hunks) {
-    // Check if the hunk modifies lines that have also been changed in current content
-    const modifiedLines = hunk.changes
+  for (const chunk of chunks) {
+    const changes = (chunk as any).changes || [];
+    const modifiedLines = changes
       .filter((change: any) => change.type === "del" || change.type === "add")
-      .map((change: any) => change.ln || change.ln2);
+      .map((change: any) => change.ln || change.ln2)
+      .filter(Boolean);
 
     if (modifiedLines.length > 0) {
-      // Simple heuristic: if we're modifying the same general area, it's a potential conflict
       markers.push({
-        start: Math.min(...modifiedLines.filter(Boolean)),
-        end: Math.max(...modifiedLines.filter(Boolean)),
-        content: hunk.content,
+        start: Math.min(...modifiedLines),
+        end: Math.max(...modifiedLines),
+        content: (chunk as any).content || "",
         type: "both-modified",
       });
     }

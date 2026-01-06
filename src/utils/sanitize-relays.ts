@@ -77,12 +77,14 @@ export function normalizeRelayUrl(input: string): string {
       ? `:${u.port}`
       : ""
 
-  // Normalize pathname: collapse duplicate slashes; no trailing slash rule:
-  // - If no pathname -> ensure single trailing slash
-  // - If pathname exists -> keep as-is (collapsed), don't force trailing slash
+  // Normalize pathname: collapse duplicate slashes and remove trailing slashes
+  // - If no pathname or just "/" -> empty string (no trailing slash)
+  // - If pathname exists -> keep as-is (collapsed), remove trailing slash
   let pathname = collapsePathSlashes(u.pathname || "")
   if (pathname === "" || pathname === "/") {
-    pathname = "/"
+    pathname = ""
+  } else if (pathname.endsWith("/")) {
+    pathname = pathname.slice(0, -1)
   }
 
   // Strip hash, keep query

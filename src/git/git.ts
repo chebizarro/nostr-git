@@ -487,17 +487,17 @@ export async function produceGitDiffFromPermalink(data: PermalinkData): Promise<
   const { commit } = await git.readCommit({ dir, oid: newOid });
   const parentOid = commit.parent[0];
 
-  const changes = await getFileChanges(dir, parentOid || '', newOid);
+  if (!parentOid) {
+    return await generateMultiFilePatch(dir, '4b825dc642cb6eb9a060e54bf8d69288fbee4904', newOid);
+  }
+
+  const changes = await getFileChanges(dir, parentOid, newOid);
 
   if (data.diffFileHash && changes.length) {
     const match = await findDiffMatch(changes, data.diffFileHash);
     if (match) {
-      return await createFilePatch(dir, parentOid || '', newOid, match.filepath, match.type);
+      return await createFilePatch(dir, parentOid, newOid, match.filepath, match.type);
     }
-  }
-
-  if (!parentOid) {
-    return await generateMultiFilePatch(dir, '4b825dc642cb6eb9a060e54bf8d69288fbee4904', newOid);
   }
 
   return await generateMultiFilePatch(dir, parentOid, newOid, changes);
@@ -570,13 +570,31 @@ async function createFilePatch(
   changeType: 'add' | 'remove' | 'modify'
 ) {
   const git = getGitProvider();
-  const oldContent = oldOid ? (await git.readBlob({ dir, oid: oldOid, filepath })).blob : '';
-  const newContent = newOid ? (await git.readBlob({ dir, oid: newOid, filepath })).blob : '';
 
-  const oldBuf = oldContent;
-  const newBuf = newContent;
+  const decoder = new TextDecoder('utf-8');
 
-  return createPatch(filepath, oldContent, newContent, oldOid.slice(0, 7), newOid.slice(0, 7));
+  const readTextAt = async (oid: string): Promise<string> => {
+    try {
+      const res = await git.readBlob({ dir, oid, filepath });
+      const blob: any = (res as any)?.blob;
+      if (!blob) return '';
+      if (typeof blob === 'string') return blob;
+      return decoder.decode(blob as Uint8Array);
+    } catch {
+      return '';
+    }
+  };
+
+  const oldText = oldOid ? await readTextAt(oldOid) : '';
+  const newText = newOid ? await readTextAt(newOid) : '';
+
+  const oldLabel = oldOid ? oldOid.slice(0, 7) : '';
+  const newLabel = newOid ? newOid.slice(0, 7) : '';
+
+  // changeType is currently unused but kept for future improvements (e.g., mode headers)
+  void changeType;
+
+  return createPatch(filepath, oldText, newText, oldLabel, newLabel);
 }
 
 /**

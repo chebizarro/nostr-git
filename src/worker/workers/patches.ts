@@ -315,17 +315,7 @@ export async function applyPatchAndPushUtil(
     const dir = `${rootDir}/${key}`;
     progress('Initializing merge...', 0);
 
-    const effectiveTargetBranch = await resolveRobustBranch(dir, targetBranch);
-    progress('Branch resolved', 10);
-
-    await ensureFullClone({ repoId, branch: effectiveTargetBranch });
-    progress('Repository prepared', 20);
-
-    // Checkout target branch
-    await git.checkout({ dir, ref: effectiveTargetBranch });
-    progress('Checked out target branch', 40);
-
-    // Apply patch (simplified unified diff application)
+    // Apply patch (simplified unified diff application) — parse first so we can short-circuit
     if (!patchData.rawContent || typeof patchData.rawContent !== 'string') {
       throw new Error('Patch rawContent must be a non-empty string');
     }
@@ -341,6 +331,25 @@ export async function applyPatchAndPushUtil(
         error: 'Unsupported patch features detected (rename/binary). Aborting.'
       };
     }
+
+    // If there are no file changes parsed, exit early
+    if (!fileChanges.length) {
+      return {
+        success: false,
+        error: 'No changes to apply - patch may already be merged or invalid'
+      };
+    }
+
+    // Resolve and prepare repository only after we know we have something to apply
+    const effectiveTargetBranch = await resolveRobustBranch(dir, targetBranch);
+    progress('Branch resolved', 10);
+
+    await ensureFullClone({ repoId, branch: effectiveTargetBranch });
+    progress('Repository prepared', 20);
+
+    // Checkout target branch
+    await git.checkout({ dir, ref: effectiveTargetBranch });
+    progress('Checked out target branch', 40);
 
     for (const change of fileChanges) {
       if (change.type === 'modify' || change.type === 'add') {
@@ -367,6 +376,10 @@ export async function applyPatchAndPushUtil(
         await fs.promises.writeFile(fullPath, finalContent, 'utf8');
         await git.add({ dir, filepath: change.filepath });
       } else if (change.type === 'delete') {
+        // Remove from working tree if present, then stage removal
+        try {
+          await (fs as any).promises.unlink(`${dir}/${change.filepath}`);
+        } catch {}
         await git.remove({ dir, filepath: change.filepath });
       }
     }

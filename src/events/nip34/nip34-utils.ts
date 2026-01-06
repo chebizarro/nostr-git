@@ -770,7 +770,10 @@ export function parseRepoAnnouncementEvent(event: RepoAnnouncementEvent): RepoAn
   const getAllTags = (name: string) => event.tags.filter(t => t[0] === name).map(t => t[1])
   const getMultiTag = (name: string) =>
     event.tags.filter(t => t[0] === name).flatMap(t => t.slice(1))
-  const relaysTag = () => sanitizeRelays(getMultiTag("relays"))
+  const relaysTag = () => {
+    const raw = getMultiTag("relays")
+    return raw.length > 0 ? sanitizeRelays(raw) : []
+  }
   // Extract earliest unique commit from r tag with 'euc' marker
   const eucTag = event.tags.find(t => t[0] === "r" && t[2] === "euc")
   const earliestUniqueCommit = eucTag?.[1]
