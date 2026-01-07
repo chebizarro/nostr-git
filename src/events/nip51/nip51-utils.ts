@@ -1,9 +1,9 @@
 import type { Event as NostrEvent } from "nostr-tools"
 import {
-  DEFAULT_GRASP_SET_ID,
-  GRASP_SET_KIND,
-  type GraspSetEvent,
-  type GraspSetTag,
+    DEFAULT_GRASP_SET_ID,
+    GRASP_SET_KIND,
+    type GraspSetEvent,
+    type GraspSetTag,
 } from "./nip51.js"
 
 // Derive bookmarked addresses from the singleton bookmarksStore
@@ -12,7 +12,7 @@ export type BookmarkAddress = {
     author: string
     identifier: string
     relayHint: string
-  }
+}
 
 
 export function validateGraspServerUrl(url: string): boolean {

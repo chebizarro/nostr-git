@@ -45,7 +45,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "tsconfig.base.json"
   ],
   "scripts": {
     "clean": "rimraf dist",
