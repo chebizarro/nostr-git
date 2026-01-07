@@ -9,40 +9,40 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "import": "./dist/index.js"
     },
     "./package.json": "./package.json",
     "./events": {
       "types": "./dist/events/index.d.ts",
-      "default": "./dist/events/index.js"
+      "import": "./dist/events/index.js"
     },
     "./git": {
       "types": "./dist/git/index.d.ts",
-      "default": "./dist/git/index.js"
+      "import": "./dist/git/index.js"
     },
     "./types": {
       "types": "./dist/types/index.d.ts",
-      "default": "./dist/types/index.js"
+      "import": "./dist/types/index.js"
     },
     "./worker": {
       "types": "./dist/worker/index.d.ts",
-      "default": "./dist/worker/index.js"
+      "import": "./dist/worker/index.js"
     },
     "./api": {
       "types": "./dist/api/index.d.ts",
-      "default": "./dist/api/index.js"
+      "import": "./dist/api/index.js"
     },
     "./blossom" : {
       "types": "./dist/blossom/index.d.ts",
-      "default": "./dist/blossom/index.js"
+      "import": "./dist/blossom/index.js"
     },
     "./stack" : {
       "types": "./dist/stack/index.d.ts",
-      "default": "./dist/stack/index.js"
+      "import": "./dist/stack/index.js"
     },
     "./utils" : {
       "types": "./dist/utils/index.d.ts",
-      "default": "./dist/utils/index.js"
+      "import": "./dist/utils/index.js"
     }
   },
   "files": [
