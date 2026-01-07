@@ -35,6 +35,76 @@ describe('worker/sync utils', () => {
     expect(res).toBe(false);
   });
 
+  it('syncWithRemoteUtil: updates cache branches using heads for local and remote fallback for missing heads', async () => {
+    const setSpy = vi.fn(async () => undefined);
+    const cache = { getRepoCache: vi.fn(async () => ({ dataLevel: 'shallow' })), setRepoCache: setSpy } as any;
+    const git = makeGit({
+      fetch: vi.fn(async () => undefined) as any,
+      listRemotes: vi.fn(async () => [{ remote: 'origin', url: 'https://example.com/repo.git' }]) as any,
+      listBranches: vi.fn(async () => ['main', 'feature']) as any,
+      resolveRef: vi.fn(async ({ ref }: any) => {
+        if (ref === 'HEAD') return 'localHeadX';
+        if (ref === 'refs/remotes/origin/main') return 'remoteMainX';
+        if (ref === 'refs/remotes/origin/feature') return 'remoteFeatureX';
+        if (ref === 'refs/heads/main') return 'localMainX';
+        if (ref === 'refs/heads/feature') throw new Error('no local feature head');
+        return 'localHeadX';
+      }) as any,
+      branch: vi.fn(async () => undefined) as any,
+      checkout: vi.fn(async () => undefined) as any,
+    });
+    const res = await syncWithRemoteUtil(
+      git,
+      cache,
+      { repoId: 'Org/Branches', cloneUrls: ['https://example.com/repo.git'], branch: 'main' },
+      {
+        ...depsBase,
+        isRepoCloned: async () => true,
+      }
+    );
+    expect(res.success).toBe(true);
+    expect(setSpy).toHaveBeenCalled();
+    const arg = (setSpy as any).mock.calls[0][0];
+    const branches = (arg as any).branches as Array<{ name: string; commit: string }>;
+    const main = branches.find((b) => b.name === 'main');
+    const feature = branches.find((b) => b.name === 'feature');
+    expect(main?.commit).toBe('localMainX');
+    expect(feature?.commit).toBe('remoteFeatureX');
+  });
+
+  it('syncWithRemoteUtil: empty local branches still updates cache with headCommit and synced=true', async () => {
+    const setSpy = vi.fn(async () => undefined);
+    const cache = { getRepoCache: vi.fn(async () => ({ dataLevel: 'refs' })), setRepoCache: setSpy } as any;
+    const git = makeGit({
+      fetch: vi.fn(async () => undefined) as any,
+      listRemotes: vi.fn(async () => [{ remote: 'origin', url: 'https://example.com/repo.git' }]) as any,
+      listBranches: vi.fn(async () => []) as any,
+      resolveRef: vi.fn(async ({ ref }: any) => {
+        if (ref === 'refs/remotes/origin/main') return 'remoteHeadY';
+        if (ref === 'HEAD') return 'localHeadY';
+        return 'localHeadY';
+      }) as any,
+      branch: vi.fn(async () => undefined) as any,
+      checkout: vi.fn(async () => undefined) as any,
+    });
+
+    const res = await syncWithRemoteUtil(
+      git,
+      cache,
+      { repoId: 'Org/EmptyBranches', cloneUrls: ['https://example.com/repo.git'], branch: 'main' },
+      {
+        ...depsBase,
+        isRepoCloned: async () => true,
+      }
+    );
+    expect(res.success).toBe(true);
+    expect((res as any).synced).toBe(true);
+    const arg = (setSpy as any).mock.calls[0][0];
+    expect((arg as any).headCommit).toBe('remoteHeadY');
+    expect(Array.isArray((arg as any).branches)).toBe(true);
+    expect(((arg as any).branches as any[]).length).toBe(0);
+  });
+
   it('syncWithRemoteUtil: CORS/network fetch error returns success with warning and synced=false', async () => {
     const cache = cacheMgr();
     const git = makeGit({
