@@ -55,4 +55,65 @@ describe('RepoCacheManager (IndexedDB)', () => {
     const deleted = await mgr.getMergeAnalysis(repoId, patchId, targetBranch);
     expect(deleted).toBeNull();
   });
+
+  it('getRepoCache propagates request error (onerror)', async () => {
+    const mgr = new RepoCacheManager();
+    // Inject a fake DB that triggers onerror for get()
+    const fakeError = new Error('get failed');
+    const req: any = { onerror: null as any, onsuccess: null as any, error: fakeError };
+    const fakeDb: any = {
+      transaction: () => ({
+        objectStore: () => ({
+          get: () => {
+            setTimeout(() => req.onerror && req.onerror(new Event('error')));
+            return req;
+          },
+        }),
+      }),
+    };
+    (mgr as any).db = fakeDb;
+    await expect(mgr.getRepoCache('owner:repo')).rejects.toThrow(/get failed/);
+  });
+
+  it('setRepoCache propagates request error (onerror)', async () => {
+    const mgr = new RepoCacheManager();
+    const fakeError = new Error('put failed');
+    const req: any = { onerror: null as any, onsuccess: null as any, error: fakeError };
+    const fakeDb: any = {
+      transaction: () => ({
+        objectStore: () => ({
+          put: () => {
+            setTimeout(() => req.onerror && req.onerror(new Event('error')));
+            return req;
+          },
+        }),
+      }),
+    };
+    (mgr as any).db = fakeDb;
+    await expect(mgr.setRepoCache({ repoId: 'x' } as any)).rejects.toThrow(/put failed/);
+  });
+
+  it('mergeAnalysis get/set/delete propagate request errors', async () => {
+    const mgr = new RepoCacheManager();
+    // get error
+    let req: any = { onerror: null as any, onsuccess: null as any, error: new Error('ma get failed') };
+    (mgr as any).db = {
+      transaction: () => ({ objectStore: () => ({ get: () => { setTimeout(() => req.onerror && req.onerror(new Event('error'))); return req; } }) })
+    } as any;
+    await expect(mgr.getMergeAnalysis('r','p','b')).rejects.toThrow(/ma get failed/);
+
+    // set error
+    req = { onerror: null as any, onsuccess: null as any, error: new Error('ma put failed') };
+    (mgr as any).db = {
+      transaction: () => ({ objectStore: () => ({ put: () => { setTimeout(() => req.onerror && req.onerror(new Event('error'))); return req; } }) })
+    } as any;
+    await expect(mgr.setMergeAnalysis('r','p','b', { ok: true } as any)).rejects.toThrow(/ma put failed/);
+
+    // delete error
+    req = { onerror: null as any, onsuccess: null as any, error: new Error('ma delete failed') };
+    (mgr as any).db = {
+      transaction: () => ({ objectStore: () => ({ delete: () => { setTimeout(() => req.onerror && req.onerror(new Event('error'))); return req; } }) })
+    } as any;
+    await expect(mgr.deleteMergeAnalysis('r','p','b')).rejects.toThrow(/ma delete failed/);
+  });
 });
