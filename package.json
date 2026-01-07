@@ -11,6 +11,7 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./*": "./dist/*",
     "./events": {
       "types": "./dist/events/index.d.ts",
       "default": "./dist/events/index.js"
