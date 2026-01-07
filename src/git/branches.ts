@@ -27,8 +27,23 @@ export async function listBranchesFromEvent(opts: {
 
   const dir = `${rootDir}/${canonicalKey}`;
   const git = getGitProvider();
-  const branches = await git.listBranches({ dir });
-  return branches.map((name: string) => ({ name }));
+  const localBranches: string[] = await git.listBranches({ dir });
+  let remoteBranches: string[] = [];
+  try {
+    // Attempt to include remote branches from origin (may not be supported in all providers)
+    remoteBranches = await git.listBranches({ dir, remote: 'origin' });
+  } catch {
+    // Ignore if remote listing is unsupported or no remote configured
+  }
+
+  const all = new Set<string>();
+  for (const b of localBranches) all.add(b);
+  for (const rb of remoteBranches) {
+    const name = rb.startsWith('origin/') ? rb.slice(7) : rb;
+    all.add(name);
+  }
+
+  return Array.from(all).map((name) => ({ name, isHead: false }));
 }
 
 /**

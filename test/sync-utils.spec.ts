@@ -75,6 +75,20 @@ describe('needsUpdateUtil', () => {
     );
     expect(res).toBe(true);
   });
+
+  it('returns true when cache exists but no cloneUrl provided', async () => {
+    const git = makeGit({
+      listServerRefs: vi.fn(async () => [{ ref: 'refs/heads/main', oid: 'ef01' }])
+    });
+    const res = await needsUpdateUtil(
+      git,
+      'org/repo',
+      [],
+      cache('abcd'),
+      Date.now()
+    );
+    expect(res).toBe(true);
+  });
 });
 
 describe('syncWithRemoteUtil', () => {

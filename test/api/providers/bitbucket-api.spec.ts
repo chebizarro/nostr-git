@@ -39,6 +39,166 @@ describe('BitbucketApi request/shape mapping', () => {
     expect(init.headers.Authorization).toBe(`Bearer ${token}`);
   });
 
+  it('listIssues maps fields including author/assignee and content', async () => {
+    const payload = {
+      values: [
+        {
+          id: 3,
+          title: 'Bug',
+          content: { raw: 'desc' },
+          state: 'open',
+          reporter: { username: 'alice', links: { avatar: { href: 'a.png' } } },
+          assignee: { username: 'bob', links: { avatar: { href: 'b.png' } } },
+          created_on: 'c', updated_on: 'u',
+          links: { self: { href: 's' }, html: { href: 'h' } }
+        }
+      ]
+    };
+    globalThis.fetch = makeFetchOk(payload) as any;
+    const api = new BitbucketApi(token);
+    const out = await api.listIssues(owner, repo, { state: 'open', per_page: 10 });
+    expect(out[0]).toMatchObject({
+      id: 3,
+      number: 3,
+      title: 'Bug',
+      body: 'desc',
+      state: 'open',
+      author: { login: 'alice', avatarUrl: 'a.png' },
+      assignees: [{ login: 'bob', avatarUrl: 'b.png' }],
+      url: 's', htmlUrl: 'h'
+    });
+  });
+
+  it('listIssues propagates errors', async () => {
+    globalThis.fetch = makeFetchErr(503, 'unavailable') as any;
+    const api = new BitbucketApi(token);
+    await expect(api.listIssues(owner, repo)).rejects.toThrow(/Bitbucket API error 503: unavailable/);
+  });
+
+  it('getIssue maps fields including closed state', async () => {
+    const payload = {
+      id: 4,
+      title: 'Closed',
+      content: { raw: 'body' },
+      state: 'closed',
+      reporter: { username: 'eve', links: { avatar: { href: 'e.png' } } },
+      created_on: 'c', updated_on: 'u',
+      links: { self: { href: 's' }, html: { href: 'h' } },
+    };
+    globalThis.fetch = makeFetchOk(payload) as any;
+    const api = new BitbucketApi(token);
+    const out = await api.getIssue(owner, repo, 4);
+    expect(out.number).toBe(4);
+    expect(out.state).toBe('closed');
+    expect(out.htmlUrl).toBe('h');
+  });
+
+  it('getIssue propagates errors', async () => {
+    globalThis.fetch = makeFetchErr(404, 'missing') as any;
+    const api = new BitbucketApi(token);
+    await expect(api.getIssue(owner, repo, 99)).rejects.toThrow(/Bitbucket API error 404: missing/);
+  });
+
+  it('createIssue maps response to Issue shape', async () => {
+    const payload = {
+      id: 8, title: 'New', content: { raw: 'b' }, state: 'open',
+      reporter: { username: 'alice', links: { avatar: { href: 'a.png' } } },
+      created_on: 'c', updated_on: 'u', links: { self: { href: 's' }, html: { href: 'h' } }
+    };
+    globalThis.fetch = makeFetchOk(payload) as any;
+    const api = new BitbucketApi(token);
+    const out = await api.createIssue(owner, repo, { title: 'New', body: 'b' } as any);
+    expect(out.number).toBe(8);
+    expect(out.title).toBe('New');
+    expect(out.body).toBe('b');
+  });
+
+  it('createIssue propagates errors', async () => {
+    globalThis.fetch = makeFetchErr(400, 'invalid') as any;
+    const api = new BitbucketApi(token);
+    await expect(api.createIssue(owner, repo, { title: 'x' } as any)).rejects.toThrow(/Bitbucket API error 400: invalid/);
+  });
+
+  it('updateIssue maps updated fields', async () => {
+    const payload = {
+      id: 10, title: 'Upd', content: { raw: 'nb' }, state: 'open',
+      reporter: { username: 'alice', links: { avatar: { href: 'a.png' } } },
+      created_on: 'c', updated_on: 'u', links: { self: { href: 's' }, html: { href: 'h' } }
+    };
+    globalThis.fetch = makeFetchOk(payload) as any;
+    const api = new BitbucketApi(token);
+    const out = await api.updateIssue(owner, repo, 10, { title: 'Upd', body: 'nb' });
+    expect(out.title).toBe('Upd');
+    expect(out.body).toBe('nb');
+  });
+
+  it('updateIssue propagates errors', async () => {
+    globalThis.fetch = makeFetchErr(500, 'boom') as any;
+    const api = new BitbucketApi(token);
+    await expect(api.updateIssue(owner, repo, 10, { title: 'x' })).rejects.toThrow(/Bitbucket API error 500: boom/);
+  });
+
+  it('closeIssue sets state closed and maps fields', async () => {
+    const payload = {
+      id: 11, title: 'C', content: { raw: '' }, state: 'closed',
+      reporter: { username: 'bob', links: { avatar: { href: 'b.png' } } },
+      created_on: 'c', updated_on: 'u', links: { self: { href: 's' }, html: { href: 'h' } }
+    };
+    globalThis.fetch = makeFetchOk(payload) as any;
+    const api = new BitbucketApi(token);
+    const out = await api.closeIssue(owner, repo, 11);
+    expect(out.state).toBe('closed');
+    expect(out.number).toBe(11);
+  });
+
+  it('closeIssue propagates errors', async () => {
+    globalThis.fetch = makeFetchErr(409, 'conflict') as any;
+    const api = new BitbucketApi(token);
+    await expect(api.closeIssue(owner, repo, 11)).rejects.toThrow(/Bitbucket API error 409: conflict/);
+  });
+
+  it('getBranch maps name/target hash/url and protected=false', async () => {
+    const payload = { name: 'main', target: { hash: 'abc', links: { self: { href: 'u' } } } };
+    globalThis.fetch = makeFetchOk(payload) as any;
+    const api = new BitbucketApi(token);
+    const out = await api.getBranch(owner, repo, 'main');
+    expect(out).toEqual({ name: 'main', commit: { sha: 'abc', url: 'u' }, protected: false });
+  });
+
+  it('getBranch propagates errors', async () => {
+    globalThis.fetch = makeFetchErr(404, 'missing') as any;
+    const api = new BitbucketApi(token);
+    await expect(api.getBranch(owner, repo, 'dev')).rejects.toThrow(/Bitbucket API error 404: missing/);
+  });
+
+  it('mergePullRequest performs POST then GET PR and returns mapped PR', async () => {
+    const prPayload = {
+      id: 7,
+      title: 't', description: '', state: 'OPEN',
+      author: { username: 'octo', links: { avatar: { href: 'a' } } },
+      source: { branch: { name: 'feat' }, commit: { hash: 'h' }, repository: { name: repo, owner: { username: owner } } },
+      destination: { branch: { name: 'main' }, commit: { hash: 'b' }, repository: { name: repo, owner: { username: owner } } },
+      created_on: 'c', updated_on: 'u', links: { self: { href: 'u' }, html: { href: 'h' }, diff: { href: 'd' } }
+    };
+    const fetchMock = vi.fn()
+      // POST merge
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) })
+      // GET PR
+      .mockResolvedValueOnce({ ok: true, json: async () => prPayload });
+    globalThis.fetch = fetchMock as any;
+    const api = new BitbucketApi(token);
+    const out = await api.mergePullRequest(owner, repo, 7, { mergeMethod: 'squash' });
+    expect(out.number).toBe(7);
+    const firstInit = (globalThis.fetch as any).mock.calls[0][1];
+    expect(firstInit.method).toBe('POST');
+  });
+
+  it('mergePullRequest propagates error text when merge POST fails', async () => {
+    globalThis.fetch = makeFetchErr(409, 'conflict') as any;
+    const api = new BitbucketApi(token);
+    await expect(api.mergePullRequest(owner, repo, 1)).rejects.toThrow(/Bitbucket API error 409: conflict/);
+  });
+
   it('getCommit maps author/committer, parents and urls', async () => {
     const payload = {
       hash: 'c1',

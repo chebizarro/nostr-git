@@ -35,6 +35,44 @@ describe('worker/sync utils', () => {
     expect(res).toBe(false);
   });
 
+  it('syncWithRemoteUtil: CORS/network fetch error returns success with warning and synced=false', async () => {
+    const cache = cacheMgr();
+    const git = makeGit({
+      fetch: vi.fn(async () => { throw new Error('CORS: Access-Control blocked'); }) as any,
+      listRemotes: vi.fn(async () => [{ remote: 'origin', url: 'https://example.com/repo.git' }]) as any,
+    });
+    const res = await syncWithRemoteUtil(
+      git,
+      cache,
+      { repoId: 'Org/Cors', cloneUrls: ['https://example.com/repo.git'], branch: 'feature' },
+      {
+        ...depsBase,
+        isRepoCloned: async () => true,
+      }
+    );
+    expect(res.success).toBe(true);
+    expect((res as any).synced).toBe(false);
+    expect(String((res as any).warning || '')).toMatch(/CORS|network/i);
+  });
+
+  it('syncWithRemoteUtil: no remote URL available returns error', async () => {
+    const cache = cacheMgr();
+    const git = makeGit({
+      listRemotes: vi.fn(async () => []) as any,
+    });
+    const res = await syncWithRemoteUtil(
+      git,
+      cache,
+      { repoId: 'Org/NoRemote', cloneUrls: [], branch: 'main' },
+      {
+        ...depsBase,
+        isRepoCloned: async () => true,
+      }
+    );
+    expect(res.success).toBe(false);
+    expect((res as any).error).toMatch(/No remote URL available/i);
+  });
+
   it('syncWithRemoteUtil: preserves existing cache dataLevel when updating cache', async () => {
     const cache = {
       getRepoCache: vi.fn(async () => ({ dataLevel: 'full' })),

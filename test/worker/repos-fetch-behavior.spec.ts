@@ -43,7 +43,7 @@ describe('worker repos fetch behavior', () => {
     );
     expect(res.success).toBe(true);
     expect(record.lastFetchArgs?.depth).toBe(50);
-    expect(record.lastFetchArgs?.ref).toBe('HEAD');
+    expect(record.lastFetchArgs?.ref).toBeUndefined();
   });
 
   it('ensureShallowCloneUtil passes onAuth callback when origin remote present', async () => {

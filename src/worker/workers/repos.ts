@@ -89,13 +89,17 @@ export async function smartInitializeRepoUtil(
         const cloneUrl = cloneUrls[0];
         if (cloneUrl) {
           try {
+            sendProgress('Fetching latest changes from remote');
+            const fetchStart = Date.now();
             await git.fetch({
               dir,
               url: cloneUrl,
-              ref: 'HEAD', // Use HEAD instead of trying to resolve branch first
+              // Omit ref to allow fetching all branches/refs
               singleBranch: false,
               depth: repoDataLevels.get(key) === 'full' ? undefined : 50
             });
+            const secs = ((Date.now() - fetchStart) / 1000).toFixed(1);
+            sendProgress(`Fetch completed (${secs}s)`);
           } catch (fetchError: any) {
             // Handle CORS/network errors gracefully during fetch
             const errorMessage = fetchError?.message || String(fetchError);
@@ -114,7 +118,9 @@ export async function smartInitializeRepoUtil(
         // Try to resolve branch, but handle empty repos gracefully
         let mainBranch: string;
         try {
+          sendProgress('Resolving repository branch');
           mainBranch = await resolveRobustBranch(git, dir);
+          sendProgress(`Found branch: ${mainBranch}`);
         } catch (branchError) {
           console.warn(`[smartInitializeRepo] Could not resolve branches, repository may be empty:`, branchError);
           // For empty repos, we'll return a limited success state
@@ -130,7 +136,9 @@ export async function smartInitializeRepoUtil(
         const remoteRef = `refs/remotes/origin/${mainBranch}`;
         let remoteCommit: string;
         try {
+          sendProgress('Resolving remote commit');
           remoteCommit = await git.resolveRef({ dir, ref: remoteRef });
+          sendProgress('Updating local references');
           await git.writeRef({ dir, ref: `refs/heads/${mainBranch}`, value: remoteCommit });
           await git.writeRef({
             dir,
@@ -140,20 +148,68 @@ export async function smartInitializeRepoUtil(
           });
           sendProgress('Local repository synced with remote');
         } catch (e) {
+          sendProgress('Using local HEAD commit');
           remoteCommit = await git.resolveRef({ dir, ref: 'HEAD' });
         }
-        const branches = await git.listBranches({ dir });
+        // Resolve per-branch commits (merge local + remote branches)
+        sendProgress('Listing repository branches');
+        const localBranches: string[] = await git.listBranches({ dir });
+        let remoteBranches: string[] = [];
+        try {
+          remoteBranches = await git.listBranches({ dir, remote: 'origin' });
+        } catch {}
+        const allBranchNames = new Set<string>(localBranches);
+        for (const rb of remoteBranches) {
+          allBranchNames.add(rb.startsWith('origin/') ? rb.slice(7) : rb);
+        }
+        const branchEntries: Array<{ name: string; commit: string }> = [];
+        for (const name of allBranchNames) {
+          try {
+            const commit = await git
+              .resolveRef({ dir, ref: `refs/heads/${name}` })
+              .catch(async () => await git.resolveRef({ dir, ref: `refs/remotes/origin/${name}` }));
+            branchEntries.push({ name, commit });
+          } catch {
+            // Fallback to remoteCommit if resolution fails
+            branchEntries.push({ name, commit: remoteCommit });
+          }
+        }
+
+        // Resolve tags (optional)
+        let tags: Array<{ name: string; commit: string }> | undefined = undefined;
+        try {
+          sendProgress('Resolving tags');
+          const tagNames: string[] = await (git as any).listTags?.({ dir });
+          if (Array.isArray(tagNames) && tagNames.length > 0) {
+            tags = [];
+            for (const t of tagNames) {
+              try {
+                const commit = await git.resolveRef({ dir, ref: `refs/tags/${t}` });
+                tags.push({ name: t, commit });
+              } catch {
+                // ignore individual tag resolution errors
+              }
+            }
+          }
+        } catch {
+          // listing tags is best effort; ignore errors
+        }
+
         const newCache: RepoCache = {
           repoId: key,
           lastUpdated: Date.now(),
           headCommit: remoteCommit,
           dataLevel: (repoDataLevels.get(key) || 'shallow') as DataLevel,
-          branches: branches.map((name: string) => ({ name, commit: remoteCommit })),
+          branches: branchEntries,
           cloneUrls
         };
+        if (tags && tags.length) {
+          (newCache as any).tags = tags;
+        }
         await cacheManager.setRepoCache(newCache);
         repoDataLevels.set(key, newCache.dataLevel);
         clonedRepos.add(key);
+        sendProgress(`Updating repository cache with ${branchEntries.length} branches${tags?.length ? ` and ${tags.length} tags` : ''}`);
         sendProgress('Repository ready');
         return {
           success: true,

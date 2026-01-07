@@ -29,6 +29,56 @@ describe('GitHubApi request/shape mapping', () => {
     origFetch = globalThis.fetch;
   });
 
+  it('getFileContent success maps fields and passes ref param', async () => {
+    const payload = { content: 'YmFzZTY0', encoding: 'base64', sha: 'abc' };
+    globalThis.fetch = makeFetchOk(payload) as any;
+    const api = new GitHubApi(token);
+    const out = await api.getFileContent(owner, repo, 'path.txt', 'main');
+    expect(out).toEqual(payload);
+    const url = (globalThis.fetch as any).mock.calls[0][0];
+    expect(url).toMatch(/\/contents\/path.txt\?/);
+    expect(url).toMatch(/ref=main/);
+  });
+
+  it('mergePullRequest performs PUT then GETs PR and returns mapped PR', async () => {
+    const mergeOk = { merged: true, sha: 'deadbeef' };
+    const prPayload = {
+      id: 7,
+      number: 7,
+      title: 't',
+      body: '',
+      state: 'open',
+      merged: true,
+      user: { login: 'octo', avatar_url: 'a' },
+      head: { ref: 'feat', sha: 'h', repo: { name: repo, owner: { login: owner } } },
+      base: { ref: 'main', sha: 'b', repo: { name: repo, owner: { login: owner } } },
+      mergeable: true,
+      merged_at: 'now',
+      created_at: 'c', updated_at: 'u', url: 'u', html_url: 'h', diff_url: 'd', patch_url: 'p'
+    };
+    const fetchMock = vi.fn()
+      // PUT merge
+      .mockResolvedValueOnce({ ok: true, json: async () => mergeOk })
+      // GET PR
+      .mockResolvedValueOnce({ ok: true, json: async () => prPayload });
+    globalThis.fetch = fetchMock as any;
+    const api = new GitHubApi(token);
+    const out = await api.mergePullRequest(owner, repo, 7, { mergeMethod: 'squash' });
+    expect(out.number).toBe(7);
+    // First call is PUT
+    const firstInit = (globalThis.fetch as any).mock.calls[0][1];
+    expect(firstInit.method).toBe('PUT');
+    // Second call is GET PR
+    const secondUrl = (globalThis.fetch as any).mock.calls[1][0];
+    expect(String(secondUrl)).toMatch(/\/repos\/octo\/hello\/pulls\/7$/);
+  });
+
+  it('mergePullRequest propagates error text when merge PUT fails', async () => {
+    globalThis.fetch = makeFetchErr(409, 'conflict') as any;
+    const api = new GitHubApi(token);
+    await expect(api.mergePullRequest(owner, repo, 1)).rejects.toThrow(/GitHub API error 409: conflict/);
+  });
+
   it('getCommit propagates error text when response not ok', async () => {
     globalThis.fetch = makeFetchErr(500, 'boom') as any;
     const api = new GitHubApi(token);

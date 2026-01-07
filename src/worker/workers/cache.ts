@@ -11,6 +11,7 @@ export interface RepoCache {
   branches: Array<{ name: string; commit: string }>;
   cloneUrls: string[];
   commitCount?: number;
+  tags?: Array<{ name: string; commit: string }>;
 }
 
 export interface CommitHistoryCache {

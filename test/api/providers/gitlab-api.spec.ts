@@ -213,4 +213,101 @@ describe('GitLabApi request/shape mapping', () => {
     const api = new GitLabApi(token);
     await expect(api.listIssues(owner, repo)).rejects.toThrow(/GitLab API error 503: unavailable/);
   });
+
+  it('closeIssue maps fields and sets state closed', async () => {
+    const payload = {
+      iid: 9,
+      title: 'Closed',
+      description: 'd',
+      author: { username: 'alice', avatar_url: 'a.png' },
+      assignees: [{ username: 'bob', avatar_url: 'b.png' }],
+      labels: ['bug'],
+      created_at: 'c',
+      updated_at: 'u',
+      closed_at: 'z',
+      web_url: 'https://gitlab.com/g/a/-/issues/9'
+    };
+    const api = new GitLabApi(token);
+    vi.spyOn(api as any, 'getProjectId').mockResolvedValue(777);
+    globalThis.fetch = makeFetchOk(payload) as any;
+    const out = await api.closeIssue(owner, repo, 9);
+    expect(out.number).toBe(9);
+    expect(out.state).toBe('closed');
+    expect(out.htmlUrl).toContain('/issues/9');
+  });
+
+  it('getBranch maps name/commit/protected', async () => {
+    const branch = { name: 'main', protected: true, commit: { id: 'abc', web_url: 'u' } };
+    const api = new GitLabApi(token);
+    vi.spyOn(api as any, 'getProjectId').mockResolvedValue(777);
+    globalThis.fetch = makeFetchOk(branch) as any;
+    const out = await api.getBranch(owner, repo, 'main');
+    expect(out).toEqual({ name: 'main', commit: { sha: 'abc', url: 'u' }, protected: true });
+  });
+
+  it('listTags maps name and commit id/url', async () => {
+    const tags = [
+      { name: 'v1', commit: { id: 't1', web_url: 'u1' } },
+      { name: 'v2', commit: { id: 't2', web_url: 'u2' } },
+    ];
+    const api = new GitLabApi(token);
+    vi.spyOn(api as any, 'getProjectId').mockResolvedValue(777);
+    globalThis.fetch = makeFetchOk(tags) as any;
+    const out = await api.listTags(owner, repo);
+    expect(out).toEqual([
+      { name: 'v1', commit: { sha: 't1', url: 'u1' } },
+      { name: 'v2', commit: { sha: 't2', url: 'u2' } },
+    ]);
+  });
+
+  it('getTag returns tag metadata with archive URLs and commit', async () => {
+    const tag = { name: 'v3', commit: { id: 't3', web_url: 'u3' } };
+    const api = new GitLabApi(token, 'https://gitlab.example/api/v4');
+    vi.spyOn(api as any, 'getProjectId').mockResolvedValue(777);
+    globalThis.fetch = makeFetchOk(tag) as any;
+    const out = await api.getTag(owner, repo, 'v3');
+    expect(out.name).toBe('v3');
+    expect(out.commit.sha).toBe('t3');
+    expect(out.zipballUrl).toBe('https://gitlab.example/api/v4/projects/777/repository/archive.zip?sha=v3');
+    expect(out.tarballUrl).toBe('https://gitlab.example/api/v4/projects/777/repository/archive.tar.gz?sha=v3');
+  });
+
+  it('mergePullRequest performs PUT then GETs MR and returns mapped PR', async () => {
+    const mr = {
+      iid: 12,
+      title: 'MR',
+      description: 'd',
+      state: 'merged',
+      author: { username: 'a', avatar_url: 'x' },
+      source_branch: 'feat',
+      sha: 'abc',
+      source_project_id: 1,
+      target_branch: 'main',
+      target_project_id: 2,
+      merge_status: 'can_be_merged',
+      merged_at: 'now',
+      created_at: 'c',
+      updated_at: 'u',
+      web_url: 'https://gitlab.com/g/a/-/merge_requests/12'
+    };
+    const api = new GitLabApi(token);
+    vi.spyOn(api as any, 'getProjectId').mockResolvedValue(777);
+    const fetchMock = vi.fn()
+      // PUT merge
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) })
+      // GET MR
+      .mockResolvedValueOnce({ ok: true, json: async () => mr });
+    globalThis.fetch = fetchMock as any;
+    const out = await api.mergePullRequest(owner, repo, 12, { mergeMethod: 'squash' });
+    expect(out.number).toBe(12);
+    const firstInit = (globalThis.fetch as any).mock.calls[0][1];
+    expect(firstInit.method).toBe('PUT');
+  });
+
+  it('mergePullRequest propagates error text when merge PUT fails', async () => {
+    const api = new GitLabApi(token);
+    vi.spyOn(api as any, 'getProjectId').mockResolvedValue(777);
+    globalThis.fetch = makeFetchErr(409, 'conflict') as any;
+    await expect(api.mergePullRequest(owner, repo, 1)).rejects.toThrow(/GitLab API error 409: conflict/);
+  });
 });

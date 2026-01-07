@@ -316,4 +316,83 @@ describe('worker/push: safePushToRemoteUtil', () => {
     expect((res as any).blossomSummary).toEqual(summary);
     expect(pushToRemote).toHaveBeenCalledTimes(1);
   });
+
+  it('returns error when pushToRemote returns invalid response without success field', async () => {
+    const fs = createTestFs('push-safe-invalid-response');
+    const remoteRegistry = createRemoteRegistry();
+    const git = createTestGitProvider({ fs: fs as any, remoteRegistry });
+    const cacheManager = new MemCacheManager();
+
+    const rootDir = '/repos';
+    const repoId = 'owner/repo';
+    const dir = `${rootDir}/${repoId}`;
+    await mkdirp(fs as any, dir);
+    await (git as any).init({ dir, defaultBranch: 'main' });
+
+    const res = await safePushToRemoteUtil(
+      git as any,
+      cacheManager as any,
+      {
+        repoId,
+        remoteUrl: 'https://example.com/owner/repo.git',
+        branch: 'main',
+        preflight: { requireUpToDate: false, blockIfUncommitted: false }
+      },
+      {
+        rootDir,
+        canonicalRepoKey: (id) => id,
+        isRepoCloned: async (d) => isRepoClonedByGitDir(fs as any, d),
+        isShallowClone: async () => false,
+        resolveRobustBranch: async (_d, requested) => requested || 'main',
+        hasUncommittedChanges: async () => false,
+        needsUpdate: async () => false,
+        pushToRemote: async () => ({}) as any,
+      }
+    );
+
+    expect(res.success).toBe(false);
+    expect(String(res.error || '')).toMatch(/invalid response/i);
+  });
+
+  it('allows force push when confirmation provided (allowForce=true, confirmDestructive=true)', async () => {
+    const fs = createTestFs('push-safe-force-allowed');
+    const remoteRegistry = createRemoteRegistry();
+    const git = createTestGitProvider({ fs: fs as any, remoteRegistry });
+    const cacheManager = new MemCacheManager();
+
+    const rootDir = '/repos';
+    const repoId = 'owner/repo';
+    const dir = `${rootDir}/${repoId}`;
+    await mkdirp(fs as any, dir);
+    await (git as any).init({ dir, defaultBranch: 'main' });
+
+    const pushSpy = vi.fn().mockResolvedValue({ success: true });
+
+    const res = await safePushToRemoteUtil(
+      git as any,
+      cacheManager as any,
+      {
+        repoId,
+        remoteUrl: 'https://example.com/owner/repo.git',
+        branch: 'main',
+        allowForce: true,
+        confirmDestructive: true,
+        preflight: { requireUpToDate: false, blockIfUncommitted: false }
+      },
+      {
+        rootDir,
+        canonicalRepoKey: (id) => id,
+        isRepoCloned: async (d) => isRepoClonedByGitDir(fs as any, d),
+        isShallowClone: async () => false,
+        resolveRobustBranch: async (_d, requested) => requested || 'main',
+        hasUncommittedChanges: async () => false,
+        needsUpdate: async () => false,
+        pushToRemote: pushSpy,
+      }
+    );
+
+    expect(res.success).toBe(true);
+    expect(res.pushed).toBe(true);
+    expect(pushSpy).toHaveBeenCalledTimes(1);
+  });
 });
