@@ -63,6 +63,93 @@ describe('NIP-34 parsers (nip34-utils)', () => {
     expect(parsed.createdAt).toBe(new Date(1700000100 * 1000).toISOString());
   });
 
+  it('roundtrips repo announcement fields from builder through parser (builder→parser symmetry)', () => {
+    const built = createRepoAnnouncementEvent({
+      repoId: 'alice/example-repo',
+      name: 'Example Repo',
+      description: 'A longer description',
+      web: ['https://example.com', 'https://example.com/docs'],
+      clone: ['https://github.com/alice/example-repo.git', 'https://gitlab.com/alice/example-repo.git'],
+      relays: ['wss://relay.example.com/', 'wss://relay.example.com', 'wss://relay.two/'],
+      maintainers: ['npub1maintainer'],
+      hashtags: ['bug', 'feature'],
+      earliestUniqueCommit: 'euc-xyz',
+      created_at: 1700000999
+    });
+
+    const evt = withMeta(built as any as RepoAnnouncementEvent, {
+      created_at: 1700000999,
+      pubkey: 'npub1alice',
+      id: 'ann-rt-1'
+    });
+
+    const parsed = parseRepoAnnouncementEvent(evt);
+    expect(parsed.id).toBe('ann-rt-1');
+
+    // createRepoAnnouncementEvent uses repo name segment for d tag
+    expect(parsed.repoId).toBe('example-repo');
+    expect(parsed.owner).toBe('npub1alice');
+    expect(parsed.address).toBe(`30617:npub1alice:example-repo`);
+
+    expect(parsed.name).toBe('Example Repo');
+    expect(parsed.description).toBe('A longer description');
+    expect(parsed.web).toEqual(['https://example.com', 'https://example.com/docs']);
+    expect(parsed.clone).toEqual([
+      'https://github.com/alice/example-repo.git',
+      'https://gitlab.com/alice/example-repo.git'
+    ]);
+
+    // Relays should be sanitized (no trailing slashes) and de-duped
+    expect(parsed.relays).toEqual(['wss://relay.example.com', 'wss://relay.two']);
+    expect(parsed.maintainers).toEqual(['npub1maintainer']);
+    expect(parsed.hashtags?.sort()).toEqual(['bug', 'feature'].sort());
+    expect(parsed.earliestUniqueCommit).toBe('euc-xyz');
+    expect(parsed.createdAt).toBe(new Date(1700000999 * 1000).toISOString());
+  });
+
+  it('accepts created_at as a numeric string (current behavior via JS coercion)', () => {
+    const built = createRepoAnnouncementEvent({
+      repoId: 'owner/name',
+      name: 'Repo Name'
+    });
+
+    const evt: any = {
+      ...(built as any),
+      id: 'ann-str-created-at',
+      pubkey: 'owner-pk',
+      sig: '00'.repeat(64),
+      created_at: '1700000100'
+    };
+
+    const parsed = parseRepoAnnouncementEvent(evt as any);
+    expect(parsed.createdAt).toBe(new Date(1700000100 * 1000).toISOString());
+  });
+
+  it('handles missing created_at gracefully (implementation: parser falls back to Date.now())', () => {
+    const built = createRepoAnnouncementEvent({
+      repoId: 'owner/name',
+      name: 'Repo Name'
+    });
+
+    const evt: any = {
+      ...(built as any),
+      id: 'ann-missing-created-at',
+      pubkey: 'owner-pk',
+      sig: '00'.repeat(64)
+      // created_at intentionally missing
+    };
+
+    // Current implementation falls back to Date.now() when created_at is missing
+    const parsed = parseRepoAnnouncementEvent(evt as any);
+    // Use a recent timestamp range to avoid flaky tests due to Date.now()
+    const now = Date.now();
+    const parsedTime = new Date(parsed.createdAt).getTime();
+    expect(parsedTime).toBeGreaterThanOrEqual(now - 5000);
+    expect(parsedTime).toBeLessThanOrEqual(now + 5000);
+  });
+
+  it.todo('should accept ISO created_at strings (implementation gap: parsers currently assume integer seconds)');
+
   it('parseRepoAnnouncementEvent handles missing optional tags gracefully', () => {
     const built = createRepoAnnouncementEvent({
       repoId: 'owner/name',
@@ -86,6 +173,7 @@ describe('NIP-34 parsers (nip34-utils)', () => {
     expect(parsed.hashtags).toEqual([]);
     expect(parsed.earliestUniqueCommit).toBeUndefined();
   });
+
 
   it('parseRepoStateEvent parses refs and head', () => {
     const built = createRepoStateEvent({
@@ -222,6 +310,81 @@ describe('NIP-34 parsers (nip34-utils)', () => {
     expect(parsed.id).toBe('patch-1');
     expect(parsed.repoId).toBe('30617:pk:repo');
     expect(parsed.createdAt).toBe(new Date(1700000700 * 1000).toISOString());
+  });
+
+  it('roundtrips patch fields from builder through parser (including commit linkage and snippet tags preserved on raw)', () => {
+    const built = createPatchEvent({
+      content: 'diff --git a/README.md b/README.md\n',
+      repoAddr: '30617:owner:repo',
+      earliestUniqueCommit: 'euc-abc',
+      commit: '1111111111111111111111111111111111111111',
+      parentCommit: '0000000000000000000000000000000000000000',
+      committer: {
+        name: 'Alice',
+        email: 'alice@example.com',
+        timestamp: '1700000700',
+        tzOffset: '0'
+      },
+      recipients: ['pk1', 'pk2'],
+      created_at: 1700000700
+    });
+
+    // Add NIP-95-ish snippet metadata tags to ensure they survive parse via `raw`
+    const snippetTags: string[][] = [
+      ['l', 'README-snippet'],
+      ['x', 'abcd'.repeat(16)],
+      ['f', 'README.md', 'text/markdown', 'abcd'.repeat(16), '42'],
+      ['description', 'Example snippet']
+    ];
+
+    const evt: any = {
+      ...(built as any),
+      id: 'patch-rt-1',
+      pubkey: 'author-pk',
+      sig: '00'.repeat(64),
+      created_at: 1700000700,
+      tags: [...(built as any).tags, ...snippetTags]
+    };
+
+    const parsed = parsePatchEvent(evt as any);
+
+    expect(parsed.id).toBe('patch-rt-1');
+    expect(parsed.repoId).toBe('30617:owner:repo');
+
+    // parsePatchEvent currently uses 'subject' tag for title; builder does not set it
+    expect(parsed.title).toBe('');
+
+    // Parsed commit linkage
+    expect(parsed.commitHash).toBe('1111111111111111111111111111111111111111');
+    expect(parsed.commitCount).toBe(1);
+    expect(parsed.createdAt).toBe(new Date(1700000700 * 1000).toISOString());
+
+    // parsePatchEvent maps author from `committer` tag (note: avatar currently maps to committer email)
+    expect(parsed.author.pubkey).toBe('author-pk');
+    expect(parsed.author.name).toBe('Alice');
+    expect(parsed.author.avatar).toBe('alice@example.com');
+
+    // Builder fields not yet parsed into structured fields should still be present on raw tags
+    expect(parsed.raw.tags).toEqual(
+      expect.arrayContaining([
+        ['a', '30617:owner:repo'],
+        ['r', 'euc-abc'],
+        ['commit', '1111111111111111111111111111111111111111'],
+        ['parent-commit', '0000000000000000000000000000000000000000'],
+        ['committer', 'Alice', 'alice@example.com', '1700000700', '0'],
+        ['p', 'pk1'],
+        ['p', 'pk2']
+      ])
+    );
+
+    // Snippet metadata is not parsed into structured fields yet, but should remain on raw tags
+    expect(parsed.raw.tags).toEqual(
+      expect.arrayContaining([
+        ['l', 'README-snippet'],
+        ['description', 'Example snippet'],
+        ['f', 'README.md', 'text/markdown', 'abcd'.repeat(16), '42']
+      ])
+    );
   });
 
   it('parsers handle malformed tags without crashing (graceful degradation)', () => {

@@ -139,6 +139,60 @@ describe('Zod event validators (src/utils/validation.ts)', () => {
     }
   });
 
+  it('rejects patch events missing required a tag with a clear error message', () => {
+    const badPatch: any = {
+      kind: 1617,
+      content: 'patch',
+      tags: [['commit', 'c1']]
+    };
+
+    const res = validatePatchEvent(badPatch);
+    expect(res.success).toBe(false);
+    if (!res.success) {
+      const msgs = res.error.issues.map((i) => i.message).join('\n');
+      expect(msgs).toMatch(/Patch must include an 'a' tag/i);
+    }
+  });
+
+  it('rejects repo state events missing required d tag even when HEAD is present (superRefine)', () => {
+    const badStateMissingD: any = {
+      kind: 30618,
+      content: '',
+      tags: [['HEAD', 'ref: refs/heads/main']]
+    };
+
+    const res = validateRepoStateEvent(badStateMissingD);
+    expect(res.success).toBe(false);
+    if (!res.success) {
+      const msgs = res.error.issues.map((i) => i.message).join('\n');
+      expect(msgs).toMatch(/Repo state must include a 'd' tag/i);
+    }
+  });
+
+  it('reports multiple missing-tag issues for status events missing both e and p tags', () => {
+    const badStatus: any = {
+      kind: 1630,
+      content: 'open',
+      tags: []
+    };
+
+    const res = validateStatusEvent(badStatus);
+    expect(res.success).toBe(false);
+    if (!res.success) {
+      const msgs = res.error.issues.map((i) => i.message);
+
+      // Both issues should be present at once (multi-missing-tags coverage)
+      expect(msgs).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/Status must include at least one 'e' tag/i),
+          expect.stringMatching(/Status should include at least one 'p' tag/i)
+        ])
+      );
+    }
+  });
+
+  it.todo('add comment-event validation (NIP-22) and assert missing e/p tags produce clear zod errors (implementation gap: no validator in src/utils/validation.ts yet)');
+
   it('rejects malformed status event missing required e/p tags with helpful errors', () => {
     const badStatus: any = { kind: 1630, tags: [] };
     const res = validateStatusEvent(badStatus);

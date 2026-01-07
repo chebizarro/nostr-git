@@ -64,6 +64,70 @@ describe('buildPatchGraph', () => {
     expect(n2.children).toEqual([]);
   });
 
+  it('links multi-parent merge commits (two parent-commit tags) to both parents', () => {
+    const A = patchEvt({ id: 'a', created_at: 10, tags: [['commit', 'A'], ['t', 'root']] });
+    const B = patchEvt({ id: 'b', created_at: 11, tags: [['commit', 'B'], ['t', 'root']] });
+
+    const M = patchEvt({
+      id: 'm',
+      created_at: 20,
+      tags: [
+        ['commit', 'M'],
+        ['parent-commit', 'A'],
+        ['parent-commit', 'B']
+      ]
+    });
+
+    const graph = buildPatchGraph([A, B, M]);
+
+    const nA = graph.get('A')!;
+    const nB = graph.get('B')!;
+    const nM = graph.get('M')!;
+
+    expect(nM.parents.slice().sort()).toEqual(['A', 'B']);
+    expect(nA.children).toContain('M');
+    expect(nB.children).toContain('M');
+
+    // Ensure no duplicate child edge is introduced
+    expect(nA.children.filter((c) => c === 'M')).toHaveLength(1);
+    expect(nB.children.filter((c) => c === 'M')).toHaveLength(1);
+  });
+
+  it('does not throw when parent-commit references form a cycle (current behavior: no explicit cycle detection)', () => {
+    const X = patchEvt({
+      id: 'x',
+      created_at: 1,
+      tags: [
+        ['commit', 'X'],
+        ['parent-commit', 'Y']
+      ]
+    });
+
+    const Y = patchEvt({
+      id: 'y',
+      created_at: 2,
+      tags: [
+        ['commit', 'Y'],
+        ['parent-commit', 'X']
+      ]
+    });
+
+    expect(() => buildPatchGraph([X, Y])).not.toThrow();
+
+    const graph = buildPatchGraph([X, Y]);
+    const nX = graph.get('X')!;
+    const nY = graph.get('Y')!;
+
+    expect(nX.parents).toEqual(['Y']);
+    expect(nY.parents).toEqual(['X']);
+    expect(nX.children).toContain('Y');
+    expect(nY.children).toContain('X');
+
+    // Neither is a root (each has a parent and no t:root tag)
+    expect(nX.isRoot).toBe(false);
+    expect(nY.isRoot).toBe(false);
+  });
+
   it('skips malformed patches without commit tag', () => {
     const bad = patchEvt({ id: 'bad', created_at: 50, tags: [['parent-commit', 'X']] });
     const ok = patchEvt({ id: 'ok', created_at: 60, tags: [['commit', 'X']] });
