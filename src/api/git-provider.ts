@@ -51,13 +51,11 @@ export function setGitTokens(tokens: Array<{ host: string; token: string }>) {
  *
  * This sets up the NostrGitProvider for Nostr-based Git operations.
  * Must be called before using any Nostr-specific functionality.
- * 
- * IMPORTANT: No more Signer passing - EventIO handles signing internally!
  */
-export function initializeNostrGitProvider(options: {
+export async function initializeNostrGitProvider(options: {
   eventIO: EventIO;
-}): NostrGitProvider {
-  nostrGitProvider = createNostrGitProviderFromEnv(options);
+}): Promise<NostrGitProvider> {
+  nostrGitProvider = await createNostrGitProviderFromEnv(options);
   return nostrGitProvider;
 }
 
