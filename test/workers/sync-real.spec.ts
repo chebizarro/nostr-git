@@ -117,8 +117,8 @@ describe('worker/sync: needsUpdateUtil + syncWithRemoteUtil (real provider)', ()
       { repoId, cloneUrls: [url], branch: 'main' },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
-        resolveRobustBranch: async (_d, requested) => requested || 'main',
+        parseRepoId: (id) => id,
+        resolveBranchName: async (_d, requested) => requested || 'main',
         isRepoCloned: async (d) => {
           try {
             const st = await (localFs as any).promises.stat(`${d}/.git`);
@@ -176,8 +176,8 @@ describe('worker/sync: needsUpdateUtil + syncWithRemoteUtil (real provider)', ()
       { repoId, cloneUrls: [url], branch: 'main' },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
-        resolveRobustBranch: async (_d, requested) => requested || 'main',
+        parseRepoId: (id) => id,
+        resolveBranchName: async (_d, requested) => requested || 'main',
         isRepoCloned: async (d) => {
           try {
             const st = await (localFs as any).promises.stat(`${d}/.git`);

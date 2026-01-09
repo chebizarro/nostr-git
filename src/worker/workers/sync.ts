@@ -1,5 +1,6 @@
 import type { GitProvider } from '../../git/provider.js';
 import type { RepoCache, RepoCacheManager } from './cache.js';
+import { resolveBranchToOid } from '../../git/git.js';
 
 export async function needsUpdateUtil(
   git: GitProvider,
@@ -53,15 +54,15 @@ export async function syncWithRemoteUtil(
   opts: { repoId: string; cloneUrls: string[]; branch?: string },
   deps: {
     rootDir: string;
-    canonicalRepoKey: (id: string) => string;
-    resolveRobustBranch: (dir: string, requested?: string) => Promise<string>;
+    parseRepoId: (id: string) => string;
+    resolveBranchName: (dir: string, requested?: string) => Promise<string>;
     isRepoCloned: (dir: string) => Promise<boolean>;
     toPlain: <T>(v: T) => T;
   }
 ) {
   const { repoId, cloneUrls, branch } = opts;
-  const { rootDir, canonicalRepoKey, resolveRobustBranch, isRepoCloned, toPlain } = deps;
-  const key = canonicalRepoKey(repoId);
+  const { rootDir, parseRepoId, resolveBranchName, isRepoCloned, toPlain } = deps;
+  const key = parseRepoId(repoId);
   const dir = `${rootDir}/${key}`;
 
   const startTime = Date.now();
@@ -134,7 +135,7 @@ export async function syncWithRemoteUtil(
     
     // 4. If requested branch fetch failed or no branch specified, use robust branch resolution
     if (!fetchSuccess) {
-      targetBranch = await resolveRobustBranch(dir, branch);
+      targetBranch = await resolveBranchName(dir, branch);
       console.log(`[syncWithRemote] Resolved fallback branch: ${targetBranch}`);
       
       console.log(`[syncWithRemote] Fetching fallback branch from remote...`);

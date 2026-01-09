@@ -22,8 +22,8 @@ const cacheMgr = () => ({
 
 const depsBase = {
   rootDir: '/tmp/root',
-  canonicalRepoKey: (id: string) => id.replace(/\s+/g, '-').toLowerCase(),
-  resolveRobustBranch: async (_dir: string, requested?: string) => requested ?? 'main',
+  parseRepoId: (id: string) => id.replace(/\s+/g, '-').toLowerCase(),
+  resolveBranchName: async (_dir: string, requested?: string) => requested ?? 'main',
   isRepoCloned: async (_dir: string) => true,
   toPlain: <T,>(v: T) => v,
 };

@@ -22,7 +22,7 @@ function makeCacheManagerMock() {
 
 describe('worker: smartInitializeRepoUtil branch/repo flows', () => {
   const rootDir = '/tmp';
-  const canonicalRepoKey = (id: string) => id.replace(/[^a-z0-9_-]/gi, '_');
+  const parseRepoId = (id: string) => id.replace(/[^a-z0-9_-]/gi, '_');
   const repoDataLevels = new Map<string, 'refs' | 'shallow' | 'full'>();
   const clonedRepos = new Set<string>();
   const isRepoCloned = vi.fn().mockResolvedValue(true);
@@ -42,17 +42,17 @@ describe('worker: smartInitializeRepoUtil branch/repo flows', () => {
 
   it('ensureFullCloneUtil propagates fetch failure as { success: false, error }', async () => {
     const { ensureFullCloneUtil } = await import('../../src/worker/workers/repos.js');
-    const resolveRobustBranch = vi.fn().mockResolvedValue('main');
+    const resolveBranchName = vi.fn().mockResolvedValue('main');
     git.listRemotes.mockResolvedValue([{ remote: 'origin', url: 'https://example/repo.git' }]);
     git.fetch.mockRejectedValue(new Error('fatal: fetch failed'));
     const repoId = 'team/repo';
-    const key = canonicalRepoKey(repoId);
+    const key = parseRepoId(repoId);
     clonedRepos.add(key);
 
     const res = await ensureFullCloneUtil(
       git,
       { repoId, branch: 'main', depth: 10 },
-      { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos, isRepoCloned, resolveRobustBranch },
+      { rootDir, parseRepoId, repoDataLevels, clonedRepos, isRepoCloned, resolveBranchName },
       sendProgress
     );
 
@@ -62,16 +62,16 @@ describe('worker: smartInitializeRepoUtil branch/repo flows', () => {
 
   it('ensureFullCloneUtil errors when origin remote missing URL', async () => {
     const { ensureFullCloneUtil } = await import('../../src/worker/workers/repos.js');
-    const resolveRobustBranch = vi.fn().mockResolvedValue('main');
+    const resolveBranchName = vi.fn().mockResolvedValue('main');
     git.listRemotes.mockResolvedValue([{ remote: 'upstream', url: '' }]);
     const repoId = 'team/repo';
-    const key = canonicalRepoKey(repoId);
+    const key = parseRepoId(repoId);
     clonedRepos.add(key);
 
     const res = await ensureFullCloneUtil(
       git,
       { repoId, branch: 'main', depth: 10 },
-      { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos, isRepoCloned, resolveRobustBranch },
+      { rootDir, parseRepoId, repoDataLevels, clonedRepos, isRepoCloned, resolveBranchName },
       sendProgress
     );
 
@@ -81,17 +81,17 @@ describe('worker: smartInitializeRepoUtil branch/repo flows', () => {
 
   it('ensureFullCloneUtil caps depth at 100 and sets level full', async () => {
     const { ensureFullCloneUtil } = await import('../../src/worker/workers/repos.js');
-    const resolveRobustBranch = vi.fn().mockResolvedValue('main');
+    const resolveBranchName = vi.fn().mockResolvedValue('main');
     git.listRemotes.mockResolvedValue([{ remote: 'origin', url: 'https://example/repo.git' }]);
     git.fetch.mockResolvedValue(undefined);
     const repoId = 'team/repo';
-    const key = canonicalRepoKey(repoId);
+    const key = parseRepoId(repoId);
     clonedRepos.add(key);
 
     const res = await ensureFullCloneUtil(
       git,
       { repoId, branch: 'main', depth: 500 },
-      { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos, isRepoCloned, resolveRobustBranch },
+      { rootDir, parseRepoId, repoDataLevels, clonedRepos, isRepoCloned, resolveBranchName },
       sendProgress
     );
 
@@ -105,14 +105,14 @@ describe('worker: smartInitializeRepoUtil branch/repo flows', () => {
 
   it('ensureFullCloneUtil returns repo not initialized error when missing clone', async () => {
     const { ensureFullCloneUtil } = await import('../../src/worker/workers/repos.js');
-    const resolveRobustBranch = vi.fn().mockResolvedValue('main');
+    const resolveBranchName = vi.fn().mockResolvedValue('main');
     isRepoCloned.mockResolvedValue(false);
     const repoId = 'team/new';
 
     const res = await ensureFullCloneUtil(
       git,
       { repoId, branch: 'main', depth: 10 },
-      { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos, isRepoCloned, resolveRobustBranch },
+      { rootDir, parseRepoId, repoDataLevels, clonedRepos, isRepoCloned, resolveBranchName },
       sendProgress
     );
 
@@ -125,7 +125,7 @@ describe('worker: smartInitializeRepoUtil branch/repo flows', () => {
   });
 
   it('syncs existing clone, writes branch refs, caches shallow by default', async () => {
-    const resolveRobustBranch = vi.fn().mockResolvedValue('main');
+    const resolveBranchName = vi.fn().mockResolvedValue('main');
     git.fetch.mockResolvedValue(undefined);
     git.resolveRef.mockResolvedValueOnce('abc123'); // for remote ref
     git.resolveRef.mockResolvedValueOnce('abc123'); // for HEAD fallback if needed
@@ -138,7 +138,7 @@ describe('worker: smartInitializeRepoUtil branch/repo flows', () => {
       git,
       cacheManager,
       { repoId: 'team/repo', cloneUrls: ['https://example/repo.git'] },
-      { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos, isRepoCloned, resolveRobustBranch },
+      { rootDir, parseRepoId, repoDataLevels, clonedRepos, isRepoCloned, resolveBranchName },
       sendProgress
     );
 
@@ -150,7 +150,7 @@ describe('worker: smartInitializeRepoUtil branch/repo flows', () => {
   });
 
   it('handles empty repositories by returning refs-only success with warning', async () => {
-    const resolveRobustBranch = vi.fn().mockRejectedValue(new Error('no branches'));
+    const resolveBranchName = vi.fn().mockRejectedValue(new Error('no branches'));
     // fetch is attempted but allowed to be undefined
     git.fetch.mockResolvedValue(undefined);
     isRepoCloned.mockResolvedValueOnce(true);
@@ -160,7 +160,7 @@ describe('worker: smartInitializeRepoUtil branch/repo flows', () => {
       cacheManager,
       // Use empty cloneUrls to minimize side effects and ensure early branch handling
       { repoId: 'team/empty', cloneUrls: [] },
-      { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos, isRepoCloned, resolveRobustBranch },
+      { rootDir, parseRepoId, repoDataLevels, clonedRepos, isRepoCloned, resolveBranchName },
       sendProgress
     );
 
@@ -171,7 +171,7 @@ describe('worker: smartInitializeRepoUtil branch/repo flows', () => {
   });
 
   it('propagates non-network fetch errors as failure result', async () => {
-    const resolveRobustBranch = vi.fn();
+    const resolveBranchName = vi.fn();
     git.fetch.mockRejectedValue(new Error('fatal: remote error'));
     // initializeRepoUtil will be attempted; ensure git.clone exists and throws same fatal error
     (git as any).clone = vi.fn().mockRejectedValue(new Error('fatal: remote error'));
@@ -180,7 +180,7 @@ describe('worker: smartInitializeRepoUtil branch/repo flows', () => {
       git,
       cacheManager,
       { repoId: 'team/fail', cloneUrls: ['https://example/fail.git'] },
-      { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos, isRepoCloned, resolveRobustBranch },
+      { rootDir, parseRepoId, repoDataLevels, clonedRepos, isRepoCloned, resolveBranchName },
       sendProgress
     );
 
@@ -190,18 +190,18 @@ describe('worker: smartInitializeRepoUtil branch/repo flows', () => {
 
   it('ensureShallowCloneUtil fetches requested branch and sets shallow level', async () => {
     const { ensureShallowCloneUtil } = await import('../../src/worker/workers/repos.js');
-    const resolveRobustBranch = vi.fn().mockResolvedValue('feature');
+    const resolveBranchName = vi.fn().mockResolvedValue('feature');
     git.listRemotes.mockResolvedValue([{ remote: 'origin', url: 'https://example/repo.git' }]);
     git.fetch.mockResolvedValue(undefined);
     git.checkout.mockResolvedValue(undefined);
     const repoId = 'team/repo';
-    const key = canonicalRepoKey(repoId);
+    const key = parseRepoId(repoId);
     clonedRepos.add(key);
 
     const res = await ensureShallowCloneUtil(
       git,
       { repoId, branch: 'feature' },
-      { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos, isRepoCloned, resolveRobustBranch },
+      { rootDir, parseRepoId, repoDataLevels, clonedRepos, isRepoCloned, resolveBranchName },
       sendProgress
     );
 

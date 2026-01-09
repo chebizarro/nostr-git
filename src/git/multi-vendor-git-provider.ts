@@ -1,5 +1,5 @@
 import type { GitProvider } from './provider.js';
-import { getGitProvider } from './factory.js';
+import { createGitProvider } from './factory.js';
 import type {
   VendorProvider,
   RepoMetadata,
@@ -23,7 +23,7 @@ export class MultiVendorGitProvider implements GitProvider {
   private tokenStore: Map<string, string> = new Map();
 
   constructor(options?: { baseProvider?: GitProvider }) {
-    this.baseProvider = options?.baseProvider ?? getGitProvider();
+    this.baseProvider = options?.baseProvider ?? createGitProvider();
   }
 
   // Token management

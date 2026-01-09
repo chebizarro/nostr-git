@@ -9,7 +9,7 @@ import LightningFS from "@isomorphic-git/lightning-fs"
 
 let singleton: GitProvider | null = null
 
-export function getGitProvider(overrides?: Partial<GitWrapperConfig>): GitProvider {
+export function createGitProvider(overrides?: Partial<GitWrapperConfig>): GitProvider {
   if (singleton) return singleton
 
   const cfg = loadConfig(overrides)

@@ -14,7 +14,7 @@ function looksLikeEventId(id: string): boolean {
   return /^[0-9a-fA-F]{64}$/.test(id);
 }
 
-export function canonicalRepoKey(input: string): string {
+export function parseRepoId(input: string): string {
   if (!input || !input.trim()) {
     throw new Error('Invalid repoId: empty. Expected "owner/name" or "npub...:name"');
   }

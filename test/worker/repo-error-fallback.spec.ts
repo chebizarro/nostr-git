@@ -30,7 +30,7 @@ describe('worker repo error/fallback paths', () => {
     const cache = makeCacheManager();
     const deps = {
       rootDir: '/tmp',
-      canonicalRepoKey: (id: string) => id,
+      parseRepoId: (id: string) => id,
       repoDataLevels: new Map(),
       clonedRepos: new Set<string>(),
     };
@@ -52,11 +52,11 @@ describe('worker repo error/fallback paths', () => {
     } as any;
     const deps = {
       rootDir: '/tmp',
-      canonicalRepoKey: (id: string) => id,
+      parseRepoId: (id: string) => id,
       repoDataLevels: new Map(),
       clonedRepos: new Set<string>(['r8']),
       isRepoCloned: async () => true,
-      resolveRobustBranch: async () => 'main',
+      resolveBranchName: async () => 'main',
     };
     const res = await ensureFullCloneUtil(git, { repoId: 'r8', depth: 150 }, deps as any, (p: string) => progress.push(p));
     expect(res.success).toBe(true);
@@ -71,7 +71,7 @@ describe('worker repo error/fallback paths', () => {
     const cache = makeCacheManager();
     const deps = {
       rootDir: '/tmp',
-      canonicalRepoKey: (id: string) => id,
+      parseRepoId: (id: string) => id,
       repoDataLevels: new Map(),
       clonedRepos: new Set<string>(),
     };
@@ -90,11 +90,11 @@ describe('worker repo error/fallback paths', () => {
     } as any;
     const deps = {
       rootDir: '/tmp',
-      canonicalRepoKey: (id: string) => id,
+      parseRepoId: (id: string) => id,
       repoDataLevels: new Map(),
       clonedRepos: new Set<string>(),
       isRepoCloned: async () => false,
-      resolveRobustBranch: async () => 'main',
+      resolveBranchName: async () => 'main',
     };
     const res = await ensureShallowCloneUtil(git, { repoId: 'r2' }, deps as any, noop);
     expect(res.success).toBe(false);
@@ -107,11 +107,11 @@ describe('worker repo error/fallback paths', () => {
     } as any;
     const deps = {
       rootDir: '/tmp',
-      canonicalRepoKey: (id: string) => id,
+      parseRepoId: (id: string) => id,
       repoDataLevels: new Map(),
       clonedRepos: new Set<string>(['r3']),
       isRepoCloned: async () => true,
-      resolveRobustBranch: async () => 'main',
+      resolveBranchName: async () => 'main',
     };
     const res = await ensureFullCloneUtil(git, { repoId: 'r3' }, deps as any, noop);
     expect(res.success).toBe(false);
@@ -135,11 +135,11 @@ describe('worker repo error/fallback paths', () => {
     const git = {} as any;
     const deps = {
       rootDir: '/tmp',
-      canonicalRepoKey: (id: string) => id,
+      parseRepoId: (id: string) => id,
       repoDataLevels: new Map(),
       clonedRepos: new Set<string>(),
       isRepoCloned: async () => true,
-      resolveRobustBranch: async () => 'main',
+      resolveBranchName: async () => 'main',
     };
     // import function here to avoid circular
     const { smartInitializeRepoUtil } = await import('../../src/worker/workers/repos.js');
@@ -160,11 +160,11 @@ describe('worker repo error/fallback paths', () => {
     };
     const deps = {
       rootDir: '/tmp',
-      canonicalRepoKey: (id: string) => id,
+      parseRepoId: (id: string) => id,
       repoDataLevels: new Map(),
       clonedRepos: new Set<string>(),
       isRepoCloned: async () => true,
-      resolveRobustBranch: async () => 'main',
+      resolveBranchName: async () => 'main',
     };
     const { smartInitializeRepoUtil } = await import('../../src/worker/workers/repos.js');
     const res = await smartInitializeRepoUtil(git as any, cache, { repoId: 'r6', cloneUrls: ['https://example/repo.git'] }, deps as any, noop);

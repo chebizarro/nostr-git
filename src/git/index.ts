@@ -3,7 +3,7 @@ export * from "./vendor-providers.js"
 
 export * from "./config.js"
 export {
-  getCommitInfo as getDetailedCommitInfo,
+  readCommitInfo as getDetailedCommitInfo,
   getAllBranches,
   hasOutstandingChanges,
   getRootCommit,
@@ -17,7 +17,7 @@ export {
 export * from "./isomorphic-git-provider.js"
 export * from "./cached-provider.js"
 export * from "./factory.js"
-export { getGitProvider } from "./factory.js"
+export { createGitProvider } from "./factory.js"
 
 export * from "./multi-vendor-git-provider.js"
 

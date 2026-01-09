@@ -81,8 +81,8 @@ describe('applyPatchAndPushUtil - multi-hunk modify', () => {
       },
       {
         rootDir: '/tmp',
-        canonicalRepoKey: (s) => s,
-        resolveRobustBranch: async (_dir, requested) => requested || 'main',
+        parseRepoId: (s) => s,
+        resolveBranchName: async (_dir, requested) => requested || 'main',
         ensureFullClone: async () => ({}),
         getAuthCallback: () => undefined,
         getConfiguredAuthHosts: () => [],

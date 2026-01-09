@@ -94,8 +94,8 @@ describe('needsUpdateUtil', () => {
 describe('syncWithRemoteUtil', () => {
   const deps = {
     rootDir: '/tmp',
-    canonicalRepoKey: (s: string) => s,
-    resolveRobustBranch: async (_dir: string, requested?: string) => requested || 'main',
+    parseRepoId: (s: string) => s,
+    resolveBranchName: async (_dir: string, requested?: string) => requested || 'main',
     isRepoCloned: async (_dir: string) => true,
     toPlain: <T>(v: T) => JSON.parse(JSON.stringify(v)) as T
   };

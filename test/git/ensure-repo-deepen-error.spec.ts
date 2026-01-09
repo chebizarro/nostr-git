@@ -3,7 +3,7 @@ import 'fake-indexeddb/auto';
 
 // We will mock the git provider used by ensureRepoFromEvent
 const makeGit = () => ({
-  // Used by isRepoCloned (HEAD) and resolveRobustBranch (branch refs)
+  // Used by isRepoCloned (HEAD) and resolveBranchToOid (branch refs)
   async resolveRef({ ref }: any) {
     // Return a dummy oid for any ref queried
     if (ref) return 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef';

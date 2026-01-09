@@ -1,4 +1,4 @@
-export * from "./canonical-repo-key.js";
+export * from "./repo-id.js";
 export * from "./nip05.js";
 export * from "./nostr-url.js";
 export * from "./repo-addr.js";

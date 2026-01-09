@@ -1,5 +1,6 @@
 import type { GitProvider } from '../../git/provider.js';
 import type { RepoCache, RepoCacheManager } from './cache.js';
+import { resolveBranchToOid } from '../../git/git.js';
 import type { GitVendor } from '../../git/vendor-providers.js';
 import type { BlossomPushSummary } from '../../blossom/index.js';
 
@@ -24,10 +25,10 @@ export async function safePushToRemoteUtil(
   options: SafePushOptions,
   deps: {
     rootDir: string;
-    canonicalRepoKey: (id: string) => string;
+    parseRepoId: (id: string) => string;
     isRepoCloned: (dir: string) => Promise<boolean>;
     isShallowClone: (key: string) => Promise<boolean>;
-    resolveRobustBranch: (dir: string, requested?: string) => Promise<string>;
+    resolveBranchName: (dir: string, requested?: string) => Promise<string>;
     hasUncommittedChanges: (dir: string) => Promise<boolean>;
     needsUpdate: (repoId: string, cloneUrls: string[], cache: RepoCache | null) => Promise<boolean>;
     pushToRemote: (args: {
@@ -59,15 +60,15 @@ export async function safePushToRemoteUtil(
   } = options;
   const {
     rootDir,
-    canonicalRepoKey,
+    parseRepoId,
     isRepoCloned,
     isShallowClone,
-    resolveRobustBranch,
+    resolveBranchName,
     hasUncommittedChanges,
     needsUpdate,
     pushToRemote
   } = deps;
-  const key = canonicalRepoKey(repoId);
+  const key = parseRepoId(repoId);
   const dir = `${rootDir}/${key}`;
 
   const pf = {
@@ -82,7 +83,7 @@ export async function safePushToRemoteUtil(
     if (!cloned)
       return { success: false, error: 'Repository not cloned locally; clone before pushing.' };
 
-    const targetBranch = await resolveRobustBranch(dir, branch);
+    const targetBranch = await resolveBranchName(dir, branch);
 
     if (pf.blockIfUncommitted) {
       const dirty = await hasUncommittedChanges(dir);

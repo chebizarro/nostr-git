@@ -62,8 +62,8 @@ describe('integration: multi-file patch', () => {
       },
       {
         rootDir,
-        canonicalRepoKey: (s) => s.toLowerCase(),
-        resolveRobustBranch: async (_dir, requested) => requested || 'main',
+        parseRepoId: (s) => s.toLowerCase(),
+        resolveBranchName: async (_dir, requested) => requested || 'main',
         ensureFullClone: async () => ({}),
         getAuthCallback: (_url) => undefined,
         getConfiguredAuthHosts: () => [],

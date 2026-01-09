@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import 'fake-indexeddb/auto';
 
-import { getCommitInfo, getAllBranches, hasOutstandingChanges, getRootCommit, doesCommitExist, getCommitParent, getCommitMessageSummary, createPatchFromCommit, areCommitsTooBigForPatches } from '../../src/git/git-utils.js';
+import { readCommitInfo, getAllBranches, hasOutstandingChanges, getRootCommit, doesCommitExist, getCommitParent, getCommitMessageSummary, createPatchFromCommit, areCommitsTooBigForPatches } from '../../src/git/git-utils.js';
 
 describe('git-utils high-impact coverage', () => {
   it('covers commit info, parent, message summary, root commit, existence', async () => {
@@ -36,7 +36,7 @@ describe('git-utils high-impact coverage', () => {
       async log() { return [{ oid: c2 }, { oid: c1 }]; }
     };
 
-    const info = await getCommitInfo(git, c2);
+    const info = await readCommitInfo(git, c2);
     expect(info.oid).toBe(c2);
     expect(info.parent).toEqual([c1]);
 

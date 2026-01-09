@@ -79,8 +79,8 @@ describe('worker/patches: push aggregation and protected branch fallback', () =>
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
-        resolveRobustBranch: async (d, requested) => {
+        parseRepoId: (id) => id,
+        resolveBranchName: async (d, requested) => {
           const branch = requested || 'main';
           try { await (git as any).resolveRef({ dir: d, ref: `refs/heads/${branch}` }); return branch; } catch { return branch; }
         },
@@ -159,8 +159,8 @@ describe('worker/patches: push aggregation and protected branch fallback', () =>
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
-        resolveRobustBranch: async (_d, requested) => requested || 'main',
+        parseRepoId: (id) => id,
+        resolveBranchName: async (_d, requested) => requested || 'main',
         ensureFullClone: async () => ({ ok: true }),
         getAuthCallback: () => undefined,
         getConfiguredAuthHosts: () => [],
@@ -214,8 +214,8 @@ describe('worker/patches: push aggregation and protected branch fallback', () =>
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
-        resolveRobustBranch: async (d, requested) => requested || 'main',
+        parseRepoId: (id) => id,
+        resolveBranchName: async (d, requested) => requested || 'main',
         ensureFullClone: async () => ({ ok: true }),
         getAuthCallback: () => undefined,
         getConfiguredAuthHosts: () => [],

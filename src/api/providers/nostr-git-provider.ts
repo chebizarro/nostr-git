@@ -10,7 +10,7 @@ import type {
   HttpOverrides
 } from '../../git/provider.js';
 import type { BlossomPushSummary } from '../../blossom/index.js';
-import { getGitProvider } from '../../git/factory.js';
+import { createGitProvider } from '../../git/factory.js';
 import type { EventIO } from '../../types/index.js';
 import type { RepoAnnouncementEvent, RepoStateEvent } from '../../events/index.js';
 import { createRepoStateEvent, createRepoAnnouncementEvent, getTags } from '../../events/index.js';
@@ -65,7 +65,7 @@ export class NostrGitProvider {
     this.nostrConfig = config;
     
     // Create the underlying git provider (isomorphic-git or libgit2)
-    this.baseGitProvider = config.gitProvider ?? getGitProvider();
+    this.baseGitProvider = config.gitProvider ?? createGitProvider();
   }
 
   configureGrasp(grasp: GraspLike): void {

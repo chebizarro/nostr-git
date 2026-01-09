@@ -41,7 +41,7 @@ vi.mock('../../src/git/vendor-provider-factory.js', () => {
   };
 });
 
-vi.mock('../../src/git/factory.js', () => ({ getGitProvider: () => ({}) }));
+vi.mock('../../src/git/factory.js', () => ({ createGitProvider: () => ({}) }));
 
 describe('MultiVendorGitProvider (strict)', () => {
   let m: MultiVendorGitProvider;

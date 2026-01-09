@@ -52,8 +52,8 @@ describe('syncWithRemote with Enhanced Logging', () => {
       },
       {
         rootDir: '/repos',
-        canonicalRepoKey: (id) => id,
-        resolveRobustBranch: vi.fn().mockResolvedValue('main'),
+        parseRepoId: (id) => id,
+        resolveBranchName: vi.fn().mockResolvedValue('main'),
         isRepoCloned: vi.fn().mockResolvedValue(true),
         toPlain: (v) => v
       }
@@ -84,8 +84,8 @@ describe('syncWithRemote with Enhanced Logging', () => {
       },
       {
         rootDir: '/repos',
-        canonicalRepoKey: (id) => id,
-        resolveRobustBranch: vi.fn().mockResolvedValue('main'),
+        parseRepoId: (id) => id,
+        resolveBranchName: vi.fn().mockResolvedValue('main'),
         isRepoCloned: vi.fn().mockResolvedValue(true),
         toPlain: (v) => v
       }
@@ -114,8 +114,8 @@ describe('syncWithRemote with Enhanced Logging', () => {
       },
       {
         rootDir: '/repos',
-        canonicalRepoKey: (id) => id,
-        resolveRobustBranch: vi.fn().mockResolvedValue('main'),
+        parseRepoId: (id) => id,
+        resolveBranchName: vi.fn().mockResolvedValue('main'),
         isRepoCloned: vi.fn().mockResolvedValue(true),
         toPlain: (v) => v
       }
@@ -140,8 +140,8 @@ describe('syncWithRemote with Enhanced Logging', () => {
       },
       {
         rootDir: '/repos',
-        canonicalRepoKey: (id) => id,
-        resolveRobustBranch: vi.fn().mockResolvedValue('main'),
+        parseRepoId: (id) => id,
+        resolveBranchName: vi.fn().mockResolvedValue('main'),
         isRepoCloned: vi.fn().mockResolvedValue(true),
         toPlain: (v) => v
       }

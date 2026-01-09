@@ -36,9 +36,9 @@ export interface BranchInfo {
 }
 
 /**
- * Get commit information in ngit format
+ * Read commit information in ngit format (low-level git operation)
  */
-export async function getCommitInfo(git: any, oid: string): Promise<CommitInfo> {
+export async function readCommitInfo(git: any, oid: string): Promise<CommitInfo> {
   const commit = await git.readCommit({ oid })
   const c = commit.commit || commit
   

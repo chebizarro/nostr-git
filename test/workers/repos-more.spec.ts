@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { GitProvider } from '../../src/git/provider.js';
 import { smartInitializeRepoUtil, initializeRepoUtil, ensureShallowCloneUtil, ensureFullCloneUtil, clearCloneTracking, cloneRemoteRepoUtil } from '../../src/worker/workers/repos.js';
 
-const canonicalRepoKey = (id: string) => id.replace(/\s+/g, '-').toLowerCase();
+const parseRepoId = (id: string) => id.replace(/\s+/g, '-').toLowerCase();
 
 function makeGitMock(partial: Partial<GitProvider> = {}): GitProvider {
   return {
@@ -62,7 +62,7 @@ describe('repos utils (additional coverage)', () => {
       git,
       cacheManager,
       { repoId: 'o/r', cloneUrls: ['https://example.com/o/r.git'] },
-      { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos },
+      { rootDir, parseRepoId, repoDataLevels, clonedRepos },
       () => {}
     );
     expect(res.success).toBe(false);
@@ -80,7 +80,7 @@ describe('repos utils (additional coverage)', () => {
       git,
       cacheManager,
       { repoId: 'o/r', cloneUrls: ['https://example.com/o/r.git'] },
-      { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos },
+      { rootDir, parseRepoId, repoDataLevels, clonedRepos },
       () => {}
     );
     expect(res.success).toBe(false);
@@ -95,11 +95,11 @@ describe('repos utils (additional coverage)', () => {
       { repoId: 'o/r' },
       {
         rootDir,
-        canonicalRepoKey,
-        repoDataLevels: new Map([[canonicalRepoKey('o/r'), 'shallow']]),
-        clonedRepos: new Set([canonicalRepoKey('o/r')]),
+        parseRepoId,
+        repoDataLevels: new Map([[parseRepoId('o/r'), 'shallow']]),
+        clonedRepos: new Set([parseRepoId('o/r')]),
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async (_dir, requested) => requested || 'main',
       },
       () => {}
     );
@@ -115,11 +115,11 @@ describe('repos utils (additional coverage)', () => {
       { repoId: 'o/r' },
       {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         repoDataLevels: new Map(),
-        clonedRepos: new Set([canonicalRepoKey('o/r')]),
+        clonedRepos: new Set([parseRepoId('o/r')]),
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async (_dir, requested) => requested || 'main',
       },
       () => {}
     );
@@ -137,11 +137,11 @@ describe('repos utils (additional coverage)', () => {
       { repoId: 'o/r', branch: 'develop', depth: 75 },
       {
         rootDir,
-        canonicalRepoKey,
-        repoDataLevels: new Map([[canonicalRepoKey('o/r'), 'shallow']]),
-        clonedRepos: new Set([canonicalRepoKey('o/r')]),
+        parseRepoId,
+        repoDataLevels: new Map([[parseRepoId('o/r'), 'shallow']]),
+        clonedRepos: new Set([parseRepoId('o/r')]),
         isRepoCloned: async () => true,
-        resolveRobustBranch: async (_g: any, _d: string, requested?: string) => requested || 'main',
+        resolveBranchName: async (_g: any, _d: string, requested?: string) => requested || 'main',
       },
       () => {}
     );
@@ -158,11 +158,11 @@ describe('repos utils (additional coverage)', () => {
       { repoId: 'o/r', branch: 'main' },
       {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         repoDataLevels: new Map(),
         clonedRepos: new Set(),
         isRepoCloned: async () => false,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async (_dir, requested) => requested || 'main',
       },
       () => {}
     );
@@ -177,11 +177,11 @@ describe('repos utils (additional coverage)', () => {
       { repoId: 'o/r', branch: 'main' },
       {
         rootDir,
-        canonicalRepoKey,
-        repoDataLevels: new Map([[canonicalRepoKey('o/r'), 'full']]),
-        clonedRepos: new Set([canonicalRepoKey('o/r')]),
+        parseRepoId,
+        repoDataLevels: new Map([[parseRepoId('o/r'), 'full']]),
+        clonedRepos: new Set([parseRepoId('o/r')]),
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async (_dir, requested) => requested || 'main',
       },
       () => {}
     );
@@ -216,11 +216,11 @@ describe('repos utils (additional coverage)', () => {
       { repoId: 'owner/repo', cloneUrls: ['https://example.com/owner/repo.git'] },
       {
         rootDir,
-        canonicalRepoKey,
-        repoDataLevels: new Map([[canonicalRepoKey('owner/repo'), 'refs']]),
-        clonedRepos: new Set([canonicalRepoKey('owner/repo')]),
+        parseRepoId,
+        repoDataLevels: new Map([[parseRepoId('owner/repo'), 'refs']]),
+        clonedRepos: new Set([parseRepoId('owner/repo')]),
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async (_dir, requested) => requested || 'main',
       },
       () => {}
     );
@@ -261,11 +261,11 @@ describe('repos utils (additional coverage)', () => {
       { repoId: 'owner/repo', cloneUrls: ['https://example.com/owner/repo.git'] },
       {
         rootDir,
-        canonicalRepoKey,
-        repoDataLevels: new Map([[canonicalRepoKey('owner/repo'), 'refs']]),
-        clonedRepos: new Set([canonicalRepoKey('owner/repo')]),
+        parseRepoId,
+        repoDataLevels: new Map([[parseRepoId('owner/repo'), 'refs']]),
+        clonedRepos: new Set([parseRepoId('owner/repo')]),
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async (_dir, requested) => requested || 'main',
       },
       () => {}
     );
@@ -287,11 +287,11 @@ describe('repos utils (additional coverage)', () => {
       { repoId, branch: 'main', depth: 10 },
       {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         repoDataLevels,
         clonedRepos,
         isRepoCloned: async () => false,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async (_dir, requested) => requested || 'main',
       } as any,
       () => {}
     );
@@ -359,7 +359,7 @@ describe('repos utils (additional coverage)', () => {
 
   it('ensureFullCloneUtil: missing origin remote error', async () => {
     const repoId = 'X/FullNoOrigin';
-    const key = canonicalRepoKey(repoId);
+    const key = parseRepoId(repoId);
     clonedRepos.add(key);
     (git.listRemotes as any) = vi.fn(async () => []);
     const res = await ensureFullCloneUtil(
@@ -367,11 +367,11 @@ describe('repos utils (additional coverage)', () => {
       { repoId, branch: 'main', depth: 20 },
       {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         repoDataLevels,
         clonedRepos,
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async (_dir, requested) => requested || 'main',
       } as any,
       () => {}
     );
@@ -381,7 +381,7 @@ describe('repos utils (additional coverage)', () => {
 
   it('smartInitializeRepoUtil: forceUpdate bypasses cache and re-initializes', async () => {
     const repoId = 'Org/ForceUpdate';
-    const key = canonicalRepoKey(repoId);
+    const key = parseRepoId(repoId);
     // Seed cache that would normally short-circuit
     const cached = {
       repoId: key,
@@ -399,11 +399,11 @@ describe('repos utils (additional coverage)', () => {
       { repoId, cloneUrls: ['https://example.com/repo.git'], forceUpdate: true },
       {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         repoDataLevels,
         clonedRepos,
         isRepoCloned: async () => false,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async (_dir, requested) => requested || 'main',
       },
       () => {}
     );
@@ -416,7 +416,7 @@ describe('repos utils (additional coverage)', () => {
 
   it('ensureFullCloneUtil: cached full path returns cached=true', async () => {
     const repoId = 'X/FullCached';
-    const key = canonicalRepoKey(repoId);
+    const key = parseRepoId(repoId);
     repoDataLevels.set(key, 'full');
     clonedRepos.add(key);
     const res = await ensureFullCloneUtil(
@@ -424,11 +424,11 @@ describe('repos utils (additional coverage)', () => {
       { repoId, branch: 'main', depth: 50 },
       {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         repoDataLevels,
         clonedRepos,
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async (_dir, requested) => requested || 'main',
       } as any,
       () => {}
     );
@@ -438,17 +438,17 @@ describe('repos utils (additional coverage)', () => {
 
   it('ensureFullCloneUtil: success path updates dataLevel to full', async () => {
     const repoId = 'X/FullSuccess';
-    const key = canonicalRepoKey(repoId);
+    const key = parseRepoId(repoId);
     const res = await ensureFullCloneUtil(
       git,
       { repoId, branch: 'main', depth: 50 },
       {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         repoDataLevels,
         clonedRepos,
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async (_dir, requested) => requested || 'main',
       } as any,
       () => {}
     );
@@ -460,18 +460,18 @@ describe('repos utils (additional coverage)', () => {
 
   it('ensureShallowCloneUtil: success path sets shallow level', async () => {
     const repoId = 'X/ShallowSuccess';
-    const key = canonicalRepoKey(repoId);
+    const key = parseRepoId(repoId);
     clonedRepos.add(key);
     const res = await ensureShallowCloneUtil(
       git,
       { repoId, branch: 'main' },
       {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         repoDataLevels,
         clonedRepos,
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async (_dir, requested) => requested || 'main',
       } as any,
       () => {}
     );
@@ -483,7 +483,7 @@ describe('repos utils (additional coverage)', () => {
 
   it('ensureShallowCloneUtil: missing origin remote throws', async () => {
     const repoId = 'X/ShallowNoOrigin';
-    const key = canonicalRepoKey(repoId);
+    const key = parseRepoId(repoId);
     clonedRepos.add(key);
     // listRemotes returns empty
     (git.listRemotes as any) = vi.fn(async () => []);
@@ -492,11 +492,11 @@ describe('repos utils (additional coverage)', () => {
       { repoId, branch: 'main' },
       {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         repoDataLevels,
         clonedRepos,
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async (_dir, requested) => requested || 'main',
       } as any,
       () => {}
     );
@@ -506,18 +506,18 @@ describe('repos utils (additional coverage)', () => {
 
   it('ensureShallowCloneUtil: returns from cache when level already shallow', async () => {
     const repoId = 'Org/CachedShallow';
-    const key = canonicalRepoKey(repoId);
+    const key = parseRepoId(repoId);
     repoDataLevels.set(key, 'shallow');
     const res = await ensureShallowCloneUtil(
       git,
       { repoId, branch: 'main' },
       {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         repoDataLevels,
         clonedRepos,
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async (_dir, requested) => requested || 'main',
       },
       () => {}
     );
@@ -536,7 +536,7 @@ describe('repos utils (additional coverage)', () => {
   it('smartInitializeRepoUtil: propagate failure when initialize fallback fails', async () => {
     const repoId = 'Org/FallbackInitFail';
     const isRepoCloned = async () => true;
-    const resolveRobustBranch = async () => 'main';
+    const resolveBranchName = async () => 'main';
 
     // Non-CORS fetch error to force fallback into initializeRepoUtil
     (git.fetch as any) = vi.fn(async () => { throw new Error('server 500'); });
@@ -549,11 +549,11 @@ describe('repos utils (additional coverage)', () => {
       { repoId, cloneUrls: ['https://example.com/repo.git'] },
       {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         repoDataLevels,
         clonedRepos,
         isRepoCloned,
-        resolveRobustBranch,
+        resolveBranchName,
       },
       () => {}
     );
@@ -566,7 +566,7 @@ describe('repos utils (additional coverage)', () => {
   it('smartInitializeRepoUtil: falls back to HEAD when remoteRef resolve fails', async () => {
     const repoId = 'Org/FallbackHead';
     const isRepoCloned = async () => true;
-    const resolveRobustBranch = async () => 'main';
+    const resolveBranchName = async () => 'main';
 
     // First resolveRef call for remoteRef throws; next for HEAD succeeds
     const originalResolve = git.resolveRef as any;
@@ -583,11 +583,11 @@ describe('repos utils (additional coverage)', () => {
       { repoId, cloneUrls: ['https://example.com/repo.git'] },
       {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         repoDataLevels,
         clonedRepos,
         isRepoCloned,
-        resolveRobustBranch,
+        resolveBranchName,
       },
       () => {}
     );
@@ -602,9 +602,9 @@ describe('repos utils (additional coverage)', () => {
 
   it('smartInitializeRepoUtil: already-cloned non-CORS fetch error falls through to initialize flow', async () => {
     const repoId = 'Org/NonCorsFail';
-    const key = canonicalRepoKey(repoId);
+    const key = parseRepoId(repoId);
     const isRepoCloned = async () => true;
-    const resolveRobustBranch = async () => 'main';
+    const resolveBranchName = async () => 'main';
 
     // Make fetch throw a non-CORS error to trigger throw and re-init path
     (git.fetch as any) = vi.fn(async () => {
@@ -619,11 +619,11 @@ describe('repos utils (additional coverage)', () => {
       { repoId, cloneUrls: ['https://example.com/repo.git'] },
       {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         repoDataLevels,
         clonedRepos,
         isRepoCloned,
-        resolveRobustBranch,
+        resolveBranchName,
       },
       () => {}
     );
@@ -636,7 +636,7 @@ describe('repos utils (additional coverage)', () => {
 
   it('smartInitializeRepoUtil: already-cloned path with CORS fetch error and empty repo branch resolution', async () => {
     const repoId = 'Owner/EmptyRepo';
-    const key = canonicalRepoKey(repoId);
+    const key = parseRepoId(repoId);
 
     // Simulate already cloned
     const isRepoCloned = async () => true;
@@ -645,8 +645,8 @@ describe('repos utils (additional coverage)', () => {
       const err: any = new Error('CORS: Access-Control blocked');
       throw err;
     });
-    // Simulate resolveRobustBranch failing (empty repo)
-    const resolveRobustBranch = async () => { throw new Error('no branches'); };
+    // Simulate resolveBranchName failing (empty repo)
+    const resolveBranchName = async () => { throw new Error('no branches'); };
 
     const res = await smartInitializeRepoUtil(
       git,
@@ -654,11 +654,11 @@ describe('repos utils (additional coverage)', () => {
       { repoId, cloneUrls: ['https://example.com/repo.git'] },
       {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         repoDataLevels,
         clonedRepos,
         isRepoCloned,
-        resolveRobustBranch,
+        resolveBranchName,
       },
       () => {}
     );
@@ -673,9 +673,9 @@ describe('repos utils (additional coverage)', () => {
 
   it('smartInitializeRepoUtil: already-cloned path syncs branch when resolvable', async () => {
     const repoId = 'Org/Normal';
-    const key = canonicalRepoKey(repoId);
+    const key = parseRepoId(repoId);
     const isRepoCloned = async () => true;
-    const resolveRobustBranch = async () => 'main';
+    const resolveBranchName = async () => 'main';
 
     const res = await smartInitializeRepoUtil(
       git,
@@ -683,11 +683,11 @@ describe('repos utils (additional coverage)', () => {
       { repoId, cloneUrls: ['https://example.com/repo.git'] },
       {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         repoDataLevels,
         clonedRepos,
         isRepoCloned,
-        resolveRobustBranch,
+        resolveBranchName,
       },
       () => {}
     );
@@ -705,11 +705,11 @@ describe('repos utils (additional coverage)', () => {
       { repoId, branch: 'main' },
       {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         repoDataLevels,
         clonedRepos,
         isRepoCloned: async () => false,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async (_dir, requested) => requested || 'main',
       },
       () => {}
     );
@@ -724,11 +724,11 @@ describe('repos utils (additional coverage)', () => {
       { repoId, branch: 'main', depth: 50 },
       {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         repoDataLevels,
         clonedRepos,
         isRepoCloned: async () => false,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async (_dir, requested) => requested || 'main',
       },
       () => {}
     );

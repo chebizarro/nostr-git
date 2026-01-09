@@ -10,7 +10,7 @@ import type {
   PullRequestUpdateEvent,
   UserGraspListEvent,
 } from "../events/index.js";
-import { canonicalRepoKey, parseEucTag, GitIssueStatus, parseRepoStateEvent } from "../events/index.js";
+import { buildRepoKey, parseEucTag, GitIssueStatus, parseRepoStateEvent } from "../events/index.js";
 import { assembleIssueThread, resolveIssueStatus, type IssueThread } from "../events/nip34/issues.js";
 import { buildRepoSubscriptions, type RepoSubscriptions } from "../git/subscriptions.js";
 
@@ -342,8 +342,8 @@ export class RepoCore {
   }
 
   // Shared-types convenience
-  static canonicalRepoKey(pubkey: string, name?: string): string {
-    return canonicalRepoKey(pubkey, name);
+  static buildRepoKey(pubkey: string, name?: string): string {
+    return buildRepoKey(pubkey, name);
   }
 
   static parseEucFromTags(tags: string[][]): string | undefined {

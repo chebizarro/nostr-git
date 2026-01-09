@@ -11,7 +11,7 @@ vi.mock('comlink', () => ({
 
 // Mock Git provider used by the worker
 vi.mock('../../src/git/factory.js', () => ({
-  getGitProvider: () => ({
+  createGitProvider: () => ({
     push: vi.fn(async () => undefined),
     // Other methods may be referenced in unrelated API paths but are not invoked here
     statusMatrix: vi.fn(async () => []),

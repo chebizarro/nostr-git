@@ -56,8 +56,8 @@ describe('git-worker patch utilities', () => {
       },
       {
         rootDir: '/root',
-        canonicalRepoKey: (id: string) => id,
-        resolveRobustBranch: async (_dir: string, requested?: string) => requested || 'main',
+        parseRepoId: (id: string) => id,
+        resolveBranchName: async (_dir: string, requested?: string) => requested || 'main',
         analyzePatchMergeability: analyze,
       },
     )
@@ -88,8 +88,8 @@ describe('git-worker patch utilities', () => {
       },
       {
         rootDir: '/root',
-        canonicalRepoKey: (id: string) => id,
-        resolveRobustBranch: async () => 'main',
+        parseRepoId: (id: string) => id,
+        resolveBranchName: async (_dir: string, requested?: string) => requested || 'main',
         analyzePatchMergeability: analyze,
       },
     )
@@ -143,8 +143,8 @@ describe('git-worker patch utilities', () => {
       },
       {
         rootDir,
-        canonicalRepoKey: (id: string) => id,
-        resolveRobustBranch: async () => 'main',
+        parseRepoId: (id: string) => id,
+        resolveBranchName: async (_dir, requested) => requested || 'main',
         ensureFullClone: async () => ({ success: true }),
         getAuthCallback: () => null,
         getConfiguredAuthHosts: () => [],
@@ -188,8 +188,8 @@ describe('git-worker patch utilities', () => {
       },
       {
         rootDir: '/root',
-        canonicalRepoKey: (id: string) => id,
-        resolveRobustBranch: async () => 'main',
+        parseRepoId: (id: string) => id,
+        resolveBranchName: async (_dir, requested) => requested || 'main',
         ensureFullClone: async () => ({ success: true }),
         getAuthCallback: () => null,
         getConfiguredAuthHosts: () => [],

@@ -33,11 +33,11 @@ describe('worker repos fetch behavior', () => {
       { repoId: 'owner/name', cloneUrls: ['https://example.com/owner/name.git'] },
       {
         rootDir: '/root',
-        canonicalRepoKey: (id: string) => id.replace('/', ':'),
+        parseRepoId: (id: string) => id.replace('/', ':'),
         repoDataLevels: new Map([['owner:name', 'refs']]),
         clonedRepos: new Set(['owner:name']),
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async () => 'main',
       },
       () => {}
     );
@@ -53,11 +53,11 @@ describe('worker repos fetch behavior', () => {
       { repoId: 'owner/name' },
       {
         rootDir: '/root',
-        canonicalRepoKey: (id: string) => id.replace('/', ':'),
+        parseRepoId: (id: string) => id.replace('/', ':'),
         repoDataLevels: new Map(),
         clonedRepos: new Set(['owner:name']),
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async () => 'main',
       },
       () => {}
     );
@@ -74,11 +74,11 @@ describe('worker repos fetch behavior', () => {
       { repoId: 'owner/name', cloneUrls: ['https://example.com/owner/name.git'] },
       {
         rootDir: '/root',
-        canonicalRepoKey: (id: string) => id.replace('/', ':'),
+        parseRepoId: (id: string) => id.replace('/', ':'),
         repoDataLevels: new Map(),
         clonedRepos: new Set(['owner:name']),
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => { throw new Error('no branches'); },
+        resolveBranchName: async () => { throw new Error('no branches'); },
       },
       () => {}
     );

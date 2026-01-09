@@ -1,7 +1,7 @@
 // Branch resolution helpers extracted from git-worker
 import type { GitProvider } from '../../git/provider.js';
 
-export async function resolveRobustBranch(
+export async function resolveBranchName(
   git: GitProvider,
   dir: string,
   requestedBranch?: string
@@ -11,12 +11,12 @@ export async function resolveRobustBranch(
   if (requestedBranch) {
     try {
       await git.resolveRef({ dir, ref: requestedBranch });
-      console.log(`[resolveRobustBranch] Successfully resolved requested branch: ${requestedBranch}`);
+      console.log(`[resolveBranchName] Successfully resolved requested branch: ${requestedBranch}`);
       return requestedBranch;
     } catch (error) {
       // If the requested branch doesn't exist locally, still return it
       // The calling code will handle fetching/syncing it
-      console.log(`[resolveRobustBranch] Requested branch "${requestedBranch}" not found locally, but returning it anyway for sync/fetch`);
+      console.log(`[resolveBranchName] Requested branch "${requestedBranch}" not found locally, but returning it anyway for sync/fetch`);
       return requestedBranch;
     }
   }

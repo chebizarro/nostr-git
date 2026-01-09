@@ -1,5 +1,5 @@
 import type { GitProvider } from '../git/provider.js';
-import { getGitProvider as getBaseGitProvider } from '../git/factory.js';
+import { createGitProvider as getBaseGitProvider } from '../git/factory.js';
 import { MultiVendorGitProvider } from '../git/multi-vendor-git-provider.js';
 import { NostrGitProvider } from './providers/nostr-git-provider.js';
 import { createNostrGitProviderFromEnv } from './providers/nostr-git-factory.js';

@@ -1,19 +1,19 @@
 import { expose } from "comlink";
 
 import type { GitProvider } from "../git/provider.js";
-import { getGitProvider } from "../git/factory.js";
+import { createGitProvider } from "../git/factory.js";
 import { rootDir } from "../git/git.js";
 import { analyzePatchMergeability } from "../git/merge-analysis.js";
 
 import type { EventIO } from "../types/index.js";
 import { getNostrGitProvider, initializeNostrGitProvider } from "../api/git-provider.js";
 
-import { canonicalRepoKey } from "../utils/canonical-repo-key.js";
+import { parseRepoId } from "../utils/repo-id.js";
 
 import type { AuthConfig } from "./workers/auth.js";
 import { getAuthCallback, getConfiguredAuthHosts, setAuthConfig } from "./workers/auth.js";
 
-import { resolveRobustBranch as resolveRobustBranchUtil } from "./workers/branches.js";
+import { resolveBranchName as resolveRobustBranchUtil } from "./workers/branches.js";
 import { getProviderFs, isRepoClonedFs } from "./workers/fs-utils.js";
 
 import type { RepoCache } from "./workers/cache.js";
@@ -69,7 +69,7 @@ function makeProgress(repoId: string, type: "clone-progress" | "merge-progress")
 }
 
 function repoKeyAndDir(repoId: string): { key: string; dir: string } {
-  const key = canonicalRepoKey(repoId);
+  const key = parseRepoId(repoId);
   return { key, dir: `${rootDir}/${key}` };
 }
 
@@ -102,7 +102,7 @@ async function hasUncommittedChanges(repoDir: string, git: GitProvider): Promise
 }
 
 // --- shared worker state ---
-const git: GitProvider = getGitProvider();
+const git: GitProvider = createGitProvider();
 const cacheManager: RepoCacheManager = new (RepoCacheManager as any)();
 const clonedRepos = new Set<string>();
 const repoDataLevels = new Map<string, DataLevel>();
@@ -142,7 +142,7 @@ const api = {
         opts,
         {
           rootDir,
-          canonicalRepoKey,
+          parseRepoId,
           repoDataLevels,
           clonedRepos,
         },
@@ -161,12 +161,12 @@ const api = {
         opts,
         {
           rootDir,
-          canonicalRepoKey,
+          parseRepoId,
           repoDataLevels,
           clonedRepos,
           isRepoCloned: async (g: GitProvider, dir: string) => isRepoClonedFs(g, dir),
-          resolveRobustBranch: async (g: GitProvider, dir: string, requested?: string) =>
-            resolveRobustBranchUtil(g, dir, requested),
+          resolveBranchName: async (dir: string, requested?: string) =>
+            resolveRobustBranchUtil(git, dir, requested),
         },
         sendProgress
       )
@@ -182,12 +182,12 @@ const api = {
         opts,
         {
           rootDir,
-          canonicalRepoKey,
+          parseRepoId,
           repoDataLevels,
           clonedRepos,
           isRepoCloned: async (g: GitProvider, dir: string) => isRepoClonedFs(g, dir),
-          resolveRobustBranch: async (g: GitProvider, dir: string, requested?: string) =>
-            resolveRobustBranchUtil(g, dir, requested),
+          resolveBranchName: async (dir: string, requested?: string) =>
+            resolveRobustBranchUtil(git, dir, requested),
         },
         sendProgress
       )
@@ -203,12 +203,12 @@ const api = {
         opts,
         {
           rootDir,
-          canonicalRepoKey,
+          parseRepoId,
           repoDataLevels,
           clonedRepos,
           isRepoCloned: async (g: GitProvider, dir: string) => isRepoClonedFs(g, dir),
-          resolveRobustBranch: async (g: GitProvider, dir: string, requested?: string) =>
-            resolveRobustBranchUtil(g, dir, requested),
+          resolveBranchName: async (dir: string, requested?: string) =>
+            resolveRobustBranchUtil(git, dir, requested),
         },
         sendProgress
       )
@@ -225,8 +225,8 @@ const api = {
     return toPlain(
       await syncWithRemoteUtil(git, cacheManager, opts, {
         rootDir,
-        canonicalRepoKey,
-        resolveRobustBranch: async (dir: string, requested?: string) =>
+        parseRepoId,
+        resolveBranchName: async (dir: string, requested?: string) =>
           resolveRobustBranchUtil(git, dir, requested),
         isRepoCloned: async (dir: string) => isRepoClonedFs(git, dir),
         toPlain,
@@ -253,8 +253,8 @@ const api = {
     sendProgress("Analyzing patch mergeability...");
     const result = await analyzePatchMergeUtil(git, opts, {
       rootDir,
-      canonicalRepoKey,
-      resolveRobustBranch: async (dir: string, requested?: string) =>
+      parseRepoId,
+      resolveBranchName: async (dir: string, requested?: string) =>
         resolveRobustBranchUtil(git, dir, requested),
       analyzePatchMergeability,
     });
@@ -268,8 +268,8 @@ const api = {
     sendProgress("Applying patch...");
     const result = await applyPatchAndPushUtil(git, opts, {
       rootDir,
-      canonicalRepoKey,
-      resolveRobustBranch: async (dir: string, requested?: string) =>
+      parseRepoId,
+      resolveBranchName: async (dir: string, requested?: string) =>
         resolveRobustBranchUtil(git, dir, requested),
       ensureFullClone: async (args: { repoId: string; branch?: string; depth?: number }) =>
         ensureFullCloneUtil(
@@ -277,12 +277,12 @@ const api = {
           args,
           {
             rootDir,
-            canonicalRepoKey,
+            parseRepoId,
             repoDataLevels,
             clonedRepos,
             isRepoCloned: async (g: GitProvider, dir: string) => isRepoClonedFs(g, dir),
-            resolveRobustBranch: async (g: GitProvider, dir: string, requested?: string) =>
-              resolveRobustBranchUtil(g, dir, requested),
+            resolveBranchName: async (dir: string, requested?: string) =>
+              resolveRobustBranchUtil(git, dir, requested),
           },
           makeProgress(args.repoId, "clone-progress")
         ),
@@ -346,13 +346,13 @@ const api = {
     return toPlain(
       await safePushToRemoteUtil(git, cacheManager, opts, {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         isRepoCloned: async (dir: string) => isRepoClonedFs(git, dir),
         isShallowClone: async (key: string) => {
           const { dir } = repoKeyAndDir(key);
           return await isShallowClone(dir, git);
         },
-        resolveRobustBranch: async (dir: string, requested?: string) =>
+        resolveBranchName: async (dir: string, requested?: string) =>
           resolveRobustBranchUtil(git, dir, requested),
         hasUncommittedChanges: async (dir: string) => hasUncommittedChanges(dir, git),
         needsUpdate: async (repoId: string, cloneUrls: string[], cache: RepoCache | null) =>

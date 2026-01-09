@@ -15,7 +15,7 @@ export * as stack from "./stack/index.js";
 
 // Convenience top-level exports
 export { createRepoStateEvent, createRepoAnnouncementEvent } from "./events/index.js";
-export { getGitProvider } from "./git/factory.js";
+export { getGitProvider } from "./api/git-provider.js";
 export { initializeNostrGitProvider } from "./api/git-provider.js";
 export { getGitWorker, configureWorkerEventIO } from "./worker/client.js";
 export * from "./utils/sanitize-relays.js";

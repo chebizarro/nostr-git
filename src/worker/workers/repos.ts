@@ -1,8 +1,9 @@
 import type { GitProvider } from '../../git/provider.js';
-import { RepoCache, RepoCacheManager } from './cache.js';
-import { getAuthCallback, setAuthConfig } from './auth.js';
-import { resolveRobustBranch } from './branches.js';
+import type { RepoCacheManager, RepoCache } from './cache.js';
+import { resolveBranchName } from './branches.js';
+import { resolveBranchToOid } from '../../git/git.js';
 import { getProviderFs, safeRmrf, ensureDir } from './fs-utils.js';
+import { getAuthCallback, setAuthConfig } from './auth.js';
 
 // Import toPlain from worker (it's defined in the same directory)
 function toPlain<T>(val: T): T {
@@ -44,26 +45,26 @@ export async function smartInitializeRepoUtil(
   },
   deps: {
     rootDir: string;
-    canonicalRepoKey: (id: string) => string;
+    parseRepoId: (id: string) => string;
     repoDataLevels: Map<string, DataLevel>;
     clonedRepos: Set<string>;
     isRepoCloned: (git: GitProvider, dir: string) => Promise<boolean>;
-    resolveRobustBranch: (git: GitProvider, dir: string, requested?: string) => Promise<string>;
+    resolveBranchName: (dir: string, requested?: string) => Promise<string>;
   },
   sendProgress: (phase: string, loaded?: number, total?: number) => void
 ) {
   const { repoId, cloneUrls, forceUpdate = false } = opts;
   const {
     rootDir,
-    canonicalRepoKey,
+    parseRepoId,
     repoDataLevels,
     clonedRepos,
     isRepoCloned,
-    resolveRobustBranch
+    resolveBranchName
   } = deps;
 
   try {
-    const key = canonicalRepoKey(repoId);
+    const key = parseRepoId(repoId);
     const cache = await cacheManager.getRepoCache(key);
     if (cache && !forceUpdate) {
       sendProgress('Using cached data');
@@ -119,7 +120,7 @@ export async function smartInitializeRepoUtil(
         let mainBranch: string;
         try {
           sendProgress('Resolving repository branch');
-          mainBranch = await resolveRobustBranch(git, dir);
+          mainBranch = await resolveBranchName(dir);
           sendProgress(`Found branch: ${mainBranch}`);
         } catch (branchError) {
           console.warn(`[smartInitializeRepo] Could not resolve branches, repository may be empty:`, branchError);
@@ -229,7 +230,7 @@ export async function smartInitializeRepoUtil(
       git,
       cacheManager,
       { repoId, cloneUrls },
-      { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos },
+      { rootDir, parseRepoId, repoDataLevels, clonedRepos },
       sendProgress
     );
   } catch (error: any) {
@@ -248,16 +249,16 @@ export async function initializeRepoUtil(
   opts: { repoId: string; cloneUrls: string[] },
   deps: {
     rootDir: string;
-    canonicalRepoKey: (id: string) => string;
+    parseRepoId: (id: string) => string;
     repoDataLevels: Map<string, DataLevel>;
     clonedRepos: Set<string>;
   },
   sendProgress: (phase: string, loaded?: number, total?: number) => void
 ) {
   const { repoId, cloneUrls } = opts;
-  const { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos } = deps;
+  const { rootDir, parseRepoId, repoDataLevels, clonedRepos } = deps;
   try {
-    const key = canonicalRepoKey(repoId);
+    const key = parseRepoId(repoId);
     const dir = `${rootDir}/${key}`;
     sendProgress('Initializing repository');
 
@@ -354,28 +355,28 @@ export async function ensureShallowCloneUtil(
   opts: { repoId: string; branch?: string },
   deps: {
     rootDir: string;
-    canonicalRepoKey: (id: string) => string;
+    parseRepoId: (id: string) => string;
     repoDataLevels: Map<string, DataLevel>;
     clonedRepos: Set<string>;
     isRepoCloned: (git: GitProvider, dir: string) => Promise<boolean>;
-    resolveRobustBranch: (git: GitProvider, dir: string, requested?: string) => Promise<string>;
+    resolveBranchName: (dir: string, requested?: string) => Promise<string>;
   },
   sendProgress: (phase: string, loaded?: number, total?: number) => void
 ) {
   const { repoId, branch } = opts;
   const {
     rootDir,
-    canonicalRepoKey,
+    parseRepoId,
     repoDataLevels,
     clonedRepos,
     isRepoCloned,
-    resolveRobustBranch
+    resolveBranchName
   } = deps;
-  const key = canonicalRepoKey(repoId);
+  const key = parseRepoId(repoId);
   const dir = `${rootDir}/${key}`;
   let targetBranch: string = branch || 'main';
   try {
-    targetBranch = await resolveRobustBranch(git, dir, branch);
+    targetBranch = await resolveBranchName(dir, branch);
     const currentLevel = repoDataLevels.get(key);
     if (currentLevel === 'shallow' || currentLevel === 'full') {
       sendProgress('Using existing shallow clone');
@@ -423,26 +424,26 @@ export async function ensureFullCloneUtil(
   opts: { repoId: string; branch?: string; depth?: number },
   deps: {
     rootDir: string;
-    canonicalRepoKey: (id: string) => string;
+    parseRepoId: (id: string) => string;
     repoDataLevels: Map<string, DataLevel>;
     clonedRepos: Set<string>;
     isRepoCloned: (git: GitProvider, dir: string) => Promise<boolean>;
-    resolveRobustBranch: (git: GitProvider, dir: string, requested?: string) => Promise<string>;
+    resolveBranchName: (dir: string, requested?: string) => Promise<string>;
   },
   sendProgress: (phase: string, loaded?: number, total?: number) => void
 ) {
   const { repoId, branch, depth = 50 } = opts;
   const {
     rootDir,
-    canonicalRepoKey,
+    parseRepoId,
     repoDataLevels,
     clonedRepos,
     isRepoCloned,
-    resolveRobustBranch
+    resolveBranchName
   } = deps;
-  const key = canonicalRepoKey(repoId);
+  const key = parseRepoId(repoId);
   const dir = `${rootDir}/${key}`;
-  const targetBranch = await resolveRobustBranch(git, dir, branch);
+  const targetBranch = await resolveBranchName(dir, branch);
   const currentLevel = repoDataLevels.get(key);
   if (currentLevel === 'full') return { success: true, repoId, cached: true, level: currentLevel };
   if (!clonedRepos.has(key)) {
@@ -557,7 +558,7 @@ export async function cloneRemoteRepoUtil(
 
     onProgress?.('Setting up local branches...', 95);
 
-    const defaultBranch = await resolveRobustBranch(git, dir);
+    const defaultBranch = await resolveBranchName(git, dir);
     await git.checkout({ dir, ref: defaultBranch });
 
     const headCommit = await git.resolveRef({ dir, ref: 'HEAD' });

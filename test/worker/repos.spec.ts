@@ -51,11 +51,11 @@ describe('worker/repos quick tests', () => {
       { repoId: 'owner/name' },
       {
         rootDir: '/root',
-        canonicalRepoKey: (id: string) => id.replace('/', ':'),
+        parseRepoId: (id: string) => id.replace('/', ':'),
         repoDataLevels,
         clonedRepos: new Set(['owner:name']),
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async () => 'main',
       },
       () => {}
     );
@@ -80,11 +80,11 @@ describe('worker/repos quick tests', () => {
       { repoId: 'owner/name', cloneUrls: ['https://example.com/owner/name.git'] },
       {
         rootDir: '/root',
-        canonicalRepoKey: (id: string) => id.replace('/', ':'),
+        parseRepoId: (id: string) => id.replace('/', ':'),
         repoDataLevels: new Map(),
         clonedRepos: new Set(['owner:name']),
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async () => 'main',
       },
       () => {}
     );
@@ -101,11 +101,11 @@ describe('worker/repos quick tests', () => {
       { repoId: 'owner/name' },
       {
         rootDir: '/root',
-        canonicalRepoKey: (id: string) => id.replace('/', ':'),
+        parseRepoId: (id: string) => id.replace('/', ':'),
         repoDataLevels,
         clonedRepos: new Set(['owner:name']),
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async () => 'main',
       },
       () => {}
     );
@@ -120,11 +120,11 @@ describe('worker/repos quick tests', () => {
       { repoId: 'owner/name' },
       {
         rootDir: '/root',
-        canonicalRepoKey: (id: string) => id.replace('/', ':'),
+        parseRepoId: (id: string) => id.replace('/', ':'),
         repoDataLevels: new Map(),
         clonedRepos: new Set(),
         isRepoCloned: async () => false,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async () => 'main',
       },
       () => {}
     );
@@ -141,7 +141,7 @@ describe('worker/repos quick tests', () => {
       { repoId: 'owner/name', cloneUrls: ['https://example.com/owner/name.git'] },
       {
         rootDir: '/root',
-        canonicalRepoKey: (id: string) => id.replace('/', ':'),
+        parseRepoId: (id: string) => id.replace('/', ':'),
         repoDataLevels: new Map(),
         clonedRepos: new Set(),
       },
@@ -170,11 +170,11 @@ describe('worker/repos quick tests', () => {
       { repoId: 'owner/name', cloneUrls: ['https://example.com/owner/name.git'] },
       {
         rootDir: '/root',
-        canonicalRepoKey: (id: string) => id.replace('/', ':'),
+        parseRepoId: (id: string) => id.replace('/', ':'),
         repoDataLevels: new Map(),
         clonedRepos: new Set(),
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async () => 'main',
       },
       () => {}
     );
@@ -191,11 +191,11 @@ describe('worker/repos quick tests', () => {
       { repoId: 'owner/name' },
       {
         rootDir: '/root',
-        canonicalRepoKey: (id: string) => id.replace('/', ':'),
+        parseRepoId: (id: string) => id.replace('/', ':'),
         repoDataLevels,
         clonedRepos: new Set(['owner:name']),
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async () => 'main',
       },
       () => {}
     );
@@ -211,11 +211,11 @@ describe('worker/repos quick tests', () => {
       { repoId: 'owner/name' },
       {
         rootDir: '/root',
-        canonicalRepoKey: (id: string) => id.replace('/', ':'),
+        parseRepoId: (id: string) => id.replace('/', ':'),
         repoDataLevels,
         clonedRepos: new Set(['owner:name']),
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async () => 'main',
       },
       () => {}
     );
@@ -232,11 +232,11 @@ describe('worker/repos quick tests', () => {
       { repoId: 'owner/name', depth: 20 },
       {
         rootDir: '/root',
-        canonicalRepoKey: (id: string) => id.replace('/', ':'),
+        parseRepoId: (id: string) => id.replace('/', ':'),
         repoDataLevels,
         clonedRepos: new Set(['owner:name']),
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async () => 'main',
       },
       () => {}
     );
@@ -252,11 +252,11 @@ describe('worker/repos quick tests', () => {
       { repoId: 'owner/name' },
       {
         rootDir: '/root',
-        canonicalRepoKey: (id: string) => id.replace('/', ':'),
+        parseRepoId: (id: string) => id.replace('/', ':'),
         repoDataLevels,
         clonedRepos: new Set(['owner:name']),
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async () => 'main',
       },
       () => {}
     );

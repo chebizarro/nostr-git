@@ -105,8 +105,8 @@ describe('worker/patches: applyPatchAndPushUtil', () => {
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
-        resolveRobustBranch: async (d, requested) => {
+        parseRepoId: (id) => id,
+        resolveBranchName: async (d, requested) => {
           const branch = requested || 'main';
           try {
             await (git as any).resolveRef({ dir: d, ref: `refs/heads/${branch}` });
@@ -178,8 +178,8 @@ describe('worker/patches: applyPatchAndPushUtil', () => {
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
-        resolveRobustBranch: async (d, requested) => {
+        parseRepoId: (id) => id,
+        resolveBranchName: async (d, requested) => {
           const branch = requested || 'main';
           try {
             await (git as any).resolveRef({ dir: d, ref: `refs/heads/${branch}` });
@@ -236,8 +236,8 @@ describe('worker/patches: applyPatchAndPushUtil', () => {
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
-        resolveRobustBranch: async (d, requested) => {
+        parseRepoId: (id) => id,
+        resolveBranchName: async (d, requested) => {
           const branch = requested || 'main';
           try {
             await (git as any).resolveRef({ dir: d, ref: `refs/heads/${branch}` });
@@ -332,8 +332,8 @@ describe('worker/patches: applyPatchAndPushUtil', () => {
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
-        resolveRobustBranch: async (d, requested) => {
+        parseRepoId: (id) => id,
+        resolveBranchName: async (d, requested) => {
           const branch = requested || 'main';
           try {
             await (git as any).resolveRef({ dir: d, ref: `refs/heads/${branch}` });

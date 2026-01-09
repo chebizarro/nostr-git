@@ -74,10 +74,10 @@ it("proceeds when provider==='grasp' even if needsUpdate would be true, and prop
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
+        parseRepoId: (id) => id,
         isRepoCloned: async (d) => isRepoClonedByGitDir(fs as any, d),
         isShallowClone: async () => false,
-        resolveRobustBranch: async (_d, requested) => requested || 'main',
+        resolveBranchName: async (_d, requested) => requested || 'main',
         hasUncommittedChanges: async () => false,
         needsUpdate: async () => true, // would normally block, but provider==='grasp' bypasses
         pushToRemote,
@@ -116,10 +116,10 @@ it("proceeds when provider==='grasp' even if needsUpdate would be true, and prop
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
+        parseRepoId: (id) => id,
         isRepoCloned: async (d) => isRepoClonedByGitDir(fs as any, d),
         isShallowClone: async () => false,
-        resolveRobustBranch: async (_d, requested) => requested || 'main',
+        resolveBranchName: async (_d, requested) => requested || 'main',
         hasUncommittedChanges: async () => false,
         needsUpdate: async () => true,
         pushToRemote: pushSpy,
@@ -149,10 +149,10 @@ describe('worker/push: safePushToRemoteUtil', () => {
       },
       {
         rootDir: '/repos',
-        canonicalRepoKey: (id) => id,
+        parseRepoId: (id) => id,
         isRepoCloned: async (dir) => isRepoClonedByGitDir(fs as any, dir),
         isShallowClone: async () => false,
-        resolveRobustBranch: async (_dir, requested) => requested || 'main',
+        resolveBranchName: async (_dir, requested) => requested || 'main',
         hasUncommittedChanges: async (dir) => hasUncommittedChangesReal(git as any, dir),
         needsUpdate: async () => false,
         pushToRemote: async () => ({ success: true })
@@ -196,10 +196,10 @@ describe('worker/push: safePushToRemoteUtil', () => {
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
+        parseRepoId: (id) => id,
         isRepoCloned: async (d) => isRepoClonedByGitDir(fs as any, d),
         isShallowClone: async () => false,
-        resolveRobustBranch: async (_d, requested) => requested || 'main',
+        resolveBranchName: async (_d, requested) => requested || 'main',
         hasUncommittedChanges: async (d) => hasUncommittedChangesReal(git as any, d),
         needsUpdate: async () => false,
         pushToRemote: async () => ({ success: true })
@@ -235,10 +235,10 @@ describe('worker/push: safePushToRemoteUtil', () => {
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
+        parseRepoId: (id) => id,
         isRepoCloned: async (d) => isRepoClonedByGitDir(fs as any, d),
         isShallowClone: async () => true,
-        resolveRobustBranch: async (_d, requested) => requested || 'main',
+        resolveBranchName: async (_d, requested) => requested || 'main',
         hasUncommittedChanges: async () => false,
         needsUpdate: async () => false,
         pushToRemote: async () => ({ success: true })
@@ -277,10 +277,10 @@ describe('worker/push: safePushToRemoteUtil', () => {
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
+        parseRepoId: (id) => id,
         isRepoCloned: async (d) => isRepoClonedByGitDir(fs as any, d),
         isShallowClone: async () => false,
-        resolveRobustBranch: async (_d, requested) => requested || 'main',
+        resolveBranchName: async (_d, requested) => requested || 'main',
         hasUncommittedChanges: async () => false,
         needsUpdate,
         pushToRemote: async () => ({ success: true })
@@ -305,10 +305,10 @@ describe('worker/push: safePushToRemoteUtil', () => {
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
+        parseRepoId: (id) => id,
         isRepoCloned: async (d) => isRepoClonedByGitDir(fs as any, d),
         isShallowClone: async () => false,
-        resolveRobustBranch: async (_d, requested) => requested || 'main',
+        resolveBranchName: async (_d, requested) => requested || 'main',
         hasUncommittedChanges: async () => false,
         needsUpdate,
         pushToRemote: async () => ({ success: true })
@@ -345,10 +345,10 @@ describe('worker/push: safePushToRemoteUtil', () => {
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
+        parseRepoId: (id) => id,
         isRepoCloned: async (d) => isRepoClonedByGitDir(fs as any, d),
         isShallowClone: async () => false,
-        resolveRobustBranch: async (_d, requested) => requested || 'main',
+        resolveBranchName: async (_d, requested) => requested || 'main',
         hasUncommittedChanges: async () => false,
         needsUpdate: async () => false,
         pushToRemote: async () => ({ success: true })
@@ -387,10 +387,10 @@ describe('worker/push: safePushToRemoteUtil', () => {
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
+        parseRepoId: (id) => id,
         isRepoCloned: async (d) => isRepoClonedByGitDir(fs as any, d),
         isShallowClone: async () => false,
-        resolveRobustBranch: async (_d, requested) => requested || 'main',
+        resolveBranchName: async (_d, requested) => requested || 'main',
         hasUncommittedChanges: async () => false,
         needsUpdate: async () => false,
         pushToRemote
@@ -425,10 +425,10 @@ describe('worker/push: safePushToRemoteUtil', () => {
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
+        parseRepoId: (id) => id,
         isRepoCloned: async (d) => isRepoClonedByGitDir(fs as any, d),
         isShallowClone: async () => false,
-        resolveRobustBranch: async (_d, requested) => requested || 'main',
+        resolveBranchName: async (_d, requested) => requested || 'main',
         hasUncommittedChanges: async () => false,
         needsUpdate: async () => false,
         pushToRemote: async () => ({}) as any,
@@ -466,10 +466,10 @@ describe('worker/push: safePushToRemoteUtil', () => {
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
+        parseRepoId: (id) => id,
         isRepoCloned: async (d) => isRepoClonedByGitDir(fs as any, d),
         isShallowClone: async () => false,
-        resolveRobustBranch: async (_d, requested) => requested || 'main',
+        resolveBranchName: async (_d, requested) => requested || 'main',
         hasUncommittedChanges: async () => false,
         needsUpdate: async () => false,
         pushToRemote: pushSpy,

@@ -61,8 +61,8 @@ describe('worker/patches: analyzePatchMergeUtil', () => {
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
-        resolveRobustBranch: async (_d, requested) => requested || 'main',
+        parseRepoId: (id) => id,
+        resolveBranchName: async (_d, requested) => requested || 'main',
         analyzePatchMergeability
       }
     );
@@ -112,8 +112,8 @@ describe('worker/patches: analyzePatchMergeUtil', () => {
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
-        resolveRobustBranch: async (_d, requested) => requested || 'main',
+        parseRepoId: (id) => id,
+        resolveBranchName: async (_d, requested) => requested || 'main',
         analyzePatchMergeability
       }
     );
@@ -156,8 +156,8 @@ describe('worker/patches: analyzePatchMergeUtil', () => {
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
-        resolveRobustBranch: async (_d, requested) => requested || 'main',
+        parseRepoId: (id) => id,
+        resolveBranchName: async (_d, requested) => requested || 'main',
         analyzePatchMergeability
       }
     );
@@ -192,8 +192,8 @@ describe('worker/patches: analyzePatchMergeUtil', () => {
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
-        resolveRobustBranch: async (_d, requested) => requested || 'main',
+        parseRepoId: (id) => id,
+        resolveBranchName: async (_d, requested) => requested || 'main',
         analyzePatchMergeability
       }
     );

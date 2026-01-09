@@ -283,8 +283,8 @@ export function parseEucTag(tags: string[][]): string | undefined {
   return r ? r[1] : undefined;
 }
 
-// Canonical repo key: `${npub}/${name}` if name provided, otherwise `${npub}`
-export function canonicalRepoKey(pubkey: string, name?: string): string {
+// Build repo key: `${npub}/${name}` if name provided, otherwise `${npub}`
+export function buildRepoKey(pubkey: string, name?: string): string {
   const cleanName = (name ?? "").trim();
   try {
     const npub = nip19.npubEncode(pubkey);

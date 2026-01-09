@@ -25,8 +25,8 @@ describe('analyzePatchMergeUtil', () => {
       },
       {
         rootDir: '/tmp',
-        canonicalRepoKey: (s) => s.toLowerCase(),
-        resolveRobustBranch: async (_dir, requested) => requested || 'main',
+        parseRepoId: (s) => s.toLowerCase(),
+        resolveBranchName: async (_dir, requested) => requested || 'main',
         analyzePatchMergeability: analyze
       }
     );
@@ -48,8 +48,8 @@ describe('analyzePatchMergeUtil', () => {
       },
       {
         rootDir: '/tmp',
-        canonicalRepoKey: (s) => s,
-        resolveRobustBranch: async () => 'main',
+        parseRepoId: (s) => s,
+        resolveBranchName: async () => 'main',
         analyzePatchMergeability: analyze
       }
     );

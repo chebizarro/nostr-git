@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import 'fake-indexeddb/auto';
-import { resolveRobustBranch } from '../../src/worker/workers/branches.js';
+import { resolveBranchName } from '../../src/worker/workers/branches.js';
 
 function makeGit(mocks: any) {
   return {
@@ -12,16 +12,16 @@ function makeGit(mocks: any) {
   } as any;
 }
 
-describe('worker/branches resolveRobustBranch', () => {
+describe('worker/branches resolveBranchName', () => {
   it('returns requestedBranch if it resolves', async () => {
     const git = makeGit({});
-    const res = await resolveRobustBranch(git, '/repo', 'feature');
+    const res = await resolveBranchName(git, '/repo', 'feature');
     expect(res).toBe('feature');
   });
 
   it('returns requestedBranch even if resolveRef throws (caller will sync)', async () => {
     const git = makeGit({ resolveRefError: new Set(['feat']) });
-    const res = await resolveRobustBranch(git, '/repo', 'feat');
+    const res = await resolveBranchName(git, '/repo', 'feat');
     expect(res).toBe('feat');
   });
 
@@ -30,7 +30,7 @@ describe('worker/branches resolveRobustBranch', () => {
       resolveRefError: new Set(['main', 'master', 'develop']),
       refs: { dev: 'abc' },
     });
-    const res = await resolveRobustBranch(git, '/repo');
+    const res = await resolveBranchName(git, '/repo');
     expect(res).toBe('dev');
   });
 
@@ -39,7 +39,7 @@ describe('worker/branches resolveRobustBranch', () => {
       resolveRefError: new Set(['main', 'master', 'develop', 'dev']),
       branchList: ['trunk', 'release'],
     });
-    const res = await resolveRobustBranch(git, '/repo');
+    const res = await resolveBranchName(git, '/repo');
     expect(res).toBe('trunk');
   });
 
@@ -48,6 +48,6 @@ describe('worker/branches resolveRobustBranch', () => {
       resolveRef: async () => { throw new Error('nope'); },
       listBranches: async () => { throw new Error('boom'); },
     };
-    await expect(resolveRobustBranch(git, '/repo')).rejects.toBeInstanceOf(Error);
+    await expect(resolveBranchName(git, '/repo')).rejects.toBeInstanceOf(Error);
   });
 });

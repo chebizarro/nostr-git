@@ -3,9 +3,9 @@ import {
   ensureRepo,
   ensureRepoFromEvent,
   rootDir,
-  resolveRobustBranch
+  resolveBranchToOid
 } from './git.js';
-import { canonicalRepoKey } from '../utils/canonical-repo-key.js';
+import { parseRepoId } from '../utils/repo-id.js';
 import { parseRepoAnnouncementEvent } from '../events/index.js';
 import type { RepoAnnouncementEvent } from '../events/index.js';
 import { Buffer } from 'buffer';
@@ -69,10 +69,10 @@ export async function listRepoFilesFromEvent(opts: {
   assertRepoAnnouncementEvent(opts.repoEvent);
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main'; // Will be resolved robustly later
-  const dir = `${rootDir}/${opts.repoKey || canonicalRepoKey(event.repoId)}`;
+  const dir = `${rootDir}/${opts.repoKey || parseRepoId(event.repoId)}`;
   const contextBase: GitErrorContext & { path?: string } = {
     operation: 'listRepoFilesFromEvent',
-    repoKey: opts.repoKey || canonicalRepoKey(event.repoId),
+    repoKey: opts.repoKey || parseRepoId(event.repoId),
     naddr: event.repoId,
     ref: opts.commit || branch,
   };
@@ -160,7 +160,7 @@ export async function listRepoFilesFromEvent(opts: {
       oid = await git.resolveRef({ dir, ref: branch });
     } catch (e) {
       // Fallback to robust resolver if direct ref resolution fails
-      oid = await resolveRobustBranch(git, dir, branch, {
+      oid = await resolveBranchToOid(git, dir, branch, {
         onBranchNotFound: (branchName, error: unknown) => {
           throw createInvalidInputError(
             `Branch '${branchName}' not found in repository.`,
@@ -303,10 +303,10 @@ export async function getRepoFileContentFromEvent(opts: {
   assertRepoAnnouncementEvent(opts.repoEvent);
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main'; // Will be resolved robustly in git operations
-  const dir = `${rootDir}/${opts.repoKey || canonicalRepoKey(event.repoId)}`;
+  const dir = `${rootDir}/${opts.repoKey || parseRepoId(event.repoId)}`;
   const contextBase: GitErrorContext = {
     operation: 'getRepoFileContentFromEvent',
-    repoKey: opts.repoKey || canonicalRepoKey(event.repoId),
+    repoKey: opts.repoKey || parseRepoId(event.repoId),
     naddr: event.repoId,
     ref: opts.commit || branch,
   };
@@ -355,7 +355,7 @@ export async function getRepoFileContentFromEvent(opts: {
       }
     }
   } else {
-    oid = await resolveRobustBranch(git, dir, branch, {
+    oid = await resolveBranchToOid(git, dir, branch, {
       onBranchNotFound: (branchName, error: unknown) => {
         // This will be handled by the UI layer if they provide a callback
         console.warn(
@@ -515,7 +515,7 @@ export async function getCommitInfo(opts: {
 }> {
   assertRepoAnnouncementEvent(opts.repoEvent);
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
-  const dir = `${rootDir}/${canonicalRepoKey(event.repoId)}`;
+  const dir = `${rootDir}/${parseRepoId(event.repoId)}`;
   await ensureRepoFromEvent({ repoEvent: event });
 
   const git = getGitProvider();
@@ -555,7 +555,7 @@ export async function getFileHistory(opts: {
   assertRepoAnnouncementEvent(opts.repoEvent);
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main'; // Will be resolved robustly in git operations
-  const dir = `${rootDir}/${opts.repoKey || canonicalRepoKey(event.repoId)}`;
+  const dir = `${rootDir}/${opts.repoKey || parseRepoId(event.repoId)}`;
   await ensureRepoFromEvent({ repoEvent: event, branch: opts.branch, repoKey: opts.repoKey });
 
   const git = getGitProvider();
@@ -599,7 +599,7 @@ export async function getCommitHistory(opts: {
   assertRepoAnnouncementEvent(opts.repoEvent);
   const event = parseRepoAnnouncementEvent(opts.repoEvent);
   const branch = opts.branch || 'main'; // Will be resolved robustly in git operations
-  const dir = `${rootDir}/${canonicalRepoKey(event.repoId)}`;
+  const dir = `${rootDir}/${parseRepoId(event.repoId)}`;
   const depth = opts.depth || 50;
 
   console.log(`getCommitHistory: requesting ${depth} commits for branch ${branch}`);

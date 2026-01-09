@@ -1,5 +1,7 @@
 import type { GitProvider } from '../../git/provider.js';
 import type { MergeAnalysisResult } from '../../git/merge-analysis.js';
+import { getProviderFs } from './fs-utils.js';
+import { resolveBranchToOid } from '../../git/git.js';
 
 export interface AnalyzePatchMergeOptions {
   repoId: string;
@@ -17,8 +19,8 @@ export async function analyzePatchMergeUtil(
   opts: AnalyzePatchMergeOptions,
   deps: {
     rootDir: string;
-    canonicalRepoKey: (id: string) => string;
-    resolveRobustBranch: (dir: string, requested?: string) => Promise<string>;
+    parseRepoId: (id: string) => string;
+    resolveBranchName: (dir: string, requested?: string) => Promise<string>;
     analyzePatchMergeability: (
       git: GitProvider,
       dir: string,
@@ -28,14 +30,14 @@ export async function analyzePatchMergeUtil(
   }
 ): Promise<MergeAnalysisResult> {
   const { repoId, patchData, targetBranch } = opts;
-  const { rootDir, canonicalRepoKey, resolveRobustBranch, analyzePatchMergeability } = deps;
+  const { rootDir, parseRepoId, resolveBranchName, analyzePatchMergeability } = deps;
   
   try {
-    const key = canonicalRepoKey(repoId);
+    const key = parseRepoId(repoId);
     const dir = `${rootDir}/${key}`;
 
     // Resolve target branch robustly
-    const effectiveTargetBranch = await resolveRobustBranch(
+    const effectiveTargetBranch = await resolveBranchName(
       dir,
       targetBranch || patchData.baseBranch
     );
@@ -282,8 +284,8 @@ export async function applyPatchAndPushUtil(
   opts: ApplyPatchAndPushOptions,
   deps: {
     rootDir: string;
-    canonicalRepoKey: (id: string) => string;
-    resolveRobustBranch: (dir: string, requested?: string) => Promise<string>;
+    parseRepoId: (id: string) => string;
+    resolveBranchName: (dir: string, requested?: string) => Promise<string>;
     ensureFullClone: (args: { repoId: string; branch?: string; depth?: number }) => Promise<any>;
     getAuthCallback: (url: string) => any;
     getConfiguredAuthHosts?: () => string[];
@@ -302,8 +304,8 @@ export async function applyPatchAndPushUtil(
   const progress = opts.onProgress || (() => {});
   const {
     rootDir,
-    canonicalRepoKey,
-    resolveRobustBranch,
+    parseRepoId,
+    resolveBranchName,
     ensureFullClone,
     getAuthCallback,
     getConfiguredAuthHosts,
@@ -311,7 +313,7 @@ export async function applyPatchAndPushUtil(
   } = deps;
 
   try {
-    const key = canonicalRepoKey(repoId);
+    const key = parseRepoId(repoId);
     const dir = `${rootDir}/${key}`;
     progress('Initializing merge...', 0);
 
@@ -341,7 +343,7 @@ export async function applyPatchAndPushUtil(
     }
 
     // Resolve and prepare repository only after we know we have something to apply
-    const effectiveTargetBranch = await resolveRobustBranch(dir, targetBranch);
+    const effectiveTargetBranch = await resolveBranchName(dir, targetBranch);
     progress('Branch resolved', 10);
 
     await ensureFullClone({ repoId, branch: effectiveTargetBranch });

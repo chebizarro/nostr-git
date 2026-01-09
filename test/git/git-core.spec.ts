@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import 'fake-indexeddb/auto';
 
-import { detectDefaultBranch, resolveRobustBranch, ensureRepoFromEvent, fetchPermalink } from '../../src/git/git.js';
+import { detectDefaultBranch, resolveBranchToOid, ensureRepoFromEvent, fetchPermalink } from '../../src/git/git.js';
 
 vi.mock('../../src/api/git-provider.js', () => {
   const state: any = { git: null };
@@ -42,7 +42,7 @@ describe('git core helpers (strict behavior)', () => {
     await expect(detectDefaultBranch(repoEvent)).resolves.toBe('main');
   });
 
-  it('resolveRobustBranch: tries preferred then common names and returns on first success', async () => {
+  it('resolveBranchToOid: tries preferred then common names and returns on first success', async () => {
     const calls: string[] = [];
     const git = {
       resolveRef: vi.fn(async ({ ref }: any) => {
@@ -52,15 +52,15 @@ describe('git core helpers (strict behavior)', () => {
         throw new Error('no');
       })
     } as any;
-    const oid = await resolveRobustBranch(git, '/r', 'feat');
+    const oid = await resolveBranchToOid(git, '/r', 'feat');
     expect(oid.startsWith('01234567')).toBe(true);
     expect(calls[0]).toBe('feat');
     expect(calls).toContain('main');
   });
 
-  it('resolveRobustBranch: throws wrapped error when all attempts fail', async () => {
+  it('resolveBranchToOid: throws wrapped error when all attempts fail', async () => {
     const git = { resolveRef: vi.fn(async () => { throw new Error('missing'); }) } as any;
-    await expect(resolveRobustBranch(git, '/r', 'nope')).rejects.toThrow();
+    await expect(resolveBranchToOid(git, '/r', 'nope')).rejects.toThrow();
   });
 
   it('ensureRepoFromEvent: converts SSH clone URL to https and calls clone', async () => {

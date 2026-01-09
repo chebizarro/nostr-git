@@ -22,10 +22,10 @@ describe('safePushToRemoteUtil', () => {
       { repoId: 'a/b', remoteUrl: 'https://x', allowForce: true },
       {
         rootDir: '/tmp',
-        canonicalRepoKey: (s) => s,
+        parseRepoId: (s) => s,
         isRepoCloned: async () => true,
         isShallowClone: async () => false,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async () => 'main',
         hasUncommittedChanges: async () => false,
         needsUpdate: async () => false,
         pushToRemote: async () => ({ success: true })
@@ -42,10 +42,10 @@ describe('safePushToRemoteUtil', () => {
       { repoId: 'a/b', remoteUrl: 'https://x' },
       {
         rootDir: '/tmp',
-        canonicalRepoKey: (s) => s,
+        parseRepoId: (s) => s,
         isRepoCloned: async () => false,
         isShallowClone: async () => false,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async () => 'main',
         hasUncommittedChanges: async () => false,
         needsUpdate: async () => false,
         pushToRemote: async () => ({ success: true })
@@ -62,10 +62,10 @@ describe('safePushToRemoteUtil', () => {
       { repoId: 'a/b', remoteUrl: 'https://x' },
       {
         rootDir: '/tmp',
-        canonicalRepoKey: (s) => s,
+        parseRepoId: (s) => s,
         isRepoCloned: async () => true,
         isShallowClone: async () => false,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async () => 'main',
         hasUncommittedChanges: async () => false,
         needsUpdate: async () => true,
         pushToRemote: async () => ({ success: true })
@@ -83,10 +83,10 @@ describe('safePushToRemoteUtil', () => {
       { repoId: 'a/b', remoteUrl: 'https://x', provider: 'github' as GitVendor },
       {
         rootDir: '/tmp',
-        canonicalRepoKey: (s) => s,
+        parseRepoId: (s) => s,
         isRepoCloned: async () => true,
         isShallowClone: async () => false,
-        resolveRobustBranch: async () => 'main',
+        resolveBranchName: async () => 'main',
         hasUncommittedChanges: async () => false,
         needsUpdate: async () => false,
         pushToRemote: pushSpy

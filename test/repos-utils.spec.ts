@@ -8,7 +8,7 @@ import {
 } from '../src/worker/workers/repos.js';
 
 // Simple helpers/mocks
-const canonicalRepoKey = (id: string) => id.replace(/\s+/g, '-').toLowerCase();
+const parseRepoId = (id: string) => id.replace(/\s+/g, '-').toLowerCase();
 
 function makeGitMock(partial: Partial<GitProvider> = {}): GitProvider {
   return {
@@ -64,7 +64,7 @@ describe('repos utils', () => {
       git,
       cacheManager,
       { repoId: 'Owner/Repo', cloneUrls: ['https://example.com/repo.git'] },
-      { rootDir, canonicalRepoKey, repoDataLevels, clonedRepos },
+      { rootDir, parseRepoId, repoDataLevels, clonedRepos },
       sendProgress
     );
 
@@ -73,8 +73,8 @@ describe('repos utils', () => {
       throw new Error(`initializeRepoUtil failed: ${JSON.stringify(res)}`);
     }
     expect('dataLevel' in res && res.dataLevel === 'refs').toBe(true);
-    expect(repoDataLevels.get(canonicalRepoKey('Owner/Repo'))).toBe('refs');
-    expect(clonedRepos.has(canonicalRepoKey('Owner/Repo'))).toBe(true);
+    expect(repoDataLevels.get(parseRepoId('Owner/Repo'))).toBe('refs');
+    expect(clonedRepos.has(parseRepoId('Owner/Repo'))).toBe(true);
     expect(cacheManager.setRepoCache).toHaveBeenCalled();
   });
 
@@ -82,26 +82,26 @@ describe('repos utils', () => {
     const sendProgress = vi.fn();
     const repoId = 'Org/App';
     // Pretend repo already exists (initialize)
-    repoDataLevels.set(canonicalRepoKey(repoId), 'refs');
-    clonedRepos.add(canonicalRepoKey(repoId));
+    repoDataLevels.set(parseRepoId(repoId), 'refs');
+    clonedRepos.add(parseRepoId(repoId));
 
     const res = await ensureShallowCloneUtil(
       git,
       { repoId, branch: 'main' },
       {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         repoDataLevels,
         clonedRepos,
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main'
+        resolveBranchName: async () => 'main'
       },
       sendProgress
     );
 
     expect(res.success).toBe(true);
     expect(res.dataLevel).toBe('shallow');
-    expect(repoDataLevels.get(canonicalRepoKey(repoId))).toBe('shallow');
+    expect(repoDataLevels.get(parseRepoId(repoId))).toBe('shallow');
     expect(git.fetch as any).toHaveBeenCalled();
     expect(git.checkout as any).toHaveBeenCalled();
   });
@@ -109,30 +109,30 @@ describe('repos utils', () => {
   it('ensureFullCloneUtil should set level full after fetch', async () => {
     const sendProgress = vi.fn();
     const repoId = 'Org/App2';
-    repoDataLevels.set(canonicalRepoKey(repoId), 'shallow');
-    clonedRepos.add(canonicalRepoKey(repoId));
+    repoDataLevels.set(parseRepoId(repoId), 'shallow');
+    clonedRepos.add(parseRepoId(repoId));
 
     const res = await ensureFullCloneUtil(
       git,
       { repoId, branch: 'main', depth: 100 },
       {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         repoDataLevels,
         clonedRepos,
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main'
+        resolveBranchName: async () => 'main'
       },
       (phase) => void phase
     );
 
     expect(res.success).toBe(true);
     expect(res.level).toBe('full');
-    expect(repoDataLevels.get(canonicalRepoKey(repoId))).toBe('full');
+    expect(repoDataLevels.get(parseRepoId(repoId))).toBe('full');
   });
 
   it('smartInitializeRepoUtil should return cached when available', async () => {
-    const key = canonicalRepoKey('X/Y');
+    const key = parseRepoId('X/Y');
     const cached = {
       repoId: key,
       lastUpdated: Date.now(),
@@ -149,11 +149,11 @@ describe('repos utils', () => {
       { repoId: 'X/Y', cloneUrls: cached.cloneUrls },
       {
         rootDir,
-        canonicalRepoKey,
+        parseRepoId,
         repoDataLevels,
         clonedRepos,
         isRepoCloned: async () => true,
-        resolveRobustBranch: async () => 'main'
+        resolveBranchName: async () => 'main'
       },
       () => {}
     );

@@ -1,5 +1,5 @@
 import { getGitProvider } from '../api/git-provider.js';
-import { canonicalRepoKey } from '../utils/canonical-repo-key.js';
+import { parseRepoId } from '../utils/repo-id.js';
 import { fileTypeFromBuffer } from 'file-type';
 import { createPatch } from 'diff';
 import type { RepoAnnouncement } from '../events/index.js';
@@ -30,7 +30,7 @@ export async function detectDefaultBranch(
   repoKey?: string
 ): Promise<string> {
   const git = getGitProvider();
-  const dir = `${rootDir}/${repoKey || canonicalRepoKey(repoEvent.repoId)}`;
+  const dir = `${rootDir}/${repoKey || parseRepoId(repoEvent.repoId)}`;
 
   try {
     // First try to get the symbolic ref for HEAD
@@ -75,7 +75,7 @@ export async function getDefaultBranch(
   repoEvent: RepoAnnouncement,
   repoKey?: string
 ): Promise<string> {
-  const cacheKey = repoKey || canonicalRepoKey(repoEvent.repoId);
+  const cacheKey = repoKey || parseRepoId(repoEvent.repoId);
 
   if (defaultBranchCache.has(cacheKey)) {
     return defaultBranchCache.get(cacheKey)!;
@@ -88,14 +88,14 @@ export async function getDefaultBranch(
 }
 
 /**
- * Robust branch resolution that tries multiple common branch names
+ * Resolve a branch name to its OID with fallback logic
  * @param git Git provider instance
  * @param dir Repository directory
- * @param preferredBranch Preferred branch name to try first
+ * @param preferredBranch Preferred branch name to resolve
  * @param options Optional configuration for error handling
  * @returns Promise resolving to the OID of the resolved branch
  */
-export async function resolveRobustBranch(
+export async function resolveBranchToOid(
   git: any,
   dir: string,
   preferredBranch?: string,
@@ -128,7 +128,7 @@ export async function resolveRobustBranch(
   }
 
   const context: GitErrorContext & { repoDir?: string } = {
-    operation: 'resolveRobustBranch',
+    operation: 'resolveBranchToOid',
     ref: preferredBranch,
     repoDir: dir,
   };
@@ -234,7 +234,7 @@ export async function ensureRepoFromEvent(
   depth: number = 1
 ) {
   const git = getGitProvider();
-  const dir = `${rootDir}/${opts.repoKey || canonicalRepoKey(opts.repoEvent.repoId)}`;
+  const dir = `${rootDir}/${opts.repoKey || parseRepoId(opts.repoEvent.repoId)}`;
 
   // Prefer HTTPS clone URL
   let cloneUrl = opts.repoEvent.clone?.find((url) => url.startsWith('https://'));
@@ -334,7 +334,7 @@ export async function ensureRepoFromEvent(
       try {
         const actualDefault = await detectDefaultBranch(opts.repoEvent, opts.repoKey);
         defaultBranchCache.set(
-          opts.repoKey || canonicalRepoKey(opts.repoEvent.repoId),
+          opts.repoKey || parseRepoId(opts.repoEvent.repoId),
           actualDefault
         );
         console.log(`Detected default branch: ${actualDefault}`);
@@ -359,7 +359,7 @@ export async function ensureRepoFromEvent(
       );
 
       // Use robust branch resolution instead of hardcoded fallback
-      const resolvedBranch = await resolveRobustBranch(git, dir, targetBranch);
+      const resolvedBranch = await resolveBranchToOid(git, dir, targetBranch);
 
       try {
         await git.fetch({

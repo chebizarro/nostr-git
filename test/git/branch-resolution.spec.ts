@@ -2,14 +2,14 @@ import { describe, it, expect, vi } from 'vitest';
 import 'fake-indexeddb/auto';
 
 import type { GitProvider } from '../../src/git/provider.js';
-import { resolveRobustBranch } from '../../src/git/git.js';
+import { resolveBranchToOid } from '../../src/git/git.js';
 
 import { createTestFs, mkdirp } from '../utils/lightningfs.js';
 import { createRemoteRegistry } from '../utils/remote-registry.js';
 import { createTestGitProvider } from '../utils/provider-harness.js';
 import { initRepo, commitFile, createBranch, checkout } from '../utils/git-harness.js';
 
-describe('git/git.ts: resolveRobustBranch', () => {
+describe('git/git.ts: resolveBranchToOid', () => {
   it('resolves preferred branch when it exists', async () => {
     const fs = createTestFs('branch-resolve-preferred');
     const remoteRegistry = createRemoteRegistry();
@@ -23,7 +23,7 @@ describe('git/git.ts: resolveRobustBranch', () => {
     await commitFile(h, '/README.md', 'hello\n', 'init');
     await createBranch(h, 'feature/x', false);
 
-    const oid = await resolveRobustBranch(git as any, dir, 'feature/x');
+    const oid = await resolveBranchToOid(git as any, dir, 'feature/x');
     const expected = await (git as any).resolveRef({ dir, ref: 'feature/x' });
 
     expect(oid).toBe(expected);
@@ -42,7 +42,7 @@ describe('git/git.ts: resolveRobustBranch', () => {
     await commitFile(h, '/README.md', 'hello\n', 'init');
 
     const misses: string[] = [];
-    const oid = await resolveRobustBranch(git as any, dir, 'does-not-exist', {
+    const oid = await resolveBranchToOid(git as any, dir, 'does-not-exist', {
       onBranchNotFound: (branchName) => misses.push(branchName)
     });
 
@@ -66,7 +66,7 @@ describe('git/git.ts: resolveRobustBranch', () => {
     await checkout(h, 'develop');
 
     const misses: string[] = [];
-    const oid = await resolveRobustBranch(git as any, dir, 'feature/missing', {
+    const oid = await resolveBranchToOid(git as any, dir, 'feature/missing', {
       onBranchNotFound: (branchName) => misses.push(branchName)
     });
 
@@ -85,7 +85,7 @@ describe('git/git.ts: resolveRobustBranch', () => {
 
     const misses: string[] = [];
     await expect(
-      resolveRobustBranch(git as any as GitProvider, dir, 'preferred', {
+      resolveBranchToOid(git as any as GitProvider, dir, 'preferred', {
         onBranchNotFound: (branchName) => misses.push(branchName)
       })
     ).rejects.toBeTruthy();

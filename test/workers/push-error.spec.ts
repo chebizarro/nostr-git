@@ -79,8 +79,8 @@ describe('worker/patches: push error aggregation paths', () => {
       },
       {
         rootDir,
-        canonicalRepoKey: (id) => id,
-        resolveRobustBranch: async (_d, requested) => requested || 'main',
+        parseRepoId: (id) => id,
+        resolveBranchName: async (_d, requested) => requested || 'main',
         ensureFullClone: async () => ({ ok: true }),
         getAuthCallback: () => undefined,
         getConfiguredAuthHosts: () => [],
