@@ -1,19 +1,19 @@
 export type CacheMode = "off" | "per-session" | "per-repo-batch"
 
-export interface GitWrapperConfig {
+export interface GitConfig {
   compatMode: boolean
   cacheMode: CacheMode
   cacheMaxAgeMs: number
   defaultCorsProxy?: string | null
 }
 
-const defaultConfig: GitWrapperConfig = {
+const defaultConfig: GitConfig = {
   compatMode: false,
   cacheMode: "per-session",
   cacheMaxAgeMs: 60_000, // 60s idle TTL by default
 }
 
-export function loadConfig(overrides?: Partial<GitWrapperConfig>): GitWrapperConfig {
+export function loadConfig(overrides?: Partial<GitConfig>): GitConfig {
   const env =
     typeof process !== "undefined" && (process as any).env ? (process as any).env : ({} as any)
 
@@ -33,7 +33,7 @@ export function loadConfig(overrides?: Partial<GitWrapperConfig>): GitWrapperCon
   const defaultCorsProxy =
     defaultCorsProxyEnv === "none"
       ? null
-      : defaultCorsProxyEnv ?? "https://corsproxy.budabit.club"
+      : defaultCorsProxyEnv ?? "https://cors.isomorphic-git.org"
 
   return { compatMode, cacheMode, cacheMaxAgeMs, defaultCorsProxy }
 }

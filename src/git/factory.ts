@@ -1,7 +1,7 @@
 import type { GitProvider } from "./provider.js"
 import {IsomorphicGitProvider} from "./isomorphic-git-provider.js"
 import {CachedGitProvider} from "./cached-provider.js"
-import {loadConfig, type GitWrapperConfig} from "./config.js"
+import {loadConfig, type GitConfig} from "./config.js"
 import * as fsNode from "fs"
 import httpNode from "isomorphic-git/http/node"
 import httpWeb from "isomorphic-git/http/web"
@@ -9,7 +9,7 @@ import LightningFS from "@isomorphic-git/lightning-fs"
 
 let singleton: GitProvider | null = null
 
-export function createGitProvider(overrides?: Partial<GitWrapperConfig>): GitProvider {
+export function createGitProvider(overrides?: Partial<GitConfig>): GitProvider {
   if (singleton) return singleton
 
   const cfg = loadConfig(overrides)
@@ -26,7 +26,7 @@ export function createGitProvider(overrides?: Partial<GitWrapperConfig>): GitPro
   const provider = new IsomorphicGitProvider({
     fs,
     http,
-    corsProxy: cfg.defaultCorsProxy ?? "https://corsproxy.budabit.club",
+    corsProxy: cfg.defaultCorsProxy ?? "https://cors.isomorphic-git.org",
   })
 
   if (cfg.cacheMode === "off") {

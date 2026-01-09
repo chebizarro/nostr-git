@@ -1,5 +1,5 @@
 import type { GitProvider } from "./provider.js"
-import type {CacheMode, GitWrapperConfig} from "./config.js"
+import type {CacheMode, GitConfig} from "./config.js"
 
 // Simple per-dir cache store with TTL
 type CacheEntry = {cache: Record<string | symbol, any>; lastUsed: number}
@@ -12,7 +12,7 @@ export class CachedGitProvider implements GitProvider {
   private readonly ttl: number
   private readonly caches = new Map<string, CacheEntry>()
 
-  constructor(inner: GitProvider, cfg: GitWrapperConfig) {
+  constructor(inner: GitProvider, cfg: GitConfig) {
     this.inner = inner
     this.baseProvider = inner
     this.mode = cfg.cacheMode

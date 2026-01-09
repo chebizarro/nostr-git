@@ -9,6 +9,7 @@
 
 import type { EventIO } from '../../types/index.js';
 import type { NostrEvent } from 'nostr-tools';
+import { loadConfig } from '../../git/config.js';
 
 import { NostrGitProvider, type NostrGitConfig } from './nostr-git-provider.js';
 import { GraspApi, type GraspApiConfig } from './grasp-api.js';
@@ -111,12 +112,12 @@ export function createNostrGitProvider(options: NostrGitFactoryOptions): NostrGi
  * Reads configuration from environment variables and git config.
  * Mirrors ngit's configuration loading behavior.
  */
-export function createNostrGitProviderFromEnv(options: {
+export async function createNostrGitProviderFromEnv(options: {
   eventIO: EventIO;
-}): NostrGitProvider {
-  const {
-    eventIO
-  } = options;
+}): Promise<NostrGitProvider> {
+  const { eventIO } = options;
+
+  const gitConfig = loadConfig();
 
   // Read configuration from environment variables
   const defaultRelays = process.env.NOSTR_DEFAULT_RELAYS?.split(';') || DEFAULT_RELAYS.default;
@@ -125,8 +126,7 @@ export function createNostrGitProviderFromEnv(options: {
   const enableGrasp = process.env.NOSTR_ENABLE_GRASP !== 'false';
   const publishRepoState = process.env.NOSTR_PUBLISH_REPO_STATE !== 'false';
   const publishRepoAnnouncements = process.env.NOSTR_PUBLISH_REPO_ANNOUNCEMENTS === 'true';
-  const corsProxy = process.env.GIT_DEFAULT_CORS_PROXY === 'none' ? undefined :
-                   process.env.GIT_DEFAULT_CORS_PROXY || 'https://cors.isomorphic-git.org';
+  const corsProxy = gitConfig.defaultCorsProxy ?? undefined;
 
   return createNostrGitProvider({
     eventIO,
@@ -155,6 +155,8 @@ export async function createNostrGitProviderFromGitConfig(options: {
     gitDir
   } = options;
 
+  const gitConfig = loadConfig();
+
   // Default configuration
   let config = {
     defaultRelays: DEFAULT_RELAYS.default,
@@ -163,7 +165,7 @@ export async function createNostrGitProviderFromGitConfig(options: {
     enableGrasp: true,
     publishRepoState: true,
     publishRepoAnnouncements: false,
-    corsProxy: 'https://corsproxy.budabit.club'
+    corsProxy: gitConfig.defaultCorsProxy ?? undefined
   };
 
   // Try to read from git config if available
