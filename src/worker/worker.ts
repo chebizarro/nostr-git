@@ -321,6 +321,12 @@ const api = {
     await cloneRemoteRepoUtil(git, cacheManager, options);
   },
 
+  // Check if repo is cloned locally
+  async isRepoCloned(opts: { repoId: string }): Promise<boolean> {
+    const { dir } = repoKeyAndDir(opts.repoId);
+    return await isRepoClonedFs(git, dir);
+  },
+
   // Sync helpers
   async syncWithRemote(opts: { repoId: string; cloneUrls: string[]; branch?: string }) {
     return toPlain(
@@ -577,6 +583,256 @@ const api = {
       branch: opts.branch,
       depth: opts.depth,
     });
+  },
+
+  // --- Additional methods from legacy worker ---
+
+  // Get the current data level for a repository
+  getRepoDataLevel(opts: { repoId: string }): "none" | "refs" | "shallow" | "full" {
+    const { key } = repoKeyAndDir(opts.repoId);
+    if (!clonedRepos.has(key)) return "none";
+    return repoDataLevels.get(key) || "none";
+  },
+
+  // Clear clone cache and data level tracking
+  async clearCloneCache(): Promise<{ success: boolean }> {
+    clearCloneTracking(clonedRepos, repoDataLevels);
+    try {
+      await (cacheManager as any).clearOldCache?.();
+    } catch (error) {
+      console.warn("Failed to clear persistent cache:", error);
+    }
+    return { success: true };
+  },
+
+  // Delete repository and clear cache
+  async deleteRepo(opts: { repoId: string }) {
+    const { key, dir } = repoKeyAndDir(opts.repoId);
+    clonedRepos.delete(key);
+    repoDataLevels.delete(key);
+
+    try {
+      await (cacheManager as any).deleteRepoCache?.(key);
+    } catch (error) {
+      console.warn(`Failed to delete cache for ${opts.repoId}:`, error);
+    }
+
+    try {
+      const fs: any = getProviderFs(git);
+      if (fs?.promises?.rmdir) {
+        await fs.promises.rmdir(dir, { recursive: true });
+      }
+      return toPlain({ success: true, repoId: opts.repoId });
+    } catch (error) {
+      console.error(`Failed to delete repo directory ${dir}:`, error);
+      return toPlain({
+        success: false,
+        repoId: opts.repoId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  },
+
+  // Get commit count for a repository
+  async getCommitCount(opts: { repoId: string; branch?: string }) {
+    const { key, dir } = repoKeyAndDir(opts.repoId);
+    let targetBranch = opts.branch || "main";
+
+    try {
+      targetBranch = await resolveRobustBranchUtil(git, dir, opts.branch);
+      const currentLevel = repoDataLevels.get(key);
+
+      if (currentLevel === "full" || currentLevel === "shallow") {
+        const commits = await (git as any).log({ dir, ref: targetBranch });
+        return toPlain({
+          success: true,
+          count: commits.length,
+          repoId: opts.repoId,
+          branch: targetBranch,
+          fromCache: true,
+        });
+      }
+
+      return toPlain({
+        success: false,
+        repoId: opts.repoId,
+        branch: targetBranch,
+        error: "Repository not fully cloned. Clone the repository first to get commit count.",
+      });
+    } catch (error) {
+      return toPlain({
+        success: false,
+        repoId: opts.repoId,
+        branch: targetBranch,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  },
+
+  // Get detailed commit information including file changes
+  async getCommitDetails(opts: { repoId: string; commitId: string; branch?: string }) {
+    const { key, dir } = repoKeyAndDir(opts.repoId);
+
+    try {
+      // Ensure we have the repository with sufficient depth
+      await ensureFullCloneUtil(
+        git,
+        { repoId: opts.repoId, branch: opts.branch, depth: 100 },
+        {
+          rootDir,
+          parseRepoId,
+          repoDataLevels,
+          clonedRepos,
+          isRepoCloned: async (g: GitProvider, d: string) => isRepoClonedFs(g, d),
+          resolveBranchName: async (d: string, requested?: string) =>
+            resolveRobustBranchUtil(git, d, requested),
+        },
+        makeProgress(opts.repoId, "clone-progress")
+      );
+
+      const commits = await (git as any).log({ dir, depth: 1, ref: opts.commitId });
+      if (commits.length === 0) {
+        throw new Error(`Commit ${opts.commitId} not found`);
+      }
+
+      const commit = commits[0];
+      const meta = {
+        sha: commit.oid,
+        author: commit.commit.author.name,
+        email: commit.commit.author.email,
+        date: commit.commit.author.timestamp * 1000,
+        message: commit.commit.message,
+        parents: commit.commit.parent || [],
+      };
+
+      return toPlain({ success: true, meta, changes: [] });
+    } catch (error) {
+      return toPlain({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  },
+
+  // Get working tree status for a repository
+  async getStatus(opts: { repoId: string; branch?: string }) {
+    const { key, dir } = repoKeyAndDir(opts.repoId);
+
+    try {
+      const cloned = await isRepoClonedFs(git, dir);
+      if (!cloned) {
+        return toPlain({
+          success: false,
+          repoId: opts.repoId,
+          branch: opts.branch || "main",
+          files: [],
+          counts: {},
+          error: "Repository not cloned locally",
+        });
+      }
+
+      const targetBranch = await resolveRobustBranchUtil(git, dir, opts.branch);
+
+      try {
+        await (git as any).checkout({ dir, ref: targetBranch });
+      } catch {
+        // ignore checkout errors
+      }
+
+      const matrix = await (git as any).statusMatrix({ dir });
+      type StatusFile = {
+        path: string;
+        head: number;
+        workdir: number;
+        stage: number;
+        status: string;
+      };
+
+      const files: StatusFile[] = matrix.map((row: any) => {
+        const path = row[0] as string;
+        const head = row[1] as number;
+        const workdir = row[2] as number;
+        const stage = row[3] as number;
+        let status = "unknown";
+        if (head === 0 && workdir === 2 && stage === 0) status = "untracked";
+        else if (head === 1 && workdir === 0 && stage === 0) status = "deleted";
+        else if (head === 1 && workdir === 2 && stage === 1) status = "modified";
+        else if (head === 0 && workdir === 2 && stage === 2) status = "added";
+        else if (head !== stage) status = "staged";
+        return { path, head, workdir, stage, status };
+      });
+
+      const counts: Record<string, number> = {};
+      for (const f of files) counts[f.status] = (counts[f.status] || 0) + 1;
+
+      return toPlain({
+        success: true,
+        repoId: opts.repoId,
+        branch: targetBranch,
+        files,
+        counts,
+      });
+    } catch (error) {
+      return toPlain({
+        success: false,
+        repoId: opts.repoId,
+        branch: opts.branch || "main",
+        files: [],
+        counts: {},
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  },
+
+  // Reset local repository to match remote HEAD state
+  async resetRepoToRemote(opts: { repoId: string; branch?: string }) {
+    const { key, dir } = repoKeyAndDir(opts.repoId);
+
+    try {
+      const targetBranch = await resolveRobustBranchUtil(git, dir, opts.branch);
+      const remotes = await (git as any).listRemotes({ dir });
+      const originRemote = remotes.find((r: any) => r.remote === "origin");
+
+      if (!originRemote?.url) {
+        throw new Error("No origin remote found - cannot reset to remote state");
+      }
+
+      const authCallback = getAuthCallback(originRemote.url);
+      await (git as any).fetch({
+        dir,
+        url: originRemote.url,
+        ref: targetBranch,
+        singleBranch: true,
+        ...(authCallback && { onAuth: authCallback }),
+      });
+
+      const remoteRef = `refs/remotes/origin/${targetBranch}`;
+      const remoteCommit = await (git as any).resolveRef({ dir, ref: remoteRef });
+
+      await (git as any).checkout({ dir, ref: remoteCommit, force: true });
+      await (git as any).writeRef({
+        dir,
+        ref: `refs/heads/${targetBranch}`,
+        value: remoteCommit,
+        force: true,
+      });
+      await (git as any).checkout({ dir, ref: targetBranch });
+
+      return toPlain({
+        success: true,
+        repoId: opts.repoId,
+        branch: targetBranch,
+        remoteCommit,
+        message: "Repository reset to remote state",
+      });
+    } catch (error) {
+      return toPlain({
+        success: false,
+        repoId: opts.repoId,
+        branch: opts.branch,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   },
 };
 
