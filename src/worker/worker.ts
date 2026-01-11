@@ -1,3 +1,94 @@
+// Crypto polyfill for worker context where crypto.subtle may be unavailable
+// Must be at the very top before any other imports that might use crypto
+// In insecure contexts (HTTP), crypto.subtle exists but operations fail
+(function initWorkerCryptoPolyfill() {
+  const globalScope: any = typeof self !== 'undefined' ? self : globalThis;
+  
+  // Always install polyfill in insecure contexts (HTTP) where crypto.subtle won't work
+  const isInsecure = typeof globalScope.isSecureContext !== 'undefined' && !globalScope.isSecureContext;
+  const needsPolyfill = !globalScope.crypto?.subtle?.digest || isInsecure;
+  
+  if (needsPolyfill) {
+    console.warn('[Worker] Installing crypto.subtle polyfill (insecure context or missing crypto.subtle)');
+    
+    // SHA-256 implementation
+    function sha256(data: Uint8Array): Uint8Array {
+      const K = new Uint32Array([
+        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+        0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+        0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+        0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+        0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+        0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+        0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+      ]);
+      const H = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
+      
+      const rotr = (n: number, x: number) => (x >>> n) | (x << (32 - n));
+      const ch = (x: number, y: number, z: number) => (x & y) ^ (~x & z);
+      const maj = (x: number, y: number, z: number) => (x & y) ^ (x & z) ^ (y & z);
+      const sigma0 = (x: number) => rotr(2, x) ^ rotr(13, x) ^ rotr(22, x);
+      const sigma1 = (x: number) => rotr(6, x) ^ rotr(11, x) ^ rotr(25, x);
+      const gamma0 = (x: number) => rotr(7, x) ^ rotr(18, x) ^ (x >>> 3);
+      const gamma1 = (x: number) => rotr(17, x) ^ rotr(19, x) ^ (x >>> 10);
+
+      // Padding
+      const bitLen = data.length * 8;
+      const padLen = (data.length % 64 < 56 ? 56 : 120) - (data.length % 64);
+      const padded = new Uint8Array(data.length + padLen + 8);
+      padded.set(data);
+      padded[data.length] = 0x80;
+      const view = new DataView(padded.buffer);
+      view.setUint32(padded.length - 4, bitLen, false);
+
+      // Process blocks
+      const h = new Uint32Array(H);
+      const w = new Uint32Array(64);
+      for (let i = 0; i < padded.length; i += 64) {
+        for (let j = 0; j < 16; j++) {
+          w[j] = view.getUint32(i + j * 4, false);
+        }
+        for (let j = 16; j < 64; j++) {
+          w[j] = (gamma1(w[j - 2]) + w[j - 7] + gamma0(w[j - 15]) + w[j - 16]) >>> 0;
+        }
+        let [a, b, c, d, e, f, g, hh] = h;
+        for (let j = 0; j < 64; j++) {
+          const t1 = (hh + sigma1(e) + ch(e, f, g) + K[j] + w[j]) >>> 0;
+          const t2 = (sigma0(a) + maj(a, b, c)) >>> 0;
+          hh = g; g = f; f = e; e = (d + t1) >>> 0;
+          d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+        }
+        h[0] = (h[0] + a) >>> 0; h[1] = (h[1] + b) >>> 0;
+        h[2] = (h[2] + c) >>> 0; h[3] = (h[3] + d) >>> 0;
+        h[4] = (h[4] + e) >>> 0; h[5] = (h[5] + f) >>> 0;
+        h[6] = (h[6] + g) >>> 0; h[7] = (h[7] + hh) >>> 0;
+      }
+      const result = new Uint8Array(32);
+      const resultView = new DataView(result.buffer);
+      for (let i = 0; i < 8; i++) resultView.setUint32(i * 4, h[i], false);
+      return result;
+    }
+
+    const polyfillSubtle = {
+      digest: async (algorithm: string, data: BufferSource): Promise<ArrayBuffer> => {
+        const algo = algorithm.toLowerCase().replace('-', '');
+        if (algo !== 'sha256') throw new Error(`Unsupported algorithm: ${algorithm}`);
+        const input = data instanceof ArrayBuffer ? new Uint8Array(data) : new Uint8Array((data as ArrayBufferView).buffer, (data as ArrayBufferView).byteOffset, (data as ArrayBufferView).byteLength);
+        const result = sha256(input);
+        // Copy to a new ArrayBuffer to avoid SharedArrayBuffer issues
+        const output = new ArrayBuffer(result.length);
+        new Uint8Array(output).set(result);
+        return output;
+      }
+    };
+
+    if (!globalScope.crypto) globalScope.crypto = {};
+    globalScope.crypto.subtle = polyfillSubtle;
+    console.log('[Worker] crypto.subtle polyfill installed successfully');
+  }
+})();
+
 import { expose } from "comlink";
 
 import type { GitProvider } from "../git/provider.js";
@@ -12,6 +103,11 @@ import { parseRepoId } from "../utils/repo-id.js";
 
 import type { AuthConfig } from "./workers/auth.js";
 import { getAuthCallback, getConfiguredAuthHosts, setAuthConfig } from "./workers/auth.js";
+
+// Import event-based git operations
+import { listRepoFilesFromEvent, getRepoFileContentFromEvent, fileExistsAtCommit, getFileHistory } from "../git/files.js";
+import { listBranchesFromEvent } from "../git/branches.js";
+import type { RepoAnnouncementEvent } from "../events/index.js";
 
 import { resolveBranchName as resolveRobustBranchUtil } from "./workers/branches.js";
 import { getProviderFs, isRepoClonedFs } from "./workers/fs-utils.js";
@@ -110,6 +206,11 @@ let eventIO: EventIO | null = null;
 
 // --- exposed Comlink API ---
 const api = {
+  // Health check / handshake
+  async ping(): Promise<{ ok: true; ts: number; apiVersion: string }> {
+    return { ok: true, ts: Date.now(), apiVersion: '2026-01-11' };
+  },
+
   // Configuration
   async setEventIO(io: EventIO): Promise<void> {
     eventIO = io;
@@ -397,6 +498,85 @@ const api = {
     const depth = opts.depth ?? 50;
     const commits = await (git as any).log({ dir, ref, depth });
     return toPlain(commits);
+  },
+
+  // Event-based git operations (handle repo initialization automatically)
+  async listRepoFilesFromEvent(opts: {
+    repoEvent: RepoAnnouncementEvent;
+    branch?: string;
+    path?: string;
+    repoKey?: string;
+  }) {
+    const result = await listRepoFilesFromEvent(opts);
+    return toPlain(result);
+  },
+
+  async getRepoFileContentFromEvent(opts: {
+    repoEvent: RepoAnnouncementEvent;
+    branch?: string;
+    path: string;
+    commit?: string;
+    repoKey?: string;
+  }) {
+    return await getRepoFileContentFromEvent(opts);
+  },
+
+  async listBranchesFromEvent(opts: { repoEvent: RepoAnnouncementEvent }) {
+    const result = await listBranchesFromEvent(opts);
+    return toPlain(result);
+  },
+
+  async fileExistsAtCommit(opts: {
+    repoEvent: RepoAnnouncementEvent;
+    branch?: string;
+    path: string;
+    commit?: string;
+    repoKey?: string;
+  }) {
+    return await fileExistsAtCommit(opts);
+  },
+
+  async getFileHistory(opts: {
+    repoEvent: RepoAnnouncementEvent;
+    path: string;
+    branch: string;
+    maxCount?: number;
+    repoKey?: string;
+  }) {
+    const result = await getFileHistory(opts);
+    return toPlain(result);
+  },
+
+  async listTreeAtCommit(opts: {
+    repoEvent: RepoAnnouncementEvent;
+    commit: string;
+    path?: string;
+    repoKey?: string;
+  }) {
+    // Use listRepoFilesFromEvent with commit parameter
+    const result = await listRepoFilesFromEvent({
+      repoEvent: opts.repoEvent,
+      commit: opts.commit,
+      path: opts.path,
+      repoKey: opts.repoKey,
+    });
+    return toPlain(result);
+  },
+
+  async getCommitHistoryFromEvent(opts: {
+    repoEvent: RepoAnnouncementEvent;
+    branch: string;
+    depth?: number;
+  }) {
+    // This is an alias for getCommitHistory that works with events
+    // Parse repoId from event and delegate to existing method
+    const event = opts.repoEvent as any;
+    const repoId = event.id || `${event.pubkey}:${event.tags?.find((t: any[]) => t[0] === 'd')?.[1] || 'repo'}`;
+    return await api.getCommitHistory({
+      repoId,
+      branch: opts.branch,
+      depth: opts.depth,
+    });
   },
 };
 

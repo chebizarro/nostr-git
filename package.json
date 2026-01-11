@@ -13,6 +13,7 @@
     "./git": "./dist/git/index.js",
     "./types": "./dist/types/index.js",
     "./worker": "./dist/worker/index.js",
+    "./worker/worker.js": "./dist/worker/worker.js",
     "./api": "./dist/api/index.js",
     "./blossom": "./dist/blossom/index.js",
     "./stack": "./dist/stack/index.js",
