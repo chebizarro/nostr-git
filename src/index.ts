@@ -12,6 +12,7 @@ export * as api from "./api/index.js";
 export * as worker from "./worker/index.js";
 export * as blossom from "./blossom/index.js";
 export * as stack from "./stack/index.js";
+export * as errors from "./errors/index.js";
 
 // Convenience top-level exports
 export { createRepoStateEvent, createRepoAnnouncementEvent } from "./events/index.js";

@@ -16,7 +16,8 @@
     "./api": "./dist/api/index.js",
     "./blossom": "./dist/blossom/index.js",
     "./stack": "./dist/stack/index.js",
-    "./utils": "./dist/utils/index.js"
+    "./utils": "./dist/utils/index.js",
+    "./errors": "./dist/errors/index.js"
   },
   "files": [
     "dist",
