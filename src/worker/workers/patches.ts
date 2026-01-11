@@ -459,6 +459,7 @@ export async function applyPatchAndPushUtil(
           continue;
         }
         // Use tryPushWithTokens for fallback retry logic with multiple tokens
+        // Disable CORS proxy for push - it only supports fetch operations
         const { tryPushWithTokens } = await import('./auth.js');
         await tryPushWithTokens(remote.url, async (authCallback) => {
           await git.push({
@@ -466,6 +467,7 @@ export async function applyPatchAndPushUtil(
             url: remote.url,
             ref: effectiveTargetBranch,
             force: true,
+            corsProxy: null, // Disable CORS proxy for push operations
             ...(authCallback && { onAuth: authCallback })
           });
         });
@@ -494,6 +496,7 @@ export async function applyPatchAndPushUtil(
                 ref: effectiveTargetBranch,
                 remoteRef,
                 force: false,
+                corsProxy: null, // Disable CORS proxy for push operations
                 ...(authCallback && { onAuth: authCallback })
               } as any);
             });

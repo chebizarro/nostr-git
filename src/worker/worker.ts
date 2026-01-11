@@ -108,6 +108,7 @@ import { getAuthCallback, getConfiguredAuthHosts, setAuthConfig } from "./worker
 import { listRepoFilesFromEvent, getRepoFileContentFromEvent, fileExistsAtCommit, getFileHistory } from "../git/files.js";
 import { listBranchesFromEvent } from "../git/branches.js";
 import type { RepoAnnouncementEvent } from "../events/index.js";
+import { createRepoStateEvent } from "../events/index.js";
 
 import { resolveBranchName as resolveRobustBranchUtil } from "./workers/branches.js";
 import { getProviderFs, isRepoClonedFs } from "./workers/fs-utils.js";
@@ -132,6 +133,21 @@ import { analyzePatchMergeUtil, applyPatchAndPushUtil } from "./workers/patches.
 
 import type { SafePushOptions } from "./workers/push.js";
 import { safePushToRemoteUtil } from "./workers/push.js";
+
+import {
+  getGitignoreTemplate,
+  getLicenseTemplate,
+  createLocalRepo,
+  createRemoteRepo,
+  forkAndCloneRepo,
+  updateRemoteRepoMetadata,
+  updateAndPushFiles,
+  type CreateLocalRepoOptions,
+  type CreateRemoteRepoOptions,
+  type ForkAndCloneOptions,
+  type UpdateRemoteRepoMetadataOptions,
+  type UpdateAndPushFilesOptions,
+} from "./workers/repo-management.js";
 
 type DataLevel = "refs" | "shallow" | "full";
 
@@ -321,6 +337,102 @@ const api = {
     await cloneRemoteRepoUtil(git, cacheManager, options);
   },
 
+  // Legacy clone function - uses smart initialization strategy
+  async clone(opts: { repoId: string; cloneUrls: string[] }) {
+    try {
+      // Use smart initialization
+      const initResult = await api.smartInitializeRepo({ repoId: opts.repoId, cloneUrls: opts.cloneUrls });
+      if (!initResult.success) {
+        return toPlain(initResult);
+      }
+
+      // If we got data from cache and it's already shallow/full, we're done
+      const dataLevel = (initResult as any).dataLevel;
+      if (initResult.fromCache && dataLevel && dataLevel !== "refs") {
+        return toPlain(initResult);
+      }
+
+      // Otherwise, ensure we have at least shallow clone
+      const shallowResult = await api.ensureShallowClone({ repoId: opts.repoId });
+      if (!shallowResult.success) {
+        return toPlain(shallowResult);
+      }
+
+      return toPlain({
+        success: true,
+        repoId: opts.repoId,
+        dataLevel: (shallowResult as any).dataLevel,
+        fromCache: initResult.fromCache,
+      });
+    } catch (error: any) {
+      console.error(`Clone failed for ${opts.repoId}:`, error);
+      return toPlain({
+        success: false,
+        repoId: opts.repoId,
+        error: error.message || String(error),
+      });
+    }
+  },
+
+  // Clone and fork a repository (legacy function for Nostr fork events)
+  async cloneAndFork(opts: {
+    sourceUrl: string;
+    targetHost: "github" | "gitlab" | "gitea";
+    targetToken: string;
+    targetUsername: string;
+    targetRepo: string;
+  }) {
+    const { sourceUrl, targetHost, targetToken, targetUsername, targetRepo } = opts;
+    const dir = `${rootDir}/${sourceUrl.replace(/[^a-zA-Z0-9]/g, "_")}`;
+
+    try {
+      const authCallback = getAuthCallback(sourceUrl);
+      await (git as any).clone({
+        dir,
+        url: sourceUrl,
+        singleBranch: true,
+        depth: 1,
+        ...(authCallback && { onAuth: authCallback }),
+      });
+
+      // Create remote repo using the provider factory
+      const { getGitServiceApi } = await import("../git/provider-factory.js");
+      const api = getGitServiceApi(targetHost, targetToken);
+      const repoMetadata = await api.createRepo({
+        name: targetRepo,
+        description: `Fork of ${sourceUrl}`,
+        private: false,
+        autoInit: false,
+      });
+
+      const remoteUrl = repoMetadata.cloneUrl;
+
+      // Push to the new remote
+      const remotes = await (git as any).listRemotes({ dir });
+      const originRemote = remotes.find((r: any) => r.remote === "origin");
+
+      if (originRemote?.url) {
+        const resolvedBranch = await resolveRobustBranchUtil(git, dir);
+        const pushAuthCallback = getAuthCallback(originRemote.url);
+        await (git as any).push({
+          dir,
+          url: originRemote.url,
+          ref: resolvedBranch,
+          force: true,
+          ...(pushAuthCallback && { onAuth: pushAuthCallback }),
+        });
+      }
+
+      return toPlain({ success: true, remoteUrl });
+    } catch (error: any) {
+      console.error("cloneAndFork failed:", error);
+      return toPlain({
+        success: false,
+        error: error.message || String(error),
+      });
+    }
+  },
+
   // Check if repo is cloned locally
   async isRepoCloned(opts: { repoId: string }): Promise<boolean> {
     const { dir } = repoKeyAndDir(opts.repoId);
@@ -410,42 +522,182 @@ const api = {
     blossomMirror?: boolean;
   }) {
     const { repoId, remoteUrl, branch, token, provider, blossomMirror } = opts;
-    const { dir } = repoKeyAndDir(repoId);
+    const { key, dir } = repoKeyAndDir(repoId);
     const targetBranch = branch || "main";
 
-    const onAuth =
-      token != null
-        ? () => ({ username: "token", password: token })
-        : getAuthCallback(remoteUrl);
+    try {
+      console.log(`Pushing repository ${repoId} to remote: ${remoteUrl} (provider=${provider})`);
 
-    const nostrProvider = getNostrGitProvider?.();
-    if (nostrProvider) {
-      const result = await nostrProvider.push({
+      // Handle GRASP provider with full state publishing
+      if (provider === "grasp") {
+        if (!token) {
+          throw new Error("GRASP provider requires a pubkey token");
+        }
+
+        // Build relay base URL for state publishing
+        let relayBaseUrl = remoteUrl;
+        try {
+          const u = new URL(remoteUrl);
+          const origin = `${u.protocol}//${u.host}`;
+          relayBaseUrl = origin.replace(/^http:\/\//, "ws://").replace(/^https:\/\//, "wss://");
+        } catch {
+          relayBaseUrl = remoteUrl
+            .replace(/^http:\/\//, "ws://")
+            .replace(/^https:\/\//, "wss://")
+            .replace(/(ws[s]?:\/\/[^/]+).*/, "$1");
+        }
+
+        console.log(`[GRASP] Using relay base URL: ${relayBaseUrl}`);
+
+        // Publish repo state (30618) before pushing
+        try {
+          const io = eventIO;
+          const u = new URL(remoteUrl);
+          const parts = u.pathname.replace(/^\//, "").split("/");
+          const npub = parts[0] || "";
+          const repo = (parts[1] || "").replace(/\.git$/, "");
+
+          // Collect local refs
+          const heads = await (git as any).listBranches({ dir });
+          const tags = await (git as any).listTags({ dir });
+          const refs: Record<string, string> = {};
+
+          for (const b of heads) {
+            try {
+              const sha = await (git as any).resolveRef({ dir, ref: `refs/heads/${b}` });
+              refs[`refs/heads/${b}`] = sha;
+            } catch {}
+          }
+          for (const t of tags) {
+            try {
+              const sha = await (git as any).resolveRef({ dir, ref: `refs/tags/${t}` });
+              refs[`refs/tags/${t}`] = sha;
+            } catch {}
+          }
+
+          const headRef = targetBranch ? `refs/heads/${targetBranch}` : undefined;
+          const stateRepoId = `${npub}:${repo}`;
+          const stateEvent = createRepoStateEvent({
+            repoId: stateRepoId,
+            head: headRef,
+            refs: Object.entries(refs).map(([ref, commit]) => ({
+              type: ref.startsWith("refs/heads/") ? "heads" : "tags",
+              name: ref,
+              commit,
+            })),
+          });
+
+          if (headRef && !stateEvent.tags.find((t: string[]) => t[0] === "HEAD")) {
+            stateEvent.tags.push(["HEAD", `ref: ${headRef}` as any]);
+          }
+
+          // Publish via EventIO if available
+          if (io && typeof (io as any).publishEvent === "function") {
+            const pub = (io as any).publishEvent(stateEvent as any, [relayBaseUrl]);
+            await Promise.race([pub, new Promise((resolve) => setTimeout(resolve, 3000))]);
+            console.log("[GRASP] Pre-push state publish attempted to", relayBaseUrl);
+          }
+        } catch (e) {
+          console.warn("[GRASP] Failed to publish pre-push state; proceeding anyway", e);
+        }
+
+        // Build Smart HTTP URL
+        const pickSmartHttpUrl = (orig: string): string => {
+          const u = new URL(orig);
+          let p = u.pathname.startsWith("/git/") ? u.pathname.slice(4) : u.pathname;
+          if (!p.endsWith(".git")) p = p.endsWith("/") ? `${p.slice(0, -1)}.git` : `${p}.git`;
+          return `${u.protocol}//${u.host}${p}`;
+        };
+
+        const pushUrl = pickSmartHttpUrl(remoteUrl);
+
+        // Add remote if needed
+        try {
+          await (git as any).addRemote({ dir, remote: "origin", url: pushUrl });
+        } catch (err: any) {
+          if (!err.message?.includes("already exists") && !err.message?.includes("Remote named")) {
+            throw err;
+          }
+        }
+
+        console.log(`[GRASP] Pushing to ${pushUrl} (ref=refs/heads/${targetBranch})`);
+
+        // Try multiple auth mappings
+        const authCandidates = [
+          { username: "grasp", password: token },
+          { username: token, password: "grasp" },
+          { username: token, password: token },
+        ];
+
+        let pushed = false;
+        let lastErr: any = null;
+
+        for (const creds of authCandidates) {
+          try {
+            await (git as any).push({
+              dir,
+              url: pushUrl,
+              ref: `refs/heads/${targetBranch}`,
+              onAuth: () => creds,
+            });
+            console.log("[GRASP] Push successful");
+            pushed = true;
+            break;
+          } catch (e) {
+            lastErr = e;
+          }
+        }
+
+        if (!pushed) {
+          throw lastErr || new Error("Push failed for all auth mappings");
+        }
+
+        return toPlain({ success: true, repoId, remoteUrl, branch: targetBranch });
+      }
+
+      // Standard providers or NostrGitProvider
+      const onAuth =
+        token != null
+          ? () => ({ username: "token", password: token })
+          : getAuthCallback(remoteUrl);
+
+      const nostrProvider = getNostrGitProvider?.();
+      if (nostrProvider) {
+        const result = await nostrProvider.push({
+          dir,
+          fs: getProviderFs(git),
+          ref: targetBranch,
+          remoteRef: targetBranch,
+          url: remoteUrl,
+          onAuth,
+          blossomMirror: blossomMirror ?? Boolean(provider === "blossom"),
+        });
+        return toPlain({
+          success: true,
+          branch: targetBranch,
+          remoteUrl,
+          blossomSummary: result.blossomSummary,
+        });
+      }
+
+      await (git as any).push({
         dir,
-        fs: getProviderFs(git),
+        url: remoteUrl,
         ref: targetBranch,
         remoteRef: targetBranch,
-        url: remoteUrl,
         onAuth,
-        blossomMirror: blossomMirror ?? Boolean(provider === "blossom" || provider === "grasp"),
       });
+
+      return toPlain({ success: true, branch: targetBranch, remoteUrl });
+    } catch (error) {
+      console.error(`Error pushing to remote:`, error);
       return toPlain({
-        success: true,
-        branch: targetBranch,
+        success: false,
+        repoId,
         remoteUrl,
-        blossomSummary: result.blossomSummary,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
-
-    await (git as any).push({
-      dir,
-      url: remoteUrl,
-      ref: targetBranch,
-      remoteRef: targetBranch,
-      onAuth,
-    });
-
-    return toPlain({ success: true, branch: targetBranch, remoteUrl });
   },
 
   // Safe push wrapper (preflight checks + optional confirmation flow)
@@ -499,11 +751,16 @@ const api = {
   },
 
   async getCommitHistory(opts: { repoId: string; branch?: string; depth?: number }) {
-    const { dir } = repoKeyAndDir(opts.repoId);
-    const ref = opts.branch || "main";
-    const depth = opts.depth ?? 50;
-    const commits = await (git as any).log({ dir, ref, depth });
-    return toPlain(commits);
+    try {
+      const { dir } = repoKeyAndDir(opts.repoId);
+      const ref = opts.branch || "main";
+      const depth = opts.depth ?? 50;
+      const commits = await (git as any).log({ dir, ref, depth });
+      return { success: true, commits: toPlain(commits) };
+    } catch (error: any) {
+      console.error("[getCommitHistory] Error:", error);
+      return { success: false, error: error?.message || String(error) };
+    }
   },
 
   // Event-based git operations (handle repo initialization automatically)
@@ -833,6 +1090,50 @@ const api = {
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  },
+
+  // --- Repository Management Functions ---
+
+  // Get .gitignore template content
+  async getGitignoreTemplate(opts: { template: string }) {
+    const content = await getGitignoreTemplate(opts.template);
+    return toPlain({ success: true, content });
+  },
+
+  // Get license template content
+  async getLicenseTemplate(opts: { template: string; authorName: string }) {
+    const content = await getLicenseTemplate(opts.template, opts.authorName);
+    return toPlain({ success: true, content });
+  },
+
+  // Create a new local git repository with initial files
+  async createLocalRepo(opts: CreateLocalRepoOptions) {
+    const result = await createLocalRepo(git, rootDir, clonedRepos, repoDataLevels, opts);
+    return toPlain(result);
+  },
+
+  // Create a remote repository on GitHub/GitLab/Gitea/GRASP
+  async createRemoteRepo(opts: CreateRemoteRepoOptions) {
+    const result = await createRemoteRepo(opts);
+    return toPlain(result);
+  },
+
+  // Fork and clone a repository
+  async forkAndCloneRepo(opts: ForkAndCloneOptions) {
+    const result = await forkAndCloneRepo(git, cacheManager, rootDir, opts);
+    return toPlain(result);
+  },
+
+  // Update remote repository metadata
+  async updateRemoteRepoMetadata(opts: UpdateRemoteRepoMetadataOptions) {
+    const result = await updateRemoteRepoMetadata(opts);
+    return toPlain(result);
+  },
+
+  // Update and push files to a repository
+  async updateAndPushFiles(opts: UpdateAndPushFilesOptions) {
+    const result = await updateAndPushFiles(git, opts);
+    return toPlain(result);
   },
 };
 

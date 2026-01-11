@@ -424,8 +424,8 @@ async function checkIfPatchApplied(
           return true;
         }
       } catch (commitError) {
-        // Patch commit might not exist in this repo, continue with other checks
-        console.warn("Could not read patch commit for content comparison:", commitError);
+        // Patch commit might not exist in this repo (expected for external patches), continue with other checks
+        console.debug("Could not read patch commit for content comparison (expected for external patches):", commitError);
       }
     }
 
