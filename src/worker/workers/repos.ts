@@ -445,7 +445,14 @@ export async function ensureFullCloneUtil(
   const dir = `${rootDir}/${key}`;
   const targetBranch = await resolveBranchName(dir, branch);
   const currentLevel = repoDataLevels.get(key);
-  if (currentLevel === 'full') return { success: true, repoId, cached: true, level: currentLevel };
+  
+  // Always fetch when a specific branch is requested, since we need to ensure
+  // that branch's history is available (dataLevel is per-repo, not per-branch)
+  const needsFetch = branch !== undefined || currentLevel !== 'full';
+  if (!needsFetch) {
+    return { success: true, repoId, cached: true, level: currentLevel };
+  }
+  
   if (!clonedRepos.has(key)) {
     if (!(await isRepoCloned(git, dir)))
       return {

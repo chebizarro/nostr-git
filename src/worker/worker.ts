@@ -96,6 +96,15 @@ import { createGitProvider } from "../git/factory.js";
 import { rootDir } from "../git/git.js";
 import { analyzePatchMergeability } from "../git/merge-analysis.js";
 
+import {
+  wrapError,
+  isGitError,
+  type GitError,
+  type GitErrorContext,
+  GitErrorCode,
+  GitErrorCategory,
+} from "../errors/index.js";
+
 import type { EventIO } from "../types/index.js";
 import { getNostrGitProvider, initializeNostrGitProvider } from "../api/git-provider.js";
 
@@ -157,6 +166,30 @@ function toPlain<T>(val: T): T {
   } catch {
     return val;
   }
+}
+
+/**
+ * Format an error into a structured response object.
+ * Uses the error taxonomy to provide code, category, and hint.
+ */
+function formatError(
+  error: unknown,
+  context?: GitErrorContext
+): {
+  error: string;
+  code: GitErrorCode;
+  category: GitErrorCategory;
+  hint?: string;
+  context?: GitErrorContext;
+} {
+  const gitError = isGitError(error) ? error : wrapError(error, context);
+  return {
+    error: gitError.message,
+    code: gitError.code,
+    category: gitError.category,
+    hint: gitError.hint,
+    context: gitError.context,
+  };
 }
 
 function postProgress(payload: {
@@ -369,7 +402,7 @@ const api = {
       return toPlain({
         success: false,
         repoId: opts.repoId,
-        error: error.message || String(error),
+        ...formatError(error, { naddr: opts.repoId, operation: "clone" }),
       });
     }
   },
@@ -428,7 +461,7 @@ const api = {
       console.error("cloneAndFork failed:", error);
       return toPlain({
         success: false,
-        error: error.message || String(error),
+        ...formatError(error, { remote: opts.sourceUrl, operation: "cloneAndFork" }),
       });
     }
   },
@@ -695,7 +728,7 @@ const api = {
         success: false,
         repoId,
         remoteUrl,
-        error: error instanceof Error ? error.message : String(error),
+        ...formatError(error, { naddr: repoId, remote: remoteUrl, operation: "push" }),
       });
     }
   },
@@ -759,7 +792,7 @@ const api = {
       return { success: true, commits: toPlain(commits) };
     } catch (error: any) {
       console.error("[getCommitHistory] Error:", error);
-      return { success: false, error: error?.message || String(error) };
+      return { success: false, ...formatError(error, { naddr: opts.repoId, ref: opts.branch, operation: "getCommitHistory" }) };
     }
   },
 
@@ -885,7 +918,7 @@ const api = {
       return toPlain({
         success: false,
         repoId: opts.repoId,
-        error: error instanceof Error ? error.message : String(error),
+        ...formatError(error, { naddr: opts.repoId, operation: "deleteRepo" }),
       });
     }
   },
@@ -921,7 +954,7 @@ const api = {
         success: false,
         repoId: opts.repoId,
         branch: targetBranch,
-        error: error instanceof Error ? error.message : String(error),
+        ...formatError(error, { naddr: opts.repoId, ref: targetBranch, operation: "getCommitCount" }),
       });
     }
   },
@@ -962,11 +995,181 @@ const api = {
         parents: commit.commit.parent || [],
       };
 
-      return toPlain({ success: true, meta, changes: [] });
+      // Get file changes and diffs
+      const changes: Array<{
+        path: string;
+        status: 'added' | 'modified' | 'deleted' | 'renamed';
+        diffHunks: Array<{
+          oldStart: number;
+          oldLines: number;
+          newStart: number;
+          newLines: number;
+          patches: Array<{ line: string; type: '+' | '-' | ' ' }>;
+        }>;
+      }> = [];
+
+      // If this is not the initial commit, compare with parent
+      if (commit.commit.parent && commit.commit.parent.length > 0) {
+        const parentCommit = commit.commit.parent[0];
+
+        // Get the list of changed files
+        const changedFiles = await (git as any).walk({
+          dir,
+          trees: [(git as any).TREE({ ref: parentCommit }), (git as any).TREE({ ref: commit.oid })],
+          map: async function (filepath: string, [A, B]: any[]) {
+            // Skip directories
+            if (filepath === '.') return;
+            // Only process file blobs; ignore trees (directories) and other types
+            try {
+              const at = A ? await A.type() : undefined;
+              const bt = B ? await B.type() : undefined;
+              const isABlob = at === 'blob';
+              const isBBlob = bt === 'blob';
+              if (!isABlob && !isBBlob) {
+                return;
+              }
+            } catch (e) {
+              // If type detection fails, continue
+            }
+
+            const Aoid = await A?.oid();
+            const Boid = await B?.oid();
+
+            // Determine file status
+            let status: 'added' | 'modified' | 'deleted' | 'renamed' = 'modified';
+            if (Aoid === undefined && Boid !== undefined) {
+              status = 'added';
+            } else if (Aoid !== undefined && Boid === undefined) {
+              status = 'deleted';
+            } else if (Aoid !== Boid) {
+              status = 'modified';
+            } else {
+              return; // No change
+            }
+
+            // Get diff for this file
+            let diffHunks: Array<{
+              oldStart: number;
+              oldLines: number;
+              newStart: number;
+              newLines: number;
+              patches: Array<{ line: string; type: '+' | '-' | ' ' }>;
+            }> = [];
+
+            try {
+              if (status === 'added') {
+                const blob = await B!.content();
+                const lines = new TextDecoder().decode(blob).split('\n');
+                diffHunks = [{
+                  oldStart: 0,
+                  oldLines: 0,
+                  newStart: 1,
+                  newLines: lines.length,
+                  patches: lines.map((line: string) => ({ line, type: '+' as const }))
+                }];
+              } else if (status === 'deleted') {
+                const blob = await A!.content();
+                const lines = new TextDecoder().decode(blob).split('\n');
+                diffHunks = [{
+                  oldStart: 1,
+                  oldLines: lines.length,
+                  newStart: 0,
+                  newLines: 0,
+                  patches: lines.map((line: string) => ({ line, type: '-' as const }))
+                }];
+              } else {
+                // For modified files, compute actual diff
+                const oldBlob = await A!.content();
+                const newBlob = await B!.content();
+                const oldText = new TextDecoder().decode(oldBlob);
+                const newText = new TextDecoder().decode(newBlob);
+                const oldLines = oldText.split('\n');
+                const newLines = newText.split('\n');
+
+                // Basic diff implementation
+                const patches: Array<{ line: string; type: '+' | '-' | ' ' }> = [];
+                let oldIndex = 0;
+                let newIndex = 0;
+
+                while (oldIndex < oldLines.length || newIndex < newLines.length) {
+                  const oldLine = oldLines[oldIndex];
+                  const newLine = newLines[newIndex];
+
+                  if (oldIndex >= oldLines.length) {
+                    patches.push({ line: newLine, type: '+' });
+                    newIndex++;
+                  } else if (newIndex >= newLines.length) {
+                    patches.push({ line: oldLine, type: '-' });
+                    oldIndex++;
+                  } else if (oldLine === newLine) {
+                    patches.push({ line: oldLine, type: ' ' });
+                    oldIndex++;
+                    newIndex++;
+                  } else {
+                    patches.push({ line: oldLine, type: '-' });
+                    patches.push({ line: newLine, type: '+' });
+                    oldIndex++;
+                    newIndex++;
+                  }
+                }
+
+                if (patches.length > 0) {
+                  diffHunks = [{
+                    oldStart: 1,
+                    oldLines: oldLines.length,
+                    newStart: 1,
+                    newLines: newLines.length,
+                    patches
+                  }];
+                }
+              }
+            } catch (diffError) {
+              console.warn(`Failed to generate diff for ${filepath}:`, diffError);
+              diffHunks = [];
+            }
+
+            return { path: filepath, status, diffHunks };
+          }
+        });
+
+        changes.push(...changedFiles.filter(Boolean));
+      } else {
+        // Initial commit - show all files as added
+        const files = await (git as any).walk({
+          dir,
+          trees: [(git as any).TREE({ ref: opts.commitId })],
+          map: async function (filepath: string, [A]: any[]) {
+            if (filepath === '.') return;
+            const oid = await A?.oid();
+            if (!oid) return;
+
+            try {
+              const content = await (git as any).readBlob({ dir, oid, filepath });
+              const lines = new TextDecoder().decode(content.blob).split('\n');
+              return {
+                path: filepath,
+                status: 'added' as const,
+                diffHunks: [{
+                  oldStart: 0,
+                  oldLines: 0,
+                  newStart: 1,
+                  newLines: lines.length,
+                  patches: lines.map((line: string) => ({ line, type: '+' as const }))
+                }]
+              };
+            } catch (error) {
+              return { path: filepath, status: 'added' as const, diffHunks: [] };
+            }
+          }
+        });
+        changes.push(...files.filter(Boolean));
+      }
+
+      return toPlain({ success: true, meta, changes });
     } catch (error) {
       return toPlain({
         success: false,
-        error: error instanceof Error ? error.message : String(error),
+        ...formatError(error, { naddr: opts.repoId, ref: opts.commitId, operation: "getCommitDetails" }),
       });
     }
   },
@@ -1036,7 +1239,7 @@ const api = {
         branch: opts.branch || "main",
         files: [],
         counts: {},
-        error: error instanceof Error ? error.message : String(error),
+        ...formatError(error, { naddr: opts.repoId, ref: opts.branch, operation: "getStatus" }),
       });
     }
   },
@@ -1087,7 +1290,7 @@ const api = {
         success: false,
         repoId: opts.repoId,
         branch: opts.branch,
-        error: error instanceof Error ? error.message : String(error),
+        ...formatError(error, { naddr: opts.repoId, ref: opts.branch, operation: "resetRepoToRemote" }),
       });
     }
   },
