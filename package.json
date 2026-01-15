@@ -13,7 +13,7 @@
     "./git": "./dist/git/index.js",
     "./types": "./dist/types/index.js",
     "./worker": "./dist/worker/index.js",
-    "./worker/worker.js": "./dist/worker/worker.js",
+    "./worker/worker.js": "./dist/worker/worker.bundle.js",
     "./api": "./dist/api/index.js",
     "./blossom": "./dist/blossom/index.js",
     "./stack": "./dist/stack/index.js",
@@ -27,7 +27,8 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "pnpm run clean && tsc -p tsconfig.base.json",
+    "build": "pnpm run clean && tsc -p tsconfig.base.json && pnpm run bundle:worker",
+    "bundle:worker": "node scripts/bundle-worker.mjs",
     "typecheck": "tsc -p tsconfig.base.json --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
@@ -47,6 +48,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.2.1",
+    "esbuild": "^0.24.0",
     "@vitest/coverage-v8": "3.2.4",
     "eslint": "^9.18.0",
     "fake-indexeddb": "^6.2.4",

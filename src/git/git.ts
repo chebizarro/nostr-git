@@ -127,6 +127,32 @@ export async function resolveBranchToOid(
     }
   }
 
+  // All branch names failed - try HEAD as fallback
+  // This handles shallow clones where refs/heads/* may not exist yet
+  // Use depth: 1 to get just the immediate target without following symbolic refs
+  try {
+    const headOid = await git.resolveRef({ dir, ref: 'HEAD', depth: 1 });
+    if (headOid && headOid.length === 40) {
+      // Got a commit OID directly
+      console.log(`[resolveBranchToOid] No branches resolved, but HEAD exists. Using HEAD OID: ${headOid.substring(0, 8)}`);
+      return headOid;
+    }
+  } catch (headError) {
+    // depth: 1 failed, try reading the log to get the latest commit
+    console.log(`[resolveBranchToOid] HEAD depth:1 resolution failed, trying git.log:`, headError);
+  }
+  
+  // Try to get the latest commit from the log (works even without branch refs)
+  try {
+    const commits = await git.log({ dir, depth: 1 });
+    if (commits && commits.length > 0 && commits[0].oid) {
+      console.log(`[resolveBranchToOid] Found commit from log: ${commits[0].oid.substring(0, 8)}`);
+      return commits[0].oid;
+    }
+  } catch (logError) {
+    console.log(`[resolveBranchToOid] git.log also failed:`, logError);
+  }
+
   const context: GitErrorContext & { repoDir?: string } = {
     operation: 'resolveBranchToOid',
     ref: preferredBranch,
@@ -236,23 +262,24 @@ export async function ensureRepoFromEvent(
   const git = getGitProvider();
   const dir = `${rootDir}/${opts.repoKey || parseRepoId(opts.repoEvent.repoId)}`;
 
-  // Prefer HTTPS clone URL
-  let cloneUrl = opts.repoEvent.clone?.find((url) => url.startsWith('https://'));
-
-  // If not found, try to convert SSH to HTTPS
-  if (!cloneUrl && opts.repoEvent.clone?.length) {
+  // Collect all HTTPS clone URLs to try
+  const cloneUrls: string[] = [];
+  
+  // Add all HTTPS URLs
+  if (opts.repoEvent.clone?.length) {
     for (const url of opts.repoEvent.clone) {
-      if (url.startsWith('git@')) {
+      if (url.startsWith('https://')) {
+        cloneUrls.push(url);
+      } else if (url.startsWith('git@')) {
         const httpsUrl = sshToHttps(url);
         if (httpsUrl) {
-          cloneUrl = httpsUrl;
-          break;
+          cloneUrls.push(httpsUrl);
         }
       }
     }
   }
 
-  if (!cloneUrl) {
+  if (cloneUrls.length === 0) {
     throw createInvalidInputError('No supported clone URL found in repo announcement', {
       operation: 'ensureRepoFromEvent',
       naddr: opts.repoEvent.repoId,
@@ -260,6 +287,9 @@ export async function ensureRepoFromEvent(
       repoDir: dir,
     });
   }
+
+  // Use the first URL for initial clone attempt
+  let cloneUrl = cloneUrls[0];
 
   const isCloned = await isRepoCloned(dir);
 
@@ -304,13 +334,14 @@ export async function ensureRepoFromEvent(
     });
 
     // Try to clone without specifying a branch first (let git use default)
+    // IMPORTANT: noCheckout must be false to create local branch refs
     const clonePromise = git.clone({
       dir,
       url: cloneUrl,
       // Don't specify ref initially - let git use the remote's default
       singleBranch: false, // Allow git to determine the default branch
       depth,
-      noCheckout: true,
+      noCheckout: false,   // Must be false to create local branch refs properly
       noTags: true,
       // Optimize for speed over completeness
       since: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Only last 30 days
@@ -331,8 +362,9 @@ export async function ensureRepoFromEvent(
       console.log(`Successfully cloned ${cloneUrl}`);
 
       // After successful clone, detect the actual default branch
+      let actualDefault = 'main';
       try {
-        const actualDefault = await detectDefaultBranch(opts.repoEvent, opts.repoKey);
+        actualDefault = await detectDefaultBranch(opts.repoEvent, opts.repoKey);
         defaultBranchCache.set(
           opts.repoKey || parseRepoId(opts.repoEvent.repoId),
           actualDefault
@@ -340,6 +372,55 @@ export async function ensureRepoFromEvent(
         console.log(`Detected default branch: ${actualDefault}`);
       } catch (error) {
         console.warn('Failed to detect default branch after clone:', error);
+      }
+
+      // CRITICAL: isomorphic-git's clone sometimes doesn't fetch objects properly
+      // Check if we have branches, if not, try fetching from alternative URLs
+      try {
+        const branches = await git.listBranches({ dir });
+        if (branches.length === 0) {
+          console.log('[ensureRepoFromEvent] No local branches after clone, trying alternative URLs');
+          
+          const branchesToTry = [actualDefault, 'main', 'master'].filter(Boolean);
+          let fetchedRef: string | undefined;
+          
+          // Try each clone URL until one works
+          for (const url of cloneUrls) {
+            if (fetchedRef) break;
+            
+            for (const branch of branchesToTry) {
+              try {
+                console.log(`[ensureRepoFromEvent] Fetching ${branch} from ${url}`);
+                const fetchResult = await git.fetch({
+                  dir,
+                  url,
+                  ref: branch,
+                  depth,
+                  singleBranch: true,
+                });
+                
+                if (fetchResult?.fetchHead) {
+                  console.log(`[ensureRepoFromEvent] Fetch succeeded from ${url}, fetchHead: ${fetchResult.fetchHead}`);
+                  fetchedRef = fetchResult.fetchHead;
+                  
+                  // Create local branch from fetchHead
+                  await git.writeRef({ dir, ref: `refs/heads/${branch}`, value: fetchResult.fetchHead, force: true });
+                  await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${branch}`, symbolic: true, force: true });
+                  console.log(`[ensureRepoFromEvent] Created branch '${branch}' from fetchHead`);
+                  break;
+                }
+              } catch (fetchErr: any) {
+                console.log(`[ensureRepoFromEvent] Fetch failed for ${branch} from ${url}: ${fetchErr.message}`);
+              }
+            }
+          }
+          
+          if (!fetchedRef) {
+            console.warn('[ensureRepoFromEvent] All fetch attempts failed from all URLs');
+          }
+        }
+      } catch (refError) {
+        console.warn('[ensureRepoFromEvent] Error checking/creating refs after clone:', refError);
       }
     } catch (error) {
       console.error(`Clone failed for ${cloneUrl}:`, error);

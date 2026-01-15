@@ -92,7 +92,7 @@
 import { expose } from "comlink";
 
 import type { GitProvider } from "../git/provider.js";
-import { createGitProvider } from "../git/factory.js";
+import { createGitProvider } from "../git/factory-browser.js";
 import { rootDir } from "../git/git.js";
 import { analyzePatchMergeability } from "../git/merge-analysis.js";
 
@@ -788,8 +788,35 @@ const api = {
       const { dir } = repoKeyAndDir(opts.repoId);
       const ref = opts.branch || "main";
       const depth = opts.depth ?? 50;
-      const commits = await (git as any).log({ dir, ref, depth });
-      return { success: true, commits: toPlain(commits) };
+      
+      // Try the requested branch first
+      try {
+        const commits = await (git as any).log({ dir, ref, depth });
+        return { success: true, commits: toPlain(commits) };
+      } catch (branchError: any) {
+        // If branch not found, try HEAD as fallback
+        if (branchError?.code === 'NotFoundError' || branchError?.message?.includes('Could not find')) {
+          console.log(`[getCommitHistory] Branch '${ref}' not found, trying HEAD fallback`);
+          try {
+            const commits = await (git as any).log({ dir, ref: 'HEAD', depth });
+            return { success: true, commits: toPlain(commits), fallbackUsed: 'HEAD' };
+          } catch (headError: any) {
+            // HEAD also failed - try to list any available branches and use the first one
+            console.log(`[getCommitHistory] HEAD also failed, trying to find any available branch`);
+            try {
+              const branches = await (git as any).listBranches({ dir });
+              if (branches && branches.length > 0) {
+                const commits = await (git as any).log({ dir, ref: branches[0], depth });
+                return { success: true, commits: toPlain(commits), fallbackUsed: branches[0] };
+              }
+            } catch {
+              // No branches available
+            }
+            throw headError;
+          }
+        }
+        throw branchError;
+      }
     } catch (error: any) {
       console.error("[getCommitHistory] Error:", error);
       return { success: false, ...formatError(error, { naddr: opts.repoId, ref: opts.branch, operation: "getCommitHistory" }) };

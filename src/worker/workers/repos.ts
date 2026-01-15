@@ -275,13 +275,15 @@ export async function initializeRepoUtil(
       
       for (const refCandidate of refCandidates) {
         try {
+          // Clone with noCheckout: false to ensure refs are created properly
+          // singleBranch: false to get remote tracking refs
           await git.clone({
             dir,
             url: cloneUrl,
             ref: refCandidate,
-            singleBranch: true,
+            singleBranch: false,  // Changed: get all refs so we have remote tracking branches
             depth: 1,
-            noCheckout: true,
+            noCheckout: false,    // Changed: checkout to create HEAD and local branch ref
             noTags: true,
             onProgress,
             ...(authCallback && { onAuth: authCallback })
@@ -323,8 +325,73 @@ export async function initializeRepoUtil(
       throw lastError || new Error('All clone URLs failed');
     }
 
-    const branches = await git.listBranches({ dir });
-    const headCommit = await git.resolveRef({ dir, ref: 'HEAD' });
+    // After shallow clone, we need to create local branch refs from remote refs
+    // because isomorphic-git's shallow clone with singleBranch doesn't create them
+    let headCommit: string | undefined;
+    let defaultBranch = 'main';
+    
+    // Try to get the HEAD commit and create local branch ref
+    try {
+      // First, try to find remote refs that were fetched
+      const remoteBranches = await git.listBranches({ dir, remote: 'origin' }).catch(() => [] as string[]);
+      
+      if (remoteBranches.length > 0) {
+        // Use the first remote branch (usually the default)
+        const remoteBranch = remoteBranches[0];
+        defaultBranch = remoteBranch;
+        const remoteRef = `refs/remotes/origin/${remoteBranch}`;
+        headCommit = await git.resolveRef({ dir, ref: remoteRef });
+        
+        // Create the local branch ref
+        await git.writeRef({ dir, ref: `refs/heads/${defaultBranch}`, value: headCommit });
+        // Update HEAD to point to the local branch
+        await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${defaultBranch}`, symbolic: true });
+        console.log(`[initializeRepo] Created local branch '${defaultBranch}' from remote ref, commit: ${headCommit?.substring(0, 8)}`);
+      } else {
+        // No remote branches - try to read FETCH_HEAD or packed-refs
+        // This handles cases where the clone fetched objects but didn't create refs
+        try {
+          // Try FETCH_HEAD which isomorphic-git creates during fetch
+          headCommit = await git.resolveRef({ dir, ref: 'FETCH_HEAD' });
+          // Create a local branch from FETCH_HEAD
+          await git.writeRef({ dir, ref: `refs/heads/${defaultBranch}`, value: headCommit });
+          await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${defaultBranch}`, symbolic: true });
+          console.log(`[initializeRepo] Created local branch '${defaultBranch}' from FETCH_HEAD, commit: ${headCommit?.substring(0, 8)}`);
+        } catch {
+          // Last resort: try to find any commit in the object store
+          // by reading the shallow file or walking objects
+          console.warn(`[initializeRepo] Could not find any refs, repository may be empty`);
+          headCommit = undefined;
+        }
+      }
+    } catch (refError) {
+      console.warn(`[initializeRepo] Error setting up refs:`, refError);
+    }
+
+    const branches = await git.listBranches({ dir }).catch(() => [] as string[]);
+    
+    // If we still don't have headCommit, try one more time with the newly created refs
+    if (!headCommit && branches.length > 0) {
+      try {
+        headCommit = await git.resolveRef({ dir, ref: `refs/heads/${branches[0]}` });
+      } catch {
+        // ignore
+      }
+    }
+    
+    // Final fallback - if no commit found, return partial success
+    if (!headCommit) {
+      console.warn(`[initializeRepo] Repository cloned but no commits found`);
+      return toPlain({
+        success: true,
+        repoId,
+        dataLevel: 'refs' as const,
+        branches: [],
+        headCommit: undefined,
+        fromCache: false,
+        warning: 'Repository cloned but no commits found. Repository may be empty.'
+      });
+    }
     repoDataLevels.set(key, 'refs');
     clonedRepos.add(key);
     const cache: RepoCache = {

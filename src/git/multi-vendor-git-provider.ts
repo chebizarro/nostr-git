@@ -26,6 +26,11 @@ export class MultiVendorGitProvider implements GitProvider {
     this.baseProvider = options?.baseProvider ?? createGitProvider();
   }
 
+  // Forward fs property if present on the base provider (needed for direct filesystem access)
+  get fs(): any {
+    return (this.baseProvider as any)?.fs;
+  }
+
   // Token management
   setTokens(tokens: Array<{ host: string; token: string }>): void {
     this.tokenStore.clear();
