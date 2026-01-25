@@ -445,6 +445,9 @@ export async function applyPatchAndPushUtil(
       };
     }
 
+    // Import auth module once outside the loop to avoid redundant dynamic imports
+    const { tryPushWithTokens } = await import('./auth.js');
+
     const pushErrors: Array<{
       remote: string;
       url: string;
@@ -468,7 +471,6 @@ export async function applyPatchAndPushUtil(
         }
         // Use tryPushWithTokens for fallback retry logic with multiple tokens
         // Disable CORS proxy for push - it only supports fetch operations
-        const { tryPushWithTokens } = await import('./auth.js');
         await tryPushWithTokens(remote.url, async (authCallback) => {
           await git.push({
             dir,
@@ -494,8 +496,6 @@ export async function applyPatchAndPushUtil(
             const shortId = (patchData.id || 'patch').slice(0, 8);
             const topicBranch = `grasp/patch-${shortId}`;
             const remoteRef = `refs/heads/${topicBranch}`;
-            // Use tryPushWithTokens for fallback retry logic with multiple tokens
-            const { tryPushWithTokens } = await import('./auth.js');
             // Push local target branch to remote topic branch; avoid force on fallback
             await tryPushWithTokens(remote.url || '', async (authCallback) => {
               await git.push({

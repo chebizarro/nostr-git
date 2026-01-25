@@ -1171,7 +1171,8 @@ const api = {
             if (!oid) return;
 
             try {
-              const content = await (git as any).readBlob({ dir, oid, filepath });
+              // When reading by OID, don't pass filepath - it's already resolved
+              const content = await (git as any).readBlob({ dir, oid });
               const lines = new TextDecoder().decode(content.blob).split('\n');
               return {
                 path: filepath,
