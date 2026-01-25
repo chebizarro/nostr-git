@@ -625,11 +625,17 @@ const api = {
           const stateEvent = createRepoStateEvent({
             repoId: stateRepoId,
             head: targetBranch, // Just the branch name, createRepoStateEvent adds refs/heads/ prefix
-            refs: Object.entries(refs).map(([ref, commit]) => ({
-              type: ref.startsWith("refs/heads/") ? "heads" : "tags",
-              name: ref,
-              commit,
-            })),
+            refs: Object.entries(refs).map(([ref, commit]) => {
+              // Extract just the branch/tag name from the full ref path
+              // e.g., "refs/heads/master" -> "master", "refs/tags/v1.0" -> "v1.0"
+              const isHead = ref.startsWith("refs/heads/");
+              const name = isHead ? ref.replace("refs/heads/", "") : ref.replace("refs/tags/", "");
+              return {
+                type: isHead ? "heads" as const : "tags" as const,
+                name,
+                commit,
+              };
+            }),
           });
 
           if (headRef && !stateEvent.tags.find((t: string[]) => t[0] === "HEAD")) {
@@ -671,12 +677,15 @@ const api = {
         // the Nostr repo state events (kind 30617/30618), not HTTP headers.
         // This matches ngit's behavior which uses UnauthHttps/UnauthHttp protocols.
         try {
+          console.log("[GRASP] Push params:", { dir, url: pushUrl, ref: `refs/heads/${targetBranch}`, remote: "origin" });
           await git.push({
             dir,
             url: pushUrl,
+            remote: "origin",
             ref: `refs/heads/${targetBranch}`,
+            remoteRef: `refs/heads/${targetBranch}`,
             http: httpWeb,
-            corsProxy: null, // GRASP servers support CORS directly, bypass proxy
+            force: false,
           });
           console.log("[GRASP] Push successful (unauthenticated smart HTTP)");
           return toPlain({ success: true, repoId, remoteUrl, branch: targetBranch });
@@ -685,6 +694,9 @@ const api = {
           // Log more details for debugging
           if (pushErr.data) {
             console.error("[GRASP] Push error data:", pushErr.data);
+          }
+          if (pushErr.message) {
+            console.error("[GRASP] Push error message:", pushErr.message);
           }
           throw pushErr;
         }
