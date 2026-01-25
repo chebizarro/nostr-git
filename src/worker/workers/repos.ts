@@ -92,23 +92,40 @@ export async function smartInitializeRepoUtil(
           try {
             sendProgress('Fetching latest changes from remote');
             const fetchStart = Date.now();
-            await git.fetch({
-              dir,
-              url: cloneUrl,
-              // Omit ref to allow fetching all branches/refs
-              singleBranch: false,
-              depth: repoDataLevels.get(key) === 'full' ? undefined : 50
-            });
+            const fetchDepth = repoDataLevels.get(key) === 'full' ? undefined : 50;
+
+            // Try singleBranch: true first (works better with non-GitHub servers like Forgejo)
+            // Only fall back to singleBranch: false if needed for multi-branch support
+            try {
+              await git.fetch({
+                dir,
+                url: cloneUrl,
+                singleBranch: true,  // More compatible with non-GitHub servers
+                depth: fetchDepth
+              });
+            } catch (singleBranchError: any) {
+              // If single branch fetch fails, try without specifying singleBranch
+              // This handles edge cases where the ref isn't set properly
+              console.warn(`[smartInitializeRepo] Single branch fetch failed, trying default:`, singleBranchError?.message);
+              await git.fetch({
+                dir,
+                url: cloneUrl,
+                depth: fetchDepth
+              });
+            }
+
             const secs = ((Date.now() - fetchStart) / 1000).toFixed(1);
             sendProgress(`Fetch completed (${secs}s)`);
           } catch (fetchError: any) {
             // Handle CORS/network errors gracefully during fetch
             const errorMessage = fetchError?.message || String(fetchError);
-            if (errorMessage.includes('CORS') || 
-                errorMessage.includes('NetworkError') || 
+            if (errorMessage.includes('CORS') ||
+                errorMessage.includes('NetworkError') ||
                 errorMessage.includes('Failed to fetch') ||
-                errorMessage.includes('Access-Control')) {
-              console.warn(`[smartInitializeRepo] CORS/Network error during fetch, using local data only:`, errorMessage);
+                errorMessage.includes('Access-Control') ||
+                errorMessage.includes('NoRefspecError') ||
+                errorMessage.includes('refspec')) {
+              console.warn(`[smartInitializeRepo] CORS/Network/Refspec error during fetch, using local data only:`, errorMessage);
               // Continue with local data, don't throw error
             } else {
               throw fetchError;
@@ -276,14 +293,15 @@ export async function initializeRepoUtil(
       for (const refCandidate of refCandidates) {
         try {
           // Clone with noCheckout: false to ensure refs are created properly
-          // singleBranch: false to get remote tracking refs
+          // Use singleBranch: true for shallow clones - non-GitHub servers (Forgejo, Gitea)
+          // don't properly handle singleBranch: false with shallow depth during pack negotiation
           await git.clone({
             dir,
             url: cloneUrl,
             ref: refCandidate,
-            singleBranch: false,  // Changed: get all refs so we have remote tracking branches
+            singleBranch: true,   // Critical: use single branch for shallow clone compatibility
             depth: 1,
-            noCheckout: false,    // Changed: checkout to create HEAD and local branch ref
+            noCheckout: false,    // checkout to create HEAD and local branch ref
             noTags: true,
             onProgress,
             ...(authCallback && { onAuth: authCallback })
