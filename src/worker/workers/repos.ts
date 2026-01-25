@@ -532,12 +532,36 @@ export async function ensureFullCloneUtil(
   const dir = `${rootDir}/${key}`;
   const currentLevel = repoDataLevels.get(key);
 
-  // If already at 'full' level, no need to fetch - we have complete history
-  if (currentLevel === 'full') {
-    return { success: true, repoId, cached: true, level: currentLevel };
-  }
-
   const targetBranch = await resolveBranchName(dir, branch);
+
+  // Check if we already have commits for this specific branch
+  // Even at 'full' level, we may need to fetch a different branch
+  if (currentLevel === 'full') {
+    // Try to verify the branch exists locally by attempting to resolve it to an OID
+    try {
+      // Try direct branch name, then remote tracking branch
+      const branchesToCheck = [targetBranch, `origin/${targetBranch}`, `refs/remotes/origin/${targetBranch}`];
+      let branchExists = false;
+
+      for (const ref of branchesToCheck) {
+        try {
+          await git.resolveRef({ dir, ref });
+          branchExists = true;
+          break;
+        } catch {
+          // Branch not found, continue trying
+        }
+      }
+
+      if (branchExists) {
+        return { success: true, repoId, cached: true, level: currentLevel };
+      }
+      // Branch not found - need to fetch it
+      console.log(`[ensureFullClone] Repo at 'full' level but branch '${targetBranch}' not found, fetching...`);
+    } catch (error) {
+      console.log(`[ensureFullClone] Could not verify branch '${targetBranch}', will fetch...`, error);
+    }
+  }
   
   if (!clonedRepos.has(key)) {
     if (!(await isRepoCloned(git, dir)))
