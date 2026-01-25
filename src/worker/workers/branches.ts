@@ -35,46 +35,23 @@ export async function resolveBranchName(
   }
   
   // If all specific branches fail, try to list available branches
+  let branches: string[];
   try {
-    const branches = await git.listBranches({ dir });
-    if (branches.length > 0) {
-      const firstBranch = branches[0];
-      console.warn(
-        `All specific branch resolution attempts failed, using first available branch: ${firstBranch}`
-      );
-      return firstBranch;
-    }
+    branches = await git.listBranches({ dir });
   } catch (error) {
-    console.warn('Failed to list branches:', error);
+    // If listBranches fails, throw the error - this is a critical failure
+    console.error('Failed to list branches:', error);
+    throw error;
   }
-  
-  // No branches found locally - try to use HEAD as fallback
-  // This handles shallow clones where refs/heads/* may not exist yet
-  // Use depth: 1 to avoid following symbolic refs that point to non-existent branches
-  try {
-    const headRef = await git.resolveRef({ dir, ref: 'HEAD', depth: 1 });
-    if (headRef && headRef.length === 40) {
-      // Got a commit OID - repo has commits but no branch refs
-      console.log(`[resolveBranchName] No branches found, but HEAD exists (${headRef.substring(0, 8)}). Using 'main' as default branch name.`);
-      return 'main';
-    }
-  } catch {
-    // depth: 1 failed
+
+  if (branches.length > 0) {
+    const firstBranch = branches[0];
+    console.warn(
+      `All specific branch resolution attempts failed, using first available branch: ${firstBranch}`
+    );
+    return firstBranch;
   }
-  
-  // Try to get the latest commit from the log (works even without branch refs)
-  try {
-    const commits = await git.log({ dir, depth: 1 });
-    if (commits && commits.length > 0) {
-      console.log(`[resolveBranchName] Found commits in log, using 'main' as default branch name.`);
-      return 'main';
-    }
-  } catch {
-    // git.log also failed
-  }
-  
-  // Last resort: return 'main' as a sensible default for new/empty repos
-  // This allows the UI to display something and attempt operations
-  console.warn(`[resolveBranchName] No branches found in repository at ${dir}. Returning 'main' as default.`);
-  return 'main';
+
+  // No branches found at all - this is an error condition
+  throw new Error(`No branches found in repository at ${dir}`);
 }

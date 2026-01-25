@@ -10,9 +10,10 @@ vi.mock('comlink', () => ({
 }));
 
 // Mock Git provider used by the worker
-vi.mock('../../src/git/factory.js', () => ({
+vi.mock('../../src/git/factory-browser.js', () => ({
   createGitProvider: () => ({
     push: vi.fn(async () => undefined),
+    resolveRef: vi.fn(async () => 'abc123def456'),
     // Other methods may be referenced in unrelated API paths but are not invoked here
     statusMatrix: vi.fn(async () => []),
     log: vi.fn(async () => []),
@@ -44,11 +45,12 @@ describe('worker.pushToRemote API', () => {
     (mod as any).getNostrGitProvider = () => ({ push: pushSpy });
 
     // Act: call pushToRemote on exposed API
+    // Don't pass 'grasp' as provider - that triggers a different code path requiring token
+    // Instead, let it use the NostrGitProvider path which is checked after GRASP
     const res = await exposed.pushToRemote({
       repoId: 'owner/repo',
       remoteUrl: 'https://example.com/owner/repo.git',
       branch: 'main',
-      provider: 'grasp',
     });
 
     // Assert

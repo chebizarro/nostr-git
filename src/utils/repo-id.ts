@@ -45,3 +45,13 @@ export function parseRepoId(input: string): string {
     `Invalid repoId: "${input}". Expected canonical repoId in the form "owner/name" or "owner:name".`
   );
 }
+
+export function canonicalRepoKey(repoId: string): string {
+  // Use parseRepoId to normalize, then make filesystem-safe
+  try {
+    const normalized = parseRepoId(repoId);
+    return normalized.replace(/[^a-zA-Z0-9_\-\/]/g, "_");
+  } catch {
+    return repoId.replace(/[^a-zA-Z0-9_\-\/]/g, "_");
+  }
+}

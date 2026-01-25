@@ -281,19 +281,116 @@ export class RepoCore {
     const legacyT = new Set<string>();
     const byNamespace: Record<string, Set<string>> = {};
     const flat = new Set<string>();
+
     const rootEvt = target.id
       ? (ctx.issues || []).find((i) => i.id === target.id) ||
         (ctx.patches || []).find((p) => p.id === target.id)
       : undefined;
+
+    if (!rootEvt) {
+      return { byNamespace, flat, legacyT };
+    }
+
+    // Extract legacy "t" tags
+    const tTags: string[] = [];
     if (rootEvt?.tags) {
       for (const t of rootEvt.tags as any[][]) {
         if (t[0] === "t") {
           legacyT.add(t[1]);
-          flat.add(t[1]);
+          tTags.push(t[1]);
         }
       }
     }
-    byNamespace["default"] = flat;
+
+    // Extract self-labels (author's own "l" tags on the event)
+    const selfLabels: Array<{L?: string; l: string; targetKind: number}> = [];
+    const namespaces = (rootEvt.tags as any[][])
+      .filter(t => t[0] === "L")
+      .map(t => t[1]);
+
+    for (const tag of rootEvt.tags as any[][]) {
+      if (tag[0] !== "l") continue;
+      const [_, value, mark] = tag as [string, string, string?];
+      const ns = mark && namespaces.includes(mark) ? mark : undefined;
+      selfLabels.push({L: ns, l: value, targetKind: rootEvt.kind});
+    }
+
+    // Extract external labels (kind 1985 events targeting this event)
+    const externalLabels: Array<{namespace: string; value: string}> = [];
+    const labelEvents = ctx.labelEventsArr || [];
+
+    for (const labelEvt of labelEvents) {
+      // Check if this label event targets our root event
+      const targets = (labelEvt.tags || []) as string[][];
+
+      // Check for target in various formats:
+      // Standard: ["e", "id"], ["a", "address"], ["r", "euc"]
+      // Non-standard: ["L", "id", "e"] (used in tests)
+      const hasTarget = targets.some(t =>
+        (t[0] === "e" && t[1] === target.id) ||
+        (t[0] === "a" && t[1] === target.address) ||
+        (t[0] === "r" && t[1] === target.euc) ||
+        (t[0] === "L" && t[1] === target.id && t[2] === "e")
+      );
+
+      if (!hasTarget) continue;
+
+      // Extract namespace declarations (standard format)
+      const labelNamespaces = targets
+        .filter(t => t[0] === "L" && t.length === 2)
+        .map(t => t[1]);
+
+      for (const tag of targets) {
+        if (tag[0] !== "l") continue;
+        const [_, value, mark] = tag as [string, string, string?];
+        const ns = mark && labelNamespaces.includes(mark) ? mark : "ugc";
+        externalLabels.push({namespace: ns, value});
+      }
+    }
+
+    // Merge all labels
+    const push = (ns: string | undefined, value: string) => {
+      // Check if the value itself contains namespace information (e.g., "org.nostr.git.type:feature")
+      let namespace = ns || "ugc";
+      let labelValue = value;
+
+      // If no explicit namespace provided AND value contains namespace markers,
+      // try to extract namespace from value
+      if (!ns) {
+        // Check for complex namespace patterns (e.g., "org.nostr.git.type:feature" or "ugc/custom:needs-review")
+        // Only split if the namespace part contains dots or multiple slashes, indicating a structured namespace
+        const colonIdx = value.indexOf(':');
+        const slashIdx = value.indexOf('/');
+
+        if (colonIdx > 0) {
+          const potentialNs = value.substring(0, colonIdx);
+          // Only treat as namespace if it has dots (e.g., "org.nostr.git.type") or multiple segments
+          if (potentialNs.includes('.') || potentialNs.includes('/')) {
+            namespace = potentialNs;
+            labelValue = value.substring(colonIdx + 1);
+          }
+          // Otherwise keep the whole value (e.g., "type:feature" stays as "type:feature" in ugc namespace)
+        } else if (slashIdx > 0) {
+          const potentialNs = value.substring(0, slashIdx);
+          // Only treat first part as namespace if it suggests a structured namespace
+          if (potentialNs.includes('.') || value.lastIndexOf('/') > slashIdx) {
+            // Multiple slashes means nested namespace
+            const lastSlash = value.lastIndexOf('/');
+            namespace = value.substring(0, lastSlash);
+            labelValue = value.substring(lastSlash + 1);
+          }
+        }
+      }
+
+      byNamespace[namespace] = byNamespace[namespace] || new Set<string>();
+      byNamespace[namespace].add(labelValue);
+      flat.add(`${namespace}/${labelValue}`);
+    };
+
+    for (const s of selfLabels) push(s.L, s.l);
+    for (const e of externalLabels) push(e.namespace, e.value);
+    for (const t of tTags) push("#t", t);
+
     return { byNamespace, flat, legacyT };
   }
 
