@@ -1056,7 +1056,8 @@ const api = {
                 return;
               }
             } catch (e) {
-              // If type detection fails, continue
+              console.warn(`Type detection failed for ${filepath}:`, e);
+              // Continue but log the issue
             }
 
             const Aoid = await A?.oid();

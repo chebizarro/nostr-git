@@ -129,7 +129,8 @@ function parsePatchContent(patchLines: string[]): Array<{
         });
       }
       const match = line.match(/diff --git a\/(.*) b\/(.*)/);
-      currentFile = match ? match[2] : null;
+      currentFile = match?.[2]?.trim() || null;
+      if (currentFile === '') currentFile = null;
       // reset flags
       currentContent = [];
       inFileDiff = false;

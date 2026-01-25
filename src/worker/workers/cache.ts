@@ -97,6 +97,13 @@ export class RepoCacheManager {
     });
   }
 
+  async close(): Promise<void> {
+    if (this.db) {
+      this.db.close();
+      this.db = null;
+    }
+  }
+
   async getRepoCache(repoId: string): Promise<RepoCache | null> {
     await this.init();
     if (!this.db) return null;

@@ -58,7 +58,13 @@ export function getGitWorker(init?: GitWorkerInit | ((event: MessageEvent | Clon
   }
 
   const api = wrap<any>(worker);
-  return { api, worker };
+  return {
+    api,
+    worker,
+    terminate: () => {
+      worker.terminate();
+    }
+  };
 }
 
 /**
