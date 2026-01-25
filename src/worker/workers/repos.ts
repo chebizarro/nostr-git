@@ -42,6 +42,51 @@ export function clearCloneTracking(
 
 type DataLevel = 'refs' | 'shallow' | 'full';
 
+/**
+ * Ensure the origin remote is properly configured with URL and fetch refspec.
+ * isomorphic-git's shallow/singleBranch clone may not create the full config,
+ * which causes "NoRefspecError: Could not find a fetch refspec for remote origin".
+ */
+async function ensureOriginRemoteConfig(git: GitProvider, dir: string, url: string): Promise<void> {
+  try {
+    // First try to add the remote (will fail if it already exists, which is fine)
+    try {
+      await git.addRemote({ dir, remote: 'origin', url });
+    } catch (err: any) {
+      // Ignore "already exists" errors
+      if (!err.message?.includes('already exists') && !err.message?.includes('Remote named')) {
+        throw err;
+      }
+    }
+
+    // Ensure the fetch refspec is set - this is the critical piece that's often missing
+    // Without this, operations that need to resolve remote refs will fail with NoRefspecError
+    try {
+      await git.setConfig({
+        dir,
+        path: 'remote.origin.fetch',
+        value: '+refs/heads/*:refs/remotes/origin/*'
+      });
+    } catch {
+      // Best effort - some providers may not support setConfig
+    }
+
+    // Also ensure the URL is set in config (belt and suspenders)
+    try {
+      await git.setConfig({
+        dir,
+        path: 'remote.origin.url',
+        value: url
+      });
+    } catch {
+      // Best effort
+    }
+  } catch (err) {
+    // Log but don't fail the clone - the remote may still work for basic operations
+    console.warn('[ensureOriginRemoteConfig] Could not fully configure origin remote:', err);
+  }
+}
+
 export async function smartInitializeRepoUtil(
   git: GitProvider,
   cacheManager: RepoCacheManager,
@@ -352,6 +397,9 @@ export async function initializeRepoUtil(
               onProgress,
               ...(authCallback && { onAuth: authCallback })
             });
+            // Ensure origin remote is properly configured with fetch refspec
+            // isomorphic-git's shallow/singleBranch clone may not create the full config
+            await ensureOriginRemoteConfig(git, dir, cloneUrl);
             return { url: cloneUrl, ref: refCandidate };
           } catch (e: any) {
             lastRefError = e;
@@ -730,6 +778,10 @@ export async function cloneRemoteRepoUtil(
     if (depth && depth > 0) cloneOptions.depth = depth;
 
     await git.clone(cloneOptions);
+
+    // Ensure origin remote is properly configured with fetch refspec
+    // isomorphic-git's clone may not create the full config in all cases
+    await ensureOriginRemoteConfig(git, dir, url);
 
     onProgress?.('Setting up local branches...', 95);
 
