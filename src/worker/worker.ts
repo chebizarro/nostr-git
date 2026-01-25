@@ -106,7 +106,7 @@ import {
 } from "../errors/index.js";
 
 import type { EventIO } from "../types/index.js";
-import { getNostrGitProvider, initializeNostrGitProvider } from "../api/git-provider.js";
+import { getNostrGitProvider, initializeNostrGitProvider, hasNostrGitProvider } from "../api/git-provider.js";
 
 import { parseRepoId } from "../utils/repo-id.js";
 
@@ -694,8 +694,14 @@ const api = {
           ? () => ({ username: "token", password: token })
           : getAuthCallback(remoteUrl);
 
-      const nostrProvider = getNostrGitProvider?.();
-      if (nostrProvider) {
+      // Only use NostrGitProvider for Nostr-based URLs (relay.ngit.dev, gitnostr.com, etc.)
+      const isNostrUrl = remoteUrl.includes('relay.ngit.dev') ||
+                         remoteUrl.includes('gitnostr.com') ||
+                         remoteUrl.startsWith('nostr://');
+
+      // Check if NostrGitProvider is available before trying to use it
+      if (isNostrUrl && hasNostrGitProvider()) {
+        const nostrProvider = getNostrGitProvider();
         const result = await nostrProvider.push({
           dir,
           fs: getProviderFs(git),
