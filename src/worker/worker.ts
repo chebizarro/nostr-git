@@ -788,35 +788,77 @@ const api = {
       const { dir } = repoKeyAndDir(opts.repoId);
       const ref = opts.branch || "main";
       const depth = opts.depth ?? 50;
-      
-      // Try the requested branch first
-      try {
-        const commits = await (git as any).log({ dir, ref, depth });
-        return { success: true, commits: toPlain(commits) };
-      } catch (branchError: any) {
-        // If branch not found, try HEAD as fallback
-        if (branchError?.code === 'NotFoundError' || branchError?.message?.includes('Could not find')) {
-          console.log(`[getCommitHistory] Branch '${ref}' not found, trying HEAD fallback`);
-          try {
-            const commits = await (git as any).log({ dir, ref: 'HEAD', depth });
-            return { success: true, commits: toPlain(commits), fallbackUsed: 'HEAD' };
-          } catch (headError: any) {
-            // HEAD also failed - try to list any available branches and use the first one
-            console.log(`[getCommitHistory] HEAD also failed, trying to find any available branch`);
-            try {
-              const branches = await (git as any).listBranches({ dir });
-              if (branches && branches.length > 0) {
-                const commits = await (git as any).log({ dir, ref: branches[0], depth });
-                return { success: true, commits: toPlain(commits), fallbackUsed: branches[0] };
-              }
-            } catch {
-              // No branches available
-            }
-            throw headError;
-          }
+
+      // Build list of refs to try: requested branch, fallbacks, remote tracking branches
+      const branchesToTry = ['main', 'master', 'develop', 'dev'];
+      const refsToTry: string[] = [ref];
+
+      // Add remote tracking branches (for shallow clones that don't have local branches)
+      refsToTry.push(`origin/${ref}`);
+      refsToTry.push(`refs/remotes/origin/${ref}`);
+
+      // Add fallback branches if different from requested
+      for (const fallback of branchesToTry) {
+        if (fallback !== ref && !refsToTry.includes(fallback)) {
+          refsToTry.push(fallback);
+          refsToTry.push(`origin/${fallback}`);
+          refsToTry.push(`refs/remotes/origin/${fallback}`);
         }
-        throw branchError;
       }
+
+      // Also try HEAD
+      refsToTry.push('HEAD');
+
+      // Try each ref in order
+      for (const tryRef of refsToTry) {
+        try {
+          const commits = await (git as any).log({ dir, ref: tryRef, depth });
+          if (tryRef !== ref) {
+            console.log(`[getCommitHistory] Used fallback ref '${tryRef}' instead of requested '${ref}'`);
+            return { success: true, commits: toPlain(commits), fallbackUsed: tryRef };
+          }
+          return { success: true, commits: toPlain(commits) };
+        } catch (error: any) {
+          // Only log when transitioning between branch groups
+          if (tryRef === ref) {
+            console.log(`[getCommitHistory] Branch '${ref}' not found, trying fallbacks...`);
+          }
+          // Continue to next ref
+        }
+      }
+
+      // All specific refs failed - try to list any available branches
+      console.log(`[getCommitHistory] All standard refs failed, trying to find any available branch`);
+      try {
+        const branches = await (git as any).listBranches({ dir });
+        if (branches && branches.length > 0) {
+          const commits = await (git as any).log({ dir, ref: branches[0], depth });
+          console.log(`[getCommitHistory] Used first available branch '${branches[0]}'`);
+          return { success: true, commits: toPlain(commits), fallbackUsed: branches[0] };
+        }
+      } catch {
+        // No local branches available
+      }
+
+      // Try remote branches as last resort
+      try {
+        const remoteBranches = await (git as any).listBranches({ dir, remote: 'origin' });
+        if (remoteBranches && remoteBranches.length > 0) {
+          const remoteRef = `origin/${remoteBranches[0]}`;
+          const commits = await (git as any).log({ dir, ref: remoteRef, depth });
+          console.log(`[getCommitHistory] Used first available remote branch '${remoteRef}'`);
+          return { success: true, commits: toPlain(commits), fallbackUsed: remoteRef };
+        }
+      } catch {
+        // No remote branches available
+      }
+
+      // Nothing worked
+      return {
+        success: false,
+        error: `No branches found in repository. Tried: ${refsToTry.slice(0, 5).join(', ')}...`,
+        code: 'NoBranchesFound'
+      };
     } catch (error: any) {
       console.error("[getCommitHistory] Error:", error);
       return { success: false, ...formatError(error, { naddr: opts.repoId, ref: opts.branch, operation: "getCommitHistory" }) };
