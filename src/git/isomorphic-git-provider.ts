@@ -56,7 +56,9 @@ export class IsomorphicGitProvider implements GitProvider {
     // Allow caller to override corsProxy (e.g., set to null for GRASP to disable proxy)
     // Check if corsProxy is explicitly provided in options (even if null/undefined)
     const corsProxy = 'corsProxy' in options ? options.corsProxy : this.corsProxy;
-    return isogit.push({...options, fs: this.fs, http: this.http, corsProxy})
+    // Allow caller to override http client (e.g., for NIP-98 auth injection)
+    const http = options.http || this.http;
+    return isogit.push({...options, fs: this.fs, http, corsProxy})
   }
   async status(options: any) {
     return isogit.status({...options, fs: this.fs})

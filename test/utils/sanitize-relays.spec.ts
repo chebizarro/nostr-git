@@ -28,13 +28,13 @@ describe('utils/sanitize-relays', () => {
       'wss://relay.example.com/ws?x=1',
       'not-a-url',
       'http://relay.example.com',
-      'wss://ngit-relay',
+      'wss://invalid-no-dot',
     ]);
 
     // Must include the authenticated endpoint with preserved userinfo
     expect(list).toContain('wss://user:pass@relay.example.com/ws?x=1');
-    // Should not include obviously invalid or disallowed hosts
-    expect(list.some((u) => u.includes('ngit-relay'))).toBe(false);
+    // Should not include obviously invalid or disallowed hosts (no dot in hostname)
+    expect(list.some((u) => u.includes('invalid-no-dot'))).toBe(false);
     // All entries should be unique
     expect(new Set(list).size).toBe(list.length);
   });

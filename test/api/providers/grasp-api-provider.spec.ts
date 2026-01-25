@@ -82,7 +82,7 @@ describe('GraspApiProvider basic behavior', () => {
     logSpy.mockRestore();
   });
 
-  it('createRepo filters relay aliases using isValidNostrRelayUrl (base allowed, ngit-relay rejected)', async () => {
+  it('createRepo filters relay aliases using isValidNostrRelayUrl (base relay allowed)', async () => {
     const baseRelay = 'wss://relay.example:7447';
     const api = new GraspApiProvider(baseRelay, ownerHex as any);
     // Seed capabilities/httpBase to bypass ensureCapabilities network
@@ -92,18 +92,14 @@ describe('GraspApiProvider basic behavior', () => {
 
     await api.createRepo({ name: 'alias-test' } as any);
 
-    // Expect it was called for base relay and for ngit-relay alias
+    // Expect it was called for base relay
     const calls = spy.mock.calls.map((c) => String(c[0]));
     expect(calls.some((u) => u.startsWith(baseRelay))).toBe(true);
-    const ngitArg = calls.find((u) => /^wss:\/\/ngit-relay(?::\d+)?$/.test(u));
-    expect(ngitArg).toBeDefined();
 
-    // Validate outcomes: base relay should be valid, ngit-relay rejected
+    // Validate outcomes: base relay should be valid
     const results = spy.mock.results;
     const baseIdx = calls.findIndex((u) => u.startsWith(baseRelay));
-    const ngitIdx = calls.findIndex((u) => /^wss:\/\/ngit-relay(?::\d+)?$/.test(u));
     expect(results[baseIdx]?.value).toBe(true);
-    expect(results[ngitIdx]?.value).toBe(false);
 
     spy.mockRestore();
   });
@@ -502,7 +498,7 @@ describe('GraspApiProvider basic behavior', () => {
     expect(call('wss://example.com')).toBe(true);
     expect(call('http://example.com')).toBe(false);
     expect(call('ftp://example.com')).toBe(false);
-    expect(call('ws://ngit-relay')).toBe(false);
+    expect(call('ws://nodot-example')).toBe(false); // hostnames without dots are rejected
     expect(call('ws://nodot')).toBe(false);
   });
 

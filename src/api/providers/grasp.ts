@@ -120,8 +120,6 @@ export class GraspApiProvider implements GitServiceApi {
       const host = u.hostname.toLowerCase();
       // Allow localhost and loopback
       if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true;
-      // Reject known dev-only alias host
-      if (host === 'ngit-relay') return false;
       // Require a dot in hostname for public hosts (rudimentary check)
       return host.includes('.');
     } catch {
@@ -345,17 +343,10 @@ export class GraspApiProvider implements GitServiceApi {
     const cloneUrl = `${webUrl}.git`;
     console.log('[GraspApiProvider] createRepo - webUrl:', webUrl);
     console.log('[GraspApiProvider] createRepo - cloneUrl:', cloneUrl);
-    // Gather relay aliases: base relay plus optional configured aliases and ngit-relay fallback
+    // Gather relay aliases: base relay plus optional configured aliases
     const aliases: string[] = [];
     // base ws(s) relay
     aliases.push(this.relayUrl);
-    // add ngit-relay:<port> alias derived from current relay
-    try {
-      const u = new URL(this.relayUrl);
-      const port = u.port ? `:${u.port}` : '';
-      const ngitAlias = `${u.protocol}//ngit-relay${port}`;
-      aliases.push(ngitAlias);
-    } catch { }
     // de-duplicate while preserving order
     const seen = new Set<string>();
     // Only include valid Nostr relay URLs in the relays tag to avoid adapter errors

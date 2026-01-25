@@ -52,6 +52,12 @@ export interface EventIO {
    * Get the current user's pubkey.
    */
   getCurrentPubkey: () => string | null;
+
+  /**
+   * Sign an event without publishing it.
+   * Used for NIP-98 HTTP Auth where we need the signed event for the Authorization header.
+   */
+  signEvent?: (event: Omit<NostrEvent, "id" | "pubkey" | "sig">) => Promise<NostrEvent>;
 }
 
 /**

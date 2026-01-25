@@ -5,7 +5,7 @@ const isValidNostrRelayUrl = (url: string): boolean => {
     if (!(u.protocol === "ws:" || u.protocol === "wss:")) return false
     const host = u.hostname.toLowerCase()
     if (host === "localhost" || host === "127.0.0.1" || host === "::1") return true
-    if (host === "ngit-relay" || host === "container") return false
+    if (host === "container") return false
     return host.includes(".")
   } catch {
     return false

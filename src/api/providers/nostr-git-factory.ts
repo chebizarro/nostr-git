@@ -10,6 +10,9 @@
 import type { EventIO } from '../../types/index.js';
 import type { NostrEvent } from 'nostr-tools';
 import { loadConfig } from '../../git/config.js';
+import { createGitProvider } from '../../git/factory.js';
+import { createNip98HttpClient } from '../../git/nip98-http-client.js';
+import httpWeb from 'isomorphic-git/http/web';
 
 import { NostrGitProvider, type NostrGitConfig } from './nostr-git-provider.js';
 import { GraspApi, type GraspApiConfig } from './grasp-api.js';
@@ -91,6 +94,16 @@ export function createNostrGitProvider(options: NostrGitFactoryOptions): NostrGi
     graspApi = new GraspApi(graspConfig);
   }
 
+  // Create NIP-98 aware HTTP client for GRASP authentication
+  const nip98Http = createNip98HttpClient(httpWeb, eventIO);
+  
+  // Create a GitProvider with NIP-98 HTTP client (skip singleton to get isolated instance)
+  const gitProvider = createGitProvider({
+    http: nip98Http,
+    skipSingleton: true,
+    defaultCorsProxy: corsProxy ?? null, // Disable CORS proxy for GRASP URLs
+  });
+
   // Create NostrGitProvider configuration
   const config: NostrGitConfig = {
     eventIO,
@@ -100,7 +113,8 @@ export function createNostrGitProvider(options: NostrGitFactoryOptions): NostrGi
     graspRelays,
     publishRepoState,
     publishRepoAnnouncements,
-    httpOverrides: corsProxy ? { corsProxy } : undefined
+    httpOverrides: corsProxy ? { corsProxy } : undefined,
+    gitProvider, // Use the NIP-98 aware GitProvider
   };
 
   return new NostrGitProvider(config);
@@ -119,13 +133,14 @@ export async function createNostrGitProviderFromEnv(options: {
 
   const gitConfig = loadConfig();
 
-  // Read configuration from environment variables
-  const defaultRelays = process.env.NOSTR_DEFAULT_RELAYS?.split(';') || DEFAULT_RELAYS.default;
-  const fallbackRelays = process.env.NOSTR_FALLBACK_RELAYS?.split(';') || DEFAULT_RELAYS.fallback;
-  const graspRelays = process.env.NOSTR_GRASP_RELAYS?.split(';') || DEFAULT_RELAYS.grasp;
-  const enableGrasp = process.env.NOSTR_ENABLE_GRASP !== 'false';
-  const publishRepoState = process.env.NOSTR_PUBLISH_REPO_STATE !== 'false';
-  const publishRepoAnnouncements = process.env.NOSTR_PUBLISH_REPO_ANNOUNCEMENTS === 'true';
+  // Read configuration from environment variables (browser-safe)
+  const env = typeof process !== 'undefined' && process.env ? process.env : {};
+  const defaultRelays = env.NOSTR_DEFAULT_RELAYS?.split(';') || DEFAULT_RELAYS.default;
+  const fallbackRelays = env.NOSTR_FALLBACK_RELAYS?.split(';') || DEFAULT_RELAYS.fallback;
+  const graspRelays = env.NOSTR_GRASP_RELAYS?.split(';') || DEFAULT_RELAYS.grasp;
+  const enableGrasp = env.NOSTR_ENABLE_GRASP !== 'false';
+  const publishRepoState = env.NOSTR_PUBLISH_REPO_STATE !== 'false';
+  const publishRepoAnnouncements = env.NOSTR_PUBLISH_REPO_ANNOUNCEMENTS === 'true';
   const corsProxy = gitConfig.defaultCorsProxy ?? undefined;
 
   return createNostrGitProvider({
