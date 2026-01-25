@@ -619,10 +619,12 @@ const api = {
           }
 
           const headRef = targetBranch ? `refs/heads/${targetBranch}` : undefined;
-          const stateRepoId = `${npub}:${repo}`;
+          // For GRASP/ngit compatibility, the state event's d tag should be just the repo name
+          // (the "identifier"), not the full npub:name format.
+          const stateRepoId = repo;
           const stateEvent = createRepoStateEvent({
             repoId: stateRepoId,
-            head: headRef,
+            head: targetBranch, // Just the branch name, createRepoStateEvent adds refs/heads/ prefix
             refs: Object.entries(refs).map(([ref, commit]) => ({
               type: ref.startsWith("refs/heads/") ? "heads" : "tags",
               name: ref,
@@ -665,131 +667,27 @@ const api = {
 
         console.log(`[GRASP] Pushing to ${pushUrl} (ref=refs/heads/${targetBranch})`);
 
-        // Use pre-signed NIP-98 auth headers if provided (keyed by URL)
-        if (authHeaders && Object.keys(authHeaders).length > 0) {
-          const authHeaderKeys = Object.keys(authHeaders);
-          console.log("[GRASP] Using pre-signed NIP-98 auth headers for URLs:", authHeaderKeys);
-          console.log("[GRASP] Auth headers object type:", typeof authHeaders);
-          console.log("[GRASP] Auth headers keys count:", authHeaderKeys.length);
-          
-          // Create a custom HTTP client that selects the correct auth header based on request URL
-          const httpWithAuth = {
-            async request(request: any) {
-              const requestUrl = request.url;
-              console.log("[GRASP] HTTP request intercepted for URL:", requestUrl);
-              
-              // Find matching auth header for this URL
-              const matchingAuth = authHeaders[requestUrl];
-              console.log("[GRASP] Looking for auth header match:", { requestUrl, hasMatch: !!matchingAuth });
-              
-              if (matchingAuth) {
-                request.headers = {
-                  ...request.headers,
-                  'Authorization': matchingAuth,
-                };
-                console.log("[GRASP] Injected NIP-98 auth header for URL:", requestUrl);
-              } else {
-                console.warn("[GRASP] No auth header found for URL:", requestUrl);
-                console.warn("[GRASP] Available auth header URLs:", authHeaderKeys);
-              }
-              return httpWeb.request(request);
-            }
-          };
-
-          try {
-            await (git as any).push({
-              dir,
-              url: pushUrl,
-              ref: `refs/heads/${targetBranch}`,
-              http: httpWithAuth,
-              corsProxy: null, // GRASP servers support CORS directly, bypass proxy
-            });
-            console.log("[GRASP] Push successful with NIP-98 auth");
-            return toPlain({ success: true, repoId, remoteUrl, branch: targetBranch });
-          } catch (pushErr) {
-            console.error("[GRASP] Push with NIP-98 auth failed:", pushErr);
-            throw pushErr;
-          }
-        }
-        
-        // Legacy: single authHeader (deprecated)
-        if (authHeader) {
-          console.log("[GRASP] Using legacy single NIP-98 auth header (deprecated)");
-          
-          const httpWithAuth = {
-            async request(request: any) {
-              request.headers = {
-                ...request.headers,
-                'Authorization': authHeader,
-              };
-              return httpWeb.request(request);
-            }
-          };
-
-          try {
-            await (git as any).push({
-              dir,
-              url: pushUrl,
-              ref: `refs/heads/${targetBranch}`,
-              http: httpWithAuth,
-              corsProxy: null,
-            });
-            console.log("[GRASP] Push successful with legacy NIP-98 auth");
-            return toPlain({ success: true, repoId, remoteUrl, branch: targetBranch });
-          } catch (pushErr) {
-            console.error("[GRASP] Push with legacy NIP-98 auth failed:", pushErr);
-            throw pushErr;
-          }
-        }
-
-        // Use NostrGitProvider for GRASP push - it handles NIP-98 HTTP Auth properly
-        if (hasNostrGitProvider()) {
-          const nostrProvider = getNostrGitProvider();
-          const result = await nostrProvider.push({
+        // GRASP uses unauthenticated git smart HTTP - authorization is handled by
+        // the Nostr repo state events (kind 30617/30618), not HTTP headers.
+        // This matches ngit's behavior which uses UnauthHttps/UnauthHttp protocols.
+        try {
+          await git.push({
             dir,
-            fs: getProviderFs(git),
-            ref: targetBranch,
-            remoteRef: targetBranch,
             url: pushUrl,
+            ref: `refs/heads/${targetBranch}`,
+            http: httpWeb,
             corsProxy: null, // GRASP servers support CORS directly, bypass proxy
           });
-          console.log("[GRASP] Push successful via NostrGitProvider");
-          return toPlain({ success: true, repoId, remoteUrl, branch: targetBranch, ...result });
-        }
-
-        // Fallback: try basic auth if NostrGitProvider not available
-        console.warn("[GRASP] NostrGitProvider not available, falling back to basic auth");
-        const authCandidates = [
-          { username: "grasp", password: token },
-          { username: token, password: "grasp" },
-          { username: token, password: token },
-        ];
-
-        let pushed = false;
-        let lastErr: any = null;
-
-        for (const creds of authCandidates) {
-          try {
-            await (git as any).push({
-              dir,
-              url: pushUrl,
-              ref: `refs/heads/${targetBranch}`,
-              onAuth: () => creds,
-              corsProxy: null, // GRASP servers support CORS directly, bypass proxy
-            });
-            console.log("[GRASP] Push successful via basic auth fallback");
-            pushed = true;
-            break;
-          } catch (e) {
-            lastErr = e;
+          console.log("[GRASP] Push successful (unauthenticated smart HTTP)");
+          return toPlain({ success: true, repoId, remoteUrl, branch: targetBranch });
+        } catch (pushErr: any) {
+          console.error("[GRASP] Push failed:", pushErr);
+          // Log more details for debugging
+          if (pushErr.data) {
+            console.error("[GRASP] Push error data:", pushErr.data);
           }
+          throw pushErr;
         }
-
-        if (!pushed) {
-          throw lastErr || new Error("Push failed for all auth mappings");
-        }
-
-        return toPlain({ success: true, repoId, remoteUrl, branch: targetBranch });
       }
 
       // Standard providers or NostrGitProvider
