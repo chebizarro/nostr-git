@@ -6,3 +6,4 @@ export * from "./sanitize-relays.js";
 export * from "./validation.js";
 export * from "./binary-utils.js";
 export * from "./normalize.js";
+export * from "./clone-url-fallback.js";

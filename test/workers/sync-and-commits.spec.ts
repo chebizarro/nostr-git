@@ -149,7 +149,8 @@ describe('syncWithRemote with Enhanced Logging', () => {
 
     const allLogs = consoleLogs.join(' ');
     expect(allLogs).toContain('Starting sync');
-    expect(allLogs).toContain('Using remote URL');
+    // Changed from 'Using remote URL' to 'URLs to try' in new implementation with URL fallback
+    expect(allLogs).toContain('URLs to try');
     expect(allLogs).toContain('Attempting to fetch requested branch');
     expect(allLogs).toContain('Successfully fetched requested branch');
     expect(allLogs).toContain('Remote HEAD');

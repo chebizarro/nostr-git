@@ -20,3 +20,4 @@ export { getGitProvider } from "./api/git-provider.js";
 export { initializeNostrGitProvider } from "./api/git-provider.js";
 export { getGitWorker, configureWorkerEventIO } from "./worker/client.js";
 export * from "./utils/sanitize-relays.js";
+export * from "./utils/clone-url-fallback.js";

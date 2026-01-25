@@ -34,9 +34,10 @@ describe('worker repo error/fallback paths', () => {
       repoDataLevels: new Map(),
       clonedRepos: new Set<string>(),
     };
-    await expect(
-      initializeRepoUtil(git, cache, { repoId: 'r7', cloneUrls: ['https://1', 'https://2'] }, deps as any, noop)
-    ).resolves.toMatchObject({ success: false, error: 'final failure' });
+    const result = await initializeRepoUtil(git, cache, { repoId: 'r7', cloneUrls: ['https://1', 'https://2'] }, deps as any, noop);
+    expect(result.success).toBe(false);
+    // New error message format includes count of URLs tried
+    expect(result.error).toContain('final failure');
   });
 
   it('ensureFullCloneUtil happy path caps depth at 100 and emits progress', async () => {

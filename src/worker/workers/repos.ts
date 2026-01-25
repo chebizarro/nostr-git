@@ -4,6 +4,13 @@ import { resolveBranchName } from './branches.js';
 import { resolveBranchToOid } from '../../git/git.js';
 import { getProviderFs, safeRmrf, ensureDir } from './fs-utils.js';
 import { getAuthCallback, setAuthConfig } from './auth.js';
+import {
+  withUrlFallback,
+  filterValidCloneUrls,
+  reorderUrlsByPreference,
+  updateUrlPreferenceCache,
+  type ReadFallbackResult,
+} from '../../utils/clone-url-fallback.js';
 
 // Import toPlain from worker (it's defined in the same directory)
 function toPlain<T>(val: T): T {
@@ -87,48 +94,69 @@ export async function smartInitializeRepoUtil(
     if (isAlreadyCloned && !forceUpdate) {
       try {
         sendProgress('Syncing with remote');
-        const cloneUrl = cloneUrls[0];
-        if (cloneUrl) {
-          try {
-            sendProgress('Fetching latest changes from remote');
-            const fetchStart = Date.now();
-            const fetchDepth = repoDataLevels.get(key) === 'full' ? undefined : 50;
+        const validUrls = filterValidCloneUrls(cloneUrls);
+        const orderedUrls = reorderUrlsByPreference(validUrls, key);
 
-            // Try singleBranch: true first (works better with non-GitHub servers like Forgejo)
-            // Only fall back to singleBranch: false if needed for multi-branch support
-            try {
-              await git.fetch({
-                dir,
-                url: cloneUrl,
-                singleBranch: true,  // More compatible with non-GitHub servers
-                depth: fetchDepth
-              });
-            } catch (singleBranchError: any) {
-              // If single branch fetch fails, try without specifying singleBranch
-              // This handles edge cases where the ref isn't set properly
-              console.warn(`[smartInitializeRepo] Single branch fetch failed, trying default:`, singleBranchError?.message);
-              await git.fetch({
-                dir,
-                url: cloneUrl,
-                depth: fetchDepth
-              });
-            }
+        if (orderedUrls.length > 0) {
+          sendProgress('Fetching latest changes from remote');
+          const fetchStart = Date.now();
+          const fetchDepth = repoDataLevels.get(key) === 'full' ? undefined : 50;
 
+          // Try each URL with fallback until one succeeds
+          const fetchResult = await withUrlFallback(
+            orderedUrls,
+            async (cloneUrl: string) => {
+              // Try singleBranch: true first (works better with non-GitHub servers like Forgejo)
+              try {
+                await git.fetch({
+                  dir,
+                  url: cloneUrl,
+                  singleBranch: true,
+                  depth: fetchDepth
+                });
+                return { url: cloneUrl };
+              } catch (singleBranchError: any) {
+                // If single branch fetch fails, try without specifying singleBranch
+                console.warn(`[smartInitializeRepo] Single branch fetch failed for ${cloneUrl}, trying default:`, singleBranchError?.message);
+                await git.fetch({
+                  dir,
+                  url: cloneUrl,
+                  depth: fetchDepth
+                });
+                return { url: cloneUrl };
+              }
+            },
+            { repoId: key }
+          );
+
+          if (fetchResult.success) {
             const secs = ((Date.now() - fetchStart) / 1000).toFixed(1);
-            sendProgress(`Fetch completed (${secs}s)`);
-          } catch (fetchError: any) {
-            // Handle CORS/network errors gracefully during fetch
-            const errorMessage = fetchError?.message || String(fetchError);
+            sendProgress(`Fetch completed (${secs}s) from ${fetchResult.usedUrl}`);
+
+            // Log fallback attempts if any
+            if (fetchResult.attempts.length > 1) {
+              const failedAttempts = fetchResult.attempts.filter(a => !a.success);
+              console.log(`[smartInitializeRepo] Fetch succeeded after ${failedAttempts.length} failed attempt(s)`);
+            }
+          } else {
+            // All URLs failed - check if it's a recoverable error
+            const lastAttempt = fetchResult.attempts[fetchResult.attempts.length - 1];
+            const errorMessage = lastAttempt?.error || 'Unknown fetch error';
+
             if (errorMessage.includes('CORS') ||
                 errorMessage.includes('NetworkError') ||
                 errorMessage.includes('Failed to fetch') ||
                 errorMessage.includes('Access-Control') ||
                 errorMessage.includes('NoRefspecError') ||
                 errorMessage.includes('refspec')) {
-              console.warn(`[smartInitializeRepo] CORS/Network/Refspec error during fetch, using local data only:`, errorMessage);
+              console.warn(`[smartInitializeRepo] All fetch attempts failed with CORS/Network/Refspec errors, using local data only`);
+              // Log all attempted URLs
+              for (const attempt of fetchResult.attempts) {
+                console.warn(`  - ${attempt.url}: ${attempt.error}`);
+              }
               // Continue with local data, don't throw error
             } else {
-              throw fetchError;
+              throw new Error(`Fetch failed for all ${fetchResult.attempts.length} URL(s): ${errorMessage}`);
             }
           }
         }
@@ -279,56 +307,72 @@ export async function initializeRepoUtil(
     const dir = `${rootDir}/${key}`;
     sendProgress('Initializing repository');
 
-    let lastError: Error | null = null;
-    let succeeded = false;
-    let corsError = false;
-    
-    for (const cloneUrl of cloneUrls) {
-      sendProgress('Fetching repository metadata', 0, 1);
-      const onProgress = (progress: { phase: string; loaded?: number; total?: number }) =>
-        sendProgress(progress.phase, progress.loaded, progress.total);
-      const authCallback = getAuthCallback(cloneUrl);
-      const refCandidates = ['HEAD', 'main', 'master', 'develop', 'dev'];
-      
-      for (const refCandidate of refCandidates) {
-        try {
-          // Clone with noCheckout: false to ensure refs are created properly
-          // Use singleBranch: true for shallow clones - non-GitHub servers (Forgejo, Gitea)
-          // don't properly handle singleBranch: false with shallow depth during pack negotiation
-          await git.clone({
-            dir,
-            url: cloneUrl,
-            ref: refCandidate,
-            singleBranch: true,   // Critical: use single branch for shallow clone compatibility
-            depth: 1,
-            noCheckout: false,    // checkout to create HEAD and local branch ref
-            noTags: true,
-            onProgress,
-            ...(authCallback && { onAuth: authCallback })
-          });
-          succeeded = true;
-          break;
-        } catch (e: any) {
-          lastError = e;
-          const errorMessage = e?.message || String(e);
-          
-          // Check for CORS/network errors specifically
-          if (errorMessage.includes('CORS') || 
-              errorMessage.includes('NetworkError') || 
-              errorMessage.includes('Failed to fetch') ||
-              errorMessage.includes('Access-Control') ||
-              errorMessage.includes('Cross-Origin')) {
-            corsError = true;
-            console.warn(`[initializeRepo] CORS/Network error for ${cloneUrl}:`, errorMessage);
-          }
-          
-          continue;
-        }
-      }
-      if (succeeded) break;
+    // Filter and order URLs by preference (using cached successful URL if available)
+    const validUrls = filterValidCloneUrls(cloneUrls);
+    const orderedUrls = reorderUrlsByPreference(validUrls, key);
+
+    if (orderedUrls.length === 0) {
+      return toPlain({
+        success: false,
+        repoId,
+        error: 'No valid clone URLs provided',
+        fromCache: false,
+        serializable: true
+      });
     }
-    
-    if (!succeeded) {
+
+    // Track which URL succeeded for caching
+    let successfulUrl: string | undefined;
+    const failedUrls: string[] = [];
+
+    // Try each URL with fallback
+    const cloneResult = await withUrlFallback(
+      orderedUrls,
+      async (cloneUrl: string) => {
+        sendProgress(`Fetching repository metadata from ${new URL(cloneUrl).hostname}`, 0, 1);
+        const onProgress = (progress: { phase: string; loaded?: number; total?: number }) =>
+          sendProgress(progress.phase, progress.loaded, progress.total);
+        const authCallback = getAuthCallback(cloneUrl);
+        const refCandidates = ['HEAD', 'main', 'master', 'develop', 'dev'];
+
+        let lastRefError: Error | null = null;
+        for (const refCandidate of refCandidates) {
+          try {
+            // Clone with noCheckout: false to ensure refs are created properly
+            // Use singleBranch: true for shallow clones - non-GitHub servers (Forgejo, Gitea)
+            // don't properly handle singleBranch: false with shallow depth during pack negotiation
+            await git.clone({
+              dir,
+              url: cloneUrl,
+              ref: refCandidate,
+              singleBranch: true,   // Critical: use single branch for shallow clone compatibility
+              depth: 1,
+              noCheckout: false,    // checkout to create HEAD and local branch ref
+              noTags: true,
+              onProgress,
+              ...(authCallback && { onAuth: authCallback })
+            });
+            return { url: cloneUrl, ref: refCandidate };
+          } catch (e: any) {
+            lastRefError = e;
+            continue;
+          }
+        }
+        throw lastRefError || new Error(`Clone failed for ${cloneUrl}`);
+      },
+      { repoId: key }
+    );
+
+    if (!cloneResult.success) {
+      // Check if the last error was CORS-related
+      const lastAttempt = cloneResult.attempts[cloneResult.attempts.length - 1];
+      const errorMessage = lastAttempt?.error || 'Unknown error';
+      const corsError = errorMessage.includes('CORS') ||
+                       errorMessage.includes('NetworkError') ||
+                       errorMessage.includes('Failed to fetch') ||
+                       errorMessage.includes('Access-Control') ||
+                       errorMessage.includes('Cross-Origin');
+
       if (corsError) {
         // For CORS errors, return a special response instead of throwing
         return toPlain({
@@ -337,10 +381,24 @@ export async function initializeRepoUtil(
           error: 'Repository initialization failed due to CORS/network restrictions. The remote repository may be accessible but the browser cannot fetch it due to security policies.',
           corsError: true,
           fromCache: false,
+          attemptedUrls: cloneResult.attempts.map(a => a.url),
           serializable: true
         });
       }
-      throw lastError || new Error('All clone URLs failed');
+
+      // Log all failed attempts
+      console.error(`[initializeRepo] All ${cloneResult.attempts.length} clone URL(s) failed:`);
+      for (const attempt of cloneResult.attempts) {
+        console.error(`  - ${attempt.url}: ${attempt.error}`);
+      }
+
+      throw new Error(`All ${cloneResult.attempts.length} clone URLs failed. Last error: ${errorMessage}`);
+    }
+
+    successfulUrl = cloneResult.usedUrl;
+    console.log(`[initializeRepo] Clone succeeded using ${successfulUrl}`);
+    if (cloneResult.attempts.length > 1) {
+      console.log(`[initializeRepo] Fallback used: ${cloneResult.attempts.filter(a => !a.success).length} URL(s) failed before success`);
     }
 
     // After shallow clone, we need to create local branch refs from remote refs

@@ -1,6 +1,11 @@
 import type { GitProvider } from '../../git/provider.js';
 import type { RepoCache, RepoCacheManager } from './cache.js';
 import { resolveBranchToOid } from '../../git/git.js';
+import {
+  withUrlFallback,
+  filterValidCloneUrls,
+  reorderUrlsByPreference,
+} from '../../utils/clone-url-fallback.js';
 
 export async function needsUpdateUtil(
   git: GitProvider,
@@ -10,44 +15,66 @@ export async function needsUpdateUtil(
   now: number = Date.now(),
   onAuth?: (url: string, auth: { username?: string; password?: string }) => { username: string; password: string } | Promise<{ username: string; password: string }> | void
 ): Promise<boolean> {
+  // Filter and order URLs by preference
+  const validUrls = filterValidCloneUrls(cloneUrls);
+  const orderedUrls = reorderUrlsByPreference(validUrls, repoId);
+
+  if (orderedUrls.length === 0) {
+    return cache ? now - cache.lastUpdated > 60 * 60 * 1000 : false;
+  }
+
   // Debug logging intentionally omitted in util to keep test output clean
   if (!cache) {
-    try {
-      const cloneUrl = cloneUrls[0];
-      if (!cloneUrl) return false;
-      const refs = await git.listServerRefs({
-        url: cloneUrl,
-        prefix: 'refs/heads/',
-        symrefs: true,
-        onAuth
-      });
-      // If there are no branch heads yet, treat as empty remote and allow initial push
-      const heads = (refs || []).filter((r: any) => r?.ref?.startsWith('refs/heads/'));
-      if (!heads || heads.length === 0) return false;
-      return true; // has heads -> require sync
-    } catch {
-      // Probe may fail in browsers due to CORS (e.g., GitHub smart HTTP endpoints).
-      // For initial push (no cache), be permissive and allow the push attempt.
-      // If the remote truly has commits, the push will fail and we can sync then.
-      return false;
+    // Try each URL with fallback until one succeeds
+    const result = await withUrlFallback(
+      orderedUrls,
+      async (cloneUrl: string) => {
+        const refs = await git.listServerRefs({
+          url: cloneUrl,
+          prefix: 'refs/heads/',
+          symrefs: true,
+          onAuth
+        });
+        // If there are no branch heads yet, treat as empty remote and allow initial push
+        const heads = (refs || []).filter((r: any) => r?.ref?.startsWith('refs/heads/'));
+        return { hasHeads: heads && heads.length > 0 };
+      },
+      { repoId }
+    );
+
+    if (result.success && result.result) {
+      return result.result.hasHeads;
     }
+
+    // All URLs failed (e.g., CORS) - be permissive for initial push
+    return false;
   }
 
   const maxCacheAge = 60 * 60 * 1000; // 1 hour
   if (now - cache.lastUpdated > maxCacheAge) return true;
 
-  try {
-    const cloneUrl = cloneUrls[0];
-    if (!cloneUrl) return true;
-    const refs = await git.listServerRefs({ url: cloneUrl, prefix: 'refs/heads/', symrefs: true, onAuth });
-    const mainBranch = refs.find(
-      (r: any) => r.ref === 'refs/heads/main' || r.ref === 'refs/heads/master'
-    );
-    if (!mainBranch) return refs && refs.length === 0 ? false : true;
-    return mainBranch.oid !== cache.headCommit;
-  } catch {
-    return now - cache.lastUpdated > maxCacheAge;
+  // Try each URL with fallback to check if update is needed
+  const result = await withUrlFallback(
+    orderedUrls,
+    async (cloneUrl: string) => {
+      const refs = await git.listServerRefs({ url: cloneUrl, prefix: 'refs/heads/', symrefs: true, onAuth });
+      const mainBranch = refs.find(
+        (r: any) => r.ref === 'refs/heads/main' || r.ref === 'refs/heads/master'
+      );
+      if (!mainBranch) {
+        return { needsUpdate: refs && refs.length > 0 };
+      }
+      return { needsUpdate: mainBranch.oid !== cache.headCommit };
+    },
+    { repoId }
+  );
+
+  if (result.success && result.result) {
+    return result.result.needsUpdate;
   }
+
+  // All URLs failed - fall back to cache age check
+  return now - cache.lastUpdated > maxCacheAge;
 }
 
 export async function syncWithRemoteUtil(
@@ -79,43 +106,73 @@ export async function syncWithRemoteUtil(
       throw new Error(error);
     }
 
-    // 2. Get remote URL first
+    // 2. Get remote URLs - prefer configured origin, then fall back to cloneUrls
     const remotes = await git.listRemotes({ dir });
     const originRemote = remotes.find((r: any) => r.remote === 'origin');
-    const remoteUrl = originRemote?.url || cloneUrls[0];
-    
-    if (!remoteUrl) {
+
+    // Build list of URLs to try: origin URL first (if available), then cloneUrls
+    const urlsToTry: string[] = [];
+    if (originRemote?.url) {
+      urlsToTry.push(originRemote.url);
+    }
+    // Add cloneUrls that aren't already in the list
+    const validCloneUrls = filterValidCloneUrls(cloneUrls);
+    for (const url of validCloneUrls) {
+      if (!urlsToTry.includes(url)) {
+        urlsToTry.push(url);
+      }
+    }
+
+    // Reorder by preference (cached successful URL first)
+    const orderedUrls = reorderUrlsByPreference(urlsToTry, key);
+
+    if (orderedUrls.length === 0) {
       throw new Error('No remote URL available for sync');
     }
-    console.log(`[syncWithRemote] Using remote URL: ${remoteUrl}`);
+    console.log(`[syncWithRemote] URLs to try: ${orderedUrls.join(', ')}`);
 
-    // 3. Try to fetch the requested branch from remote first
+    // 3. Try to fetch the requested branch from remote with URL fallback
     let targetBranch = branch;
     let fetchSuccess = false;
-    
+    let usedUrl: string | undefined;
+
     if (targetBranch) {
       console.log(`[syncWithRemote] Attempting to fetch requested branch: ${targetBranch}`);
-      try {
-        await git.fetch({
-          dir,
-          url: remoteUrl,
-          ref: targetBranch,
-          singleBranch: true,
-          depth: 1,
-          prune: true
-        });
-        console.log(`[syncWithRemote] Successfully fetched requested branch: ${targetBranch}`);
+
+      const fetchResult = await withUrlFallback(
+        orderedUrls,
+        async (remoteUrl: string) => {
+          await git.fetch({
+            dir,
+            url: remoteUrl,
+            ref: targetBranch as string,
+            singleBranch: true,
+            depth: 1,
+            prune: true
+          });
+          return { url: remoteUrl };
+        },
+        { repoId: key }
+      );
+
+      if (fetchResult.success) {
+        console.log(`[syncWithRemote] Successfully fetched requested branch from ${fetchResult.usedUrl}`);
         fetchSuccess = true;
-      } catch (fetchError: any) {
-        const errorMessage = fetchError?.message || String(fetchError);
-        
-        // Handle CORS and network errors gracefully
-        if (errorMessage.includes('CORS') || 
-            errorMessage.includes('NetworkError') || 
-            errorMessage.includes('Failed to fetch') ||
-            errorMessage.includes('Access-Control')) {
-          console.warn(`[syncWithRemote] CORS/Network error during fetch (this is expected for some remotes):`, errorMessage);
-          // For CORS errors, we'll continue with what we have locally
+        usedUrl = fetchResult.usedUrl;
+
+        if (fetchResult.attempts.length > 1) {
+          console.log(`[syncWithRemote] Fetch succeeded after ${fetchResult.attempts.filter(a => !a.success).length} failed attempt(s)`);
+        }
+      } else {
+        // Check if all errors were CORS/network related
+        const allCorsErrors = fetchResult.attempts.every(a => {
+          const msg = a.error || '';
+          return msg.includes('CORS') || msg.includes('NetworkError') ||
+                 msg.includes('Failed to fetch') || msg.includes('Access-Control');
+        });
+
+        if (allCorsErrors) {
+          console.warn(`[syncWithRemote] All ${fetchResult.attempts.length} URLs failed with CORS/Network errors, using local data only`);
           return toPlain({
             success: true,
             repoId,
@@ -125,39 +182,52 @@ export async function syncWithRemoteUtil(
             needsUpdate: false,
             synced: false,
             duration: Date.now() - startTime,
-            warning: `Could not fetch from remote due to CORS/network restrictions. Using local data only.`,
+            warning: `Could not fetch from any remote (${fetchResult.attempts.length} tried) due to CORS/network restrictions. Using local data only.`,
             serializable: true
           });
         }
-        
+
         // If fetch failed for other reasons (branch not found on remote), fall back to robust resolution
-        console.warn(`[syncWithRemote] Failed to fetch requested branch '${targetBranch}':`, errorMessage);
+        console.warn(`[syncWithRemote] Failed to fetch requested branch '${targetBranch}' from all ${fetchResult.attempts.length} URLs`);
       }
     }
-    
+
     // 4. If requested branch fetch failed or no branch specified, use robust branch resolution
     if (!fetchSuccess) {
       targetBranch = await resolveBranchName(dir, branch);
       console.log(`[syncWithRemote] Resolved fallback branch: ${targetBranch}`);
-      
-      console.log(`[syncWithRemote] Fetching fallback branch from remote...`);
-      try {
-        await git.fetch({
-          dir,
-          url: remoteUrl,
-          ref: targetBranch,
-          singleBranch: true,
-          depth: 1,
-          prune: true
+
+      console.log(`[syncWithRemote] Fetching fallback branch from remote with URL fallback...`);
+
+      const fetchResult = await withUrlFallback(
+        orderedUrls,
+        async (remoteUrl: string) => {
+          await git.fetch({
+            dir,
+            url: remoteUrl,
+            ref: targetBranch as string,
+            singleBranch: true,
+            depth: 1,
+            prune: true
+          });
+          return { url: remoteUrl };
+        },
+        { repoId: key }
+      );
+
+      if (fetchResult.success) {
+        console.log(`[syncWithRemote] Fetch completed for fallback branch from ${fetchResult.usedUrl}`);
+        usedUrl = fetchResult.usedUrl;
+      } else {
+        // Check if all errors were CORS/network related
+        const allCorsErrors = fetchResult.attempts.every(a => {
+          const msg = a.error || '';
+          return msg.includes('CORS') || msg.includes('NetworkError') ||
+                 msg.includes('Failed to fetch') || msg.includes('Access-Control');
         });
-        console.log(`[syncWithRemote] Fetch completed for fallback branch`);
-      } catch (fetchError: any) {
-        const errorMessage = fetchError?.message || String(fetchError);
-        if (errorMessage.includes('CORS') || 
-            errorMessage.includes('NetworkError') || 
-            errorMessage.includes('Failed to fetch') ||
-            errorMessage.includes('Access-Control')) {
-          console.warn(`[syncWithRemote] CORS/Network error during fetch (this is expected for some remotes):`, errorMessage);
+
+        if (allCorsErrors) {
+          console.warn(`[syncWithRemote] All ${fetchResult.attempts.length} URLs failed with CORS/Network errors for fallback branch`);
           return toPlain({
             success: true,
             repoId,
@@ -167,11 +237,14 @@ export async function syncWithRemoteUtil(
             needsUpdate: false,
             synced: false,
             duration: Date.now() - startTime,
-            warning: `Could not fetch from remote due to CORS/network restrictions. Using local data only.`,
+            warning: `Could not fetch from any remote (${fetchResult.attempts.length} tried) due to CORS/network restrictions. Using local data only.`,
             serializable: true
           });
         }
-        throw fetchError;
+
+        // Throw the last error
+        const lastAttempt = fetchResult.attempts[fetchResult.attempts.length - 1];
+        throw new Error(lastAttempt?.error || 'All fetch attempts failed');
       }
     }
 
