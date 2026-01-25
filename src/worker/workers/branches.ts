@@ -4,25 +4,47 @@ import type { GitProvider } from '../../git/provider.js';
 export async function resolveBranchName(
   git: GitProvider,
   dir: string,
-  requestedBranch?: string
+  requestedBranch?: string,
+  options?: { strict?: boolean }
 ): Promise<string> {
-  // If a specific branch was requested, try it first and return it directly
-  // This is important for user-selected branches that may not exist locally yet
+  const branchesToTry = ['main', 'master', 'develop', 'dev'];
+
+  // If a specific branch was requested, try it first
   if (requestedBranch) {
     try {
       await git.resolveRef({ dir, ref: requestedBranch });
       console.log(`[resolveBranchName] Successfully resolved requested branch: ${requestedBranch}`);
       return requestedBranch;
     } catch (error) {
-      // If the requested branch doesn't exist locally, still return it
-      // The calling code will handle fetching/syncing it
-      console.log(`[resolveBranchName] Requested branch "${requestedBranch}" not found locally, but returning it anyway for sync/fetch`);
+      // Requested branch doesn't exist locally
+      // In strict mode (user explicitly selected this branch), return it anyway for fetch
+      if (options?.strict) {
+        console.log(`[resolveBranchName] Requested branch "${requestedBranch}" not found locally (strict mode), returning for fetch`);
+        return requestedBranch;
+      }
+
+      // Non-strict mode: the requested branch might be stale metadata (e.g., NIP-34 says 'master' but repo uses 'main')
+      // Try common fallback branches first before giving up
+      console.log(`[resolveBranchName] Requested branch "${requestedBranch}" not found locally, trying fallbacks...`);
+
+      for (const fallbackBranch of branchesToTry) {
+        if (fallbackBranch === requestedBranch) continue; // Already tried this one
+        try {
+          await git.resolveRef({ dir, ref: fallbackBranch });
+          console.log(`[resolveBranchName] Using fallback branch '${fallbackBranch}' instead of requested '${requestedBranch}'`);
+          return fallbackBranch;
+        } catch {
+          // Try next fallback
+        }
+      }
+
+      // No fallbacks worked, return the requested branch for the caller to attempt fetch
+      console.log(`[resolveBranchName] No fallback branches found, returning requested branch "${requestedBranch}" for fetch attempt`);
       return requestedBranch;
     }
   }
-  
-  // Only use fallback logic when no specific branch was requested
-  const branchesToTry = ['main', 'master', 'develop', 'dev'];
+
+  // No specific branch requested - use fallback logic
   
   // Try the fallback branches
   for (const branchName of branchesToTry) {
