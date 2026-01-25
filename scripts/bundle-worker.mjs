@@ -6,10 +6,13 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 
+// Check for watch mode flag
+const watchMode = process.argv.includes('--watch') || process.argv.includes('-w');
+
 // Read the crypto polyfill banner
 const banner = fs.readFileSync(path.join(rootDir, 'src/worker/crypto-polyfill-banner.js'), 'utf-8');
 
-await esbuild.build({
+const buildOptions = {
   entryPoints: [path.join(rootDir, 'dist/worker/worker.js')],
   bundle: true,
   format: 'esm',
@@ -31,11 +34,11 @@ await esbuild.build({
         // Check if this is the git factory (importer is in git directory or path contains git/)
         const isGitFactory = args.importer.includes('/git/') || args.path.includes('git/factory.js');
         const isNotBrowser = !args.path.includes('factory-browser');
-        const isNotOtherFactory = !args.path.includes('provider-factory') && 
-                                   !args.path.includes('nostr-git-factory') && 
+        const isNotOtherFactory = !args.path.includes('provider-factory') &&
+                                   !args.path.includes('nostr-git-factory') &&
                                    !args.path.includes('vendor-provider-factory') &&
                                    !args.path.includes('errors/factory');
-        
+
         if (isGitFactory && isNotBrowser && isNotOtherFactory) {
           // Check if this resolves to the git/factory.js file
           const resolved = path.resolve(path.dirname(args.importer), args.path);
@@ -46,7 +49,7 @@ await esbuild.build({
         }
         return null;
       });
-      
+
       // Mark Node.js built-ins as external (they won't be used in browser)
       const nodeBuiltins = ['fs', 'path', 'http', 'https', 'url', 'querystring', 'crypto', 'stream', 'zlib', 'net', 'tls', 'child_process', 'os'];
       for (const mod of nodeBuiltins) {
@@ -62,6 +65,15 @@ await esbuild.build({
       }));
     },
   }],
-});
+};
 
-console.log('Worker bundle created successfully');
+if (watchMode) {
+  // Use esbuild context for watch mode
+  const ctx = await esbuild.context(buildOptions);
+  await ctx.watch();
+  console.log('Worker bundler watching for changes...');
+} else {
+  // Single build
+  await esbuild.build(buildOptions);
+  console.log('Worker bundle created successfully');
+}
