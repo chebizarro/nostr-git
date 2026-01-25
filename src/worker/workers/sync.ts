@@ -7,7 +7,8 @@ export async function needsUpdateUtil(
   repoId: string,
   cloneUrls: string[],
   cache: RepoCache | null,
-  now: number = Date.now()
+  now: number = Date.now(),
+  onAuth?: (url: string, auth: { username?: string; password?: string }) => { username: string; password: string } | Promise<{ username: string; password: string }> | void
 ): Promise<boolean> {
   // Debug logging intentionally omitted in util to keep test output clean
   if (!cache) {
@@ -17,7 +18,8 @@ export async function needsUpdateUtil(
       const refs = await git.listServerRefs({
         url: cloneUrl,
         prefix: 'refs/heads/',
-        symrefs: true
+        symrefs: true,
+        onAuth
       });
       // If there are no branch heads yet, treat as empty remote and allow initial push
       const heads = (refs || []).filter((r: any) => r?.ref?.startsWith('refs/heads/'));
@@ -37,7 +39,7 @@ export async function needsUpdateUtil(
   try {
     const cloneUrl = cloneUrls[0];
     if (!cloneUrl) return true;
-    const refs = await git.listServerRefs({ url: cloneUrl, prefix: 'refs/heads/', symrefs: true });
+    const refs = await git.listServerRefs({ url: cloneUrl, prefix: 'refs/heads/', symrefs: true, onAuth });
     const mainBranch = refs.find(
       (r: any) => r.ref === 'refs/heads/main' || r.ref === 'refs/heads/master'
     );

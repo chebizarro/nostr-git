@@ -103,6 +103,7 @@ export class RepoCacheManager {
 
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['repos'], 'readonly');
+      transaction.onabort = () => reject(transaction.error || new Error('Transaction aborted'));
       const store = transaction.objectStore('repos');
       const request = store.get(repoId);
 
@@ -117,6 +118,7 @@ export class RepoCacheManager {
 
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['repos'], 'readwrite');
+      transaction.onabort = () => reject(transaction.error || new Error('Transaction aborted'));
       const store = transaction.objectStore('repos');
       const request = store.put(cache);
 
@@ -137,6 +139,7 @@ export class RepoCacheManager {
 
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['mergeAnalysis'], 'readonly');
+      transaction.onabort = () => reject(transaction.error || new Error('Transaction aborted'));
       const store = transaction.objectStore('mergeAnalysis');
       const request = store.get(id);
 
@@ -161,6 +164,7 @@ export class RepoCacheManager {
 
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['mergeAnalysis'], 'readwrite');
+      transaction.onabort = () => reject(transaction.error || new Error('Transaction aborted'));
       const store = transaction.objectStore('mergeAnalysis');
       const request = store.put({
         id,
@@ -184,6 +188,7 @@ export class RepoCacheManager {
 
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['mergeAnalysis'], 'readwrite');
+      transaction.onabort = () => reject(transaction.error || new Error('Transaction aborted'));
       const store = transaction.objectStore('mergeAnalysis');
       const request = store.delete(id);
 
@@ -198,6 +203,7 @@ export class RepoCacheManager {
 
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['repos'], 'readwrite');
+      transaction.onabort = () => reject(transaction.error || new Error('Transaction aborted'));
       const store = transaction.objectStore('repos');
       const request = store.delete(repoId);
 
@@ -212,6 +218,7 @@ export class RepoCacheManager {
 
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['commits'], 'readonly');
+      transaction.onabort = () => reject(transaction.error || new Error('Transaction aborted'));
       const store = transaction.objectStore('commits');
       const key = `${repoId}:${branch}`;
       const request = store.get(key);
@@ -227,6 +234,7 @@ export class RepoCacheManager {
 
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['commits'], 'readwrite');
+      transaction.onabort = () => reject(transaction.error || new Error('Transaction aborted'));
       const store = transaction.objectStore('commits');
       const request = store.put(cache);
 
@@ -241,6 +249,7 @@ export class RepoCacheManager {
 
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['commits'], 'readwrite');
+      transaction.onabort = () => reject(transaction.error || new Error('Transaction aborted'));
       const store = transaction.objectStore('commits');
       const key = `${repoId}:${branch}`;
       const request = store.delete(key);
@@ -258,14 +267,26 @@ export class RepoCacheManager {
 
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['repos', 'commits', 'mergeAnalysis'], 'readwrite');
-      
+
+      // Prevent multiple rejections from concurrent cursor errors
+      let hasRejected = false;
+      const handleError = (error: any) => {
+        if (!hasRejected) {
+          hasRejected = true;
+          reject(error);
+        }
+      };
+
+      transaction.onabort = () => handleError(transaction.error || new Error('Transaction aborted'));
+      transaction.onerror = () => handleError(transaction.error);
+
       // Clear old repos
       const repoStore = transaction.objectStore('repos');
       const repoIndex = repoStore.index('lastUpdated');
       const repoRange = IDBKeyRange.upperBound(cutoffTime);
       const repoRequest = repoIndex.openCursor(repoRange);
 
-      repoRequest.onerror = () => reject(repoRequest.error);
+      repoRequest.onerror = () => handleError(repoRequest.error);
       repoRequest.onsuccess = (event) => {
         const cursor = (event.target as IDBRequest).result as IDBCursorWithValue | null;
         if (cursor) {
@@ -280,7 +301,7 @@ export class RepoCacheManager {
       const commitRange = IDBKeyRange.upperBound(cutoffTime);
       const commitRequest = commitIndex.openCursor(commitRange);
 
-      commitRequest.onerror = () => reject(commitRequest.error);
+      commitRequest.onerror = () => handleError(commitRequest.error);
       commitRequest.onsuccess = (event) => {
         const cursor = (event.target as IDBRequest).result as IDBCursorWithValue | null;
         if (cursor) {
@@ -295,7 +316,7 @@ export class RepoCacheManager {
       const mergeRange = IDBKeyRange.upperBound(cutoffTime);
       const mergeRequest = mergeIndex.openCursor(mergeRange);
 
-      mergeRequest.onerror = () => reject(mergeRequest.error);
+      mergeRequest.onerror = () => handleError(mergeRequest.error);
       mergeRequest.onsuccess = (event) => {
         const cursor = (event.target as IDBRequest).result as IDBCursorWithValue | null;
         if (cursor) {
@@ -305,7 +326,6 @@ export class RepoCacheManager {
       };
 
       transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error);
     });
   }
 }
