@@ -441,6 +441,14 @@ export function createTestGitProvider(opts: TestGitProviderOptions): GitProvider
 
     async setConfig(args: any) {
       return await (git as any).setConfig({ fs: fs as any, ...args });
+    },
+
+    async writeRef(args: any) {
+      return await (git as any).writeRef({ fs: fs as any, ...args });
+    },
+
+    async addRemote(args: any) {
+      return await (git as any).addRemote({ fs: fs as any, ...args });
     }
   };
 

@@ -376,49 +376,115 @@ export async function ensureRepoFromEvent(
         console.warn('Failed to detect default branch after clone:', error);
       }
 
-      // CRITICAL: isomorphic-git's clone sometimes doesn't fetch objects properly
-      // Check if we have branches, if not, try fetching from alternative URLs
+      // CRITICAL: isomorphic-git's clone from ngit relays (relay.ngit.dev, gitnostr.com)
+      // sometimes doesn't create local branch refs even though commits were fetched.
+      // This is because shallow clones with singleBranch may not create refs properly.
+      // We need to explicitly create local branches from whatever refs we can find.
       try {
         const branches = await git.listBranches({ dir });
         if (branches.length === 0) {
-          console.log('[ensureRepoFromEvent] No local branches after clone, trying alternative URLs');
-          
-          const branchesToTry = [actualDefault, 'main', 'master'].filter(Boolean);
-          let fetchedRef: string | undefined;
-          
-          // Try each clone URL until one works
-          for (const url of cloneUrls) {
-            if (fetchedRef) break;
-            
-            for (const branch of branchesToTry) {
-              try {
-                console.log(`[ensureRepoFromEvent] Fetching ${branch} from ${url}`);
-                const fetchResult = await git.fetch({
-                  dir,
-                  url,
-                  ref: branch,
-                  depth,
-                  singleBranch: true,
-                });
-                
-                if (fetchResult?.fetchHead) {
-                  console.log(`[ensureRepoFromEvent] Fetch succeeded from ${url}, fetchHead: ${fetchResult.fetchHead}`);
-                  fetchedRef = fetchResult.fetchHead;
-                  
-                  // Create local branch from fetchHead
-                  await git.writeRef({ dir, ref: `refs/heads/${branch}`, value: fetchResult.fetchHead, force: true });
-                  await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${branch}`, symbolic: true, force: true });
-                  console.log(`[ensureRepoFromEvent] Created branch '${branch}' from fetchHead`);
-                  break;
+          console.log('[ensureRepoFromEvent] No local branches after clone, creating from refs');
+
+          let createdBranch = false;
+          const branchName = actualDefault || 'main';
+
+          // Strategy 1: Try to find remote tracking refs and create local branches from them
+          try {
+            const remoteBranches = await git.listBranches({ dir, remote: 'origin' });
+            if (remoteBranches.length > 0) {
+              const remoteBranch = remoteBranches[0];
+              const remoteRef = `refs/remotes/origin/${remoteBranch}`;
+              const oid = await git.resolveRef({ dir, ref: remoteRef });
+              await git.writeRef({ dir, ref: `refs/heads/${remoteBranch}`, value: oid, force: true });
+              await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${remoteBranch}`, symbolic: true, force: true });
+              console.log(`[ensureRepoFromEvent] Created branch '${remoteBranch}' from remote tracking ref, oid: ${oid.substring(0, 8)}`);
+              createdBranch = true;
+            }
+          } catch (remoteRefErr: any) {
+            console.log(`[ensureRepoFromEvent] No remote tracking refs found: ${remoteRefErr.message}`);
+          }
+
+          // Strategy 2: Try to read HEAD directly (might be a commit OID after shallow clone)
+          if (!createdBranch) {
+            try {
+              const headOid = await git.resolveRef({ dir, ref: 'HEAD', depth: 1 });
+              if (headOid && headOid.length === 40) {
+                await git.writeRef({ dir, ref: `refs/heads/${branchName}`, value: headOid, force: true });
+                await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${branchName}`, symbolic: true, force: true });
+                console.log(`[ensureRepoFromEvent] Created branch '${branchName}' from HEAD OID: ${headOid.substring(0, 8)}`);
+                createdBranch = true;
+              }
+            } catch (headErr: any) {
+              console.log(`[ensureRepoFromEvent] HEAD resolution failed: ${headErr.message}`);
+            }
+          }
+
+          // Strategy 3: Try FETCH_HEAD (isomorphic-git creates this during fetch/clone)
+          if (!createdBranch) {
+            try {
+              const fetchHead = await git.resolveRef({ dir, ref: 'FETCH_HEAD' });
+              if (fetchHead) {
+                await git.writeRef({ dir, ref: `refs/heads/${branchName}`, value: fetchHead, force: true });
+                await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${branchName}`, symbolic: true, force: true });
+                console.log(`[ensureRepoFromEvent] Created branch '${branchName}' from FETCH_HEAD: ${fetchHead.substring(0, 8)}`);
+                createdBranch = true;
+              }
+            } catch (fetchHeadErr: any) {
+              console.log(`[ensureRepoFromEvent] FETCH_HEAD resolution failed: ${fetchHeadErr.message}`);
+            }
+          }
+
+          // Strategy 4: Try git.log to find commits in the object store
+          if (!createdBranch) {
+            try {
+              const commits = await git.log({ dir, depth: 1 });
+              if (commits && commits.length > 0 && commits[0].oid) {
+                await git.writeRef({ dir, ref: `refs/heads/${branchName}`, value: commits[0].oid, force: true });
+                await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${branchName}`, symbolic: true, force: true });
+                console.log(`[ensureRepoFromEvent] Created branch '${branchName}' from git.log: ${commits[0].oid.substring(0, 8)}`);
+                createdBranch = true;
+              }
+            } catch (logErr: any) {
+              console.log(`[ensureRepoFromEvent] git.log failed: ${logErr.message}`);
+            }
+          }
+
+          // Strategy 5: Last resort - try fetching from alternative URLs
+          if (!createdBranch) {
+            console.log('[ensureRepoFromEvent] Trying alternative URLs as last resort');
+            const branchesToTry = [actualDefault, 'main', 'master'].filter(Boolean);
+
+            for (const url of cloneUrls) {
+              if (createdBranch) break;
+
+              for (const branch of branchesToTry) {
+                try {
+                  console.log(`[ensureRepoFromEvent] Fetching ${branch} from ${url}`);
+                  const fetchResult = await git.fetch({
+                    dir,
+                    url,
+                    ref: branch,
+                    depth,
+                    singleBranch: true,
+                  });
+
+                  if (fetchResult?.fetchHead) {
+                    console.log(`[ensureRepoFromEvent] Fetch succeeded from ${url}, fetchHead: ${fetchResult.fetchHead}`);
+                    await git.writeRef({ dir, ref: `refs/heads/${branch}`, value: fetchResult.fetchHead, force: true });
+                    await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${branch}`, symbolic: true, force: true });
+                    console.log(`[ensureRepoFromEvent] Created branch '${branch}' from fetchHead`);
+                    createdBranch = true;
+                    break;
+                  }
+                } catch (fetchErr: any) {
+                  console.log(`[ensureRepoFromEvent] Fetch failed for ${branch} from ${url}: ${fetchErr.message}`);
                 }
-              } catch (fetchErr: any) {
-                console.log(`[ensureRepoFromEvent] Fetch failed for ${branch} from ${url}: ${fetchErr.message}`);
               }
             }
           }
-          
-          if (!fetchedRef) {
-            console.warn('[ensureRepoFromEvent] All fetch attempts failed from all URLs');
+
+          if (!createdBranch) {
+            console.warn('[ensureRepoFromEvent] Could not create local branch from any source');
           }
         }
       } catch (refError) {

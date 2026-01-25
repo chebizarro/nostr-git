@@ -141,4 +141,87 @@ describe.sequential('git/git.ts: ensureRepo + ensureRepoFromEvent + default bran
     expect(cached1).toBe('develop');
     expect(cached2).toBe('develop');
   });
+
+  it('ensureRepoFromEvent creates local branches from remote tracking refs when clone leaves none (ngit relay scenario)', async () => {
+    // This test simulates the ngit relay scenario where shallow clone fetches objects
+    // but doesn't create local branch refs. The fix creates local branches from remote tracking refs.
+    const remoteFs = createTestFs('ensure-remote-ngit');
+    const remote = new VirtualGitRemote({
+      fs: remoteFs as any,
+      dir: '/remote',
+      defaultBranch: 'master',
+      author: { name: 'Remote', email: 'remote@example.com' }
+    });
+    const { initialCommit } = await remote.seed({ 'README.md': 'hello from ngit\n' }, 'initial commit');
+
+    const registry = createRemoteRegistry();
+    const httpsUrl = 'https://relay.ngit.dev/example/ngit-repo.git';
+    registry.register(httpsUrl, remote);
+
+    const localFs = createTestFs('ensure-local-ngit');
+
+    // Create a mock git provider that simulates ngit relay behavior:
+    // - clone succeeds but local branch refs are removed (simulating ngit behavior)
+    // - remote tracking refs remain under refs/remotes/origin/*
+    const baseGit = createTestGitProvider({ fs: localFs as any, remoteRegistry: registry });
+
+    let cloneCallCount = 0;
+
+    // Create the mock by explicitly binding methods from baseGit
+    const mockGit: any = {
+      clone: async (args: any) => {
+        cloneCallCount++;
+        // Perform the normal clone
+        await baseGit.clone(args);
+        // Simulate ngit relay behavior: delete local branch refs but keep remote tracking refs
+        const dir = args.dir;
+        const pfs = (localFs as any).promises;
+        try {
+          // Remove the local branch ref to simulate ngit relay behavior
+          await pfs.unlink(`${dir}/.git/refs/heads/master`);
+        } catch {
+          // Ignore if file doesn't exist
+        }
+      },
+      // Forward all other methods to baseGit
+      listBranches: (args: any) => baseGit.listBranches(args),
+      resolveRef: (args: any) => baseGit.resolveRef(args),
+      writeRef: (args: any) => baseGit.writeRef(args),
+      fetch: (args: any) => baseGit.fetch(args),
+      listRemotes: (args: any) => baseGit.listRemotes(args),
+      log: (args: any) => baseGit.log(args),
+      deleteRef: (args: any) => baseGit.deleteRef(args),
+      listRefs: (args: any) => baseGit.listRefs(args),
+      checkout: (args: any) => baseGit.checkout(args),
+      readCommit: (args: any) => baseGit.readCommit(args),
+    };
+
+    setGitProvider(mockGit as any);
+
+    const repoEvent: any = {
+      repoId: 'test-ngit-repo',
+      clone: [httpsUrl]
+    };
+
+    await ensureRepoFromEvent(
+      {
+        repoEvent,
+        repoKey: 'ngit/repo'
+      },
+      1
+    );
+
+    expect(cloneCallCount).toBe(1);
+
+    const localDir = `${rootDir}/ngit/repo`;
+    await expect(isRepoCloned(localDir)).resolves.toBe(true);
+
+    // Verify that local branches now exist (the fix should have created them)
+    const branches = await mockGit.listBranches({ dir: localDir });
+    expect(branches.length).toBeGreaterThan(0);
+
+    // Verify we can resolve the master branch to a commit
+    const masterOid = await mockGit.resolveRef({ dir: localDir, ref: 'master' });
+    expect(masterOid).toBe(initialCommit);
+  });
 });
