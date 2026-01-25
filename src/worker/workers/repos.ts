@@ -399,7 +399,9 @@ export async function initializeRepoUtil(
       lastUpdated: Date.now(),
       headCommit,
       dataLevel: 'refs',
-      branches: branches.map((name: string) => ({ name, commit: headCommit })),
+      branches: headCommit
+        ? branches.map((name: string) => ({ name, commit: headCommit }))
+        : [],
       cloneUrls
     };
     await cacheManager.setRepoCache(cache);

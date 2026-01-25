@@ -228,7 +228,7 @@ function applyUnifiedDiffPatch(existingContent: string, patchContent: string): s
     }
   };
 
-  const findContextOffset = (startIndex: number, ctx: string[]): number => {
+  const findContextOffset = (startIndex: number, ctx: string[]): number | null => {
     if (ctx.length === 0) return startIndex;
     const window = 5;
     const begin = Math.max(0, startIndex - window);
@@ -243,7 +243,7 @@ function applyUnifiedDiffPatch(existingContent: string, patchContent: string): s
       }
       if (ok) return i;
     }
-    return startIndex; // fallback
+    return null; // context not found
   };
 
   for (const h of hunks) {
@@ -256,13 +256,21 @@ function applyUnifiedDiffPatch(existingContent: string, patchContent: string): s
     }
 
     const aligned = findContextOffset(h.oldStart, preCtx);
+    if (aligned === null) {
+      throw new Error(`Patch context not found at line ${h.oldStart + 1}. Cannot apply patch safely.`);
+    }
     advanceTo(aligned);
 
     // Apply hunk
     for (const l of h.lines) {
       if (!l) continue;
       if (l.startsWith(' ')) {
-        out.push(l.substring(1));
+        const expected = l.substring(1);
+        const actual = src[cursor];
+        if (actual !== expected && actual !== undefined) {
+          console.warn(`Context mismatch at line ${cursor}: expected "${expected}", got "${actual}"`);
+        }
+        out.push(src[cursor] ?? expected);  // Prefer source version
         cursor++;
       } else if (l.startsWith('+')) {
         out.push(l.substring(1));
