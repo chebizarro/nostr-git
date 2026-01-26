@@ -19,10 +19,21 @@ describe('worker/branches resolveBranchName', () => {
     expect(res).toBe('feature');
   });
 
-  it('returns requestedBranch even if resolveRef throws (caller will sync)', async () => {
-    const git = makeGit({ resolveRefError: new Set(['feat']) });
+  it('returns requestedBranch when no fallbacks exist (caller will sync)', async () => {
+    // When requested branch doesn't exist AND no fallbacks exist, return requested for fetch
+    const git = makeGit({ 
+      resolveRefError: new Set(['feat', 'main', 'master', 'develop', 'dev']),
+      branchList: [] // No branches available
+    });
     const res = await resolveBranchName(git, '/repo', 'feat');
     expect(res).toBe('feat');
+  });
+
+  it('falls back to main when requested branch does not exist', async () => {
+    // When requested branch doesn't exist but main does, use main (non-strict mode)
+    const git = makeGit({ resolveRefError: new Set(['feat']) });
+    const res = await resolveBranchName(git, '/repo', 'feat');
+    expect(res).toBe('main');
   });
 
   it('falls back to known names when none requested', async () => {

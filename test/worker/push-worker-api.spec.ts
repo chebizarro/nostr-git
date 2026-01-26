@@ -30,6 +30,7 @@ vi.mock('../../src/worker/workers/fs-utils.js', () => ({
 // Default mock for getNostrGitProvider is undefined; individual tests will override
 vi.mock('../../src/api/git-provider.js', () => ({
   getNostrGitProvider: () => undefined,
+  hasNostrGitProvider: () => false,
   initializeNostrGitProvider: () => {},
 }));
 
@@ -43,13 +44,13 @@ describe('worker.pushToRemote API', () => {
     const pushSpy = vi.fn(async () => ({ blossomSummary: summary }));
     const mod = await import('../../src/api/git-provider.js');
     (mod as any).getNostrGitProvider = () => ({ push: pushSpy });
+    (mod as any).hasNostrGitProvider = () => true;
 
     // Act: call pushToRemote on exposed API
-    // Don't pass 'grasp' as provider - that triggers a different code path requiring token
-    // Instead, let it use the NostrGitProvider path which is checked after GRASP
+    // Use a Nostr URL pattern to trigger the NostrGitProvider path
     const res = await exposed.pushToRemote({
       repoId: 'owner/repo',
-      remoteUrl: 'https://example.com/owner/repo.git',
+      remoteUrl: 'https://relay.ngit.dev/owner/repo.git',
       branch: 'main',
     });
 

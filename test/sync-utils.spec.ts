@@ -76,7 +76,8 @@ describe('needsUpdateUtil', () => {
     expect(res).toBe(true);
   });
 
-  it('returns true when cache exists but no cloneUrl provided', async () => {
+  it('returns false when cache is fresh but no cloneUrl provided', async () => {
+    // When no URLs are available to check, and cache is fresh, assume no update needed
     const git = makeGit({
       listServerRefs: vi.fn(async () => [{ ref: 'refs/heads/main', oid: 'ef01' }])
     });
@@ -85,6 +86,22 @@ describe('needsUpdateUtil', () => {
       'org/repo',
       [],
       cache('abcd'),
+      Date.now()
+    );
+    expect(res).toBe(false);
+  });
+
+  it('returns true when cache is stale and no cloneUrl provided', async () => {
+    // When no URLs are available but cache is stale (>1 hour), needs update
+    const git = makeGit({
+      listServerRefs: vi.fn(async () => [{ ref: 'refs/heads/main', oid: 'ef01' }])
+    });
+    const staleTime = Date.now() - 61 * 60 * 1000; // 61 minutes ago
+    const res = await needsUpdateUtil(
+      git,
+      'org/repo',
+      [],
+      cache('abcd', staleTime),
       Date.now()
     );
     expect(res).toBe(true);

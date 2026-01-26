@@ -155,8 +155,7 @@ describe('syncWithRemote with Enhanced Logging', () => {
 
     const allLogs = consoleLogs.join(' ');
     expect(allLogs).toContain('Attempting to fetch requested branch: main');
-    expect(allLogs).toContain('Successfully fetched requested branch: main');
-    expect(allLogs).toContain('Using remote URL');
+    expect(allLogs).toContain('Successfully fetched requested branch from');
     expect(allLogs).toContain('Branch checked out successfully');
     expect(allLogs).toContain('Remote HEAD');
     expect(allLogs).toContain('Cache updated');

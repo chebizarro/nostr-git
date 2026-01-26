@@ -24,6 +24,11 @@ export const rootDir = '/repos';
 const repoDepthCache: Map<string, { depth: number; timestamp: number }> = new Map();
 const DEPTH_CACHE_TTL_MS = 60_000; // 60 seconds
 
+/** Clear the repo depth cache - exported for testing */
+export function clearRepoDepthCache(): void {
+  repoDepthCache.clear();
+}
+
 /**
  * Detect the default branch name from a repository's HEAD reference
  * @param repoEvent Repository event

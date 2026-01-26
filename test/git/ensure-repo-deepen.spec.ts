@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import 'fake-indexeddb/auto';
 
-import { ensureRepoFromEvent, rootDir } from '../../src/git/git.js';
+import { ensureRepoFromEvent, rootDir, clearRepoDepthCache } from '../../src/git/git.js';
 
 vi.mock('../../src/api/git-provider.js', () => {
   const state: any = { git: null };
@@ -16,6 +16,7 @@ const { __setGit } = await import('../../src/api/git-provider.js' as any);
 describe('ensureRepoFromEvent deepening path (strict)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    clearRepoDepthCache(); // Clear the depth cache between tests
   });
 
   function makeRepoEvent(host = 'example.com') {
