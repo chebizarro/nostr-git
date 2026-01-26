@@ -14,11 +14,13 @@ import type {
   Issue,
   PullRequest,
   Patch,
+  Comment,
   NewIssue,
   NewPullRequest,
   ListCommitsOptions,
   ListIssuesOptions,
   ListPullRequestsOptions,
+  ListCommentsOptions,
   User,
   GitForkOptions
 } from '../../api/index.js';
@@ -452,6 +454,94 @@ export class GiteaApi implements GitServiceApi {
       closedAt: data.closed_at,
       url: data.url,
       htmlUrl: data.html_url
+    };
+  }
+
+  /**
+   * Comment Operations
+   * API: https://try.gitea.io/api/swagger#/issue
+   */
+  async listIssueComments(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    options?: ListCommentsOptions
+  ): Promise<Comment[]> {
+    const params = new URLSearchParams();
+    if (options?.since) params.append('since', options.since);
+    if (options?.per_page) params.append('limit', options.per_page.toString());
+    if (options?.page) params.append('page', options.page.toString());
+
+    const queryString = params.toString();
+    const endpoint = `/repos/${owner}/${repo}/issues/${issueNumber}/comments${
+      queryString ? `?${queryString}` : ''
+    }`;
+
+    const data = await this.request<any[]>(endpoint);
+
+    return data.map((comment) => ({
+      id: comment.id,
+      body: comment.body || '',
+      author: {
+        login: comment.user.login,
+        avatarUrl: comment.user.avatar_url
+      },
+      createdAt: comment.created_at,
+      updatedAt: comment.updated_at,
+      url: comment.html_url,
+      htmlUrl: comment.html_url,
+      inReplyToId: undefined
+    }));
+  }
+
+  async listPullRequestComments(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    options?: ListCommentsOptions
+  ): Promise<Comment[]> {
+    const params = new URLSearchParams();
+    if (options?.since) params.append('since', options.since);
+    if (options?.per_page) params.append('limit', options.per_page.toString());
+    if (options?.page) params.append('page', options.page.toString());
+
+    const queryString = params.toString();
+    const endpoint = `/repos/${owner}/${repo}/pulls/${prNumber}/comments${
+      queryString ? `?${queryString}` : ''
+    }`;
+
+    const data = await this.request<any[]>(endpoint);
+
+    return data.map((comment) => ({
+      id: comment.id,
+      body: comment.body || '',
+      author: {
+        login: comment.user.login,
+        avatarUrl: comment.user.avatar_url
+      },
+      createdAt: comment.created_at,
+      updatedAt: comment.updated_at,
+      url: comment.html_url,
+      htmlUrl: comment.html_url,
+      inReplyToId: undefined
+    }));
+  }
+
+  async getComment(owner: string, repo: string, commentId: number): Promise<Comment> {
+    const data = await this.request<any>(`/repos/${owner}/${repo}/issues/comments/${commentId}`);
+
+    return {
+      id: data.id,
+      body: data.body || '',
+      author: {
+        login: data.user.login,
+        avatarUrl: data.user.avatar_url
+      },
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      url: data.html_url,
+      htmlUrl: data.html_url,
+      inReplyToId: undefined
     };
   }
 

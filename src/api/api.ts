@@ -67,6 +67,45 @@ export interface Issue {
   closedAt?: string;
   url: string;
   htmlUrl: string;
+  /**
+   * Number of comments on the issue
+   * Provided by some Git service APIs (e.g., GitHub)
+   */
+  commentsCount?: number;
+}
+
+/**
+ * Comment information from Git service APIs
+ */
+export interface Comment {
+  id: number;
+  body: string;
+  author: {
+    login: string;
+    avatarUrl?: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+  url: string;
+  htmlUrl: string;
+  /**
+   * ID of the comment this comment is replying to (for comment threading)
+   * Only present if this comment is a reply to another comment
+   */
+  inReplyToId?: number;
+}
+
+/**
+ * Parameters for listing comments
+ */
+export interface ListCommentsOptions {
+  per_page?: number;
+  page?: number;
+  /**
+   * ISO 8601 date - only return comments updated at or after this time
+   * Useful for filtering comments by date during imports
+   */
+  since?: string;
 }
 
 /**
@@ -259,6 +298,33 @@ export interface GitServiceApi {
     updates: Partial<NewIssue>
   ): Promise<Issue>;
   closeIssue(owner: string, repo: string, issueNumber: number): Promise<Issue>;
+
+  /**
+   * Comment Operations
+   */
+  listIssueComments(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    options?: ListCommentsOptions
+  ): Promise<Comment[]>;
+  listPullRequestComments(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    options?: ListCommentsOptions
+  ): Promise<Comment[]>;
+  getComment(owner: string, repo: string, commentId: number): Promise<Comment>;
+  /**
+   * List all issue comments for a repository (optional, more efficient for bulk imports)
+   * Returns comments with issue/PR numbers attached
+   * This endpoint fetches all comments for all issues and PRs in one go
+   */
+  listAllIssueComments?(
+    owner: string,
+    repo: string,
+    options?: ListCommentsOptions
+  ): Promise<Array<Comment & { issueNumber: number; isPullRequest: boolean }>>;
 
   /**
    * Pull Request Operations

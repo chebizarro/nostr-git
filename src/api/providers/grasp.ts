@@ -13,11 +13,13 @@ import type {
   Issue,
   PullRequest,
   Patch,
+  Comment,
   NewIssue,
   NewPullRequest,
   ListCommitsOptions,
   ListIssuesOptions,
   ListPullRequestsOptions,
+  ListCommentsOptions,
   User,
   GitForkOptions
 } from '../api.js';
@@ -507,6 +509,134 @@ export class GraspApiProvider implements GitServiceApi {
 
     // This would require finding the original event and creating a close event
     throw new Error('GRASP closeIssue not implemented - requires close event creation');
+  }
+
+  /**
+   * Comment Operations (GRASP comments are NIP-22 comment events)
+   * NIP-22: https://github.com/nostr-protocol/nips/blob/master/22.md
+   */
+  async listIssueComments(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    options?: ListCommentsOptions
+  ): Promise<Comment[]> {
+    const issue = await this.getIssue(owner, repo, issueNumber);
+    
+    const filter: NostrFilter = {
+      kinds: [1111],
+      '#E': [issue.url]
+    };
+
+    if (options?.since) {
+      const sinceTimestamp = Math.floor(Date.parse(options.since) / 1000);
+      filter.since = sinceTimestamp;
+    }
+
+    const limit = options?.per_page || 100;
+    filter.limit = limit;
+
+    const events = await this.pool.querySync([this.relayUrl], filter);
+
+    return events
+      .sort((a, b) => a.created_at - b.created_at)
+      .map((event) => ({
+        id: parseInt(event.id.slice(-8), 16),
+        body: event.content,
+        author: {
+          login: event.pubkey.slice(0, 8),
+          avatarUrl: ''
+        },
+        createdAt: new Date(event.created_at * 1000).toISOString(),
+        updatedAt: new Date(event.created_at * 1000).toISOString(),
+        url: `nostr:${event.id}`,
+        htmlUrl: `nostr:${event.id}`,
+        inReplyToId: this.getParentCommentId(event)
+      }));
+  }
+
+  async listPullRequestComments(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    options?: ListCommentsOptions
+  ): Promise<Comment[]> {
+    const pr = await this.getPullRequest(owner, repo, prNumber);
+    
+    const filter: NostrFilter = {
+      kinds: [1111],
+      '#E': [pr.url]
+    };
+
+    if (options?.since) {
+      const sinceTimestamp = Math.floor(Date.parse(options.since) / 1000);
+      filter.since = sinceTimestamp;
+    }
+
+    const limit = options?.per_page || 100;
+    filter.limit = limit;
+
+    const events = await this.pool.querySync([this.relayUrl], filter);
+
+    return events
+      .sort((a, b) => a.created_at - b.created_at)
+      .map((event) => ({
+        id: parseInt(event.id.slice(-8), 16),
+        body: event.content,
+        author: {
+          login: event.pubkey.slice(0, 8),
+          avatarUrl: ''
+        },
+        createdAt: new Date(event.created_at * 1000).toISOString(),
+        updatedAt: new Date(event.created_at * 1000).toISOString(),
+        url: `nostr:${event.id}`,
+        htmlUrl: `nostr:${event.id}`,
+        inReplyToId: this.getParentCommentId(event)
+      }));
+  }
+
+  async getComment(owner: string, repo: string, commentId: number): Promise<Comment> {
+    const commentIdHex = commentId.toString(16).padStart(8, '0');
+    
+    // Note: We can't filter by exact event ID since we only have the last 8 hex chars
+    // This is a limitation of the integer ID mapping. For better performance,
+    // consider storing full event IDs or using a different ID scheme.
+    const filter: NostrFilter = {
+      kinds: [1111],
+      limit: 100
+    };
+
+    const events = await this.pool.querySync([this.relayUrl], filter);
+    const event = events.find(e => e.id.endsWith(commentIdHex));
+
+    if (!event) {
+      throw new Error(`Comment ${commentId} not found`);
+    }
+
+    return {
+      id: commentId,
+      body: event.content,
+      author: {
+        login: event.pubkey.slice(0, 8),
+        avatarUrl: ''
+      },
+      createdAt: new Date(event.created_at * 1000).toISOString(),
+      updatedAt: new Date(event.created_at * 1000).toISOString(),
+      url: `nostr:${event.id}`,
+      htmlUrl: `nostr:${event.id}`,
+      inReplyToId: this.getParentCommentId(event)
+    };
+  }
+
+  /**
+   * Helper to extract parent comment ID from NIP-22 comment event
+   */
+  private getParentCommentId(event: any): number | undefined {
+    const parentTag = event.tags.find((tag: string[]) => tag[0] === 'e' && tag.length > 1);
+    if (parentTag && parentTag[1]) {
+      return parseInt(parentTag[1].slice(-8), 16);
+    }
+    return undefined;
   }
 
   /**

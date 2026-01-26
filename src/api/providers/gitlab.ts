@@ -14,11 +14,13 @@ import type {
   Issue,
   PullRequest,
   Patch,
+  Comment,
   NewIssue,
   NewPullRequest,
   ListCommitsOptions,
   ListIssuesOptions,
   ListPullRequestsOptions,
+  ListCommentsOptions,
   User,
   GitForkOptions
 } from '../api.js';
@@ -571,6 +573,105 @@ export class GitLabApi implements GitServiceApi {
       closedAt: data.closed_at,
       url: data.web_url,
       htmlUrl: data.web_url
+    };
+  }
+
+  /**
+   * Comment Operations
+   * GitLab uses "notes" instead of "comments"
+   * API: https://docs.gitlab.com/ee/api/notes.html
+   */
+  async listIssueComments(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    options?: ListCommentsOptions
+  ): Promise<Comment[]> {
+    const projectId = await this.getProjectId(owner, repo);
+
+    const params = new URLSearchParams();
+    if (options?.per_page) params.append('per_page', options.per_page.toString());
+    if (options?.page) params.append('page', options.page.toString());
+    params.append('sort', 'asc');
+
+    const queryString = params.toString();
+    const endpoint = `/projects/${projectId}/issues/${issueNumber}/notes${
+      queryString ? `?${queryString}` : ''
+    }`;
+
+    const data = await this.request<any[]>(endpoint);
+
+    return data
+      .filter((note) => !note.system)
+      .map((note) => ({
+        id: note.id,
+        body: note.body || '',
+        author: {
+          login: note.author.username,
+          avatarUrl: note.author.avatar_url
+        },
+        createdAt: note.created_at,
+        updatedAt: note.updated_at,
+        url: note.noteable_iid ? `${this.baseUrl}/projects/${projectId}/issues/${note.noteable_iid}#note_${note.id}` : '',
+        htmlUrl: note.noteable_iid ? `${this.baseUrl}/projects/${projectId}/issues/${note.noteable_iid}#note_${note.id}` : '',
+        inReplyToId: undefined
+      }));
+  }
+
+  async listPullRequestComments(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    options?: ListCommentsOptions
+  ): Promise<Comment[]> {
+    const projectId = await this.getProjectId(owner, repo);
+
+    const params = new URLSearchParams();
+    if (options?.per_page) params.append('per_page', options.per_page.toString());
+    if (options?.page) params.append('page', options.page.toString());
+    params.append('sort', 'asc');
+
+    const queryString = params.toString();
+    const endpoint = `/projects/${projectId}/merge_requests/${prNumber}/notes${
+      queryString ? `?${queryString}` : ''
+    }`;
+
+    const data = await this.request<any[]>(endpoint);
+
+    return data
+      .filter((note) => !note.system)
+      .map((note) => ({
+        id: note.id,
+        body: note.body || '',
+        author: {
+          login: note.author.username,
+          avatarUrl: note.author.avatar_url
+        },
+        createdAt: note.created_at,
+        updatedAt: note.updated_at,
+        url: note.noteable_iid ? `${this.baseUrl}/projects/${projectId}/merge_requests/${note.noteable_iid}#note_${note.id}` : '',
+        htmlUrl: note.noteable_iid ? `${this.baseUrl}/projects/${projectId}/merge_requests/${note.noteable_iid}#note_${note.id}` : '',
+        inReplyToId: undefined
+      }));
+  }
+
+  async getComment(owner: string, repo: string, commentId: number): Promise<Comment> {
+    const projectId = await this.getProjectId(owner, repo);
+
+    const data = await this.request<any>(`/projects/${projectId}/notes/${commentId}`);
+
+    return {
+      id: data.id,
+      body: data.body || '',
+      author: {
+        login: data.author.username,
+        avatarUrl: data.author.avatar_url
+      },
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      url: data.noteable_iid ? `${this.baseUrl}/projects/${projectId}/issues/${data.noteable_iid}#note_${data.id}` : '',
+      htmlUrl: data.noteable_iid ? `${this.baseUrl}/projects/${projectId}/issues/${data.noteable_iid}#note_${data.id}` : '',
+      inReplyToId: undefined
     };
   }
 

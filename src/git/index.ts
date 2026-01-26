@@ -34,3 +34,37 @@ export * from "./vendor-providers.js"
 export * from "./event.js"
 export * from "./branches.js"
 export * from "./commits.js"
+
+export { type ImportConfig, DEFAULT_IMPORT_CONFIG, createImportConfig } from "./import-config.js"
+export { ImportAbortedError, ImportAbortController } from "./abort-controller.js"
+export { RateLimiter, type RateLimitConfig, type RateLimitStatus } from "./rate-limiter.js"
+export {
+  DEFAULT_PROFILE_IMAGE_URL,
+  generateRandomKeyPair,
+  createProfileEventForPlatformUser,
+  generatePlatformUserProfile,
+  getProfileMapKey,
+  type PlatformUserProfile
+} from "./platform-profiles.js"
+export {
+  convertRepoToNostrEvent,
+  convertRepoToStateEvent,
+  convertIssuesToNostrEvents,
+  convertIssueStatusesToEvents,
+  convertCommentsToNostrEvents,
+  convertPullRequestsToNostrEvents,
+  signEvent,
+  type UserProfileMap,
+  type CommentEventMap,
+  type ConvertedComment
+} from "./platform-to-nostr.js"
+export {
+  parseRepoUrl,
+  detectProviderFromUrl,
+  validateTokenPermissions,
+  validateTokenHasReadWrite,
+  checkRepoOwnership,
+  type ParsedRepoUrl,
+  type TokenValidationResult,
+  type OwnershipResult
+} from "./import-utils.js"

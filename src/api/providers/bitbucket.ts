@@ -14,11 +14,13 @@ import type {
   Issue,
   PullRequest,
   Patch,
+  Comment,
   NewIssue,
   NewPullRequest,
   ListCommitsOptions,
   ListIssuesOptions,
   ListPullRequestsOptions,
+  ListCommentsOptions,
   User,
   GitForkOptions
 } from '../api.js';
@@ -427,6 +429,92 @@ export class BitbucketApi implements GitServiceApi {
       closedAt: data.updated_on,
       url: data.links.self.href,
       htmlUrl: data.links.html.href
+    };
+  }
+
+  /**
+   * Comment Operations
+   * API: https://developer.atlassian.com/cloud/bitbucket/rest/api-group-issue-tracker/#api-repositories-workspace-repo-slug-issues-issue-id-comments-get
+   */
+  async listIssueComments(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    options?: ListCommentsOptions
+  ): Promise<Comment[]> {
+    const params = new URLSearchParams();
+    if (options?.per_page) params.append('pagelen', options.per_page.toString());
+
+    const queryString = params.toString();
+    const endpoint = `/repositories/${owner}/${repo}/issues/${issueNumber}/comments${
+      queryString ? `?${queryString}` : ''
+    }`;
+
+    const data = await this.request<any>(endpoint);
+
+    return data.values.map((comment: any) => ({
+      id: comment.id,
+      body: comment.content?.raw || '',
+      author: {
+        login: comment.user.username,
+        avatarUrl: comment.user.links.avatar.href
+      },
+      createdAt: comment.created_on,
+      updatedAt: comment.updated_on,
+      url: comment.links.self.href,
+      htmlUrl: comment.links.html.href,
+      inReplyToId: comment.parent?.id
+    }));
+  }
+
+  async listPullRequestComments(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    options?: ListCommentsOptions
+  ): Promise<Comment[]> {
+    const params = new URLSearchParams();
+    if (options?.per_page) params.append('pagelen', options.per_page.toString());
+
+    const queryString = params.toString();
+    const endpoint = `/repositories/${owner}/${repo}/pullrequests/${prNumber}/comments${
+      queryString ? `?${queryString}` : ''
+    }`;
+
+    const data = await this.request<any>(endpoint);
+
+    return data.values.map((comment: any) => ({
+      id: comment.id,
+      body: comment.content?.raw || '',
+      author: {
+        login: comment.user.username,
+        avatarUrl: comment.user.links.avatar.href
+      },
+      createdAt: comment.created_on,
+      updatedAt: comment.updated_on,
+      url: comment.links.self.href,
+      htmlUrl: comment.links.html.href,
+      inReplyToId: comment.parent?.id
+    }));
+  }
+
+  async getComment(owner: string, repo: string, commentId: number): Promise<Comment> {
+    const data = await this.request<any>(
+      `/repositories/${owner}/${repo}/pullrequests/comments/${commentId}`
+    );
+
+    return {
+      id: data.id,
+      body: data.content?.raw || '',
+      author: {
+        login: data.user.username,
+        avatarUrl: data.user.links.avatar.href
+      },
+      createdAt: data.created_on,
+      updatedAt: data.updated_on,
+      url: data.links.self.href,
+      htmlUrl: data.links.html.href,
+      inReplyToId: data.parent?.id
     };
   }
 
