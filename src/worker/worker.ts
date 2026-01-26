@@ -676,6 +676,7 @@ const api = {
         // GRASP uses unauthenticated git smart HTTP - authorization is handled by
         // the Nostr repo state events (kind 30617/30618), not HTTP headers.
         // This matches ngit's behavior which uses UnauthHttps/UnauthHttp protocols.
+        // IMPORTANT: Must set User-Agent starting with "git/" for GRASP servers to accept the request
         try {
           console.log("[GRASP] Push params:", { dir, url: pushUrl, ref: `refs/heads/${targetBranch}`, remote: "origin" });
           await git.push({
@@ -686,6 +687,9 @@ const api = {
             remoteRef: `refs/heads/${targetBranch}`,
             http: httpWeb,
             force: false,
+            headers: {
+              'User-Agent': 'git/isomorphic-git',
+            },
           });
           console.log("[GRASP] Push successful (unauthenticated smart HTTP)");
           return toPlain({ success: true, repoId, remoteUrl, branch: targetBranch });
