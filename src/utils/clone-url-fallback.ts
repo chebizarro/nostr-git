@@ -42,6 +42,23 @@ export interface CloneUrlCacheEntry {
 }
 
 /**
+ * Custom error class for URL timeout errors.
+ * Used to distinguish timeouts from other errors in fallback logic.
+ */
+export class UrlTimeoutError extends Error {
+  readonly url: string;
+  readonly timeoutMs: number;
+  readonly code = 'TIMEOUT';
+  
+  constructor(message: string, url: string, timeoutMs: number) {
+    super(message);
+    this.name = 'UrlTimeoutError';
+    this.url = url;
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+/**
  * Simple in-memory cache for URL preferences.
  * Maps repoId -> preferred URL info.
  */
@@ -159,9 +176,16 @@ export async function withUrlFallback<T>(
     tryAll?: boolean;
     /** Custom error classifier to determine if error is retriable */
     isRetriable?: (error: unknown) => boolean;
+    /** Timeout in milliseconds for each URL attempt. If exceeded, tries next URL. Default: 15000 (15s) */
+    perUrlTimeoutMs?: number;
   }
 ): Promise<ReadFallbackResult<T>> {
-  const { repoId, tryAll = false, isRetriable = defaultIsRetriable } = options || {};
+  const { 
+    repoId, 
+    tryAll = false, 
+    isRetriable = defaultIsRetriable,
+    perUrlTimeoutMs = 15000  // Default 15 second timeout per URL
+  } = options || {};
 
   // Filter and reorder URLs
   const validUrls = filterValidCloneUrls(urls);
@@ -183,9 +207,29 @@ export async function withUrlFallback<T>(
   for (let i = 0; i < orderedUrls.length; i++) {
     const url = orderedUrls[i];
     const startTime = Date.now();
+    const isLastUrl = i === orderedUrls.length - 1;
 
     try {
-      const result = await operation(url);
+      // Wrap operation with timeout - but only if we have more URLs to try
+      // For the last URL, let it run without timeout to give it a fair chance
+      let result: T;
+      
+      if (perUrlTimeoutMs > 0 && !isLastUrl) {
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new UrlTimeoutError(
+              `URL timeout after ${perUrlTimeoutMs}ms: ${url}`,
+              url,
+              perUrlTimeoutMs
+            ));
+          }, perUrlTimeoutMs);
+        });
+        
+        result = await Promise.race([operation(url), timeoutPromise]);
+      } else {
+        result = await operation(url);
+      }
+      
       const durationMs = Date.now() - startTime;
 
       attempts.push({
@@ -199,6 +243,11 @@ export async function withUrlFallback<T>(
         successResult = result;
         successUrl = url;
         successIndex = i;
+        
+        // Log when we successfully used a fallback URL (not the first one)
+        if (i > 0) {
+          console.log(`[withUrlFallback] Success with fallback URL #${i + 1}: ${url} (${durationMs}ms)`);
+        }
       }
 
       // Stop if we don't need to try all
@@ -207,8 +256,9 @@ export async function withUrlFallback<T>(
       }
     } catch (error) {
       const durationMs = Date.now() - startTime;
+      const isTimeout = error instanceof UrlTimeoutError;
       const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorCode = (error as any)?.code || (error as any)?.name || "UNKNOWN";
+      const errorCode = isTimeout ? 'TIMEOUT' : ((error as any)?.code || (error as any)?.name || "UNKNOWN");
 
       attempts.push({
         url,
@@ -219,9 +269,15 @@ export async function withUrlFallback<T>(
       });
 
       failedUrls.push(url);
+      
+      // Log timeout to help with debugging
+      if (isTimeout) {
+        console.log(`[withUrlFallback] URL timed out after ${perUrlTimeoutMs}ms, trying next: ${url}`);
+      }
 
-      // If error is not retriable, don't try other URLs
-      if (!isRetriable(error)) {
+      // If error is not retriable (and not a timeout), don't try other URLs
+      // Timeouts are always retriable - we want to try the next URL
+      if (!isTimeout && !isRetriable(error)) {
         break;
       }
     }

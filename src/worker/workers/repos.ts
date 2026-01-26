@@ -42,6 +42,9 @@ export function clearCloneTracking(
 
 type DataLevel = 'refs' | 'shallow' | 'full';
 
+// Deduplication map for ensureFullClone - prevents parallel fetches for the same repo
+const pendingFullClones = new Map<string, Promise<any>>();
+
 /**
  * Ensure the origin remote is properly configured with URL and fetch refspec.
  * isomorphic-git's shallow/singleBranch clone may not create the full config,
@@ -171,7 +174,7 @@ export async function smartInitializeRepoUtil(
                 return { url: cloneUrl };
               }
             },
-            { repoId: key }
+            { repoId: key, perUrlTimeoutMs: 15000 }
           );
 
           if (fetchResult.success) {
@@ -380,6 +383,18 @@ export async function initializeRepoUtil(
         const authCallback = getAuthCallback(cloneUrl);
         const refCandidates = ['HEAD', 'main', 'master', 'develop', 'dev'];
 
+        // Detect Nostr relay URLs - they need special handling with deeper clones
+        const isNostrRelay = cloneUrl.includes('relay.ngit.dev') || 
+                            cloneUrl.includes('gitnostr.com') ||
+                            cloneUrl.includes('grasp');
+        
+        // Nostr relays need deeper clones because shallow clones often fail to fetch commit objects
+        const cloneDepth = isNostrRelay ? 10 : 1;
+        
+        if (isNostrRelay) {
+          console.log(`[initializeRepo] Detected Nostr relay URL, using depth ${cloneDepth} for better compatibility`);
+        }
+
         let lastRefError: Error | null = null;
         for (const refCandidate of refCandidates) {
           try {
@@ -391,7 +406,7 @@ export async function initializeRepoUtil(
               url: cloneUrl,
               ref: refCandidate,
               singleBranch: true,   // Critical: use single branch for shallow clone compatibility
-              depth: 1,
+              depth: cloneDepth,
               noCheckout: false,    // checkout to create HEAD and local branch ref
               noTags: true,
               onProgress,
@@ -408,7 +423,7 @@ export async function initializeRepoUtil(
         }
         throw lastRefError || new Error(`Clone failed for ${cloneUrl}`);
       },
-      { repoId: key }
+      { repoId: key, perUrlTimeoutMs: 30000 }  // 30s timeout for initial clone (larger than fetch)
     );
 
     if (!cloneResult.success) {
@@ -472,20 +487,46 @@ export async function initializeRepoUtil(
         await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${defaultBranch}`, symbolic: true, force: true });
         console.log(`[initializeRepo] Created local branch '${defaultBranch}' from remote ref, commit: ${headCommit?.substring(0, 8)}`);
       } else {
-        // No remote branches - try to read FETCH_HEAD or packed-refs
+        // No remote branches - try multiple fallback strategies
         // This handles cases where the clone fetched objects but didn't create refs
+        console.log(`[initializeRepo] No remote branches found, trying fallback strategies...`);
+        
+        // Strategy 1: Try FETCH_HEAD which isomorphic-git creates during fetch
         try {
-          // Try FETCH_HEAD which isomorphic-git creates during fetch
           headCommit = await git.resolveRef({ dir, ref: 'FETCH_HEAD' });
-          // Create a local branch from FETCH_HEAD (use force: true to handle re-initialization)
           await git.writeRef({ dir, ref: `refs/heads/${defaultBranch}`, value: headCommit, force: true });
           await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${defaultBranch}`, symbolic: true, force: true });
           console.log(`[initializeRepo] Created local branch '${defaultBranch}' from FETCH_HEAD, commit: ${headCommit?.substring(0, 8)}`);
-        } catch {
-          // Last resort: try to find any commit in the object store
-          // by reading the shallow file or walking objects
-          console.warn(`[initializeRepo] Could not find any refs, repository may be empty`);
-          headCommit = undefined;
+        } catch (fetchHeadErr) {
+          console.log(`[initializeRepo] FETCH_HEAD not available: ${(fetchHeadErr as Error).message}`);
+          
+          // Strategy 2: Try to resolve HEAD directly (might be a detached HEAD with commit OID)
+          try {
+            const headRef = await git.resolveRef({ dir, ref: 'HEAD', depth: 1 });
+            if (headRef && headRef.length === 40) {
+              headCommit = headRef;
+              await git.writeRef({ dir, ref: `refs/heads/${defaultBranch}`, value: headCommit, force: true });
+              await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${defaultBranch}`, symbolic: true, force: true });
+              console.log(`[initializeRepo] Created local branch '${defaultBranch}' from HEAD OID, commit: ${headCommit?.substring(0, 8)}`);
+            }
+          } catch (headErr) {
+            console.log(`[initializeRepo] HEAD resolution failed: ${(headErr as Error).message}`);
+            
+            // Strategy 3: Try git.log to find any commits in the object store
+            try {
+              const commits = await git.log({ dir, depth: 1 });
+              if (commits && commits.length > 0 && commits[0].oid) {
+                headCommit = commits[0].oid;
+                await git.writeRef({ dir, ref: `refs/heads/${defaultBranch}`, value: headCommit, force: true });
+                await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${defaultBranch}`, symbolic: true, force: true });
+                console.log(`[initializeRepo] Created local branch '${defaultBranch}' from git.log, commit: ${headCommit?.substring(0, 8)}`);
+              }
+            } catch (logErr) {
+              console.log(`[initializeRepo] git.log failed: ${(logErr as Error).message}`);
+              console.warn(`[initializeRepo] Could not find any refs or commits, repository may be empty`);
+              headCommit = undefined;
+            }
+          }
         }
       }
     } catch (refError) {
@@ -614,7 +655,7 @@ export async function ensureShallowCloneUtil(
 
 export async function ensureFullCloneUtil(
   git: GitProvider,
-  opts: { repoId: string; branch?: string; depth?: number },
+  opts: { repoId: string; branch?: string; depth?: number; cloneUrls?: string[] },
   deps: {
     rootDir: string;
     parseRepoId: (id: string) => string;
@@ -622,10 +663,11 @@ export async function ensureFullCloneUtil(
     clonedRepos: Set<string>;
     isRepoCloned: (git: GitProvider, dir: string) => Promise<boolean>;
     resolveBranchName: (dir: string, requested?: string) => Promise<string>;
+    cacheManager?: RepoCacheManager;
   },
   sendProgress: (phase: string, loaded?: number, total?: number) => void
 ) {
-  const { repoId, branch, depth = 50 } = opts;
+  const { repoId, branch, depth = 50, cloneUrls: providedCloneUrls } = opts;
   const {
     rootDir,
     parseRepoId,
@@ -637,6 +679,14 @@ export async function ensureFullCloneUtil(
   const key = parseRepoId(repoId);
   const dir = `${rootDir}/${key}`;
   const currentLevel = repoDataLevels.get(key);
+
+  // Deduplication: if there's already a pending full clone for this repo, wait for it
+  const dedupeKey = `${key}:${branch || 'default'}`;
+  const pendingClone = pendingFullClones.get(dedupeKey);
+  if (pendingClone) {
+    console.log(`[ensureFullClone] Waiting for existing clone operation for ${dedupeKey}`);
+    return pendingClone;
+  }
 
   const targetBranch = await resolveBranchName(dir, branch);
 
@@ -677,27 +727,125 @@ export async function ensureFullCloneUtil(
         error: 'Repository not initialized. Call initializeRepo first.'
       };
   }
-  sendProgress(`Fetching commit history (depth: ${depth})...`);
-  try {
-    const remotes = await git.listRemotes({ dir });
-    const originRemote = remotes.find((r: any) => r.remote === 'origin');
-    if (!originRemote?.url) throw new Error('Origin remote not found or has no URL configured');
-    const authCallback = getAuthCallback(originRemote.url);
-    await git.fetch({
-      dir,
-      url: originRemote.url,
-      ref: targetBranch,
-      depth: Math.min(depth, 100),
-      singleBranch: true,
-      tags: false,
-      onProgress: (p: any) => sendProgress(`Full clone: ${p.phase}`, p.loaded, p.total),
-      ...(authCallback && { onAuth: authCallback })
-    });
-    repoDataLevels.set(key, 'full');
-    return { success: true, repoId, cached: false, level: 'full' as const };
-  } catch (error: any) {
-    return { success: false, repoId, error: error?.message || String(error) };
-  }
+  
+  // Create the fetch operation as a promise and store it for deduplication
+  const fetchPromise = (async () => {
+    sendProgress(`Fetching commit history (depth: ${depth})...`);
+    try {
+      // Build list of URLs to try: origin URL first, then provided cloneUrls, then cached cloneUrls
+      const urlsToTry: string[] = [];
+      
+      // 1. Get origin URL from git config
+      const remotes = await git.listRemotes({ dir });
+      const originRemote = remotes.find((r: any) => r.remote === 'origin');
+      if (originRemote?.url) {
+        urlsToTry.push(originRemote.url);
+      }
+      
+      // 2. Add provided clone URLs
+      if (providedCloneUrls?.length) {
+        for (const url of filterValidCloneUrls(providedCloneUrls)) {
+          if (!urlsToTry.includes(url)) {
+            urlsToTry.push(url);
+          }
+        }
+      }
+      
+      // 3. Try to get clone URLs from cache if we have a cache manager
+      if (deps.cacheManager) {
+        try {
+          const cache = await deps.cacheManager.getRepoCache(key);
+          if (cache?.cloneUrls?.length) {
+            for (const url of filterValidCloneUrls(cache.cloneUrls)) {
+              if (!urlsToTry.includes(url)) {
+                urlsToTry.push(url);
+              }
+            }
+          }
+        } catch {
+          // Ignore cache errors
+        }
+      }
+      
+      if (urlsToTry.length === 0) {
+        throw new Error('No clone URLs available. Origin remote not found and no clone URLs provided.');
+      }
+      
+      // Reorder URLs by preference (cached successful URL first)
+      const orderedUrls = reorderUrlsByPreference(urlsToTry, key);
+      
+      console.log(`[ensureFullClone] URLs to try: `, orderedUrls.join(', '));
+      
+      // Use withUrlFallback with per-URL timeout for responsive fallback
+      const fetchResult = await withUrlFallback(
+        orderedUrls,
+        async (cloneUrl: string) => {
+          // Detect Nostr relay URLs - they may need special handling
+          const isNostrRelay = cloneUrl.includes('relay.ngit.dev') || 
+                              cloneUrl.includes('gitnostr.com') ||
+                              cloneUrl.includes('grasp');
+          
+          // For Nostr relays, ensure we fetch enough depth to get the commit objects
+          const effectiveDepth = isNostrRelay ? Math.max(depth, 50) : Math.min(depth, 100);
+          
+          if (isNostrRelay) {
+            console.log(`[ensureFullClone] Detected Nostr relay URL, using depth ${effectiveDepth}`);
+          }
+          
+          const authCallback = getAuthCallback(cloneUrl);
+          await git.fetch({
+            dir,
+            url: cloneUrl,
+            ref: targetBranch,
+            depth: effectiveDepth,
+            singleBranch: true,
+            tags: false,
+            onProgress: (p: any) => sendProgress(`Full clone: ${p.phase}`, p.loaded, p.total),
+            ...(authCallback && { onAuth: authCallback })
+          });
+          return { url: cloneUrl };
+        },
+        { 
+          repoId: key,
+          perUrlTimeoutMs: 15000  // 15 second timeout per URL - if slow, try next
+        }
+      );
+      
+      if (fetchResult.success) {
+        // Log if we used a fallback URL
+        if (fetchResult.attempts.length > 1) {
+          const failedAttempts = fetchResult.attempts.filter(a => !a.success);
+          console.log(`[ensureFullClone] Fetch succeeded after ${failedAttempts.length} failed attempt(s), used: ${fetchResult.usedUrl}`);
+        }
+        
+        repoDataLevels.set(key, 'full');
+        return { success: true, repoId, cached: false, level: 'full' as const, usedUrl: fetchResult.usedUrl };
+      } else {
+        // All URLs failed
+        const lastAttempt = fetchResult.attempts[fetchResult.attempts.length - 1];
+        const errorMessage = lastAttempt?.error || 'All fetch attempts failed';
+        
+        // Log all failed attempts for debugging
+        console.warn(`[ensureFullClone] All ${fetchResult.attempts.length} URL(s) failed:`);
+        for (const attempt of fetchResult.attempts) {
+          console.warn(`  - ${attempt.url}: ${attempt.error} (${attempt.durationMs}ms)`);
+        }
+        
+        return { success: false, repoId, error: errorMessage };
+      }
+    } catch (error: any) {
+      return { success: false, repoId, error: error?.message || String(error) };
+    } finally {
+      // Clean up the pending clone entry
+      pendingFullClones.delete(dedupeKey);
+    }
+  })();
+  
+  // Store the promise for deduplication
+  pendingFullClones.set(dedupeKey, fetchPromise);
+  console.log(`[ensureFullClone] Starting fetch for ${dedupeKey}`);
+  
+  return fetchPromise;
 }
 
 /**

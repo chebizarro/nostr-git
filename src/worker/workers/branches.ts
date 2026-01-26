@@ -46,6 +46,17 @@ export async function resolveBranchName(
 
   // No specific branch requested - use fallback logic
   
+  // Try HEAD first - it's the most reliable way to find the current branch
+  try {
+    const headOid = await git.resolveRef({ dir, ref: 'HEAD' });
+    if (headOid) {
+      console.log(`[resolveBranchName] Resolved HEAD to OID ${headOid.substring(0, 8)}`);
+      return 'HEAD';
+    }
+  } catch {
+    // HEAD not available, try named branches
+  }
+
   // Try the fallback branches
   for (const branchName of branchesToTry) {
     try {
@@ -61,8 +72,17 @@ export async function resolveBranchName(
   try {
     branches = await git.listBranches({ dir });
   } catch (error) {
-    // If listBranches fails, throw the error - this is a critical failure
-    console.error('Failed to list branches:', error);
+    // If listBranches fails, try remote branches as fallback
+    console.warn('Failed to list local branches, trying remote branches:', error);
+    try {
+      const remoteBranches = await git.listBranches({ dir, remote: 'origin' });
+      if (remoteBranches.length > 0) {
+        console.log(`[resolveBranchName] Found ${remoteBranches.length} remote branches, using first: ${remoteBranches[0]}`);
+        return remoteBranches[0];
+      }
+    } catch (remoteError) {
+      console.warn('Failed to list remote branches:', remoteError);
+    }
     throw error;
   }
 
@@ -72,6 +92,17 @@ export async function resolveBranchName(
       `All specific branch resolution attempts failed, using first available branch: ${firstBranch}`
     );
     return firstBranch;
+  }
+
+  // No local branches found - try remote branches
+  try {
+    const remoteBranches = await git.listBranches({ dir, remote: 'origin' });
+    if (remoteBranches.length > 0) {
+      console.log(`[resolveBranchName] No local branches, using remote branch: ${remoteBranches[0]}`);
+      return remoteBranches[0];
+    }
+  } catch (remoteError) {
+    console.warn('[resolveBranchName] Failed to list remote branches:', remoteError);
   }
 
   // No branches found at all - this is an error condition

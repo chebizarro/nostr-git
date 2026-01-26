@@ -295,7 +295,7 @@ export async function applyPatchAndPushUtil(
     rootDir: string;
     parseRepoId: (id: string) => string;
     resolveBranchName: (dir: string, requested?: string) => Promise<string>;
-    ensureFullClone: (args: { repoId: string; branch?: string; depth?: number }) => Promise<any>;
+    ensureFullClone: (args: { repoId: string; branch?: string; depth?: number; cloneUrls?: string[] }) => Promise<any>;
     getAuthCallback: (url: string) => any;
     getConfiguredAuthHosts?: () => string[];
     getProviderFs: (git: GitProvider) => ProviderFsLike;

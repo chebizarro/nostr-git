@@ -350,7 +350,7 @@ const api = {
     );
   },
 
-  async ensureFullClone(opts: { repoId: string; branch?: string; depth?: number }) {
+  async ensureFullClone(opts: { repoId: string; branch?: string; depth?: number; cloneUrls?: string[] }) {
     const { repoId } = opts;
     const sendProgress = makeProgress(repoId, "clone-progress");
     return toPlain(
@@ -365,6 +365,7 @@ const api = {
           isRepoCloned: async (g: GitProvider, dir: string) => isRepoClonedFs(g, dir),
           resolveBranchName: async (dir: string, requested?: string) =>
             resolveRobustBranchUtil(git, dir, requested),
+          cacheManager,
         },
         sendProgress
       )
@@ -529,7 +530,7 @@ const api = {
       parseRepoId,
       resolveBranchName: async (dir: string, requested?: string) =>
         resolveRobustBranchUtil(git, dir, requested),
-      ensureFullClone: async (args: { repoId: string; branch?: string; depth?: number }) =>
+      ensureFullClone: async (args: { repoId: string; branch?: string; depth?: number; cloneUrls?: string[] }) =>
         ensureFullCloneUtil(
           git,
           args,
@@ -541,6 +542,7 @@ const api = {
             isRepoCloned: async (g: GitProvider, dir: string) => isRepoClonedFs(g, dir),
             resolveBranchName: async (dir: string, requested?: string) =>
               resolveRobustBranchUtil(git, dir, requested),
+            cacheManager,
           },
           makeProgress(args.repoId, "clone-progress")
         ),
@@ -809,17 +811,53 @@ const api = {
 
   async getCommitHistory(opts: { repoId: string; branch?: string; depth?: number }) {
     try {
-      const { dir } = repoKeyAndDir(opts.repoId);
+      const { key, dir } = repoKeyAndDir(opts.repoId);
       const ref = opts.branch || "main";
       const depth = opts.depth ?? 50;
 
-      // Build list of refs to try: requested branch, fallbacks, remote tracking branches
-      const branchesToTry = ['main', 'master', 'develop', 'dev'];
-      const refsToTry: string[] = [ref];
+      // Check if the repo is initialized
+      const isInClonedSet = clonedRepos.has(key);
+      const dataLevel = repoDataLevels.get(key);
+      
+      // Also check if the directory actually exists on the filesystem
+      const repoExists = await isRepoClonedFs(git, dir);
+      
+      console.log(`[getCommitHistory] Repo ${key}: inClonedSet=${isInClonedSet}, dataLevel=${dataLevel || 'none'}, fsExists=${repoExists}`);
 
-      // Add remote tracking branches (for shallow clones that don't have local branches)
-      refsToTry.push(`origin/${ref}`);
-      refsToTry.push(`refs/remotes/origin/${ref}`);
+      // If repo doesn't exist at all, return retriable error
+      if (!repoExists && !isInClonedSet) {
+        return {
+          success: false,
+          error: 'Repository is still being initialized. Please wait and try again.',
+          code: 'RepoNotReady',
+          retriable: true
+        };
+      }
+      
+      // If repo exists on filesystem but not in our tracking set, add it
+      // This can happen if the repo was initialized through a different code path
+      if (repoExists && !isInClonedSet) {
+        console.log(`[getCommitHistory] Repo ${key} exists on filesystem but not in clonedRepos, adding it`);
+        clonedRepos.add(key);
+        if (!dataLevel) {
+          repoDataLevels.set(key, 'refs');
+        }
+      }
+
+      // Build list of refs to try: HEAD first (most reliable), then requested branch, then fallbacks
+      const branchesToTry = ['main', 'master', 'develop', 'dev'];
+      const refsToTry: string[] = [];
+
+      // Try HEAD first - it's the most reliable way to find the current branch
+      refsToTry.push('HEAD');
+
+      // Then try the requested branch and its variants
+      if (ref && ref !== 'HEAD') {
+        refsToTry.push(ref);
+        refsToTry.push(`origin/${ref}`);
+        refsToTry.push(`refs/remotes/origin/${ref}`);
+        refsToTry.push(`refs/heads/${ref}`);
+      }
 
       // Add fallback branches if different from requested
       for (const fallback of branchesToTry) {
@@ -827,21 +865,26 @@ const api = {
           refsToTry.push(fallback);
           refsToTry.push(`origin/${fallback}`);
           refsToTry.push(`refs/remotes/origin/${fallback}`);
+          refsToTry.push(`refs/heads/${fallback}`);
         }
       }
 
-      // Also try HEAD
-      refsToTry.push('HEAD');
-
-      // Try each ref in order
+      // Strategy 1: Try to resolve ref to OID first, then use OID with git.log
+      // This works better for Nostr repos where refs might not be in standard locations
       for (const tryRef of refsToTry) {
         try {
-          const commits = await (git as any).log({ dir, ref: tryRef, depth });
-          if (tryRef !== ref) {
-            console.log(`[getCommitHistory] Used fallback ref '${tryRef}' instead of requested '${ref}'`);
-            return { success: true, commits: toPlain(commits), fallbackUsed: tryRef };
+          // First try to resolve the ref to an OID
+          const oid = await (git as any).resolveRef({ dir, ref: tryRef });
+          if (oid && oid.length === 40) {
+            // Use the OID directly with git.log - this is more reliable
+            const commits = await (git as any).log({ dir, ref: oid, depth });
+            if (tryRef !== ref) {
+              console.log(`[getCommitHistory] Resolved '${tryRef}' to OID ${oid.substring(0, 8)}, got ${commits.length} commits`);
+              return { success: true, commits: toPlain(commits), fallbackUsed: tryRef };
+            }
+            console.log(`[getCommitHistory] Resolved '${ref}' to OID ${oid.substring(0, 8)}, got ${commits.length} commits`);
+            return { success: true, commits: toPlain(commits) };
           }
-          return { success: true, commits: toPlain(commits) };
         } catch (error: any) {
           // Only log when transitioning between branch groups
           if (tryRef === ref) {
@@ -851,30 +894,63 @@ const api = {
         }
       }
 
-      // All specific refs failed - try to list any available branches
+      // Strategy 2: Try git.log directly with ref names (fallback)
+      console.log(`[getCommitHistory] resolveRef failed for all refs, trying git.log directly`);
+      for (const tryRef of refsToTry) {
+        try {
+          const commits = await (git as any).log({ dir, ref: tryRef, depth });
+          if (commits && commits.length > 0) {
+            console.log(`[getCommitHistory] git.log succeeded with ref '${tryRef}', got ${commits.length} commits`);
+            return { success: true, commits: toPlain(commits), fallbackUsed: tryRef !== ref ? tryRef : undefined };
+          }
+        } catch {
+          // Continue to next ref
+        }
+      }
+
+      // Strategy 3: List branches and try them
       console.log(`[getCommitHistory] All standard refs failed, trying to find any available branch`);
       try {
         const branches = await (git as any).listBranches({ dir });
+        console.log(`[getCommitHistory] Found ${branches?.length || 0} local branches: ${branches?.join(', ') || 'none'}`);
         if (branches && branches.length > 0) {
-          const commits = await (git as any).log({ dir, ref: branches[0], depth });
-          console.log(`[getCommitHistory] Used first available branch '${branches[0]}'`);
-          return { success: true, commits: toPlain(commits), fallbackUsed: branches[0] };
+          for (const branch of branches) {
+            try {
+              const oid = await (git as any).resolveRef({ dir, ref: `refs/heads/${branch}` });
+              if (oid) {
+                const commits = await (git as any).log({ dir, ref: oid, depth });
+                console.log(`[getCommitHistory] Used branch '${branch}' (OID: ${oid.substring(0, 8)}), got ${commits.length} commits`);
+                return { success: true, commits: toPlain(commits), fallbackUsed: branch };
+              }
+            } catch {
+              // Try next branch
+            }
+          }
         }
-      } catch {
-        // No local branches available
+      } catch (e) {
+        console.log(`[getCommitHistory] listBranches failed: ${(e as Error).message}`);
       }
 
-      // Try remote branches as last resort
+      // Strategy 4: Try remote branches
       try {
         const remoteBranches = await (git as any).listBranches({ dir, remote: 'origin' });
+        console.log(`[getCommitHistory] Found ${remoteBranches?.length || 0} remote branches: ${remoteBranches?.join(', ') || 'none'}`);
         if (remoteBranches && remoteBranches.length > 0) {
-          const remoteRef = `origin/${remoteBranches[0]}`;
-          const commits = await (git as any).log({ dir, ref: remoteRef, depth });
-          console.log(`[getCommitHistory] Used first available remote branch '${remoteRef}'`);
-          return { success: true, commits: toPlain(commits), fallbackUsed: remoteRef };
+          for (const branch of remoteBranches) {
+            try {
+              const oid = await (git as any).resolveRef({ dir, ref: `refs/remotes/origin/${branch}` });
+              if (oid) {
+                const commits = await (git as any).log({ dir, ref: oid, depth });
+                console.log(`[getCommitHistory] Used remote branch 'origin/${branch}' (OID: ${oid.substring(0, 8)}), got ${commits.length} commits`);
+                return { success: true, commits: toPlain(commits), fallbackUsed: `origin/${branch}` };
+              }
+            } catch {
+              // Try next branch
+            }
+          }
         }
-      } catch {
-        // No remote branches available
+      } catch (e) {
+        console.log(`[getCommitHistory] listBranches(remote) failed: ${(e as Error).message}`);
       }
 
       // Nothing worked
@@ -1069,6 +1145,7 @@ const api = {
           isRepoCloned: async (g: GitProvider, d: string) => isRepoClonedFs(g, d),
           resolveBranchName: async (d: string, requested?: string) =>
             resolveRobustBranchUtil(git, d, requested),
+          cacheManager,
         },
         makeProgress(opts.repoId, "clone-progress")
       );

@@ -152,7 +152,7 @@ export async function syncWithRemoteUtil(
           });
           return { url: remoteUrl };
         },
-        { repoId: key }
+        { repoId: key, perUrlTimeoutMs: 15000 }
       );
 
       if (fetchResult.success) {
@@ -212,7 +212,7 @@ export async function syncWithRemoteUtil(
           });
           return { url: remoteUrl };
         },
-        { repoId: key }
+        { repoId: key, perUrlTimeoutMs: 15000 }
       );
 
       if (fetchResult.success) {
