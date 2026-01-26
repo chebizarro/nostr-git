@@ -20,6 +20,10 @@ if (typeof window !== 'undefined' && typeof window.Buffer === 'undefined') {
 
 export const rootDir = '/repos';
 
+// Track the depth we've already fetched for each repo to avoid redundant deepening
+const repoDepthCache: Map<string, { depth: number; timestamp: number }> = new Map();
+const DEPTH_CACHE_TTL_MS = 60_000; // 60 seconds
+
 /**
  * Detect the default branch name from a repository's HEAD reference
  * @param repoEvent Repository event
@@ -502,6 +506,18 @@ export async function ensureRepoFromEvent(
     }
   } else if (depth > 1) {
     // Repository exists but might be shallow - try to deepen it if we need more history
+    // Check if we've already fetched sufficient depth recently
+    const cacheKey = dir;
+    const cached = repoDepthCache.get(cacheKey);
+    const now = Date.now();
+    
+    if (cached && (now - cached.timestamp) < DEPTH_CACHE_TTL_MS && cached.depth >= depth) {
+      console.log(
+        `Repository at ${dir} already has depth ${cached.depth} (requested: ${depth}), skipping fetch`
+      );
+      return;
+    }
+
     try {
       console.log(
         `Repository exists at ${dir}, attempting to fetch more history (depth: ${depth})`
@@ -521,6 +537,9 @@ export async function ensureRepoFromEvent(
         console.log(
           `Successfully deepened repository using resolved branch '${resolvedBranch}' to depth ${depth}`
         );
+        
+        // Update the depth cache
+        repoDepthCache.set(cacheKey, { depth, timestamp: now });
       } catch (fetchError: any) {
         console.log(
           `Failed to fetch resolved branch '${resolvedBranch}':`,
