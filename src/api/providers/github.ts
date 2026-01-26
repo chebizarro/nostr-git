@@ -551,17 +551,23 @@ export class GitHubApi implements GitServiceApi {
       head: {
         ref: pr.head.ref,
         sha: pr.head.sha,
-        repo: {
+        repo: pr.head.repo ? {
           name: pr.head.repo.name,
           owner: pr.head.repo.owner.login
+        } : {
+          name: 'unknown',
+          owner: 'unknown'
         }
       },
       base: {
         ref: pr.base.ref,
         sha: pr.base.sha,
-        repo: {
+        repo: pr.base.repo ? {
           name: pr.base.repo.name,
           owner: pr.base.repo.owner.login
+        } : {
+          name: 'unknown',
+          owner: 'unknown'
         }
       },
       mergeable: pr.mergeable,
@@ -592,17 +598,23 @@ export class GitHubApi implements GitServiceApi {
       head: {
         ref: data.head.ref,
         sha: data.head.sha,
-        repo: {
+        repo: data.head.repo ? {
           name: data.head.repo.name,
           owner: data.head.repo.owner.login
+        } : {
+          name: 'unknown',
+          owner: 'unknown'
         }
       },
       base: {
         ref: data.base.ref,
         sha: data.base.sha,
-        repo: {
+        repo: data.base.repo ? {
           name: data.base.repo.name,
           owner: data.base.repo.owner.login
+        } : {
+          name: 'unknown',
+          owner: 'unknown'
         }
       },
       mergeable: data.mergeable,
