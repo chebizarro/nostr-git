@@ -110,11 +110,24 @@ export async function resolveBranchToOid(
   preferredBranch?: string,
   options?: { onBranchNotFound?: (branchName: string, error: any) => void }
 ): Promise<string> {
+  let lastError: unknown = null;
+
+  // Try HEAD first - it's the most reliable way to find the current commit
+  try {
+    const headOid = await git.resolveRef({ dir, ref: 'HEAD' });
+    if (headOid && headOid.length === 40) {
+      console.log(`[resolveBranchToOid] Resolved HEAD to OID: ${headOid.substring(0, 8)}`);
+      return headOid;
+    }
+  } catch (headError) {
+    console.log(`[resolveBranchToOid] HEAD resolution failed, trying named branches`);
+    lastError = headError;
+  }
+
+  // Then try preferred branch and common fallbacks
   const branchesToTry = [preferredBranch, 'main', 'master', 'develop', 'dev'].filter(
     Boolean
   ) as string[];
-
-  let lastError: unknown = null;
 
   for (const branchName of branchesToTry) {
     try {
@@ -134,21 +147,6 @@ export async function resolveBranchToOid(
       lastError = branchError;
       continue;
     }
-  }
-
-  // All branch names failed - try HEAD as fallback
-  // This handles shallow clones where refs/heads/* may not exist yet
-  // Use depth: 1 to get just the immediate target without following symbolic refs
-  try {
-    const headOid = await git.resolveRef({ dir, ref: 'HEAD', depth: 1 });
-    if (headOid && headOid.length === 40) {
-      // Got a commit OID directly
-      console.log(`[resolveBranchToOid] No branches resolved, but HEAD exists. Using HEAD OID: ${headOid.substring(0, 8)}`);
-      return headOid;
-    }
-  } catch (headError) {
-    // depth: 1 failed, try reading the log to get the latest commit
-    console.log(`[resolveBranchToOid] HEAD depth:1 resolution failed, trying git.log:`, headError);
   }
   
   // Try to get the latest commit from the log (works even without branch refs)
