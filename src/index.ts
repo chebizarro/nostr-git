@@ -21,3 +21,47 @@ export { initializeNostrGitProvider } from "./api/git-provider.js";
 export { getGitWorker, configureWorkerEventIO } from "./worker/client.js";
 export * from "./utils/sanitize-relays.js";
 export * from "./utils/clone-url-fallback.js";
+
+// Git import convenience exports
+export {
+  type ImportConfig,
+  DEFAULT_IMPORT_CONFIG,
+  createImportConfig,
+  ImportAbortController,
+  ImportAbortedError,
+  RateLimiter,
+  type RateLimitConfig,
+  type RateLimitStatus,
+  parseRepoUrl,
+  validateTokenPermissions,
+  checkRepoOwnership,
+  generatePlatformUserProfile,
+  getProfileMapKey,
+  convertRepoToNostrEvent,
+  convertRepoToStateEvent,
+  convertIssuesToNostrEvents,
+  convertIssueStatusesToEvents,
+  convertCommentsToNostrEvents,
+  convertPullRequestsToNostrEvents,
+  signEvent,
+  type UserProfileMap,
+  type CommentEventMap,
+  type ConvertedComment
+} from "./git/index.js";
+
+export { getGitServiceApi, getGitServiceApiFromUrl } from "./git/provider-factory.js";
+export { DEFAULT_RELAYS } from "./api/providers/nostr-git-factory.js";
+
+// API type exports
+export type {
+  GitServiceApi,
+  Issue as GitIssue,
+  Comment as GitComment,
+  PullRequest as GitPullRequest,
+  RepoMetadata,
+  ListCommentsOptions,
+} from "./api/api.js";
+
+// IO and event type exports
+export type { EventIO, NostrEvent, NostrFilter, PublishResult } from "./types/io-types.js";
+export type { RepoAnnouncementEvent, RepoStateEvent } from "./events/index.js";

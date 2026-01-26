@@ -9,11 +9,8 @@
 
 import type { NostrEvent, Filter as NostrFilter } from "nostr-tools";
 
-/**
- * Re-export NostrFilter from nostr-tools for convenience.
- * This is the canonical filter type used across the Nostr ecosystem.
- */
-export type { NostrFilter };
+// Re-export types from nostr-tools for convenience
+export type { NostrEvent, NostrFilter };
 
 /**
  * Result returned after publishing an event.
