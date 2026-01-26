@@ -466,10 +466,10 @@ export async function initializeRepoUtil(
         const remoteRef = `refs/remotes/origin/${remoteBranch}`;
         headCommit = await git.resolveRef({ dir, ref: remoteRef });
         
-        // Create the local branch ref
-        await git.writeRef({ dir, ref: `refs/heads/${defaultBranch}`, value: headCommit });
+        // Create the local branch ref (use force: true to handle re-initialization)
+        await git.writeRef({ dir, ref: `refs/heads/${defaultBranch}`, value: headCommit, force: true });
         // Update HEAD to point to the local branch
-        await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${defaultBranch}`, symbolic: true });
+        await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${defaultBranch}`, symbolic: true, force: true });
         console.log(`[initializeRepo] Created local branch '${defaultBranch}' from remote ref, commit: ${headCommit?.substring(0, 8)}`);
       } else {
         // No remote branches - try to read FETCH_HEAD or packed-refs
@@ -477,9 +477,9 @@ export async function initializeRepoUtil(
         try {
           // Try FETCH_HEAD which isomorphic-git creates during fetch
           headCommit = await git.resolveRef({ dir, ref: 'FETCH_HEAD' });
-          // Create a local branch from FETCH_HEAD
-          await git.writeRef({ dir, ref: `refs/heads/${defaultBranch}`, value: headCommit });
-          await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${defaultBranch}`, symbolic: true });
+          // Create a local branch from FETCH_HEAD (use force: true to handle re-initialization)
+          await git.writeRef({ dir, ref: `refs/heads/${defaultBranch}`, value: headCommit, force: true });
+          await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${defaultBranch}`, symbolic: true, force: true });
           console.log(`[initializeRepo] Created local branch '${defaultBranch}' from FETCH_HEAD, commit: ${headCommit?.substring(0, 8)}`);
         } catch {
           // Last resort: try to find any commit in the object store
