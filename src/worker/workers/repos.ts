@@ -896,10 +896,21 @@ export async function cloneRemoteRepoUtil(
 
     onProgress?.('Discovering remote references...', 10);
 
-    const refs = await git.listServerRefs({
-      url,
-      onAuth: getAuthCallback(url)
-    });
+    // Add timeout to prevent hanging on slow/unresponsive servers
+    const listRefsWithTimeout = async (timeoutMs: number = 30000) => {
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`Timeout: listServerRefs took longer than ${timeoutMs / 1000}s`)), timeoutMs);
+      });
+      return Promise.race([
+        git.listServerRefs({
+          url,
+          onAuth: getAuthCallback(url)
+        }),
+        timeoutPromise
+      ]);
+    };
+
+    const refs = await listRefsWithTimeout(30000);
 
     if (!refs || refs.length === 0) {
       throw new Error('Repository not found or no refs available');
@@ -925,7 +936,18 @@ export async function cloneRemoteRepoUtil(
     };
     if (depth && depth > 0) cloneOptions.depth = depth;
 
-    await git.clone(cloneOptions);
+    // Add timeout to prevent clone from hanging indefinitely (2 minutes for clone)
+    const cloneWithTimeout = async (timeoutMs: number = 120000) => {
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`Timeout: clone operation took longer than ${timeoutMs / 1000}s`)), timeoutMs);
+      });
+      return Promise.race([
+        git.clone(cloneOptions),
+        timeoutPromise
+      ]);
+    };
+
+    await cloneWithTimeout(120000);
 
     // Ensure origin remote is properly configured with fetch refspec
     // isomorphic-git's clone may not create the full config in all cases

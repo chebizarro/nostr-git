@@ -5,52 +5,63 @@ export class IsomorphicGitProvider implements GitProvider {
   fs: any
   http: any
   corsProxy: string
+  defaultDir?: string
 
-  constructor(options: {fs: any; http: any; corsProxy: string}) {
+  constructor(options: {fs: any; http: any; corsProxy: string; defaultDir?: string}) {
     this.fs = options.fs
     this.http = options.http
     this.corsProxy = options.corsProxy
+    this.defaultDir = options.defaultDir
   }
 
   private pickCorsProxy(options: any): any {
     return 'corsProxy' in options ? options.corsProxy : this.corsProxy;
   }
 
+  private pickDir(options: any): any {
+    return 'dir' in options ? options.dir : this.defaultDir;
+  }
+
+  private withDir(options: any): any {
+    const dir = this.pickDir(options);
+    return dir ? { ...options, dir } : options;
+  }
+
   // Return a tree walker for the given ref (commit-ish)
   TREE(options: {ref: string}) {
     // isomorphic-git exposes TREE as a function for tree-walking
     // https://isomorphic-git.org/docs/en/TREE
-    return (isogit as any).TREE({...options, fs: this.fs})
+    return (isogit as any).TREE({...this.withDir(options), fs: this.fs})
   }
   // Repository
   async clone(options: any) {
     const corsProxy = this.pickCorsProxy(options);
-    return isogit.clone({...options, fs: this.fs, http: this.http, corsProxy});
+    return isogit.clone({...this.withDir(options), fs: this.fs, http: this.http, corsProxy});
   }
   async commit(options: any) {
-    return isogit.commit({...options, fs: this.fs})
+    return isogit.commit({...this.withDir(options), fs: this.fs})
   }
   async fetch(options: any) {
     const corsProxy = this.pickCorsProxy(options);
     return isogit.fetch({
-      ...options,
+      ...this.withDir(options),
       fs: this.fs,
       http: this.http,
       corsProxy,
     }) as Promise<GitFetchResult>;
   }
   async init(options: any) {
-    return isogit.init({...options, fs: this.fs})
+    return isogit.init({...this.withDir(options), fs: this.fs})
   }
   async log(options: any) {
-    return isogit.log({...options, fs: this.fs})
+    return isogit.log({...this.withDir(options), fs: this.fs})
   }
   async merge(options: any) {
-    return isogit.merge({...options, fs: this.fs}) as Promise<GitMergeResult>
+    return isogit.merge({...this.withDir(options), fs: this.fs}) as Promise<GitMergeResult>
   }
   async pull(options: any) {
     const corsProxy = this.pickCorsProxy(options);
-    return isogit.pull({...options, fs: this.fs, http: this.http, corsProxy});
+    return isogit.pull({...this.withDir(options), fs: this.fs, http: this.http, corsProxy});
   }
   async push(options: any) {
     // Allow caller to override corsProxy (e.g., set to null for GRASP to disable proxy)
@@ -58,13 +69,13 @@ export class IsomorphicGitProvider implements GitProvider {
     const corsProxy = 'corsProxy' in options ? options.corsProxy : this.corsProxy;
     // Allow caller to override http client (e.g., for NIP-98 auth injection)
     const http = options.http || this.http;
-    return isogit.push({...options, fs: this.fs, http, corsProxy})
+    return isogit.push({...this.withDir(options), fs: this.fs, http, corsProxy})
   }
   async status(options: any) {
-    return isogit.status({...options, fs: this.fs})
+    return isogit.status({...this.withDir(options), fs: this.fs})
   }
   async statusMatrix(options: any) {
-    return isogit.statusMatrix({...options, fs: this.fs})
+    return isogit.statusMatrix({...this.withDir(options), fs: this.fs})
   }
   async version() {
     return isogit.version()
@@ -72,85 +83,85 @@ export class IsomorphicGitProvider implements GitProvider {
 
   // Branches
   async deleteBranch(options: any) {
-    return isogit.deleteBranch({...options, fs: this.fs})
+    return isogit.deleteBranch({...this.withDir(options), fs: this.fs})
   }
   async listBranches(options: any) {
-    return isogit.listBranches({...options, fs: this.fs})
+    return isogit.listBranches({...this.withDir(options), fs: this.fs})
   }
   async renameBranch(options: any) {
-    return isogit.renameBranch({...options, fs: this.fs})
+    return isogit.renameBranch({...this.withDir(options), fs: this.fs})
   }
   async branch(options: any) {
-    return isogit.branch({...options, fs: this.fs})
+    return isogit.branch({...this.withDir(options), fs: this.fs})
   }
 
   // Tags
   async deleteTag(options: any) {
-    return isogit.deleteTag({...options, fs: this.fs})
+    return isogit.deleteTag({...this.withDir(options), fs: this.fs})
   }
   async listTags(options: any) {
-    return isogit.listTags({...options, fs: this.fs})
+    return isogit.listTags({...this.withDir(options), fs: this.fs})
   }
   async tag(options: any) {
-    return isogit.tag({...options, fs: this.fs})
+    return isogit.tag({...this.withDir(options), fs: this.fs})
   }
 
   // Files
   async add(options: any) {
-    return isogit.add({...options, fs: this.fs})
+    return isogit.add({...this.withDir(options), fs: this.fs})
   }
   async addNote(options: any) {
-    return isogit.addNote({...options, fs: this.fs})
+    return isogit.addNote({...this.withDir(options), fs: this.fs})
   }
   async listFiles(options: any) {
-    return isogit.listFiles({...options, fs: this.fs})
+    return isogit.listFiles({...this.withDir(options), fs: this.fs})
   }
   async readBlob(options: any) {
-    return isogit.readBlob({...options, fs: this.fs})
+    return isogit.readBlob({...this.withDir(options), fs: this.fs})
   }
   async readCommit(options: any) {
-    return isogit.readCommit({...options, fs: this.fs})
+    return isogit.readCommit({...this.withDir(options), fs: this.fs})
   }
   async readNote(options: any) {
-    return isogit.readNote({...options, fs: this.fs})
+    return isogit.readNote({...this.withDir(options), fs: this.fs})
   }
   async readObject(options: any) {
-    return isogit.readObject({...options, fs: this.fs})
+    return isogit.readObject({...this.withDir(options), fs: this.fs})
   }
   async readTag(options: any) {
-    return isogit.readTag({...options, fs: this.fs})
+    return isogit.readTag({...this.withDir(options), fs: this.fs})
   }
   async readTree(options: any) {
-    return isogit.readTree({...options, fs: this.fs})
+    return isogit.readTree({...this.withDir(options), fs: this.fs})
   }
   async remove(options: any) {
-    return isogit.remove({...options, fs: this.fs})
+    return isogit.remove({...this.withDir(options), fs: this.fs})
   }
   async removeNote(options: any) {
-    return isogit.removeNote({...options, fs: this.fs})
+    return isogit.removeNote({...this.withDir(options), fs: this.fs})
   }
   async writeBlob(options: any) {
-    return isogit.writeBlob({...options, fs: this.fs})
+    return isogit.writeBlob({...this.withDir(options), fs: this.fs})
   }
   async writeCommit(options: any) {
-    return isogit.writeCommit({...options, fs: this.fs})
+    return isogit.writeCommit({...this.withDir(options), fs: this.fs})
   }
   async writeObject(options: any) {
-    return isogit.writeObject({...options, fs: this.fs})
+    return isogit.writeObject({...this.withDir(options), fs: this.fs})
   }
   async writeRef(options: any) {
-    return isogit.writeRef({...options, fs: this.fs})
+    return isogit.writeRef({...this.withDir(options), fs: this.fs})
   }
   async writeTag(options: any) {
-    return isogit.writeTag({...options, fs: this.fs})
+    return isogit.writeTag({...this.withDir(options), fs: this.fs})
   }
   async writeTree(options: any) {
-    return isogit.writeTree({...options, fs: this.fs})
+    return isogit.writeTree({...this.withDir(options), fs: this.fs})
   }
 
   // Remotes
   async deleteRemote(options: any) {
-    return isogit.deleteRemote({...options, fs: this.fs})
+    return isogit.deleteRemote({...this.withDir(options), fs: this.fs})
   }
   async getRemoteInfo(options: any) {
     const corsProxy = this.pickCorsProxy(options);
@@ -171,7 +182,7 @@ export class IsomorphicGitProvider implements GitProvider {
     });
   }
   async listRemotes(options: any) {
-    return isogit.listRemotes({...options, fs: this.fs})
+    return isogit.listRemotes({...this.withDir(options), fs: this.fs})
   }
   async listServerRefs(options: any) {
     const corsProxy = this.pickCorsProxy(options);
@@ -183,78 +194,78 @@ export class IsomorphicGitProvider implements GitProvider {
     });
   }
   async addRemote(options: any) {
-    return isogit.addRemote({...options, fs: this.fs})
+    return isogit.addRemote({...this.withDir(options), fs: this.fs})
   }
 
   // Working Directory
   async checkout(options: any) {
-    return isogit.checkout({...options, fs: this.fs})
+    return isogit.checkout({...this.withDir(options), fs: this.fs})
   }
 
   // Config
   async getConfig(options: any) {
-    return isogit.getConfig({...options, fs: this.fs})
+    return isogit.getConfig({...this.withDir(options), fs: this.fs})
   }
   async getConfigAll(options: any) {
-    return isogit.getConfigAll({...options, fs: this.fs})
+    return isogit.getConfigAll({...this.withDir(options), fs: this.fs})
   }
   async setConfig(options: any) {
-    return isogit.setConfig({...options, fs: this.fs})
+    return isogit.setConfig({...this.withDir(options), fs: this.fs})
   }
 
   // Refs
   async deleteRef(options: any) {
-    return isogit.deleteRef({...options, fs: this.fs})
+    return isogit.deleteRef({...this.withDir(options), fs: this.fs})
   }
   async expandOid(options: any) {
-    return isogit.expandOid({...options, fs: this.fs})
+    return isogit.expandOid({...this.withDir(options), fs: this.fs})
   }
   async expandRef(options: any) {
-    return isogit.expandRef({...options, fs: this.fs})
+    return isogit.expandRef({...this.withDir(options), fs: this.fs})
   }
   async fastForward(options: any) {
-    return isogit.fastForward({...options, fs: this.fs})
+    return isogit.fastForward({...this.withDir(options), fs: this.fs})
   }
   async findMergeBase(options: any) {
-    return isogit.findMergeBase({...options, fs: this.fs})
+    return isogit.findMergeBase({...this.withDir(options), fs: this.fs})
   }
   async findRoot(options: any) {
-    return isogit.findRoot({...options, fs: this.fs})
+    return isogit.findRoot({...this.withDir(options), fs: this.fs})
   }
   async hashBlob(options: any) {
-    return isogit.hashBlob({...options, fs: this.fs})
+    return isogit.hashBlob({...this.withDir(options), fs: this.fs})
   }
   async indexPack(options: any) {
-    return isogit.indexPack({...options, fs: this.fs})
+    return isogit.indexPack({...this.withDir(options), fs: this.fs})
   }
   async isDescendent(options: any) {
-    return isogit.isDescendent({...options, fs: this.fs})
+    return isogit.isDescendent({...this.withDir(options), fs: this.fs})
   }
   async isIgnored(options: any) {
-    return isogit.isIgnored({...options, fs: this.fs})
+    return isogit.isIgnored({...this.withDir(options), fs: this.fs})
   }
   async listNotes(options: any) {
-    return isogit.listNotes({...options, fs: this.fs})
+    return isogit.listNotes({...this.withDir(options), fs: this.fs})
   }
   async listRefs(options: any) {
-    return isogit.listRefs({...options, fs: this.fs})
+    return isogit.listRefs({...this.withDir(options), fs: this.fs})
   }
   async packObjects(options: any) {
-    return isogit.packObjects({...options, fs: this.fs})
+    return isogit.packObjects({...this.withDir(options), fs: this.fs})
   }
   async resetIndex(options: any) {
-    return isogit.resetIndex({...options, fs: this.fs})
+    return isogit.resetIndex({...this.withDir(options), fs: this.fs})
   }
   async resolveRef(options: any) {
-    return isogit.resolveRef({...options, fs: this.fs})
+    return isogit.resolveRef({...this.withDir(options), fs: this.fs})
   }
   async stash(options: any) {
-    return isogit.stash({...options, fs: this.fs})
+    return isogit.stash({...this.withDir(options), fs: this.fs})
   }
   async updateIndex(options: any) {
-    return isogit.updateIndex({...options, fs: this.fs})
+    return isogit.updateIndex({...this.withDir(options), fs: this.fs})
   }
   async walk(options: any) {
-    return isogit.walk({...options, fs: this.fs})
+    return isogit.walk({...this.withDir(options), fs: this.fs})
   }
 }
