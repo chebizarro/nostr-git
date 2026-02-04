@@ -352,12 +352,16 @@ export function convertCommentsToNostrEvents(
 /**
  * Convert platform pull requests to Nostr PullRequestEvent array
  *
+ * Uses PR title, body, head branch, base branch, and optionally commit SHAs
+ * when provided via prCommits (e.g. from listPullRequestCommits).
+ *
  * @param prs - Array of platform pull requests
  * @param repoAddr - Repository address (e.g., "30617:pubkey:repo")
  * @param platform - Platform identifier (e.g., 'github', 'gitlab')
  * @param userProfiles - Map of platform users to Nostr keypairs (keys: "platform:username")
  * @param importTimestamp - Unix timestamp (seconds) when import occurred
  * @param startTimestamp - Starting timestamp for fake chronological ordering
+ * @param prCommits - Optional map of PR number -> commit SHAs (from listPullRequestCommits)
  * @returns Array of unsigned PullRequestEvent objects ready to be signed
  */
 export function convertPullRequestsToNostrEvents(
@@ -366,7 +370,8 @@ export function convertPullRequestsToNostrEvents(
   platform: string,
   userProfiles: UserProfileMap,
   importTimestamp: number,
-  startTimestamp: number
+  startTimestamp: number,
+  prCommits?: Map<number, string[]>
 ): Array<{ event: Omit<NostrEvent, 'id' | 'sig' | 'pubkey'>; privkey: string }> {
   const result: Array<{ event: Omit<NostrEvent, 'id' | 'sig' | 'pubkey'>; privkey: string }> = [];
   let currentTimestamp = startTimestamp;
@@ -382,6 +387,7 @@ export function convertPullRequestsToNostrEvents(
 
     const labels: string[] = [];
     const originalDate = Math.floor(Date.parse(pr.createdAt) / 1000);
+    const commits = prCommits?.get(pr.number);
 
     const baseEvent = createPullRequestEvent({
       content: pr.body || '',
@@ -389,6 +395,8 @@ export function convertPullRequestsToNostrEvents(
       subject: pr.title,
       labels,
       branchName: pr.head.ref,
+      mergeBase: pr.base.ref,
+      commits: commits?.length ? commits : undefined,
       created_at: currentTimestamp,
       tags: []
     });

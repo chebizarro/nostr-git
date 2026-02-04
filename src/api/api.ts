@@ -335,6 +335,16 @@ export interface GitServiceApi {
     options?: ListPullRequestsOptions
   ): Promise<PullRequest[]>;
   getPullRequest(owner: string, repo: string, prNumber: number): Promise<PullRequest>;
+  /**
+   * List commits that are part of a pull request (optional; not all providers implement this).
+   * Returns commits in the PR that are not in the base branch, in chronological order.
+   */
+  listPullRequestCommits?(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    options?: { per_page?: number; page?: number }
+  ): Promise<Commit[]>;
   createPullRequest(owner: string, repo: string, pr: NewPullRequest): Promise<PullRequest>;
   updatePullRequest(
     owner: string,

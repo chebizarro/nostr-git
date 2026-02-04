@@ -582,6 +582,47 @@ export class GitHubApi implements GitServiceApi {
     }));
   }
 
+  async listPullRequestCommits(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    options?: { per_page?: number; page?: number }
+  ): Promise<Commit[]> {
+    const params = new URLSearchParams();
+    if (options?.per_page) params.append('per_page', options.per_page.toString());
+    if (options?.page) params.append('page', options.page.toString());
+    const queryString = params.toString();
+    const endpoint = `/repos/${owner}/${repo}/pulls/${prNumber}/commits${queryString ? `?${queryString}` : ''}`;
+    const data = await this.request<any[]>(endpoint);
+    return data.map((commit) => ({
+      sha: commit.sha,
+      message: commit.commit.message,
+      author: {
+        name: commit.commit.author?.name ?? '',
+        email: commit.commit.author?.email ?? '',
+        date: commit.commit.author?.date ?? ''
+      },
+      committer: {
+        name: commit.commit.committer?.name ?? '',
+        email: commit.commit.committer?.email ?? '',
+        date: commit.commit.committer?.date ?? ''
+      },
+      url: commit.url,
+      htmlUrl: commit.html_url,
+      parents: (commit.parents ?? []).map((parent: { sha: string; url: string }) => ({
+        sha: parent.sha,
+        url: parent.url
+      })),
+      stats: commit.stats
+        ? {
+            additions: commit.stats.additions,
+            deletions: commit.stats.deletions,
+            total: commit.stats.total
+          }
+        : undefined
+    }));
+  }
+
   async getPullRequest(owner: string, repo: string, prNumber: number): Promise<PullRequest> {
     const data = await this.request<any>(`/repos/${owner}/${repo}/pulls/${prNumber}`);
 

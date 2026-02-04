@@ -15,7 +15,7 @@ import { bytesToHex, hexToBytes } from 'nostr-tools/utils';
  * Default profile image URL for mirrored users
  * Used as fallback when platform avatar is not available
  */
-export const DEFAULT_PROFILE_IMAGE_URL = 'https://via.placeholder.com/150/CCCCCC/666666?text=User';
+export const DEFAULT_PROFILE_IMAGE_URL = '';
 
 /**
  * Platform user profile information
@@ -67,7 +67,6 @@ export function generateRandomKeyPair(): { privkey: string; pubkey: string } {
  *
  * Creates a Nostr kind 0 event with:
  * - Name: "Original Name (mirrored user from <platform>)"
- * - Picture: Platform avatar URL if available, otherwise DEFAULT_PROFILE_IMAGE_URL
  * - Tags: ["imported", ""]
  * - Created at: import timestamp
  *
