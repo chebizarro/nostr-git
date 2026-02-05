@@ -112,19 +112,7 @@ export async function resolveBranchToOid(
 ): Promise<string> {
   let lastError: unknown = null;
 
-  // Try HEAD first - it's the most reliable way to find the current commit
-  try {
-    const headOid = await git.resolveRef({ dir, ref: 'HEAD' });
-    if (headOid && headOid.length === 40) {
-      console.log(`[resolveBranchToOid] Resolved HEAD to OID: ${headOid.substring(0, 8)}`);
-      return headOid;
-    }
-  } catch (headError) {
-    console.log(`[resolveBranchToOid] HEAD resolution failed, trying named branches`);
-    lastError = headError;
-  }
-
-  // Then try preferred branch and common fallbacks
+  // Try preferred branch and common fallbacks
   const branchesToTry = [preferredBranch, 'main', 'master', 'develop', 'dev'].filter(
     Boolean
   ) as string[];

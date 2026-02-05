@@ -1,96 +1,124 @@
-# Nostr-Git Integration Platform
-
-A comprehensive TypeScript monorepo for integrating Git workflows with the Nostr protocol, enabling decentralized Git collaboration through NIP-34 events.
-
-See also: [Git Stacking and Merge Metadata](docs/nostr-git-stacking.md)
-
-## 🎯 Purpose
-
-This platform bridges Git version control with Nostr's decentralized network, allowing developers to:
-
-- Publish Git repositories, patches, and issues as Nostr events
-- Enable decentralized code collaboration without centralized platforms
-- Integrate Git workflows with Nostr clients and relays
-- Build Git-aware applications on the Nostr protocol
-
-## 📦 Packages
-
-### Core Libraries
-
-- **[@nostr-git/core](packages/core/)** – Core TypeScript library for creating, parsing, and publishing Git-related Nostr events (NIP-34)
-- **[@nostr-git/shared-types](packages/shared-types/)** – Shared TypeScript types and constants for Git/Nostr event structures
-- **[@nostr-git/git-wrapper](packages/git-wrapper/)** – Git operations wrapper with Nostr integration
-- **[@nostr-git/ui](packages/ui/)** – Svelte 5 component library with TailwindCSS for rendering Git and Nostr UI elements
-
-### Applications & Extensions
-
-- **[Extension](packages/extension/)** – Browser extension that adds Nostr publishing capabilities to GitHub
-
-## 🚀 Quick Start
-
+# Nostr-Git
+ 
+Nostr-Git is a TypeScript library that bridges **Git** with **Nostr**.
+It provides helpers to:
+ 
+- Create and parse Git-related Nostr events (NIP-34, plus related NIPs used by the project)
+- Perform Git operations (via `isomorphic-git`) with vendor/provider abstractions
+- Publish and consume repo announcements, repo state, patches, issues, and status updates
+- Run Git operations in a **Web Worker** (Comlink) for browser-friendly usage
+ 
+This repository builds and publishes a **single-package npm distribution**:
+ 
+- Package name: `@nostr-git/core`
+ 
+The public API is exposed via top-level exports and subpath exports (see `package.json` and `src/index.ts`).
+ 
+## Install
+ 
+```bash
+pnpm add @nostr-git/core
+# or
+npm i @nostr-git/core
+```
+ 
+## Quick start (library)
+ 
+The root barrel exports namespaced modules:
+ 
+```ts
+import * as ngit from "@nostr-git/core"
+ 
+// Example: initialize provider plumbing for Git + Nostr
+const git = ngit.api.getGitProvider()
+```
+ 
+Convenience exports are also available:
+ 
+```ts
+import { getGitProvider, initializeNostrGitProvider } from "@nostr-git/core"
+```
+ 
+## Event tag access (required)
+ 
+Always use the canonical tag helpers when reading event tags.
+Do **not** use `event.tags.find` / `event.tags.filter` directly.
+ 
+```ts
+// Option A: import helpers from the `events` subpath
+import { getTag, getTags, getTagValue } from "@nostr-git/core/events"
+ 
+// Option B: use the namespaced root export
+// import * as ngit from "@nostr-git/core"
+// const { getTag, getTags, getTagValue } = ngit.events
+ 
+const committer = getTag(event, "committer")
+const clones = getTags(announcement, "clone")
+const repoUrl = getTagValue(announcement, "r")
+```
+ 
+## Worker usage (browser)
+ 
+Nostr-Git ships a worker bundle export and a Comlink client.
+ 
+```ts
+import { getGitWorker, configureWorkerEventIO } from "@nostr-git/core"
+import type { EventIO } from "@nostr-git/core"
+ 
+const eventIO: EventIO = {
+  fetchEvents: async () => [],
+  publishEvent: async (event) => ({ ok: true, relays: [] }),
+  publishEvents: async (events) => Promise.all(events.map((e) => eventIO.publishEvent(e))),
+  getCurrentPubkey: () => "f".repeat(64),
+}
+ 
+const { api, worker } = getGitWorker((evt) => {
+  console.log("[worker-progress]", (evt as MessageEvent).data ?? evt)
+})
+ 
+await configureWorkerEventIO(api, eventIO)
+// ... call worker API methods
+worker.terminate()
+```
+ 
+See `examples/worker-usage.ts` for a fuller example.
+ 
+## Runtime validation (feature-flagged)
+ 
+Optional Zod-backed event validation can be toggled via `NOSTR_GIT_VALIDATE_EVENTS`.
+ 
+- Default behavior: enabled when `NODE_ENV != "production"`, disabled in production.
+- Truthy values: `true`, `1`, `yes`
+- Falsy values: `false`, `0`, `no`
+ 
+## Development
+ 
 ### Prerequisites
-
+ 
 - Node.js 18+
-- pnpm 8+
-
-### Installation
-
+- pnpm (this repo pins `pnpm@10.12.4` in `package.json`)
+ 
+### Common commands
+ 
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/nostr-git.git
-cd nostr-git
-
-# Install dependencies
 pnpm install
-
-# Build all packages
 pnpm build
+pnpm test
+pnpm lint
+pnpm typecheck
+pnpm dev
 ```
-
-### Development
-
-```bash
-# Start development mode for all packages
-pnpm watch:all
-
-# Or watch specific packages
-pnpm watch:core
-pnpm watch:ui
-```
-
-## 🏗️ Architecture
-
-This monorepo follows a modular architecture where each package serves a specific purpose:
-
-- **Core**: Event creation, parsing, and Nostr protocol integration
-- **UI**: Reusable Svelte components for Git/Nostr interfaces
-- **Extensions**: Platform-specific integrations (GitHub)
-
-## 📖 Documentation
-
-- [Architecture Guide](ARCHITECTURE.md) - System design and component relationships
-- [Development Guide](DEVELOPMENT.md) - Local setup and development workflow
-- [AI Context](AI_CONTEXT.md) - LLM-specific coding context and patterns
-- [Coding Standards](CODING_STANDARDS.md) - Code style and conventions
-- [Deployment Guide](DEPLOYMENT.md) - Build and deployment processes
-- [Subscription Cookbook](docs/subscription-cookbook.md) - Practical NIP-34/22/32 subscription patterns
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Make your changes following our [coding standards](CODING_STANDARDS.md)
-4. Run tests: `pnpm test`
-5. Commit your changes: `git commit -m 'Add amazing feature'`
-6. Push to the branch: `git push origin feature/amazing-feature`
-7. Open a Pull Request
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## 🔗 Links
-
-- [NIP-34 Specification](https://github.com/nostr-protocol/nips/blob/master/34.md)
-- [Nostr Protocol](https://nostr.com/)
-- [Project Documentation](docs/)
+ 
+For watch mode (tsc + worker bundle), see `pnpm watch` and `scripts/dev.mjs`.
+ 
+## Documentation
+ 
+- [API](API.md)
+- [Development Guide](DEVELOPMENT.md)
+- [Architecture](ARCHITECTURE.md)
+- [Deployment](DEPLOYMENT.md)
+- [Subscription Cookbook](docs/subscription-cookbook.md)
+ 
+## License
+ 
+See [LICENSE](LICENSE).

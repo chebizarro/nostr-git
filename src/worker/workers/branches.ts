@@ -46,17 +46,6 @@ export async function resolveBranchName(
 
   // No specific branch requested - use fallback logic
   
-  // Try HEAD first - it's the most reliable way to find the current branch
-  try {
-    const headOid = await git.resolveRef({ dir, ref: 'HEAD' });
-    if (headOid) {
-      console.log(`[resolveBranchName] Resolved HEAD to OID ${headOid.substring(0, 8)}`);
-      return 'HEAD';
-    }
-  } catch {
-    // HEAD not available, try named branches
-  }
-
   // Try the fallback branches
   for (const branchName of branchesToTry) {
     try {

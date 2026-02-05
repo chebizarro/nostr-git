@@ -36,7 +36,10 @@
     "typecheck": "tsc -p tsconfig.base.json --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "prepare": "pnpm build"
+    "prepare": "pnpm build",
+    "prepublishOnly": "pnpm run typecheck && pnpm run lint && pnpm run test",
+    "publish:alpha": "npm publish --access public --tag alpha",
+    "publish:latest": "npm publish --access public"
   },
   "dependencies": {
     "@isomorphic-git/lightning-fs": "^4.6.2",
