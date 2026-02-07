@@ -296,8 +296,13 @@ export class GitHubApi implements GitServiceApi {
       createdAt: issue.created_at,
       updatedAt: issue.updated_at,
       closedAt: issue.closed_at,
+      closedBy: issue.closed_by ? {
+        login: issue.closed_by.login,
+        avatarUrl: issue.closed_by.avatar_url
+      } : undefined,
       url: issue.url,
-      htmlUrl: issue.html_url
+      htmlUrl: issue.html_url,
+      isPullRequest: !!issue.pull_request
     }));
   }
 
@@ -326,6 +331,10 @@ export class GitHubApi implements GitServiceApi {
       createdAt: data.created_at,
       updatedAt: data.updated_at,
       closedAt: data.closed_at,
+      closedBy: data.closed_by ? {
+        login: data.closed_by.login,
+        avatarUrl: data.closed_by.avatar_url
+      } : undefined,
       url: data.url,
       htmlUrl: data.html_url
     };

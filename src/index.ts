@@ -40,7 +40,7 @@ export {
   convertRepoToNostrEvent,
   convertRepoToStateEvent,
   convertIssuesToNostrEvents,
-  convertIssueStatusesToEvents,
+  convertIssueStatusToEvent,
   convertCommentsToNostrEvents,
   convertPullRequestsToNostrEvents,
   signEvent,

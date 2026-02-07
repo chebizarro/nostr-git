@@ -65,6 +65,10 @@ export interface Issue {
   createdAt: string;
   updatedAt: string;
   closedAt?: string;
+  closedBy?: {
+    login: string;
+    avatarUrl?: string;
+  };
   url: string;
   htmlUrl: string;
   /**
@@ -72,6 +76,10 @@ export interface Issue {
    * Provided by some Git service APIs (e.g., GitHub)
    */
   commentsCount?: number;
+  /**
+   * True when this item is a pull request (GitHub/Gitea issues API returns both).
+   */
+  isPullRequest?: boolean;
 }
 
 /**
