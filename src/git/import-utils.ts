@@ -47,6 +47,7 @@ export interface ParsedRepoUrl {
  * - https://github.com/owner/repo
  * - https://github.com/owner/repo.git
  * - https://gitlab.com/owner/repo
+ * - https://gitlab.com/group/subgroup/repo (nested groups)
  * - https://gitlab.example.com/owner/repo
  *
  * @param url - Repository URL to parse
@@ -72,15 +73,25 @@ export function parseRepoUrl(url: string): ParsedRepoUrl {
       );
     }
 
-    const owner = pathParts[pathParts.length - 2];
-    const repo = pathParts[pathParts.length - 1];
+    const host = urlObj.hostname;
+    const provider = detectVendorFromUrl(url);
+
+    // GitLab and Gitea support nested groups: group/subgroup/repo
+    // owner = full namespace path, repo = last segment
+    let owner: string;
+    let repo: string;
+    if (provider === 'gitlab' || provider === 'gitea') {
+      owner = pathParts.slice(0, -1).join('/');
+      repo = pathParts[pathParts.length - 1];
+    } else {
+      // GitHub, Bitbucket, GRASP: owner = second-to-last, repo = last
+      owner = pathParts[pathParts.length - 2];
+      repo = pathParts[pathParts.length - 1];
+    }
 
     if (!owner || !repo) {
       throw new Error(`Unable to extract owner and repo from URL: ${url}`);
     }
-
-    const host = urlObj.hostname;
-    const provider = detectVendorFromUrl(url);
 
     return {
       owner,

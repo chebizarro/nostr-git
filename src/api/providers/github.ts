@@ -296,8 +296,13 @@ export class GitHubApi implements GitServiceApi {
       createdAt: issue.created_at,
       updatedAt: issue.updated_at,
       closedAt: issue.closed_at,
+      closedBy: issue.closed_by ? {
+        login: issue.closed_by.login,
+        avatarUrl: issue.closed_by.avatar_url
+      } : undefined,
       url: issue.url,
-      htmlUrl: issue.html_url
+      htmlUrl: issue.html_url,
+      isPullRequest: !!issue.pull_request
     }));
   }
 
@@ -326,6 +331,10 @@ export class GitHubApi implements GitServiceApi {
       createdAt: data.created_at,
       updatedAt: data.updated_at,
       closedAt: data.closed_at,
+      closedBy: data.closed_by ? {
+        login: data.closed_by.login,
+        avatarUrl: data.closed_by.avatar_url
+      } : undefined,
       url: data.url,
       htmlUrl: data.html_url
     };
@@ -579,6 +588,47 @@ export class GitHubApi implements GitServiceApi {
       htmlUrl: pr.html_url,
       diffUrl: pr.diff_url,
       patchUrl: pr.patch_url
+    }));
+  }
+
+  async listPullRequestCommits(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    options?: { per_page?: number; page?: number }
+  ): Promise<Commit[]> {
+    const params = new URLSearchParams();
+    if (options?.per_page) params.append('per_page', options.per_page.toString());
+    if (options?.page) params.append('page', options.page.toString());
+    const queryString = params.toString();
+    const endpoint = `/repos/${owner}/${repo}/pulls/${prNumber}/commits${queryString ? `?${queryString}` : ''}`;
+    const data = await this.request<any[]>(endpoint);
+    return data.map((commit) => ({
+      sha: commit.sha,
+      message: commit.commit.message,
+      author: {
+        name: commit.commit.author?.name ?? '',
+        email: commit.commit.author?.email ?? '',
+        date: commit.commit.author?.date ?? ''
+      },
+      committer: {
+        name: commit.commit.committer?.name ?? '',
+        email: commit.commit.committer?.email ?? '',
+        date: commit.commit.committer?.date ?? ''
+      },
+      url: commit.url,
+      htmlUrl: commit.html_url,
+      parents: (commit.parents ?? []).map((parent: { sha: string; url: string }) => ({
+        sha: parent.sha,
+        url: parent.url
+      })),
+      stats: commit.stats
+        ? {
+            additions: commit.stats.additions,
+            deletions: commit.stats.deletions,
+            total: commit.stats.total
+          }
+        : undefined
     }));
   }
 

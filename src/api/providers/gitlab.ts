@@ -416,6 +416,10 @@ export class GitLabApi implements GitServiceApi {
       createdAt: issue.created_at,
       updatedAt: issue.updated_at,
       closedAt: issue.closed_at,
+      closedBy: issue.closed_by ? {
+        login: issue.closed_by.username,
+        avatarUrl: issue.closed_by.avatar_url
+      } : undefined,
       url: issue.web_url,
       htmlUrl: issue.web_url
     }));

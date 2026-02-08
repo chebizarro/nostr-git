@@ -15,7 +15,9 @@ import {
   createStatusEvent,
   createRepoAnnouncementEvent,
   createRepoStateEvent,
-  createCommentEvent
+  createCommentEvent,
+  GIT_STATUS_OPEN,
+  GIT_STATUS_CLOSED
 } from '../events/index.js';
 
 /**
@@ -168,42 +170,35 @@ export function convertIssuesToNostrEvents(
   return result;
 }
 
+
+// todo: review this function and make sure it's correct
 /**
- * Convert issue statuses to Nostr StatusEvent array
+ * Convert issue status to Nostr StatusEvent
  *
  * Creates status events for the current status only (no history).
- * Posts status even if issue is open (explicit status).
  *
  * @param issueEventId - Nostr event ID of the issue event
  * @param issueState - Current issue state ('open' | 'closed')
- * @param issueClosedAt - Optional closed date
- * @param maintainerPubkey - Public key of the maintainer/user importing
+ * @param originalDate - Original date of the issue (ISO 8601); stored in tag as Unix timestamp (seconds)
  * @param repoAddr - Repository address
- * @param importTimestamp - Unix timestamp (seconds) when import occurred
  * @param startTimestamp - Starting timestamp for fake chronological ordering
- * @returns Array of unsigned StatusEvent objects ready to be signed
+ * @returns Unsigned StatusEvent object ready to be signed
  */
-export function convertIssueStatusesToEvents(
+export function convertIssueStatusToEvent(
   issueEventId: string,
   issueState: 'open' | 'closed',
-  issueClosedAt: string | undefined,
-  maintainerPubkey: string,
+  originalDate: string,
   repoAddr: string,
-  importTimestamp: number,
   startTimestamp: number
-): Array<{ event: Omit<NostrEvent, 'id' | 'sig' | 'pubkey'>; maintainerPubkey: string }> {
-  const result: Array<{
-    event: Omit<NostrEvent, 'id' | 'sig' | 'pubkey'>;
-    maintainerPubkey: string;
-  }> = [];
+): Omit<NostrEvent, 'id' | 'sig' | 'pubkey'> {
 
-  const statusKind = issueState === 'closed' ? 1631 : 1630;
+  const statusKind = issueState === 'closed' ? GIT_STATUS_CLOSED : GIT_STATUS_OPEN;
   const statusContent = issueState === 'closed' ? 'closed' : 'open';
 
-  const originalDate =
-    issueClosedAt && issueState === 'closed'
-      ? Math.floor(Date.parse(issueClosedAt) / 1000)
-      : importTimestamp;
+  const parsed = Date.parse(originalDate);
+  const originalDateUnixSeconds = Number.isNaN(parsed)
+    ? startTimestamp
+    : Math.floor(parsed / 1000);
 
   const baseEvent = createStatusEvent({
     kind: statusKind,
@@ -217,7 +212,7 @@ export function convertIssueStatusesToEvents(
   const tags: string[][] = [
     ...baseEvent.tags,
     ['imported', ''],
-    ['original_date', originalDate.toString()]
+    ['original_date', originalDateUnixSeconds.toString()]
   ];
 
   const statusEvent: Omit<NostrEvent, 'id' | 'sig' | 'pubkey'> = {
@@ -225,12 +220,7 @@ export function convertIssueStatusesToEvents(
     tags
   };
 
-  result.push({
-    event: statusEvent,
-    maintainerPubkey: maintainerPubkey
-  });
-
-  return result;
+  return statusEvent;
 }
 
 /**
@@ -352,12 +342,16 @@ export function convertCommentsToNostrEvents(
 /**
  * Convert platform pull requests to Nostr PullRequestEvent array
  *
+ * Uses PR title, body, head branch, base branch, and optionally commit SHAs
+ * when provided via prCommits (e.g. from listPullRequestCommits).
+ *
  * @param prs - Array of platform pull requests
  * @param repoAddr - Repository address (e.g., "30617:pubkey:repo")
  * @param platform - Platform identifier (e.g., 'github', 'gitlab')
  * @param userProfiles - Map of platform users to Nostr keypairs (keys: "platform:username")
  * @param importTimestamp - Unix timestamp (seconds) when import occurred
  * @param startTimestamp - Starting timestamp for fake chronological ordering
+ * @param prCommits - Optional map of PR number -> commit SHAs (from listPullRequestCommits)
  * @returns Array of unsigned PullRequestEvent objects ready to be signed
  */
 export function convertPullRequestsToNostrEvents(
@@ -366,7 +360,8 @@ export function convertPullRequestsToNostrEvents(
   platform: string,
   userProfiles: UserProfileMap,
   importTimestamp: number,
-  startTimestamp: number
+  startTimestamp: number,
+  prCommits?: Map<number, string[]>
 ): Array<{ event: Omit<NostrEvent, 'id' | 'sig' | 'pubkey'>; privkey: string }> {
   const result: Array<{ event: Omit<NostrEvent, 'id' | 'sig' | 'pubkey'>; privkey: string }> = [];
   let currentTimestamp = startTimestamp;
@@ -382,6 +377,7 @@ export function convertPullRequestsToNostrEvents(
 
     const labels: string[] = [];
     const originalDate = Math.floor(Date.parse(pr.createdAt) / 1000);
+    const commits = prCommits?.get(pr.number);
 
     const baseEvent = createPullRequestEvent({
       content: pr.body || '',
@@ -389,6 +385,8 @@ export function convertPullRequestsToNostrEvents(
       subject: pr.title,
       labels,
       branchName: pr.head.ref,
+      mergeBase: pr.base.ref,
+      commits: commits?.length ? commits : undefined,
       created_at: currentTimestamp,
       tags: []
     });
