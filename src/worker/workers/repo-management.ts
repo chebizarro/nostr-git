@@ -5,23 +5,56 @@
  * These are extracted from the legacy worker to keep the main worker clean.
  */
 
-import type { GitProvider } from "../../git/provider.js";
-import type { GitVendor } from "../../git/vendor-providers.js";
-import { getGitServiceApi } from "../../git/provider-factory.js";
-import { getProviderFs, ensureDir, isRepoClonedFs } from "./fs-utils.js";
-import { cloneRemoteRepoUtil } from "./repos.js";
-import { resolveBranchName as resolveRobustBranch } from "./branches.js";
-import { parseRepoId } from "../../utils/repo-id.js";
+import type {GitProvider} from "../../git/provider.js"
+import type {GitVendor} from "../../git/vendor-providers.js"
+import {getGitServiceApi} from "../../git/provider-factory.js"
+import {getProviderFs, ensureDir, isRepoClonedFs} from "./fs-utils.js"
+import {cloneRemoteRepoUtil} from "./repos.js"
+import {resolveBranchName as resolveRobustBranch} from "./branches.js"
+import {parseRepoId} from "../../utils/repo-id.js"
 
 // Helper to generate canonical repo key from repoId
 function canonicalRepoKey(repoId: string): string {
   // Use parseRepoId to normalize, then make filesystem-safe
   try {
-    const normalized = parseRepoId(repoId);
-    return normalized.replace(/[^a-zA-Z0-9_\-\/]/g, "_");
+    const normalized = parseRepoId(repoId)
+    return normalized.replace(/[^a-zA-Z0-9_\-\/]/g, "_")
   } catch {
-    return repoId.replace(/[^a-zA-Z0-9_\-\/]/g, "_");
+    return repoId.replace(/[^a-zA-Z0-9_\-\/]/g, "_")
   }
+}
+
+async function ensureOriginFetchRefspec(
+  git: GitProvider,
+  dir: string,
+  url?: string,
+): Promise<void> {
+  if (
+    typeof (git as any).getConfig !== "function" ||
+    typeof (git as any).setConfig !== "function"
+  ) {
+    return
+  }
+
+  try {
+    const fetchSpec = await git.getConfig({dir, path: "remote.origin.fetch"})
+    if (!fetchSpec) {
+      await git.setConfig({
+        dir,
+        path: "remote.origin.fetch",
+        value: "+refs/heads/*:refs/remotes/origin/*",
+      })
+    }
+  } catch {}
+
+  if (!url) return
+
+  try {
+    const originUrl = await git.getConfig({dir, path: "remote.origin.url"})
+    if (!originUrl) {
+      await git.setConfig({dir, path: "remote.origin.url", value: url})
+    }
+  } catch {}
 }
 
 // ============================================================================
@@ -145,23 +178,20 @@ Cargo.lock
 
 # OS
 .DS_Store`,
-};
+}
 
 /**
  * Get .gitignore template content for various languages/frameworks
  */
 export async function getGitignoreTemplate(template: string): Promise<string> {
-  return GITIGNORE_TEMPLATES[template] || "";
+  return GITIGNORE_TEMPLATES[template] || ""
 }
 
 /**
  * Get license template content
  */
-export async function getLicenseTemplate(
-  template: string,
-  authorName: string
-): Promise<string> {
-  const currentYear = new Date().getFullYear();
+export async function getLicenseTemplate(template: string, authorName: string): Promise<string> {
+  const currentYear = new Date().getFullYear()
 
   const templates: Record<string, string> = {
     mit: `MIT License
@@ -219,9 +249,9 @@ the Free Software Foundation, either version 3 of the License, or
 Anyone is free to copy, modify, publish, use, compile, sell, or
 distribute this software, either in source code form or as a compiled
 binary, for any purpose, commercial or non-commercial, and by any means.`,
-  };
+  }
 
-  return templates[template] || "";
+  return templates[template] || ""
 }
 
 // ============================================================================
@@ -229,23 +259,23 @@ binary, for any purpose, commercial or non-commercial, and by any means.`,
 // ============================================================================
 
 export interface CreateLocalRepoOptions {
-  repoId: string;
-  name: string;
-  description?: string;
-  defaultBranch?: string;
-  initializeWithReadme?: boolean;
-  gitignoreTemplate?: string;
-  licenseTemplate?: string;
-  authorName: string;
-  authorEmail: string;
+  repoId: string
+  name: string
+  description?: string
+  defaultBranch?: string
+  initializeWithReadme?: boolean
+  gitignoreTemplate?: string
+  licenseTemplate?: string
+  authorName: string
+  authorEmail: string
 }
 
 export interface CreateLocalRepoResult {
-  success: boolean;
-  repoId: string;
-  commitSha?: string;
-  files?: string[];
-  error?: string;
+  success: boolean
+  repoId: string
+  commitSha?: string
+  files?: string[]
+  error?: string
 }
 
 /**
@@ -256,7 +286,7 @@ export async function createLocalRepo(
   rootDir: string,
   clonedRepos: Set<string>,
   repoDataLevels: Map<string, string>,
-  options: CreateLocalRepoOptions
+  options: CreateLocalRepoOptions,
 ): Promise<CreateLocalRepoResult> {
   const {
     repoId,
@@ -268,93 +298,93 @@ export async function createLocalRepo(
     licenseTemplate = "none",
     authorName,
     authorEmail,
-  } = options;
+  } = options
 
-  const key = canonicalRepoKey(repoId);
-  const dir = `${rootDir}/${key}`;
+  const key = canonicalRepoKey(repoId)
+  const dir = `${rootDir}/${key}`
 
   try {
-    console.log(`Creating local repository: ${name}`);
+    console.log(`Creating local repository: ${name}`)
 
     // Initialize git repository
-    await git.init({ dir, defaultBranch });
+    await git.init({dir, defaultBranch})
 
     // Create initial files based on options
-    const files: Array<{ path: string; content: string }> = [];
+    const files: Array<{path: string; content: string}> = []
 
     // README.md
     if (initializeWithReadme) {
-      const readmeContent = `# ${name}\n\n${description || "A new repository created with Flotilla-Budabit"}\n`;
-      files.push({ path: "README.md", content: readmeContent });
+      const readmeContent = `# ${name}\n\n${description || "A new repository created with Flotilla-Budabit"}\n`
+      files.push({path: "README.md", content: readmeContent})
     }
 
     // .gitignore
     if (gitignoreTemplate !== "none") {
-      const gitignoreContent = await getGitignoreTemplate(gitignoreTemplate);
+      const gitignoreContent = await getGitignoreTemplate(gitignoreTemplate)
       if (gitignoreContent) {
-        files.push({ path: ".gitignore", content: gitignoreContent });
+        files.push({path: ".gitignore", content: gitignoreContent})
       }
     }
 
     // LICENSE
     if (licenseTemplate !== "none") {
-      const licenseContent = await getLicenseTemplate(licenseTemplate, authorName);
+      const licenseContent = await getLicenseTemplate(licenseTemplate, authorName)
       if (licenseContent) {
-        files.push({ path: "LICENSE", content: licenseContent });
+        files.push({path: "LICENSE", content: licenseContent})
       }
     }
 
     // Write files to repository
-    const fs = getProviderFs(git);
+    const fs = getProviderFs(git)
     if (!fs || !fs.promises) {
-      throw new Error("File system provider is not available");
+      throw new Error("File system provider is not available")
     }
 
     for (const file of files) {
-      const filePath = `${dir}/${file.path}`;
+      const filePath = `${dir}/${file.path}`
 
       // Ensure directory exists for nested files
-      const pathParts = file.path.split("/");
+      const pathParts = file.path.split("/")
       if (pathParts.length > 1) {
-        const dirPath = pathParts.slice(0, -1).join("/");
-        const fullDirPath = `${dir}/${dirPath}`;
+        const dirPath = pathParts.slice(0, -1).join("/")
+        const fullDirPath = `${dir}/${dirPath}`
         try {
-          await ensureDir(fs, fullDirPath);
+          await ensureDir(fs, fullDirPath)
         } catch {
           // Directory might already exist
         }
       }
 
-      await fs.promises.writeFile(filePath, file.content, "utf8");
-      await git.add({ dir, filepath: file.path });
+      await fs.promises.writeFile(filePath, file.content, "utf8")
+      await git.add({dir, filepath: file.path})
     }
 
     // Create initial commit
     const commitSha = await git.commit({
       dir,
       message: "Initial commit",
-      author: { name: authorName, email: authorEmail },
-    });
+      author: {name: authorName, email: authorEmail},
+    })
 
     // Update tracking
-    clonedRepos.add(key);
-    repoDataLevels.set(key, "full");
+    clonedRepos.add(key)
+    repoDataLevels.set(key, "full")
 
-    console.log(`Local repository created successfully: ${commitSha}`);
+    console.log(`Local repository created successfully: ${commitSha}`)
 
     return {
       success: true,
       repoId,
       commitSha,
-      files: files.map((f) => f.path),
-    };
+      files: files.map(f => f.path),
+    }
   } catch (error) {
-    console.error(`Error creating local repository ${repoId}:`, error);
+    console.error(`Error creating local repository ${repoId}:`, error)
     return {
       success: false,
       repoId,
       error: error instanceof Error ? error.message : String(error),
-    };
+    }
   }
 }
 
@@ -363,38 +393,38 @@ export async function createLocalRepo(
 // ============================================================================
 
 export interface CreateRemoteRepoOptions {
-  provider: GitVendor;
-  token: string;
-  name: string;
-  description?: string;
-  isPrivate?: boolean;
-  baseUrl?: string;
+  provider: GitVendor
+  token: string
+  name: string
+  description?: string
+  isPrivate?: boolean
+  baseUrl?: string
 }
 
 export interface CreateRemoteRepoResult {
-  success: boolean;
-  remoteUrl?: string;
-  provider?: GitVendor;
-  error?: string;
+  success: boolean
+  remoteUrl?: string
+  provider?: GitVendor
+  error?: string
 }
 
 /**
  * Create a remote repository on GitHub/GitLab/Gitea/GRASP
  */
 export async function createRemoteRepo(
-  options: CreateRemoteRepoOptions
+  options: CreateRemoteRepoOptions,
 ): Promise<CreateRemoteRepoResult> {
-  const { provider, token, name, description, isPrivate = false, baseUrl } = options;
+  const {provider, token, name, description, isPrivate = false, baseUrl} = options
 
   try {
-    console.log(`Creating remote repository on ${provider}: ${name}`);
+    console.log(`Creating remote repository on ${provider}: ${name}`)
 
     if (!token || token.trim() === "") {
-      throw new Error("No authentication token provided");
+      throw new Error("No authentication token provided")
     }
 
     // Use GitServiceApi abstraction
-    const api = getGitServiceApi(provider, token, baseUrl);
+    const api = getGitServiceApi(provider, token, baseUrl)
 
     // Create repository using unified API
     const repoMetadata = await api.createRepo({
@@ -402,24 +432,24 @@ export async function createRemoteRepo(
       description,
       private: isPrivate,
       autoInit: false,
-    });
+    })
 
-    let remoteUrl = repoMetadata.cloneUrl;
+    let remoteUrl = repoMetadata.cloneUrl
 
     // For GRASP, ensure clone URL uses HTTP(S) scheme, not WS(S)
     if (provider === "grasp") {
-      remoteUrl = remoteUrl.replace(/^ws:\/\//, "http://").replace(/^wss:\/\//, "https://");
+      remoteUrl = remoteUrl.replace(/^ws:\/\//, "http://").replace(/^wss:\/\//, "https://")
     }
 
-    console.log(`Remote repository created: ${remoteUrl}`);
+    console.log(`Remote repository created: ${remoteUrl}`)
 
-    return { success: true, remoteUrl, provider };
+    return {success: true, remoteUrl, provider}
   } catch (error) {
-    console.error(`Error creating remote repository:`, error);
+    console.error(`Error creating remote repository:`, error)
     return {
       success: false,
       error: error instanceof Error ? error.message : String(error),
-    };
+    }
   }
 }
 
@@ -428,27 +458,27 @@ export async function createRemoteRepo(
 // ============================================================================
 
 export interface ForkAndCloneOptions {
-  owner: string;
-  repo: string;
-  forkName: string;
-  visibility: "public" | "private";
-  token: string;
-  dir: string;
-  provider?: string;
-  baseUrl?: string;
-  sourceCloneUrls?: string[]; // For cross-platform forking (e.g., Nostr repo to GitHub)
-  sourceRepoId?: string; // Canonical repo ID for finding existing local clone
-  onProgress?: (stage: string, pct?: number) => void;
+  owner: string
+  repo: string
+  forkName: string
+  visibility: "public" | "private"
+  token: string
+  dir: string
+  provider?: string
+  baseUrl?: string
+  sourceCloneUrls?: string[] // For cross-platform forking (e.g., Nostr repo to GitHub)
+  sourceRepoId?: string // Canonical repo ID for finding existing local clone
+  onProgress?: (stage: string, pct?: number) => void
 }
 
 export interface ForkAndCloneResult {
-  success: boolean;
-  repoId: string;
-  forkUrl: string;
-  defaultBranch: string;
-  branches: string[];
-  tags: string[];
-  error?: string;
+  success: boolean
+  repoId: string
+  forkUrl: string
+  defaultBranch: string
+  branches: string[]
+  tags: string[]
+  error?: string
 }
 
 /**
@@ -458,7 +488,7 @@ export async function forkAndCloneRepo(
   git: GitProvider,
   cacheManager: any,
   rootDir: string,
-  options: ForkAndCloneOptions
+  options: ForkAndCloneOptions,
 ): Promise<ForkAndCloneResult> {
   const {
     owner,
@@ -472,161 +502,184 @@ export async function forkAndCloneRepo(
     sourceCloneUrls,
     sourceRepoId,
     onProgress,
-  } = options;
+  } = options
 
   try {
-    onProgress?.("Creating remote fork...", 10);
+    onProgress?.("Creating remote fork...", 10)
 
     // Validate inputs
     if (!owner?.trim() || !repo?.trim() || !forkName?.trim()) {
       throw new Error(
-        `Invalid parameters for fork: owner="${owner}", repo="${repo}", forkName="${forkName}"`
-      );
+        `Invalid parameters for fork: owner="${owner}", repo="${repo}", forkName="${forkName}"`,
+      )
     }
 
-    console.log("[forkAndCloneRepo] Input params", { provider, baseUrl, owner, repo, forkName, sourceCloneUrls });
+    console.log("[forkAndCloneRepo] Input params", {
+      provider,
+      baseUrl,
+      owner,
+      repo,
+      forkName,
+      sourceCloneUrls,
+    })
 
     // Create remote fork using GitServiceApi
-    const gitServiceApi = getGitServiceApi(provider as GitVendor, token, baseUrl);
+    const gitServiceApi = getGitServiceApi(provider as GitVendor, token, baseUrl)
 
-    let forkResult;
-    let isCrossPlatformFork = false;
-    
+    let forkResult
+    let isCrossPlatformFork = false
+
     try {
-      forkResult = await gitServiceApi.forkRepo(owner, repo, { name: forkName });
+      forkResult = await gitServiceApi.forkRepo(owner, repo, {name: forkName})
     } catch (e: any) {
-      console.error("[forkAndCloneRepo] forkRepo failed", { owner, repo, forkName, error: e?.message });
-      
+      console.error("[forkAndCloneRepo] forkRepo failed", {
+        owner,
+        repo,
+        forkName,
+        error: e?.message,
+      })
+
       // Check if this is an error indicating source repo doesn't exist on target platform
       // or that we need to do a cross-platform fork
       // - 404: GitHub/GitLab repo not found
       // - 422: GitLab "Unable to access repository" when trying to import
       // - GRASP: "not supported without external EventIO" - need cross-platform fork
-      const is404 = e?.message?.includes("404") || e?.message?.includes("Not Found");
-      const isGitLabImportError = e?.message?.includes("422") && e?.message?.includes("Unable to access");
-      const isGraspNotSupported = e?.message?.includes("GRASP") && e?.message?.includes("not supported");
-      
+      const is404 = e?.message?.includes("404") || e?.message?.includes("Not Found")
+      const isGitLabImportError =
+        e?.message?.includes("422") && e?.message?.includes("Unable to access")
+      const isGraspNotSupported =
+        e?.message?.includes("GRASP") && e?.message?.includes("not supported")
+
       if (is404 || isGitLabImportError || isGraspNotSupported) {
         if (sourceCloneUrls && sourceCloneUrls.length > 0) {
-          console.log("[forkAndCloneRepo] Source repo not found on target platform, attempting cross-platform fork");
-          isCrossPlatformFork = true;
+          console.log(
+            "[forkAndCloneRepo] Source repo not found on target platform, attempting cross-platform fork",
+          )
+          isCrossPlatformFork = true
         } else {
           throw new Error(
             `Source repository "${owner}/${repo}" not found on ${provider}. ` +
-            `For cross-platform forking, the source repository's clone URLs must be provided.`
-          );
+              `For cross-platform forking, the source repository's clone URLs must be provided.`,
+          )
         }
       } else {
-        throw e;
+        throw e
       }
     }
 
-    const absoluteDir = dir.startsWith("/") ? dir : `${rootDir}/${dir}`;
-    let forkUrl: string;
-    let forkOwnerLogin: string;
-    let metadataDir = absoluteDir; // Directory to use for gathering metadata at the end
+    const absoluteDir = dir.startsWith("/") ? dir : `${rootDir}/${dir}`
+    let forkUrl: string
+    let forkOwnerLogin: string
+    let metadataDir = absoluteDir // Directory to use for gathering metadata at the end
 
     if (isCrossPlatformFork) {
       // Cross-platform fork: use existing local clone or clone from source, then create new repo and push
-      onProgress?.("Checking for existing local clone...", 20);
-      
+      onProgress?.("Checking for existing local clone...", 20)
+
       // Check multiple possible locations for existing clone:
       // 1. The sourceRepoId path (canonical repo ID from the source repo)
       // 2. The destination directory (absoluteDir) - might already have the repo
       // 3. A directory based on owner/repo format
-      let workingDir = absoluteDir;
-      let foundExistingClone = false;
-      
+      let workingDir = absoluteDir
+      let foundExistingClone = false
+
       // First, try the sourceRepoId if provided (most reliable - this is the canonical path)
       if (sourceRepoId) {
-        const sourceRepoDir = `${rootDir}/${sourceRepoId}`;
-        console.log("[forkAndCloneRepo] Checking sourceRepoId path:", sourceRepoDir);
-        const sourceRepoCloned = await isRepoClonedFs(git, sourceRepoDir);
+        const sourceRepoDir = `${rootDir}/${sourceRepoId}`
+        console.log("[forkAndCloneRepo] Checking sourceRepoId path:", sourceRepoDir)
+        const sourceRepoCloned = await isRepoClonedFs(git, sourceRepoDir)
         if (sourceRepoCloned) {
-          console.log("[forkAndCloneRepo] Found existing local clone at sourceRepoId path:", sourceRepoDir);
-          onProgress?.("Using existing local clone...", 25);
-          workingDir = sourceRepoDir;
-          foundExistingClone = true;
+          console.log(
+            "[forkAndCloneRepo] Found existing local clone at sourceRepoId path:",
+            sourceRepoDir,
+          )
+          onProgress?.("Using existing local clone...", 25)
+          workingDir = sourceRepoDir
+          foundExistingClone = true
         }
       }
-      
+
       // If not found, check if the destination directory already has a clone
       if (!foundExistingClone) {
-        const destCloned = await isRepoClonedFs(git, absoluteDir);
+        const destCloned = await isRepoClonedFs(git, absoluteDir)
         if (destCloned) {
-          console.log("[forkAndCloneRepo] Found existing local clone at destination:", absoluteDir);
-          onProgress?.("Using existing local clone...", 25);
-          workingDir = absoluteDir;
-          foundExistingClone = true;
+          console.log("[forkAndCloneRepo] Found existing local clone at destination:", absoluteDir)
+          onProgress?.("Using existing local clone...", 25)
+          workingDir = absoluteDir
+          foundExistingClone = true
         }
       }
-      
+
       // If not found at destination, try owner/repo format
       if (!foundExistingClone) {
-        const sourceRepoKey = `${owner}/${repo}`;
-        const sourceDir = `${rootDir}/${sourceRepoKey}`;
-        const sourceCloned = await isRepoClonedFs(git, sourceDir);
+        const sourceRepoKey = `${owner}/${repo}`
+        const sourceDir = `${rootDir}/${sourceRepoKey}`
+        const sourceCloned = await isRepoClonedFs(git, sourceDir)
         if (sourceCloned) {
-          console.log("[forkAndCloneRepo] Found existing local clone at source path:", sourceDir);
-          onProgress?.("Using existing local clone...", 25);
-          workingDir = sourceDir;
-          foundExistingClone = true;
+          console.log("[forkAndCloneRepo] Found existing local clone at source path:", sourceDir)
+          onProgress?.("Using existing local clone...", 25)
+          workingDir = sourceDir
+          foundExistingClone = true
         }
       }
-      
+
       if (!foundExistingClone) {
         // Try each source clone URL until one works
-        console.log("[forkAndCloneRepo] No existing clone found, will clone from remote");
-        onProgress?.("Cloning source repository...", 20);
-        let cloneSuccess = false;
-        let lastError: Error | null = null;
-        
+        console.log("[forkAndCloneRepo] No existing clone found, will clone from remote")
+        onProgress?.("Cloning source repository...", 20)
+        let cloneSuccess = false
+        let lastError: Error | null = null
+
         for (const sourceUrl of sourceCloneUrls!) {
           try {
-            console.log("[forkAndCloneRepo] Trying to clone from:", sourceUrl);
+            console.log("[forkAndCloneRepo] Trying to clone from:", sourceUrl)
             await cloneRemoteRepoUtil(git, cacheManager, {
               url: sourceUrl,
               dir: absoluteDir,
               depth: 50,
               token: undefined, // Source may not need auth or use different auth
               onProgress: (message: string, percentage?: number) => {
-                onProgress?.(message, 20 + (percentage || 0) * 0.3);
+                onProgress?.(message, 20 + (percentage || 0) * 0.3)
               },
-            });
-            cloneSuccess = true;
-            break;
+            })
+            cloneSuccess = true
+            break
           } catch (cloneError: any) {
-            console.warn("[forkAndCloneRepo] Clone failed for URL:", sourceUrl, cloneError?.message);
-            lastError = cloneError;
+            console.warn("[forkAndCloneRepo] Clone failed for URL:", sourceUrl, cloneError?.message)
+            lastError = cloneError
           }
         }
-        
+
         if (!cloneSuccess) {
-          throw new Error(`Failed to clone source repository from any URL: ${lastError?.message}`);
+          throw new Error(`Failed to clone source repository from any URL: ${lastError?.message}`)
         }
-        workingDir = absoluteDir;
+        workingDir = absoluteDir
       }
-      
-      console.log("[forkAndCloneRepo] Using working directory:", workingDir);
+
+      console.log("[forkAndCloneRepo] Using working directory:", workingDir)
 
       // For GRASP as target, we don't create a repo via API or push via git
       // GRASP uses Nostr events - the UI layer will publish the repo announcement
       if (provider === "grasp") {
-        console.log("[forkAndCloneRepo] GRASP target - skipping createRepo and push, UI will publish events");
-        onProgress?.("Repository cloned locally, ready for Nostr announcement...", 90);
-        
+        console.log(
+          "[forkAndCloneRepo] GRASP target - skipping createRepo and push, UI will publish events",
+        )
+        onProgress?.("Repository cloned locally, ready for Nostr announcement...", 90)
+
         // Get branch info for the result
-        const branches = await git.listBranches({ dir: workingDir });
-        let defaultBranch = branches[0] || "main";
-        if (branches.includes("main")) defaultBranch = "main";
-        else if (branches.includes("master")) defaultBranch = "master";
-        
+        const branches = await git.listBranches({dir: workingDir})
+        let defaultBranch = branches[0] || "main"
+        if (branches.includes("main")) defaultBranch = "main"
+        else if (branches.includes("master")) defaultBranch = "master"
+
         // For GRASP, the fork URL will be constructed by the UI using the relay URL
         // Use the baseUrl (relay URL) as the base for the clone URL
-        const graspCloneUrl = baseUrl ? `${baseUrl.replace("wss://", "https://")}/${token}/${forkName}.git` : "";
-        
-        metadataDir = workingDir;
-        
+        const graspCloneUrl = baseUrl
+          ? `${baseUrl.replace("wss://", "https://")}/${token}/${forkName}.git`
+          : ""
+
+        metadataDir = workingDir
+
         // Return success - the UI will handle publishing the Nostr events
         return {
           success: true,
@@ -634,174 +687,194 @@ export async function forkAndCloneRepo(
           forkUrl: graspCloneUrl,
           defaultBranch,
           branches,
-          tags: await git.listTags({ dir: workingDir }),
-        };
+          tags: await git.listTags({dir: workingDir}),
+        }
       }
 
-      onProgress?.("Creating new repository on target platform...", 55);
-      
+      onProgress?.("Creating new repository on target platform...", 55)
+
       // Create a new empty repo on the target platform
       const newRepoResult = await gitServiceApi.createRepo({
         name: forkName,
         description: `Fork of ${owner}/${repo}`,
         private: visibility === "private",
-      });
-      
-      forkUrl = newRepoResult.cloneUrl;
-      forkOwnerLogin = newRepoResult.owner.login;
-      console.log("[forkAndCloneRepo] Created new repo:", { forkUrl, forkOwnerLogin });
+      })
 
-      onProgress?.("Pushing to new repository...", 70);
-      
+      forkUrl = newRepoResult.cloneUrl
+      forkOwnerLogin = newRepoResult.owner.login
+      console.log("[forkAndCloneRepo] Created new repo:", {forkUrl, forkOwnerLogin})
+
+      onProgress?.("Pushing to new repository...", 70)
+
       // Add the new repo as remote and push (use workingDir which may be existing local clone)
-      console.log("[forkAndCloneRepo] Working directory:", workingDir);
-      
+      console.log("[forkAndCloneRepo] Working directory:", workingDir)
+
       // Try to add remote, ignore if it already exists
       try {
-        await git.addRemote({ dir: workingDir, remote: "fork-target", url: forkUrl });
+        await git.addRemote({dir: workingDir, remote: "fork-target", url: forkUrl})
       } catch (e: any) {
-        if (!e?.message?.includes("already exists")) throw e;
+        if (!e?.message?.includes("already exists")) throw e
         // Remote already exists, update it
-        await git.deleteRemote({ dir: workingDir, remote: "fork-target" }).catch(() => {});
-        await git.addRemote({ dir: workingDir, remote: "fork-target", url: forkUrl });
+        await git.deleteRemote({dir: workingDir, remote: "fork-target"}).catch(() => {})
+        await git.addRemote({dir: workingDir, remote: "fork-target", url: forkUrl})
       }
-      
+
       // Get the actual branch name (not HEAD) - list branches and pick the first one
       // or try common branch names
-      const branches = await git.listBranches({ dir: workingDir });
-      let defaultBranch = branches[0] || "main";
-      
+      const branches = await git.listBranches({dir: workingDir})
+      let defaultBranch = branches[0] || "main"
+
       // Prefer main/master if available
       if (branches.includes("main")) {
-        defaultBranch = "main";
+        defaultBranch = "main"
       } else if (branches.includes("master")) {
-        defaultBranch = "master";
+        defaultBranch = "master"
       }
-      
-      console.log("[forkAndCloneRepo] Pushing branch:", defaultBranch, "available branches:", branches);
-      console.log("[forkAndCloneRepo] Push URL:", forkUrl, "token length:", token?.length);
-      
+
+      console.log(
+        "[forkAndCloneRepo] Pushing branch:",
+        defaultBranch,
+        "available branches:",
+        branches,
+      )
+      console.log("[forkAndCloneRepo] Push URL:", forkUrl, "token length:", token?.length)
+
       // For cross-platform fork, we ALWAYS need to fetch full history before pushing
       // The local clone may be shallow or missing objects even if .git/shallow doesn't exist
       // GitHub will reject pushes with missing parent commits
-      const fs: any = (git as any).fs;
-      const shallowFile = `${workingDir}/.git/shallow`;
-      
+      const fs: any = (git as any).fs
+      const shallowFile = `${workingDir}/.git/shallow`
+
       // Check if shallow file exists (for logging)
-      let hasShallowFile = false;
+      let hasShallowFile = false
       try {
-        await fs.promises.stat(shallowFile);
-        hasShallowFile = true;
-        console.log("[forkAndCloneRepo] Shallow file exists - will fetch full history");
+        await fs.promises.stat(shallowFile)
+        hasShallowFile = true
+        console.log("[forkAndCloneRepo] Shallow file exists - will fetch full history")
       } catch {
-        console.log("[forkAndCloneRepo] No shallow file, but will still fetch full history to ensure all objects are present");
+        console.log(
+          "[forkAndCloneRepo] No shallow file, but will still fetch full history to ensure all objects are present",
+        )
       }
-      
+
       // ALWAYS fetch full history for cross-platform fork to ensure we have all objects
       {
-        console.log("[forkAndCloneRepo] Unshallowing clone by fetching full history...");
-        onProgress?.("Fetching full commit history...", 72);
-        
-        let unshallowed = false;
-        
+        console.log("[forkAndCloneRepo] Unshallowing clone by fetching full history...")
+        onProgress?.("Fetching full commit history...", 72)
+
+        let unshallowed = false
+
         // First, try to fetch from the existing origin remote (this is the URL that worked for the initial clone)
         try {
-          const remotes = await git.listRemotes({ dir: workingDir });
-          const originRemote = remotes.find((r: any) => r.remote === "origin");
+          const remotes = await git.listRemotes({dir: workingDir})
+          const originRemote = remotes.find((r: any) => r.remote === "origin")
           if (originRemote?.url) {
-            console.log("[forkAndCloneRepo] Trying to fetch full history from existing origin:", originRemote.url);
+            console.log(
+              "[forkAndCloneRepo] Trying to fetch full history from existing origin:",
+              originRemote.url,
+            )
+            await ensureOriginFetchRefspec(git, workingDir, originRemote.url)
             // Fetch ALL refs without depth limit to get complete history
             await git.fetch({
               dir: workingDir,
               remote: "origin",
               tags: true, // Also fetch tags
               corsProxy: "https://cors.isomorphic-git.org",
-            });
-            console.log("[forkAndCloneRepo] Fetch from origin succeeded");
-            unshallowed = true;
+            })
+            console.log("[forkAndCloneRepo] Fetch from origin succeeded")
+            unshallowed = true
           }
         } catch (originErr: any) {
-          console.warn("[forkAndCloneRepo] Fetch from origin failed:", originErr?.message);
+          console.warn("[forkAndCloneRepo] Fetch from origin failed:", originErr?.message)
         }
-        
+
         // If origin fetch failed, try the provided source URLs
         if (!unshallowed && sourceCloneUrls && sourceCloneUrls.length > 0) {
-          console.log("[forkAndCloneRepo] Trying source URLs:", sourceCloneUrls);
-          
+          console.log("[forkAndCloneRepo] Trying source URLs:", sourceCloneUrls)
+
           for (const sourceUrl of sourceCloneUrls) {
             try {
-              console.log("[forkAndCloneRepo] Fetching full history from:", sourceUrl);
+              console.log("[forkAndCloneRepo] Fetching full history from:", sourceUrl)
               // Fetch ALL refs without depth limit to get complete history
               await git.fetch({
                 dir: workingDir,
                 url: sourceUrl,
                 tags: true, // Also fetch tags
                 corsProxy: "https://cors.isomorphic-git.org",
-              });
-              console.log("[forkAndCloneRepo] Fetch succeeded from:", sourceUrl);
-              unshallowed = true;
-              break;
+              })
+              console.log("[forkAndCloneRepo] Fetch succeeded from:", sourceUrl)
+              unshallowed = true
+              break
             } catch (fetchErr: any) {
-              console.warn("[forkAndCloneRepo] Fetch failed for:", sourceUrl, fetchErr?.message);
+              console.warn("[forkAndCloneRepo] Fetch failed for:", sourceUrl, fetchErr?.message)
             }
           }
         }
-        
+
         if (!unshallowed) {
-          throw new Error("Could not fetch full history from any source - cannot push to GitHub without complete history");
+          throw new Error(
+            "Could not fetch full history from any source - cannot push to GitHub without complete history",
+          )
         }
-        
+
         // Remove shallow file if it exists
         if (hasShallowFile) {
           try {
-            await fs.promises.unlink(shallowFile);
-            console.log("[forkAndCloneRepo] Removed shallow file");
+            await fs.promises.unlink(shallowFile)
+            console.log("[forkAndCloneRepo] Removed shallow file")
           } catch {}
         }
       }
-      
+
       // Verify we have commits and check for missing objects
-      let headCommit: string | undefined;
+      let headCommit: string | undefined
       try {
-        const log = await git.log({ dir: workingDir, depth: 100, ref: defaultBranch });
-        console.log("[forkAndCloneRepo] Local commits available:", log?.length || 0, "first:", log?.[0]?.oid?.substring(0, 8));
+        const log = await git.log({dir: workingDir, depth: 100, ref: defaultBranch})
+        console.log(
+          "[forkAndCloneRepo] Local commits available:",
+          log?.length || 0,
+          "first:",
+          log?.[0]?.oid?.substring(0, 8),
+        )
         if (log && log.length > 0) {
-          headCommit = log[0].oid;
+          headCommit = log[0].oid
           // Check if we have all parent commits by walking the tree
-          let missingParent = false;
+          let missingParent = false
           for (const commit of log) {
             if (commit.commit?.parent) {
               for (const parentOid of commit.commit.parent) {
                 try {
-                  await git.readCommit({ dir: workingDir, oid: parentOid });
+                  await git.readCommit({dir: workingDir, oid: parentOid})
                 } catch {
-                  console.warn("[forkAndCloneRepo] Missing parent commit:", parentOid);
-                  missingParent = true;
-                  break;
+                  console.warn("[forkAndCloneRepo] Missing parent commit:", parentOid)
+                  missingParent = true
+                  break
                 }
               }
             }
-            if (missingParent) break;
+            if (missingParent) break
           }
           if (missingParent) {
-            console.log("[forkAndCloneRepo] Repository has incomplete history - some parent commits are missing");
+            console.log(
+              "[forkAndCloneRepo] Repository has incomplete history - some parent commits are missing",
+            )
           }
         }
       } catch (logErr: any) {
-        console.warn("[forkAndCloneRepo] Could not get log:", logErr?.message);
+        console.warn("[forkAndCloneRepo] Could not get log:", logErr?.message)
       }
-      
+
       // Push the default branch with retry logic
       // New GitHub repos may need a moment to be ready for push
-      const maxPushRetries = 3;
-      let pushSuccess = false;
-      let lastPushError: Error | null = null;
-      
+      const maxPushRetries = 3
+      let pushSuccess = false
+      let lastPushError: Error | null = null
+
       // First, try a normal push
       for (let attempt = 1; attempt <= maxPushRetries && !pushSuccess; attempt++) {
         try {
-          console.log(`[forkAndCloneRepo] Push attempt ${attempt}/${maxPushRetries}`);
-          
+          console.log(`[forkAndCloneRepo] Push attempt ${attempt}/${maxPushRetries}`)
+
           await git.push({
             dir: workingDir,
             url: forkUrl,
@@ -810,47 +883,53 @@ export async function forkAndCloneRepo(
             force: true,
             corsProxy: undefined,
             onAuth: () => {
-              console.log("[forkAndCloneRepo] onAuth called for push, provider:", provider);
+              console.log("[forkAndCloneRepo] onAuth called for push, provider:", provider)
               // Different providers use different auth formats:
               // GitHub: username can be "token", "x-access-token", or the actual username
               // GitLab: username should be "oauth2" for PATs
               if (provider === "gitlab") {
-                return { username: "oauth2", password: token };
+                return {username: "oauth2", password: token}
               }
-              return { username: "token", password: token };
+              return {username: "token", password: token}
             },
             onAuthSuccess: () => {
-              console.log("[forkAndCloneRepo] Auth succeeded");
+              console.log("[forkAndCloneRepo] Auth succeeded")
             },
             onAuthFailure: (url: string, auth: any) => {
-              console.error("[forkAndCloneRepo] Auth failure for URL:", url);
-              return undefined;
+              console.error("[forkAndCloneRepo] Auth failure for URL:", url)
+              return undefined
             },
-          });
-          console.log("[forkAndCloneRepo] Push successful");
-          pushSuccess = true;
+          })
+          console.log("[forkAndCloneRepo] Push successful")
+          pushSuccess = true
         } catch (pushError: any) {
-          lastPushError = pushError;
-          const isNotFoundError = pushError?.code === "NotFoundError" || pushError?.message?.includes("Could not find");
-          console.warn(`[forkAndCloneRepo] Push attempt ${attempt} failed:`, pushError?.message);
-          
+          lastPushError = pushError
+          const isNotFoundError =
+            pushError?.code === "NotFoundError" || pushError?.message?.includes("Could not find")
+          console.warn(`[forkAndCloneRepo] Push attempt ${attempt} failed:`, pushError?.message)
+
           if (pushError?.data) {
-            console.warn("[forkAndCloneRepo] Push error data:", JSON.stringify(pushError.data, null, 2));
+            console.warn(
+              "[forkAndCloneRepo] Push error data:",
+              JSON.stringify(pushError.data, null, 2),
+            )
           }
           if (pushError?.code) {
-            console.warn("[forkAndCloneRepo] Error code:", pushError.code);
+            console.warn("[forkAndCloneRepo] Error code:", pushError.code)
           }
-          
+
           // If we're missing objects, try creating an orphan commit with the current tree
           if (isNotFoundError && attempt === maxPushRetries && headCommit) {
-            console.log("[forkAndCloneRepo] Missing git objects - creating orphan commit with current tree state");
-            onProgress?.("Creating fresh commit from current files...", 80);
-            
+            console.log(
+              "[forkAndCloneRepo] Missing git objects - creating orphan commit with current tree state",
+            )
+            onProgress?.("Creating fresh commit from current files...", 80)
+
             try {
               // Read the current commit to get its tree
-              const currentCommit = await git.readCommit({ dir: workingDir, oid: headCommit });
-              const treeOid = currentCommit.commit.tree;
-              
+              const currentCommit = await git.readCommit({dir: workingDir, oid: headCommit})
+              const treeOid = currentCommit.commit.tree
+
               // Create a new orphan commit with no parents
               const orphanCommitOid = await git.commit({
                 dir: workingDir,
@@ -864,23 +943,23 @@ export async function forkAndCloneRepo(
                   timezoneOffset: 0,
                 },
                 committer: {
-                  name: "Flotilla Fork", 
+                  name: "Flotilla Fork",
                   email: "fork@flotilla.app",
                   timestamp: Math.floor(Date.now() / 1000),
                   timezoneOffset: 0,
                 },
-              });
-              
-              console.log("[forkAndCloneRepo] Created orphan commit:", orphanCommitOid);
-              
+              })
+
+              console.log("[forkAndCloneRepo] Created orphan commit:", orphanCommitOid)
+
               // Update the branch to point to the orphan commit
               await git.writeRef({
                 dir: workingDir,
                 ref: `refs/heads/${defaultBranch}`,
                 value: orphanCommitOid,
                 force: true,
-              });
-              
+              })
+
               // Try pushing the orphan commit
               await git.push({
                 dir: workingDir,
@@ -889,78 +968,89 @@ export async function forkAndCloneRepo(
                 remoteRef: `refs/heads/${defaultBranch}`,
                 force: true,
                 corsProxy: undefined,
-                onAuth: () => provider === "gitlab" ? { username: "oauth2", password: token } : { username: "token", password: token },
-              });
-              
-              console.log("[forkAndCloneRepo] Push of orphan commit successful");
-              pushSuccess = true;
+                onAuth: () =>
+                  provider === "gitlab"
+                    ? {username: "oauth2", password: token}
+                    : {username: "token", password: token},
+              })
+
+              console.log("[forkAndCloneRepo] Push of orphan commit successful")
+              pushSuccess = true
             } catch (orphanError: any) {
-              console.error("[forkAndCloneRepo] Failed to create/push orphan commit:", orphanError?.message);
+              console.error(
+                "[forkAndCloneRepo] Failed to create/push orphan commit:",
+                orphanError?.message,
+              )
               // Continue to throw the original error
             }
           }
-          
+
           if (!pushSuccess && attempt < maxPushRetries) {
-            await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+            await new Promise(resolve => setTimeout(resolve, 2000 * attempt))
           }
         }
       }
-      
+
       if (!pushSuccess) {
-        console.error("[forkAndCloneRepo] All push attempts failed:", lastPushError?.message);
-        throw new Error(`Failed to push to new repository after ${maxPushRetries} attempts: ${lastPushError?.message}`);
+        console.error("[forkAndCloneRepo] All push attempts failed:", lastPushError?.message)
+        throw new Error(
+          `Failed to push to new repository after ${maxPushRetries} attempts: ${lastPushError?.message}`,
+        )
       }
 
       // Clean up the fork-target remote
-      await git.deleteRemote({ dir: workingDir, remote: "fork-target" }).catch(() => {});
-      
-      // Use workingDir for metadata gathering
-      metadataDir = workingDir;
+      await git.deleteRemote({dir: workingDir, remote: "fork-target"}).catch(() => {})
 
+      // Use workingDir for metadata gathering
+      metadataDir = workingDir
     } else {
       // Standard same-platform fork
       // Check if the fork name was honored
       if (forkResult!.name !== forkName) {
         throw new Error(
-          `Fork already exists with name "${forkResult!.name}". Please delete the existing fork first or choose a different name.`
-        );
+          `Fork already exists with name "${forkResult!.name}". Please delete the existing fork first or choose a different name.`,
+        )
       }
 
-      forkOwnerLogin = forkResult!.owner.login;
-      forkUrl = forkResult!.cloneUrl;
-      console.log("[forkAndCloneRepo] Fork created", { forkOwner: forkOwnerLogin, forkUrl });
+      forkOwnerLogin = forkResult!.owner.login
+      forkUrl = forkResult!.cloneUrl
+      console.log("[forkAndCloneRepo] Fork created", {forkOwner: forkOwnerLogin, forkUrl})
 
-      onProgress?.("Waiting for fork to be ready...", 30);
+      onProgress?.("Waiting for fork to be ready...", 30)
 
       // Poll until fork is ready
-      let pollAttempts = 0;
-      const maxPollAttempts = 30;
+      let pollAttempts = 0
+      const maxPollAttempts = 30
 
       while (pollAttempts < maxPollAttempts) {
         try {
-          const repoMetadata = await gitServiceApi.getRepo(forkOwnerLogin, forkName);
-          if (repoMetadata?.id) break;
+          const repoMetadata = await gitServiceApi.getRepo(forkOwnerLogin, forkName)
+          if (repoMetadata?.id) break
         } catch (error: any) {
           if (!error.message?.includes("404") && !error.message?.includes("Not Found")) {
-            throw error;
+            throw error
           }
         }
 
-        pollAttempts++;
-        onProgress?.(`Waiting for fork... (${pollAttempts}/${maxPollAttempts})`, 30 + (pollAttempts / maxPollAttempts) * 20);
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        pollAttempts++
+        onProgress?.(
+          `Waiting for fork... (${pollAttempts}/${maxPollAttempts})`,
+          30 + (pollAttempts / maxPollAttempts) * 20,
+        )
+        await new Promise(resolve => setTimeout(resolve, 1000))
       }
 
       if (pollAttempts >= maxPollAttempts) {
-        throw new Error("Fork creation timed out. The fork may still be processing.");
+        throw new Error("Fork creation timed out. The fork may still be processing.")
       }
 
-      onProgress?.("Cloning fork locally...", 60);
+      onProgress?.("Cloning fork locally...", 60)
 
       // Clone the fork locally
-      const cloneUrl = provider === "grasp"
-        ? forkUrl.replace("ws://", "http://").replace("wss://", "https://")
-        : forkUrl;
+      const cloneUrl =
+        provider === "grasp"
+          ? forkUrl.replace("ws://", "http://").replace("wss://", "https://")
+          : forkUrl
 
       await cloneRemoteRepoUtil(git, cacheManager, {
         url: cloneUrl,
@@ -968,19 +1058,19 @@ export async function forkAndCloneRepo(
         depth: 50, // Use shallow clone to avoid hanging on large repos
         token,
         onProgress: (message: string, percentage?: number) => {
-          onProgress?.(message, 60 + (percentage || 0) * 0.35);
+          onProgress?.(message, 60 + (percentage || 0) * 0.35)
         },
-      });
+      })
     }
 
-    onProgress?.("Gathering repository metadata...", 95);
+    onProgress?.("Gathering repository metadata...", 95)
 
     // Get repository metadata (use metadataDir which may be existing local clone for cross-platform forks)
-    const defaultBranch = await resolveRobustBranch(git, metadataDir);
-    const branches = await git.listBranches({ dir: metadataDir });
-    const tags = await git.listTags({ dir: metadataDir });
+    const defaultBranch = await resolveRobustBranch(git, metadataDir)
+    const branches = await git.listBranches({dir: metadataDir})
+    const tags = await git.listTags({dir: metadataDir})
 
-    onProgress?.("Fork completed successfully!", 100);
+    onProgress?.("Fork completed successfully!", 100)
 
     return {
       success: true,
@@ -989,14 +1079,14 @@ export async function forkAndCloneRepo(
       defaultBranch,
       branches,
       tags,
-    };
+    }
   } catch (error: any) {
-    console.error("Fork and clone failed:", error);
+    console.error("Fork and clone failed:", error)
 
     // Cleanup partial clone on error
     try {
-      const fs: any = (git as any).fs;
-      await fs?.promises?.rmdir?.(dir, { recursive: true }).catch?.(() => {});
+      const fs: any = (git as any).fs
+      await fs?.promises?.rmdir?.(dir, {recursive: true}).catch?.(() => {})
     } catch {
       // Ignore cleanup errors
     }
@@ -1009,7 +1099,7 @@ export async function forkAndCloneRepo(
       branches: [],
       tags: [],
       error: error.message || "Fork operation failed",
-    };
+    }
   }
 }
 
@@ -1018,50 +1108,50 @@ export async function forkAndCloneRepo(
 // ============================================================================
 
 export interface UpdateRemoteRepoMetadataOptions {
-  owner: string;
-  repo: string;
+  owner: string
+  repo: string
   updates: {
-    name?: string;
-    description?: string;
-    private?: boolean;
-  };
-  token: string;
-  provider?: GitVendor;
+    name?: string
+    description?: string
+    private?: boolean
+  }
+  token: string
+  provider?: GitVendor
 }
 
 export interface UpdateRemoteRepoMetadataResult {
-  success: boolean;
-  updatedRepo?: any;
-  error?: string;
+  success: boolean
+  updatedRepo?: any
+  error?: string
 }
 
 /**
  * Update remote repository metadata via Git provider API
  */
 export async function updateRemoteRepoMetadata(
-  options: UpdateRemoteRepoMetadataOptions
+  options: UpdateRemoteRepoMetadataOptions,
 ): Promise<UpdateRemoteRepoMetadataResult> {
-  const { owner, repo, updates, token, provider = "github" } = options;
+  const {owner, repo, updates, token, provider = "github"} = options
 
   try {
-    console.log(`Updating remote repository metadata for ${owner}/${repo}...`);
+    console.log(`Updating remote repository metadata for ${owner}/${repo}...`)
 
-    const api = getGitServiceApi(provider, token);
+    const api = getGitServiceApi(provider, token)
     const updatedRepo = await api.updateRepo(owner, repo, {
       name: updates.name,
       description: updates.description,
       private: updates.private,
-    });
+    })
 
-    console.log(`Successfully updated remote repository metadata`);
+    console.log(`Successfully updated remote repository metadata`)
 
-    return { success: true, updatedRepo };
+    return {success: true, updatedRepo}
   } catch (error: any) {
-    console.error("Update remote repository metadata failed:", error);
+    console.error("Update remote repository metadata failed:", error)
     return {
       success: false,
       error: error.message || "Failed to update repository metadata",
-    };
+    }
   }
 }
 
@@ -1070,18 +1160,18 @@ export async function updateRemoteRepoMetadata(
 // ============================================================================
 
 export interface UpdateAndPushFilesOptions {
-  dir: string;
-  files: Array<{ path: string; content: string }>;
-  commitMessage: string;
-  token: string;
-  provider?: GitVendor;
-  onProgress?: (stage: string) => void;
+  dir: string
+  files: Array<{path: string; content: string}>
+  commitMessage: string
+  token: string
+  provider?: GitVendor
+  onProgress?: (stage: string) => void
 }
 
 export interface UpdateAndPushFilesResult {
-  success: boolean;
-  commitId?: string;
-  error?: string;
+  success: boolean
+  commitId?: string
+  error?: string
 }
 
 /**
@@ -1089,56 +1179,56 @@ export interface UpdateAndPushFilesResult {
  */
 export async function updateAndPushFiles(
   git: GitProvider,
-  options: UpdateAndPushFilesOptions
+  options: UpdateAndPushFilesOptions,
 ): Promise<UpdateAndPushFilesResult> {
-  const { dir, files, commitMessage, token, provider = "github", onProgress } = options;
+  const {dir, files, commitMessage, token, provider = "github", onProgress} = options
 
   try {
-    onProgress?.("Updating local files...");
+    onProgress?.("Updating local files...")
 
-    const fs = getProviderFs(git);
+    const fs = getProviderFs(git)
     if (!fs?.promises) {
-      throw new Error("Filesystem not available from Git provider");
+      throw new Error("Filesystem not available from Git provider")
     }
 
     for (const file of files) {
-      const filePath = `${dir}/${file.path}`;
-      const dirPath = filePath.substring(0, filePath.lastIndexOf("/"));
+      const filePath = `${dir}/${file.path}`
+      const dirPath = filePath.substring(0, filePath.lastIndexOf("/"))
       if (dirPath && dirPath !== dir) {
-        await fs.promises.mkdir(dirPath, { recursive: true }).catch(() => {});
+        await fs.promises.mkdir(dirPath, {recursive: true}).catch(() => {})
       }
-      await fs.promises.writeFile(filePath, file.content, "utf8");
+      await fs.promises.writeFile(filePath, file.content, "utf8")
     }
 
-    onProgress?.("Staging changes...");
+    onProgress?.("Staging changes...")
 
     for (const file of files) {
-      await git.add({ dir, filepath: file.path });
+      await git.add({dir, filepath: file.path})
     }
 
-    onProgress?.("Creating commit...");
+    onProgress?.("Creating commit...")
 
     const commitResult = await git.commit({
       dir,
       message: commitMessage,
-      author: { name: "Nostr Git User", email: "user@nostr-git.dev" },
-    });
+      author: {name: "Nostr Git User", email: "user@nostr-git.dev"},
+    })
 
-    onProgress?.("Pushing to remote...");
+    onProgress?.("Pushing to remote...")
 
     // Push with authentication
     const authCallback =
       provider === "grasp"
-        ? () => ({ username: token, password: "grasp" })
-        : () => ({ username: "token", password: token });
+        ? () => ({username: token, password: "grasp"})
+        : () => ({username: "token", password: token})
 
-    await git.push({ dir, onAuth: authCallback, force: false });
+    await git.push({dir, onAuth: authCallback, force: false})
 
-    onProgress?.("Files updated and pushed successfully!");
+    onProgress?.("Files updated and pushed successfully!")
 
-    return { success: true, commitId: commitResult };
+    return {success: true, commitId: commitResult}
   } catch (error: any) {
-    console.error("Update and push files failed:", error);
-    return { success: false, error: error.message || "Failed to update and push files" };
+    console.error("Update and push files failed:", error)
+    return {success: false, error: error.message || "Failed to update and push files"}
   }
 }
