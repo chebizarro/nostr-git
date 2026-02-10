@@ -32,6 +32,7 @@ export type CommentTag =
   // Optional: citation and mention tags per NIP-21
   | ["q", string, ...string[]] // Cited event or address
   | ["p", string, ...string[]] // Mentioned pubkey
+  | ["repo", string]
 
 /**
  * NIP-22 Comment Event
