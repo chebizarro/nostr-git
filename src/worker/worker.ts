@@ -142,6 +142,8 @@ import {parseRepoId} from "../utils/repo-id.js"
 
 import type {AuthConfig} from "./workers/auth.js"
 import {getAuthCallback, getConfiguredAuthHosts, setAuthConfig} from "./workers/auth.js"
+import type {GitWorkerConfig} from "./workers/git-config.js"
+import {applyGitConfigToProvider, setGitConfig as setWorkerGitConfig} from "./workers/git-config.js"
 
 // Import event-based git operations
 import {
@@ -283,6 +285,7 @@ async function hasUncommittedChanges(repoDir: string, git: GitProvider): Promise
 
 // --- shared worker state ---
 const git: GitProvider = createGitProvider()
+applyGitConfigToProvider(git)
 const cacheManager: RepoCacheManager = new (RepoCacheManager as any)()
 const clonedRepos = new Set<string>()
 const repoDataLevels = new Map<string, DataLevel>()
@@ -310,6 +313,10 @@ const api = {
 
   async setAuthConfig(cfg: AuthConfig): Promise<void> {
     setAuthConfig(cfg)
+  },
+
+  async setGitConfig(cfg: GitWorkerConfig): Promise<void> {
+    setWorkerGitConfig(cfg, git)
   },
 
   getConfiguredAuthHosts(): string[] {

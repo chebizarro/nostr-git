@@ -2,7 +2,7 @@
  * Browser-only factory for GitProvider
  * This file should be used in browser/worker contexts where Node.js modules are not available.
  */
-import type { GitProvider } from "./provider.js"
+import type {GitProvider} from "./provider.js"
 import {IsomorphicGitProvider} from "./isomorphic-git-provider.js"
 import {CachedGitProvider} from "./cached-provider.js"
 import {loadConfig, type GitConfig} from "./config.js"
@@ -18,10 +18,12 @@ export function createGitProvider(overrides?: Partial<GitConfig>): GitProvider {
 
   const fs = new LightningFS("nostr-git")
   const http = httpWeb
+  const corsProxy =
+    cfg.defaultCorsProxy === undefined ? "https://cors.isomorphic-git.org" : cfg.defaultCorsProxy
   const provider = new IsomorphicGitProvider({
     fs,
     http,
-    corsProxy: cfg.defaultCorsProxy ?? "https://cors.isomorphic-git.org",
+    corsProxy,
   })
 
   if (cfg.cacheMode === "off") {

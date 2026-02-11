@@ -1,32 +1,33 @@
-import type { GitProvider } from '../../git/provider.js';
-import type { RepoCacheManager, RepoCache } from './cache.js';
-import { resolveBranchName } from './branches.js';
-import { resolveBranchToOid } from '../../git/git.js';
-import { getProviderFs, safeRmrf, ensureDir } from './fs-utils.js';
-import { getAuthCallback, setAuthConfig } from './auth.js';
+import type {GitProvider} from "../../git/provider.js"
+import type {RepoCacheManager, RepoCache} from "./cache.js"
+import {resolveBranchName} from "./branches.js"
+import {resolveBranchToOid} from "../../git/git.js"
+import {getProviderFs, safeRmrf, ensureDir} from "./fs-utils.js"
+import {getAuthCallback, setAuthConfig} from "./auth.js"
+import {resolveDefaultCorsProxy} from "./git-config.js"
 import {
   withUrlFallback,
   filterValidCloneUrls,
   reorderUrlsByPreference,
   updateUrlPreferenceCache,
   type ReadFallbackResult,
-} from '../../utils/clone-url-fallback.js';
+} from "../../utils/clone-url-fallback.js"
 
 // Import toPlain from worker (it's defined in the same directory)
 function toPlain<T>(val: T): T {
   try {
-    return JSON.parse(JSON.stringify(val));
+    return JSON.parse(JSON.stringify(val))
   } catch {
-    return val;
+    return val
   }
 }
 
 export interface CloneRemoteRepoOptions {
-  url: string;
-  depth?: number;
-  dir: string;
-  token?: string;
-  onProgress?: (stage: string, pct?: number) => void;
+  url: string
+  depth?: number
+  dir: string
+  token?: string
+  onProgress?: (stage: string, pct?: number) => void
 }
 
 /**
@@ -34,16 +35,16 @@ export interface CloneRemoteRepoOptions {
  */
 export function clearCloneTracking(
   clonedRepos: Set<string>,
-  repoDataLevels: Map<string, 'refs' | 'shallow' | 'full'>
+  repoDataLevels: Map<string, "refs" | "shallow" | "full">,
 ) {
-  clonedRepos.clear();
-  repoDataLevels.clear();
+  clonedRepos.clear()
+  repoDataLevels.clear()
 }
 
-type DataLevel = 'refs' | 'shallow' | 'full';
+type DataLevel = "refs" | "shallow" | "full"
 
 // Deduplication map for ensureFullClone - prevents parallel fetches for the same repo
-const pendingFullClones = new Map<string, Promise<any>>();
+const pendingFullClones = new Map<string, Promise<any>>()
 
 /**
  * Ensure the origin remote is properly configured with URL and fetch refspec.
@@ -54,11 +55,11 @@ async function ensureOriginRemoteConfig(git: GitProvider, dir: string, url: stri
   try {
     // First try to add the remote (will fail if it already exists, which is fine)
     try {
-      await git.addRemote({ dir, remote: 'origin', url });
+      await git.addRemote({dir, remote: "origin", url})
     } catch (err: any) {
       // Ignore "already exists" errors
-      if (!err.message?.includes('already exists') && !err.message?.includes('Remote named')) {
-        throw err;
+      if (!err.message?.includes("already exists") && !err.message?.includes("Remote named")) {
+        throw err
       }
     }
 
@@ -67,9 +68,9 @@ async function ensureOriginRemoteConfig(git: GitProvider, dir: string, url: stri
     try {
       await git.setConfig({
         dir,
-        path: 'remote.origin.fetch',
-        value: '+refs/heads/*:refs/remotes/origin/*'
-      });
+        path: "remote.origin.fetch",
+        value: "+refs/heads/*:refs/remotes/origin/*",
+      })
     } catch {
       // Best effort - some providers may not support setConfig
     }
@@ -78,15 +79,15 @@ async function ensureOriginRemoteConfig(git: GitProvider, dir: string, url: stri
     try {
       await git.setConfig({
         dir,
-        path: 'remote.origin.url',
-        value: url
-      });
+        path: "remote.origin.url",
+        value: url,
+      })
     } catch {
       // Best effort
     }
   } catch (err) {
     // Log but don't fail the clone - the remote may still work for basic operations
-    console.warn('[ensureOriginRemoteConfig] Could not fully configure origin remote:', err);
+    console.warn("[ensureOriginRemoteConfig] Could not fully configure origin remote:", err)
   }
 }
 
@@ -94,61 +95,55 @@ export async function smartInitializeRepoUtil(
   git: GitProvider,
   cacheManager: RepoCacheManager,
   opts: {
-    repoId: string;
-    cloneUrls: string[];
-    forceUpdate?: boolean;
+    repoId: string
+    cloneUrls: string[]
+    forceUpdate?: boolean
   },
   deps: {
-    rootDir: string;
-    parseRepoId: (id: string) => string;
-    repoDataLevels: Map<string, DataLevel>;
-    clonedRepos: Set<string>;
-    isRepoCloned: (git: GitProvider, dir: string) => Promise<boolean>;
-    resolveBranchName: (dir: string, requested?: string) => Promise<string>;
+    rootDir: string
+    parseRepoId: (id: string) => string
+    repoDataLevels: Map<string, DataLevel>
+    clonedRepos: Set<string>
+    isRepoCloned: (git: GitProvider, dir: string) => Promise<boolean>
+    resolveBranchName: (dir: string, requested?: string) => Promise<string>
   },
-  sendProgress: (phase: string, loaded?: number, total?: number) => void
+  sendProgress: (phase: string, loaded?: number, total?: number) => void,
 ) {
-  const { repoId, cloneUrls, forceUpdate = false } = opts;
-  const {
-    rootDir,
-    parseRepoId,
-    repoDataLevels,
-    clonedRepos,
-    isRepoCloned,
-    resolveBranchName
-  } = deps;
+  const {repoId, cloneUrls, forceUpdate = false} = opts
+  const {rootDir, parseRepoId, repoDataLevels, clonedRepos, isRepoCloned, resolveBranchName} = deps
 
   try {
-    const key = parseRepoId(repoId);
-    const cache = await cacheManager.getRepoCache(key);
+    const key = parseRepoId(repoId)
+    const cache = await cacheManager.getRepoCache(key)
     if (cache && !forceUpdate) {
-      sendProgress('Using cached data');
-      repoDataLevels.set(key, cache.dataLevel);
-      clonedRepos.add(key);
+      sendProgress("Using cached data")
+      repoDataLevels.set(key, cache.dataLevel)
+      clonedRepos.add(key)
       return {
         success: true,
         repoId,
         fromCache: true,
         dataLevel: cache.dataLevel,
         branches: cache.branches,
-        headCommit: cache.headCommit
-      };
+        headCommit: cache.headCommit,
+      }
     }
 
-    sendProgress('Checking repository status');
-    const dir = `${rootDir}/${key}`;
-    const isAlreadyCloned = await isRepoCloned(git, dir);
+    sendProgress("Checking repository status")
+    const dir = `${rootDir}/${key}`
+    const isAlreadyCloned = await isRepoCloned(git, dir)
 
     if (isAlreadyCloned && !forceUpdate) {
       try {
-        sendProgress('Syncing with remote');
-        const validUrls = filterValidCloneUrls(cloneUrls);
-        const orderedUrls = reorderUrlsByPreference(validUrls, key);
+        sendProgress("Syncing with remote")
+        const validUrls = filterValidCloneUrls(cloneUrls)
+        const orderedUrls = reorderUrlsByPreference(validUrls, key)
 
         if (orderedUrls.length > 0) {
-          sendProgress('Fetching latest changes from remote');
-          const fetchStart = Date.now();
-          const fetchDepth = repoDataLevels.get(key) === 'full' ? undefined : 50;
+          sendProgress("Fetching latest changes from remote")
+          const fetchStart = Date.now()
+          const fetchDepth = repoDataLevels.get(key) === "full" ? undefined : 50
+          const corsProxy = resolveDefaultCorsProxy()
 
           // Try each URL with fallback until one succeeds
           const fetchResult = await withUrlFallback(
@@ -160,126 +155,142 @@ export async function smartInitializeRepoUtil(
                   dir,
                   url: cloneUrl,
                   singleBranch: true,
-                  depth: fetchDepth
-                });
-                return { url: cloneUrl };
+                  depth: fetchDepth,
+                  corsProxy,
+                })
+                return {url: cloneUrl}
               } catch (singleBranchError: any) {
                 // If single branch fetch fails, try without specifying singleBranch
-                console.warn(`[smartInitializeRepo] Single branch fetch failed for ${cloneUrl}, trying default:`, singleBranchError?.message);
+                console.warn(
+                  `[smartInitializeRepo] Single branch fetch failed for ${cloneUrl}, trying default:`,
+                  singleBranchError?.message,
+                )
                 await git.fetch({
                   dir,
                   url: cloneUrl,
-                  depth: fetchDepth
-                });
-                return { url: cloneUrl };
+                  depth: fetchDepth,
+                  corsProxy,
+                })
+                return {url: cloneUrl}
               }
             },
-            { repoId: key, perUrlTimeoutMs: 15000 }
-          );
+            {repoId: key, perUrlTimeoutMs: 15000},
+          )
 
           if (fetchResult.success) {
-            const secs = ((Date.now() - fetchStart) / 1000).toFixed(1);
-            sendProgress(`Fetch completed (${secs}s) from ${fetchResult.usedUrl}`);
+            const secs = ((Date.now() - fetchStart) / 1000).toFixed(1)
+            sendProgress(`Fetch completed (${secs}s) from ${fetchResult.usedUrl}`)
 
             // Log fallback attempts if any
             if (fetchResult.attempts.length > 1) {
-              const failedAttempts = fetchResult.attempts.filter(a => !a.success);
-              console.log(`[smartInitializeRepo] Fetch succeeded after ${failedAttempts.length} failed attempt(s)`);
+              const failedAttempts = fetchResult.attempts.filter(a => !a.success)
+              console.log(
+                `[smartInitializeRepo] Fetch succeeded after ${failedAttempts.length} failed attempt(s)`,
+              )
             }
           } else {
             // All URLs failed - check if it's a recoverable error
-            const lastAttempt = fetchResult.attempts[fetchResult.attempts.length - 1];
-            const errorMessage = lastAttempt?.error || 'Unknown fetch error';
+            const lastAttempt = fetchResult.attempts[fetchResult.attempts.length - 1]
+            const errorMessage = lastAttempt?.error || "Unknown fetch error"
 
-            if (errorMessage.includes('CORS') ||
-                errorMessage.includes('NetworkError') ||
-                errorMessage.includes('Failed to fetch') ||
-                errorMessage.includes('Access-Control') ||
-                errorMessage.includes('NoRefspecError') ||
-                errorMessage.includes('refspec')) {
-              console.warn(`[smartInitializeRepo] All fetch attempts failed with CORS/Network/Refspec errors, using local data only`);
+            if (
+              errorMessage.includes("CORS") ||
+              errorMessage.includes("NetworkError") ||
+              errorMessage.includes("Failed to fetch") ||
+              errorMessage.includes("Access-Control") ||
+              errorMessage.includes("NoRefspecError") ||
+              errorMessage.includes("refspec")
+            ) {
+              console.warn(
+                `[smartInitializeRepo] All fetch attempts failed with CORS/Network/Refspec errors, using local data only`,
+              )
               // Log all attempted URLs
               for (const attempt of fetchResult.attempts) {
-                console.warn(`  - ${attempt.url}: ${attempt.error}`);
+                console.warn(`  - ${attempt.url}: ${attempt.error}`)
               }
               // Continue with local data, don't throw error
             } else {
-              throw new Error(`Fetch failed for all ${fetchResult.attempts.length} URL(s): ${errorMessage}`);
+              throw new Error(
+                `Fetch failed for all ${fetchResult.attempts.length} URL(s): ${errorMessage}`,
+              )
             }
           }
         }
-        
+
         // Try to resolve branch, but handle empty repos gracefully
-        let mainBranch: string;
+        let mainBranch: string
         try {
-          sendProgress('Resolving repository branch');
-          mainBranch = await resolveBranchName(dir);
-          sendProgress(`Found branch: ${mainBranch}`);
+          sendProgress("Resolving repository branch")
+          mainBranch = await resolveBranchName(dir)
+          sendProgress(`Found branch: ${mainBranch}`)
         } catch (branchError) {
-          console.warn(`[smartInitializeRepo] Could not resolve branches, repository may be empty:`, branchError);
+          console.warn(
+            `[smartInitializeRepo] Could not resolve branches, repository may be empty:`,
+            branchError,
+          )
           // For empty repos, we'll return a limited success state
           return toPlain({
             success: true,
             repoId,
             fromCache: false,
-            dataLevel: 'refs',
-            warning: 'Repository initialized but no branches found. Repository may be empty.',
-            serializable: true
-          });
+            dataLevel: "refs",
+            warning: "Repository initialized but no branches found. Repository may be empty.",
+            serializable: true,
+          })
         }
-        const remoteRef = `refs/remotes/origin/${mainBranch}`;
-        let remoteCommit: string;
+        const remoteRef = `refs/remotes/origin/${mainBranch}`
+        let remoteCommit: string
         try {
-          sendProgress('Resolving remote commit');
-          remoteCommit = await git.resolveRef({ dir, ref: remoteRef });
-          sendProgress('Updating local references');
-          await git.writeRef({ dir, ref: `refs/heads/${mainBranch}`, value: remoteCommit });
+          sendProgress("Resolving remote commit")
+          remoteCommit = await git.resolveRef({dir, ref: remoteRef})
+          sendProgress("Updating local references")
+          await git.writeRef({dir, ref: `refs/heads/${mainBranch}`, value: remoteCommit})
           await git.writeRef({
             dir,
-            ref: 'HEAD',
+            ref: "HEAD",
             value: `ref: refs/heads/${mainBranch}`,
-            symbolic: true
-          });
-          sendProgress('Local repository synced with remote');
+            symbolic: true,
+          })
+          sendProgress("Local repository synced with remote")
         } catch (e) {
-          sendProgress('Using local HEAD commit');
-          remoteCommit = await git.resolveRef({ dir, ref: 'HEAD' });
+          sendProgress("Using local HEAD commit")
+          remoteCommit = await git.resolveRef({dir, ref: "HEAD"})
         }
         // Resolve per-branch commits (merge local + remote branches)
-        sendProgress('Listing repository branches');
-        const localBranches: string[] = await git.listBranches({ dir });
-        let remoteBranches: string[] = [];
+        sendProgress("Listing repository branches")
+        const localBranches: string[] = await git.listBranches({dir})
+        let remoteBranches: string[] = []
         try {
-          remoteBranches = await git.listBranches({ dir, remote: 'origin' });
+          remoteBranches = await git.listBranches({dir, remote: "origin"})
         } catch {}
-        const allBranchNames = new Set<string>(localBranches);
+        const allBranchNames = new Set<string>(localBranches)
         for (const rb of remoteBranches) {
-          allBranchNames.add(rb.startsWith('origin/') ? rb.slice(7) : rb);
+          allBranchNames.add(rb.startsWith("origin/") ? rb.slice(7) : rb)
         }
-        const branchEntries: Array<{ name: string; commit: string }> = [];
+        const branchEntries: Array<{name: string; commit: string}> = []
         for (const name of allBranchNames) {
           try {
             const commit = await git
-              .resolveRef({ dir, ref: `refs/heads/${name}` })
-              .catch(async () => await git.resolveRef({ dir, ref: `refs/remotes/origin/${name}` }));
-            branchEntries.push({ name, commit });
+              .resolveRef({dir, ref: `refs/heads/${name}`})
+              .catch(async () => await git.resolveRef({dir, ref: `refs/remotes/origin/${name}`}))
+            branchEntries.push({name, commit})
           } catch {
             // Fallback to remoteCommit if resolution fails
-            branchEntries.push({ name, commit: remoteCommit });
+            branchEntries.push({name, commit: remoteCommit})
           }
         }
 
         // Resolve tags (optional)
-        let tags: Array<{ name: string; commit: string }> | undefined = undefined;
+        let tags: Array<{name: string; commit: string}> | undefined = undefined
         try {
-          sendProgress('Resolving tags');
-          const tagNames: string[] = await (git as any).listTags?.({ dir });
+          sendProgress("Resolving tags")
+          const tagNames: string[] = await (git as any).listTags?.({dir})
           if (Array.isArray(tagNames) && tagNames.length > 0) {
-            tags = [];
+            tags = []
             for (const t of tagNames) {
               try {
-                const commit = await git.resolveRef({ dir, ref: `refs/tags/${t}` });
-                tags.push({ name: t, commit });
+                const commit = await git.resolveRef({dir, ref: `refs/tags/${t}`})
+                tags.push({name: t, commit})
               } catch {
                 // ignore individual tag resolution errors
               }
@@ -293,18 +304,20 @@ export async function smartInitializeRepoUtil(
           repoId: key,
           lastUpdated: Date.now(),
           headCommit: remoteCommit,
-          dataLevel: (repoDataLevels.get(key) || 'shallow') as DataLevel,
+          dataLevel: (repoDataLevels.get(key) || "shallow") as DataLevel,
           branches: branchEntries,
-          cloneUrls
-        };
-        if (tags && tags.length) {
-          (newCache as any).tags = tags;
+          cloneUrls,
         }
-        await cacheManager.setRepoCache(newCache);
-        repoDataLevels.set(key, newCache.dataLevel);
-        clonedRepos.add(key);
-        sendProgress(`Updating repository cache with ${branchEntries.length} branches${tags?.length ? ` and ${tags.length} tags` : ''}`);
-        sendProgress('Repository ready');
+        if (tags && tags.length) {
+          ;(newCache as any).tags = tags
+        }
+        await cacheManager.setRepoCache(newCache)
+        repoDataLevels.set(key, newCache.dataLevel)
+        clonedRepos.add(key)
+        sendProgress(
+          `Updating repository cache with ${branchEntries.length} branches${tags?.length ? ` and ${tags.length} tags` : ""}`,
+        )
+        sendProgress("Repository ready")
         return {
           success: true,
           repoId,
@@ -312,8 +325,8 @@ export async function smartInitializeRepoUtil(
           dataLevel: newCache.dataLevel,
           branches: newCache.branches,
           headCommit: newCache.headCommit,
-          synced: true
-        };
+          synced: true,
+        }
       } catch (e) {
         // fall through to re-init
       }
@@ -322,80 +335,84 @@ export async function smartInitializeRepoUtil(
     return await initializeRepoUtil(
       git,
       cacheManager,
-      { repoId, cloneUrls },
-      { rootDir, parseRepoId, repoDataLevels, clonedRepos },
-      sendProgress
-    );
+      {repoId, cloneUrls},
+      {rootDir, parseRepoId, repoDataLevels, clonedRepos},
+      sendProgress,
+    )
   } catch (error: any) {
     return {
       success: false,
       repoId: opts.repoId,
       error: error?.message || String(error),
-      fromCache: false
-    };
+      fromCache: false,
+    }
   }
 }
 
 export async function initializeRepoUtil(
   git: GitProvider,
   cacheManager: RepoCacheManager,
-  opts: { repoId: string; cloneUrls: string[] },
+  opts: {repoId: string; cloneUrls: string[]},
   deps: {
-    rootDir: string;
-    parseRepoId: (id: string) => string;
-    repoDataLevels: Map<string, DataLevel>;
-    clonedRepos: Set<string>;
+    rootDir: string
+    parseRepoId: (id: string) => string
+    repoDataLevels: Map<string, DataLevel>
+    clonedRepos: Set<string>
   },
-  sendProgress: (phase: string, loaded?: number, total?: number) => void
+  sendProgress: (phase: string, loaded?: number, total?: number) => void,
 ) {
-  const { repoId, cloneUrls } = opts;
-  const { rootDir, parseRepoId, repoDataLevels, clonedRepos } = deps;
+  const {repoId, cloneUrls} = opts
+  const {rootDir, parseRepoId, repoDataLevels, clonedRepos} = deps
   try {
-    const key = parseRepoId(repoId);
-    const dir = `${rootDir}/${key}`;
-    sendProgress('Initializing repository');
+    const key = parseRepoId(repoId)
+    const dir = `${rootDir}/${key}`
+    sendProgress("Initializing repository")
 
     // Filter and order URLs by preference (using cached successful URL if available)
-    const validUrls = filterValidCloneUrls(cloneUrls);
-    const orderedUrls = reorderUrlsByPreference(validUrls, key);
+    const validUrls = filterValidCloneUrls(cloneUrls)
+    const orderedUrls = reorderUrlsByPreference(validUrls, key)
 
     if (orderedUrls.length === 0) {
       return toPlain({
         success: false,
         repoId,
-        error: 'No valid clone URLs provided',
+        error: "No valid clone URLs provided",
         fromCache: false,
-        serializable: true
-      });
+        serializable: true,
+      })
     }
 
     // Track which URL succeeded for caching
-    let successfulUrl: string | undefined;
-    const failedUrls: string[] = [];
+    let successfulUrl: string | undefined
+    const failedUrls: string[] = []
 
     // Try each URL with fallback
     const cloneResult = await withUrlFallback(
       orderedUrls,
       async (cloneUrl: string) => {
-        sendProgress(`Fetching repository metadata from ${new URL(cloneUrl).hostname}`, 0, 1);
-        const onProgress = (progress: { phase: string; loaded?: number; total?: number }) =>
-          sendProgress(progress.phase, progress.loaded, progress.total);
-        const authCallback = getAuthCallback(cloneUrl);
-        const refCandidates = ['HEAD', 'main', 'master', 'develop', 'dev'];
+        sendProgress(`Fetching repository metadata from ${new URL(cloneUrl).hostname}`, 0, 1)
+        const onProgress = (progress: {phase: string; loaded?: number; total?: number}) =>
+          sendProgress(progress.phase, progress.loaded, progress.total)
+        const authCallback = getAuthCallback(cloneUrl)
+        const refCandidates = ["HEAD", "main", "master", "develop", "dev"]
+        const corsProxy = resolveDefaultCorsProxy()
 
         // Detect Nostr relay URLs - they need special handling with deeper clones
-        const isNostrRelay = cloneUrl.includes('relay.ngit.dev') || 
-                            cloneUrl.includes('gitnostr.com') ||
-                            cloneUrl.includes('grasp');
-        
+        const isNostrRelay =
+          cloneUrl.includes("relay.ngit.dev") ||
+          cloneUrl.includes("gitnostr.com") ||
+          cloneUrl.includes("grasp")
+
         // Nostr relays need deeper clones because shallow clones often fail to fetch commit objects
-        const cloneDepth = isNostrRelay ? 10 : 1;
-        
+        const cloneDepth = isNostrRelay ? 10 : 1
+
         if (isNostrRelay) {
-          console.log(`[initializeRepo] Detected Nostr relay URL, using depth ${cloneDepth} for better compatibility`);
+          console.log(
+            `[initializeRepo] Detected Nostr relay URL, using depth ${cloneDepth} for better compatibility`,
+          )
         }
 
-        let lastRefError: Error | null = null;
+        let lastRefError: Error | null = null
         for (const refCandidate of refCandidates) {
           try {
             // Clone with noCheckout: false to ensure refs are created properly
@@ -405,360 +422,421 @@ export async function initializeRepoUtil(
               dir,
               url: cloneUrl,
               ref: refCandidate,
-              singleBranch: true,   // Critical: use single branch for shallow clone compatibility
+              singleBranch: true, // Critical: use single branch for shallow clone compatibility
               depth: cloneDepth,
-              noCheckout: false,    // checkout to create HEAD and local branch ref
+              corsProxy,
+              noCheckout: false, // checkout to create HEAD and local branch ref
               noTags: true,
               onProgress,
-              ...(authCallback && { onAuth: authCallback })
-            });
+              ...(authCallback && {onAuth: authCallback}),
+            })
             // Ensure origin remote is properly configured with fetch refspec
             // isomorphic-git's shallow/singleBranch clone may not create the full config
-            await ensureOriginRemoteConfig(git, dir, cloneUrl);
-            return { url: cloneUrl, ref: refCandidate };
+            await ensureOriginRemoteConfig(git, dir, cloneUrl)
+            return {url: cloneUrl, ref: refCandidate}
           } catch (e: any) {
-            lastRefError = e;
-            continue;
+            lastRefError = e
+            continue
           }
         }
-        throw lastRefError || new Error(`Clone failed for ${cloneUrl}`);
+        throw lastRefError || new Error(`Clone failed for ${cloneUrl}`)
       },
-      { repoId: key, perUrlTimeoutMs: 30000 }  // 30s timeout for initial clone (larger than fetch)
-    );
+      {repoId: key, perUrlTimeoutMs: 30000}, // 30s timeout for initial clone (larger than fetch)
+    )
 
     if (!cloneResult.success) {
       // Check if the last error was CORS-related
-      const lastAttempt = cloneResult.attempts[cloneResult.attempts.length - 1];
-      const errorMessage = lastAttempt?.error || 'Unknown error';
-      const corsError = errorMessage.includes('CORS') ||
-                       errorMessage.includes('NetworkError') ||
-                       errorMessage.includes('Failed to fetch') ||
-                       errorMessage.includes('Access-Control') ||
-                       errorMessage.includes('Cross-Origin');
+      const lastAttempt = cloneResult.attempts[cloneResult.attempts.length - 1]
+      const errorMessage = lastAttempt?.error || "Unknown error"
+      const corsError =
+        errorMessage.includes("CORS") ||
+        errorMessage.includes("NetworkError") ||
+        errorMessage.includes("Failed to fetch") ||
+        errorMessage.includes("Access-Control") ||
+        errorMessage.includes("Cross-Origin")
 
       if (corsError) {
         // For CORS errors, return a special response instead of throwing
         return toPlain({
           success: false,
           repoId,
-          error: 'Repository initialization failed due to CORS/network restrictions. The remote repository may be accessible but the browser cannot fetch it due to security policies.',
+          error:
+            "Repository initialization failed due to CORS/network restrictions. The remote repository may be accessible but the browser cannot fetch it due to security policies.",
           corsError: true,
           fromCache: false,
           attemptedUrls: cloneResult.attempts.map(a => a.url),
-          serializable: true
-        });
+          serializable: true,
+        })
       }
 
       // Log all failed attempts
-      console.error(`[initializeRepo] All ${cloneResult.attempts.length} clone URL(s) failed:`);
+      console.error(`[initializeRepo] All ${cloneResult.attempts.length} clone URL(s) failed:`)
       for (const attempt of cloneResult.attempts) {
-        console.error(`  - ${attempt.url}: ${attempt.error}`);
+        console.error(`  - ${attempt.url}: ${attempt.error}`)
       }
 
-      throw new Error(`All ${cloneResult.attempts.length} clone URLs failed. Last error: ${errorMessage}`);
+      throw new Error(
+        `All ${cloneResult.attempts.length} clone URLs failed. Last error: ${errorMessage}`,
+      )
     }
 
-    successfulUrl = cloneResult.usedUrl;
-    console.log(`[initializeRepo] Clone succeeded using ${successfulUrl}`);
+    successfulUrl = cloneResult.usedUrl
+    console.log(`[initializeRepo] Clone succeeded using ${successfulUrl}`)
     if (cloneResult.attempts.length > 1) {
-      console.log(`[initializeRepo] Fallback used: ${cloneResult.attempts.filter(a => !a.success).length} URL(s) failed before success`);
+      console.log(
+        `[initializeRepo] Fallback used: ${cloneResult.attempts.filter(a => !a.success).length} URL(s) failed before success`,
+      )
     }
 
     // After shallow clone, we need to create local branch refs from remote refs
     // because isomorphic-git's shallow clone with singleBranch doesn't create them
-    let headCommit: string | undefined;
-    let defaultBranch = 'main';
-    
+    let headCommit: string | undefined
+    let defaultBranch = "main"
+
     // Try to get the HEAD commit and create local branch ref
     try {
       // First, try to find remote refs that were fetched
-      const remoteBranches = await git.listBranches({ dir, remote: 'origin' }).catch(() => [] as string[]);
-      
+      const remoteBranches = await git
+        .listBranches({dir, remote: "origin"})
+        .catch(() => [] as string[])
+
       if (remoteBranches.length > 0) {
         // Use the first remote branch (usually the default)
-        const remoteBranch = remoteBranches[0];
-        defaultBranch = remoteBranch;
-        const remoteRef = `refs/remotes/origin/${remoteBranch}`;
-        headCommit = await git.resolveRef({ dir, ref: remoteRef });
-        
+        const remoteBranch = remoteBranches[0]
+        defaultBranch = remoteBranch
+        const remoteRef = `refs/remotes/origin/${remoteBranch}`
+        headCommit = await git.resolveRef({dir, ref: remoteRef})
+
         // Create the local branch ref (use force: true to handle re-initialization)
-        await git.writeRef({ dir, ref: `refs/heads/${defaultBranch}`, value: headCommit, force: true });
+        await git.writeRef({
+          dir,
+          ref: `refs/heads/${defaultBranch}`,
+          value: headCommit,
+          force: true,
+        })
         // Update HEAD to point to the local branch
-        await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${defaultBranch}`, symbolic: true, force: true });
-        console.log(`[initializeRepo] Created local branch '${defaultBranch}' from remote ref, commit: ${headCommit?.substring(0, 8)}`);
+        await git.writeRef({
+          dir,
+          ref: "HEAD",
+          value: `ref: refs/heads/${defaultBranch}`,
+          symbolic: true,
+          force: true,
+        })
+        console.log(
+          `[initializeRepo] Created local branch '${defaultBranch}' from remote ref, commit: ${headCommit?.substring(0, 8)}`,
+        )
       } else {
         // No remote branches - try multiple fallback strategies
         // This handles cases where the clone fetched objects but didn't create refs
-        console.log(`[initializeRepo] No remote branches found, trying fallback strategies...`);
-        
+        console.log(`[initializeRepo] No remote branches found, trying fallback strategies...`)
+
         // Strategy 1: Try FETCH_HEAD which isomorphic-git creates during fetch
         try {
-          headCommit = await git.resolveRef({ dir, ref: 'FETCH_HEAD' });
-          await git.writeRef({ dir, ref: `refs/heads/${defaultBranch}`, value: headCommit, force: true });
-          await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${defaultBranch}`, symbolic: true, force: true });
-          console.log(`[initializeRepo] Created local branch '${defaultBranch}' from FETCH_HEAD, commit: ${headCommit?.substring(0, 8)}`);
+          headCommit = await git.resolveRef({dir, ref: "FETCH_HEAD"})
+          await git.writeRef({
+            dir,
+            ref: `refs/heads/${defaultBranch}`,
+            value: headCommit,
+            force: true,
+          })
+          await git.writeRef({
+            dir,
+            ref: "HEAD",
+            value: `ref: refs/heads/${defaultBranch}`,
+            symbolic: true,
+            force: true,
+          })
+          console.log(
+            `[initializeRepo] Created local branch '${defaultBranch}' from FETCH_HEAD, commit: ${headCommit?.substring(0, 8)}`,
+          )
         } catch (fetchHeadErr) {
-          console.log(`[initializeRepo] FETCH_HEAD not available: ${(fetchHeadErr as Error).message}`);
-          
+          console.log(
+            `[initializeRepo] FETCH_HEAD not available: ${(fetchHeadErr as Error).message}`,
+          )
+
           // Strategy 2: Try to resolve HEAD directly (might be a detached HEAD with commit OID)
           try {
-            const headRef = await git.resolveRef({ dir, ref: 'HEAD', depth: 1 });
+            const headRef = await git.resolveRef({dir, ref: "HEAD", depth: 1})
             if (headRef && headRef.length === 40) {
-              headCommit = headRef;
-              await git.writeRef({ dir, ref: `refs/heads/${defaultBranch}`, value: headCommit, force: true });
-              await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${defaultBranch}`, symbolic: true, force: true });
-              console.log(`[initializeRepo] Created local branch '${defaultBranch}' from HEAD OID, commit: ${headCommit?.substring(0, 8)}`);
+              headCommit = headRef
+              await git.writeRef({
+                dir,
+                ref: `refs/heads/${defaultBranch}`,
+                value: headCommit,
+                force: true,
+              })
+              await git.writeRef({
+                dir,
+                ref: "HEAD",
+                value: `ref: refs/heads/${defaultBranch}`,
+                symbolic: true,
+                force: true,
+              })
+              console.log(
+                `[initializeRepo] Created local branch '${defaultBranch}' from HEAD OID, commit: ${headCommit?.substring(0, 8)}`,
+              )
             }
           } catch (headErr) {
-            console.log(`[initializeRepo] HEAD resolution failed: ${(headErr as Error).message}`);
-            
+            console.log(`[initializeRepo] HEAD resolution failed: ${(headErr as Error).message}`)
+
             // Strategy 3: Try git.log to find any commits in the object store
             try {
-              const commits = await git.log({ dir, depth: 1 });
+              const commits = await git.log({dir, depth: 1})
               if (commits && commits.length > 0 && commits[0].oid) {
-                headCommit = commits[0].oid;
-                await git.writeRef({ dir, ref: `refs/heads/${defaultBranch}`, value: headCommit, force: true });
-                await git.writeRef({ dir, ref: 'HEAD', value: `ref: refs/heads/${defaultBranch}`, symbolic: true, force: true });
-                console.log(`[initializeRepo] Created local branch '${defaultBranch}' from git.log, commit: ${headCommit?.substring(0, 8)}`);
+                headCommit = commits[0].oid
+                await git.writeRef({
+                  dir,
+                  ref: `refs/heads/${defaultBranch}`,
+                  value: headCommit,
+                  force: true,
+                })
+                await git.writeRef({
+                  dir,
+                  ref: "HEAD",
+                  value: `ref: refs/heads/${defaultBranch}`,
+                  symbolic: true,
+                  force: true,
+                })
+                console.log(
+                  `[initializeRepo] Created local branch '${defaultBranch}' from git.log, commit: ${headCommit?.substring(0, 8)}`,
+                )
               }
             } catch (logErr) {
-              console.log(`[initializeRepo] git.log failed: ${(logErr as Error).message}`);
-              console.warn(`[initializeRepo] Could not find any refs or commits, repository may be empty`);
-              headCommit = undefined;
+              console.log(`[initializeRepo] git.log failed: ${(logErr as Error).message}`)
+              console.warn(
+                `[initializeRepo] Could not find any refs or commits, repository may be empty`,
+              )
+              headCommit = undefined
             }
           }
         }
       }
     } catch (refError) {
-      console.warn(`[initializeRepo] Error setting up refs:`, refError);
+      console.warn(`[initializeRepo] Error setting up refs:`, refError)
     }
 
-    const branches = await git.listBranches({ dir }).catch(() => [] as string[]);
-    
+    const branches = await git.listBranches({dir}).catch(() => [] as string[])
+
     // If we still don't have headCommit, try one more time with the newly created refs
     if (!headCommit && branches.length > 0) {
       try {
-        headCommit = await git.resolveRef({ dir, ref: `refs/heads/${branches[0]}` });
+        headCommit = await git.resolveRef({dir, ref: `refs/heads/${branches[0]}`})
       } catch {
         // ignore
       }
     }
-    
+
     // Final fallback - if no commit found, return partial success
     if (!headCommit) {
-      console.warn(`[initializeRepo] Repository cloned but no commits found`);
+      console.warn(`[initializeRepo] Repository cloned but no commits found`)
       return toPlain({
         success: true,
         repoId,
-        dataLevel: 'refs' as const,
+        dataLevel: "refs" as const,
         branches: [],
         headCommit: undefined,
         fromCache: false,
-        warning: 'Repository cloned but no commits found. Repository may be empty.'
-      });
+        warning: "Repository cloned but no commits found. Repository may be empty.",
+      })
     }
-    repoDataLevels.set(key, 'refs');
-    clonedRepos.add(key);
+    repoDataLevels.set(key, "refs")
+    clonedRepos.add(key)
     const cache: RepoCache = {
       repoId: key,
       lastUpdated: Date.now(),
       headCommit,
-      dataLevel: 'refs',
-      branches: headCommit
-        ? branches.map((name: string) => ({ name, commit: headCommit }))
-        : [],
-      cloneUrls
-    };
-    await cacheManager.setRepoCache(cache);
-    sendProgress('Repository initialized');
+      dataLevel: "refs",
+      branches: headCommit ? branches.map((name: string) => ({name, commit: headCommit})) : [],
+      cloneUrls,
+    }
+    await cacheManager.setRepoCache(cache)
+    sendProgress("Repository initialized")
     return {
       success: true,
       repoId,
-      dataLevel: 'refs' as const,
+      dataLevel: "refs" as const,
       branches: cache.branches,
       headCommit,
-      fromCache: false
-    };
+      fromCache: false,
+    }
   } catch (error: any) {
-    return { success: false, repoId, error: error?.message || String(error), fromCache: false };
+    return {success: false, repoId, error: error?.message || String(error), fromCache: false}
   }
 }
 
 export async function ensureShallowCloneUtil(
   git: GitProvider,
-  opts: { repoId: string; branch?: string },
+  opts: {repoId: string; branch?: string},
   deps: {
-    rootDir: string;
-    parseRepoId: (id: string) => string;
-    repoDataLevels: Map<string, DataLevel>;
-    clonedRepos: Set<string>;
-    isRepoCloned: (git: GitProvider, dir: string) => Promise<boolean>;
-    resolveBranchName: (dir: string, requested?: string) => Promise<string>;
+    rootDir: string
+    parseRepoId: (id: string) => string
+    repoDataLevels: Map<string, DataLevel>
+    clonedRepos: Set<string>
+    isRepoCloned: (git: GitProvider, dir: string) => Promise<boolean>
+    resolveBranchName: (dir: string, requested?: string) => Promise<string>
   },
-  sendProgress: (phase: string, loaded?: number, total?: number) => void
+  sendProgress: (phase: string, loaded?: number, total?: number) => void,
 ) {
-  const { repoId, branch } = opts;
-  const {
-    rootDir,
-    parseRepoId,
-    repoDataLevels,
-    clonedRepos,
-    isRepoCloned,
-    resolveBranchName
-  } = deps;
-  const key = parseRepoId(repoId);
-  const dir = `${rootDir}/${key}`;
-  let targetBranch: string = branch || 'main';
+  const {repoId, branch} = opts
+  const {rootDir, parseRepoId, repoDataLevels, clonedRepos, isRepoCloned, resolveBranchName} = deps
+  const key = parseRepoId(repoId)
+  const dir = `${rootDir}/${key}`
+  let targetBranch: string = branch || "main"
   try {
-    targetBranch = await resolveBranchName(dir, branch);
-    const currentLevel = repoDataLevels.get(key);
-    if (currentLevel === 'shallow' || currentLevel === 'full') {
-      sendProgress('Using existing shallow clone');
-      return { success: true, repoId, branch, dataLevel: currentLevel, fromCache: true };
+    targetBranch = await resolveBranchName(dir, branch)
+    const currentLevel = repoDataLevels.get(key)
+    if (currentLevel === "shallow" || currentLevel === "full") {
+      sendProgress("Using existing shallow clone")
+      return {success: true, repoId, branch, dataLevel: currentLevel, fromCache: true}
     }
     if (!clonedRepos.has(key)) {
       if (!(await isRepoCloned(git, dir))) {
         return {
           success: false,
           repoId,
-          error: 'Repository not initialized. Call initializeRepo first.'
-        };
+          error: "Repository not initialized. Call initializeRepo first.",
+        }
       }
     }
-    sendProgress('Fetching branch content', 0, 1);
-    const remotes = await git.listRemotes({ dir });
-    const originRemote = remotes.find((r: any) => r.remote === 'origin');
-    if (!originRemote?.url) throw new Error('Origin remote not found or has no URL configured');
-    const authCallback = getAuthCallback(originRemote.url);
+    sendProgress("Fetching branch content", 0, 1)
+    const remotes = await git.listRemotes({dir})
+    const originRemote = remotes.find((r: any) => r.remote === "origin")
+    if (!originRemote?.url) throw new Error("Origin remote not found or has no URL configured")
+    const authCallback = getAuthCallback(originRemote.url)
+    const corsProxy = resolveDefaultCorsProxy()
     await git.fetch({
       dir,
       url: originRemote.url,
       ref: targetBranch,
       depth: 1,
       singleBranch: true,
+      corsProxy,
       onProgress: (p: any) => sendProgress(p.phase, p.loaded, p.total),
-      ...(authCallback && { onAuth: authCallback })
-    });
-    await git.checkout({ dir, ref: targetBranch });
-    repoDataLevels.set(key, 'shallow');
+      ...(authCallback && {onAuth: authCallback}),
+    })
+    await git.checkout({dir, ref: targetBranch})
+    repoDataLevels.set(key, "shallow")
     return {
       success: true,
       repoId,
       branch: targetBranch,
-      dataLevel: 'shallow' as const,
-      fromCache: false
-    };
+      dataLevel: "shallow" as const,
+      fromCache: false,
+    }
   } catch (error: any) {
-    return { success: false, repoId, branch: targetBranch, error: error?.message || String(error) };
+    return {success: false, repoId, branch: targetBranch, error: error?.message || String(error)}
   }
 }
 
 export async function ensureFullCloneUtil(
   git: GitProvider,
-  opts: { repoId: string; branch?: string; depth?: number; cloneUrls?: string[] },
+  opts: {repoId: string; branch?: string; depth?: number; cloneUrls?: string[]},
   deps: {
-    rootDir: string;
-    parseRepoId: (id: string) => string;
-    repoDataLevels: Map<string, DataLevel>;
-    clonedRepos: Set<string>;
-    isRepoCloned: (git: GitProvider, dir: string) => Promise<boolean>;
-    resolveBranchName: (dir: string, requested?: string) => Promise<string>;
-    cacheManager?: RepoCacheManager;
+    rootDir: string
+    parseRepoId: (id: string) => string
+    repoDataLevels: Map<string, DataLevel>
+    clonedRepos: Set<string>
+    isRepoCloned: (git: GitProvider, dir: string) => Promise<boolean>
+    resolveBranchName: (dir: string, requested?: string) => Promise<string>
+    cacheManager?: RepoCacheManager
   },
-  sendProgress: (phase: string, loaded?: number, total?: number) => void
+  sendProgress: (phase: string, loaded?: number, total?: number) => void,
 ) {
-  const { repoId, branch, depth = 50, cloneUrls: providedCloneUrls } = opts;
-  const {
-    rootDir,
-    parseRepoId,
-    repoDataLevels,
-    clonedRepos,
-    isRepoCloned,
-    resolveBranchName
-  } = deps;
-  const key = parseRepoId(repoId);
-  const dir = `${rootDir}/${key}`;
-  const currentLevel = repoDataLevels.get(key);
+  const {repoId, branch, depth = 50, cloneUrls: providedCloneUrls} = opts
+  const {rootDir, parseRepoId, repoDataLevels, clonedRepos, isRepoCloned, resolveBranchName} = deps
+  const key = parseRepoId(repoId)
+  const dir = `${rootDir}/${key}`
+  const currentLevel = repoDataLevels.get(key)
+  const corsProxy = resolveDefaultCorsProxy()
 
   // Deduplication: if there's already a pending full clone for this repo, wait for it
-  const dedupeKey = `${key}:${branch || 'default'}`;
-  const pendingClone = pendingFullClones.get(dedupeKey);
+  const dedupeKey = `${key}:${branch || "default"}`
+  const pendingClone = pendingFullClones.get(dedupeKey)
   if (pendingClone) {
-    console.log(`[ensureFullClone] Waiting for existing clone operation for ${dedupeKey}`);
-    return pendingClone;
+    console.log(`[ensureFullClone] Waiting for existing clone operation for ${dedupeKey}`)
+    return pendingClone
   }
 
-  const targetBranch = await resolveBranchName(dir, branch);
+  const targetBranch = await resolveBranchName(dir, branch)
 
   // Check if we already have commits for this specific branch
   // Even at 'full' level, we may need to fetch a different branch
-  if (currentLevel === 'full') {
+  if (currentLevel === "full") {
     // Try to verify the branch exists locally by attempting to resolve it to an OID
     try {
       // Try direct branch name, then remote tracking branch
-      const branchesToCheck = [targetBranch, `origin/${targetBranch}`, `refs/remotes/origin/${targetBranch}`];
-      let branchExists = false;
+      const branchesToCheck = [
+        targetBranch,
+        `origin/${targetBranch}`,
+        `refs/remotes/origin/${targetBranch}`,
+      ]
+      let branchExists = false
 
       for (const ref of branchesToCheck) {
         try {
-          await git.resolveRef({ dir, ref });
-          branchExists = true;
-          break;
+          await git.resolveRef({dir, ref})
+          branchExists = true
+          break
         } catch {
           // Branch not found, continue trying
         }
       }
 
       if (branchExists) {
-        return { success: true, repoId, cached: true, level: currentLevel };
+        return {success: true, repoId, cached: true, level: currentLevel}
       }
       // Branch not found - need to fetch it
-      console.log(`[ensureFullClone] Repo at 'full' level but branch '${targetBranch}' not found, fetching...`);
+      console.log(
+        `[ensureFullClone] Repo at 'full' level but branch '${targetBranch}' not found, fetching...`,
+      )
     } catch (error) {
-      console.log(`[ensureFullClone] Could not verify branch '${targetBranch}', will fetch...`, error);
+      console.log(
+        `[ensureFullClone] Could not verify branch '${targetBranch}', will fetch...`,
+        error,
+      )
     }
   }
-  
+
   if (!clonedRepos.has(key)) {
     if (!(await isRepoCloned(git, dir)))
       return {
         success: false,
         repoId,
-        error: 'Repository not initialized. Call initializeRepo first.'
-      };
+        error: "Repository not initialized. Call initializeRepo first.",
+      }
   }
-  
+
   // Create the fetch operation as a promise and store it for deduplication
   const fetchPromise = (async () => {
-    sendProgress(`Fetching commit history (depth: ${depth})...`);
+    sendProgress(`Fetching commit history (depth: ${depth})...`)
     try {
       // Build list of URLs to try: origin URL first, then provided cloneUrls, then cached cloneUrls
-      const urlsToTry: string[] = [];
-      
+      const urlsToTry: string[] = []
+
       // 1. Get origin URL from git config
-      const remotes = await git.listRemotes({ dir });
-      const originRemote = remotes.find((r: any) => r.remote === 'origin');
+      const remotes = await git.listRemotes({dir})
+      const originRemote = remotes.find((r: any) => r.remote === "origin")
       if (originRemote?.url) {
-        urlsToTry.push(originRemote.url);
+        urlsToTry.push(originRemote.url)
       }
-      
+
       // 2. Add provided clone URLs
       if (providedCloneUrls?.length) {
         for (const url of filterValidCloneUrls(providedCloneUrls)) {
           if (!urlsToTry.includes(url)) {
-            urlsToTry.push(url);
+            urlsToTry.push(url)
           }
         }
       }
-      
+
       // 3. Try to get clone URLs from cache if we have a cache manager
       if (deps.cacheManager) {
         try {
-          const cache = await deps.cacheManager.getRepoCache(key);
+          const cache = await deps.cacheManager.getRepoCache(key)
           if (cache?.cloneUrls?.length) {
             for (const url of filterValidCloneUrls(cache.cloneUrls)) {
               if (!urlsToTry.includes(url)) {
-                urlsToTry.push(url);
+                urlsToTry.push(url)
               }
             }
           }
@@ -766,33 +844,39 @@ export async function ensureFullCloneUtil(
           // Ignore cache errors
         }
       }
-      
+
       if (urlsToTry.length === 0) {
-        throw new Error('No clone URLs available. Origin remote not found and no clone URLs provided.');
+        throw new Error(
+          "No clone URLs available. Origin remote not found and no clone URLs provided.",
+        )
       }
-      
+
       // Reorder URLs by preference (cached successful URL first)
-      const orderedUrls = reorderUrlsByPreference(urlsToTry, key);
-      
-      console.log(`[ensureFullClone] URLs to try: `, orderedUrls.join(', '));
-      
+      const orderedUrls = reorderUrlsByPreference(urlsToTry, key)
+
+      console.log(
+        `[ensureFullClone] URLs to try (corsProxy=${corsProxy ?? "none"}):`,
+        orderedUrls.join(", "),
+      )
+
       // Use withUrlFallback with per-URL timeout for responsive fallback
       const fetchResult = await withUrlFallback(
         orderedUrls,
         async (cloneUrl: string) => {
           // Detect Nostr relay URLs - they may need special handling
-          const isNostrRelay = cloneUrl.includes('relay.ngit.dev') || 
-                              cloneUrl.includes('gitnostr.com') ||
-                              cloneUrl.includes('grasp');
-          
+          const isNostrRelay =
+            cloneUrl.includes("relay.ngit.dev") ||
+            cloneUrl.includes("gitnostr.com") ||
+            cloneUrl.includes("grasp")
+
           // For Nostr relays, ensure we fetch enough depth to get the commit objects
-          const effectiveDepth = isNostrRelay ? Math.max(depth, 50) : Math.min(depth, 100);
-          
+          const effectiveDepth = isNostrRelay ? Math.max(depth, 50) : Math.min(depth, 100)
+
           if (isNostrRelay) {
-            console.log(`[ensureFullClone] Detected Nostr relay URL, using depth ${effectiveDepth}`);
+            console.log(`[ensureFullClone] Detected Nostr relay URL, using depth ${effectiveDepth}`)
           }
-          
-          const authCallback = getAuthCallback(cloneUrl);
+
+          const authCallback = getAuthCallback(cloneUrl)
           await git.fetch({
             dir,
             url: cloneUrl,
@@ -800,52 +884,61 @@ export async function ensureFullCloneUtil(
             depth: effectiveDepth,
             singleBranch: true,
             tags: false,
+            corsProxy,
             onProgress: (p: any) => sendProgress(`Full clone: ${p.phase}`, p.loaded, p.total),
-            ...(authCallback && { onAuth: authCallback })
-          });
-          return { url: cloneUrl };
+            ...(authCallback && {onAuth: authCallback}),
+          })
+          return {url: cloneUrl}
         },
-        { 
+        {
           repoId: key,
-          perUrlTimeoutMs: 15000  // 15 second timeout per URL - if slow, try next
-        }
-      );
-      
+          perUrlTimeoutMs: 15000, // 15 second timeout per URL - if slow, try next
+        },
+      )
+
       if (fetchResult.success) {
         // Log if we used a fallback URL
         if (fetchResult.attempts.length > 1) {
-          const failedAttempts = fetchResult.attempts.filter(a => !a.success);
-          console.log(`[ensureFullClone] Fetch succeeded after ${failedAttempts.length} failed attempt(s), used: ${fetchResult.usedUrl}`);
+          const failedAttempts = fetchResult.attempts.filter(a => !a.success)
+          console.log(
+            `[ensureFullClone] Fetch succeeded after ${failedAttempts.length} failed attempt(s), used: ${fetchResult.usedUrl}`,
+          )
         }
-        
-        repoDataLevels.set(key, 'full');
-        return { success: true, repoId, cached: false, level: 'full' as const, usedUrl: fetchResult.usedUrl };
+
+        repoDataLevels.set(key, "full")
+        return {
+          success: true,
+          repoId,
+          cached: false,
+          level: "full" as const,
+          usedUrl: fetchResult.usedUrl,
+        }
       } else {
         // All URLs failed
-        const lastAttempt = fetchResult.attempts[fetchResult.attempts.length - 1];
-        const errorMessage = lastAttempt?.error || 'All fetch attempts failed';
-        
+        const lastAttempt = fetchResult.attempts[fetchResult.attempts.length - 1]
+        const errorMessage = lastAttempt?.error || "All fetch attempts failed"
+
         // Log all failed attempts for debugging
-        console.warn(`[ensureFullClone] All ${fetchResult.attempts.length} URL(s) failed:`);
+        console.warn(`[ensureFullClone] All ${fetchResult.attempts.length} URL(s) failed:`)
         for (const attempt of fetchResult.attempts) {
-          console.warn(`  - ${attempt.url}: ${attempt.error} (${attempt.durationMs}ms)`);
+          console.warn(`  - ${attempt.url}: ${attempt.error} (${attempt.durationMs}ms)`)
         }
-        
-        return { success: false, repoId, error: errorMessage };
+
+        return {success: false, repoId, error: errorMessage}
       }
     } catch (error: any) {
-      return { success: false, repoId, error: error?.message || String(error) };
+      return {success: false, repoId, error: error?.message || String(error)}
     } finally {
       // Clean up the pending clone entry
-      pendingFullClones.delete(dedupeKey);
+      pendingFullClones.delete(dedupeKey)
     }
-  })();
-  
+  })()
+
   // Store the promise for deduplication
-  pendingFullClones.set(dedupeKey, fetchPromise);
-  console.log(`[ensureFullClone] Starting fetch for ${dedupeKey}`);
-  
-  return fetchPromise;
+  pendingFullClones.set(dedupeKey, fetchPromise)
+  console.log(`[ensureFullClone] Starting fetch for ${dedupeKey}`)
+
+  return fetchPromise
 }
 
 /**
@@ -855,132 +948,138 @@ export async function ensureFullCloneUtil(
 export async function cloneRemoteRepoUtil(
   git: GitProvider,
   cacheManager: RepoCacheManager,
-  options: CloneRemoteRepoOptions
+  options: CloneRemoteRepoOptions,
 ): Promise<void> {
-  const { url, depth, dir, token, onProgress } = options;
+  const {url, depth, dir, token, onProgress} = options
 
   try {
-    onProgress?.('Validating repository URL...', 0);
+    onProgress?.("Validating repository URL...", 0)
 
-    let repoUrl: URL;
+    let repoUrl: URL
     try {
-      repoUrl = new URL(url);
+      repoUrl = new URL(url)
     } catch {
-      throw new Error(`Invalid repository URL: ${url}`);
+      throw new Error(`Invalid repository URL: ${url}`)
     }
 
     // Ensure the parent directory exists before cloning
     // isomorphic-git requires the parent directory to exist
     try {
-      const fs = getProviderFs(git);
+      const fs = getProviderFs(git)
       if (fs?.promises) {
         // Get parent directory (everything except the last component)
-        const pathParts = dir.split('/').filter(Boolean);
+        const pathParts = dir.split("/").filter(Boolean)
         if (pathParts.length > 1) {
-          const parentDir = '/' + pathParts.slice(0, -1).join('/');
-          await ensureDir(fs, parentDir);
+          const parentDir = "/" + pathParts.slice(0, -1).join("/")
+          await ensureDir(fs, parentDir)
         } else {
           // If dir is at root level, ensure root exists
-          await ensureDir(fs, '/');
+          await ensureDir(fs, "/")
         }
       }
     } catch (dirError) {
       // Log but don't fail - some FS implementations handle this automatically
-      console.warn('[cloneRemoteRepoUtil] Could not ensure parent directory exists:', dirError);
+      console.warn("[cloneRemoteRepoUtil] Could not ensure parent directory exists:", dirError)
     }
 
     if (token) {
-      const hostname = repoUrl.hostname;
-      setAuthConfig({ tokens: [{ host: hostname, token }] });
+      const hostname = repoUrl.hostname
+      setAuthConfig({tokens: [{host: hostname, token}]})
     }
 
-    onProgress?.('Discovering remote references...', 10);
+    onProgress?.("Discovering remote references...", 10)
 
     // Add timeout to prevent hanging on slow/unresponsive servers
+    const corsProxy = resolveDefaultCorsProxy()
     const listRefsWithTimeout = async (timeoutMs: number = 30000) => {
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error(`Timeout: listServerRefs took longer than ${timeoutMs / 1000}s`)), timeoutMs);
-      });
+        setTimeout(
+          () => reject(new Error(`Timeout: listServerRefs took longer than ${timeoutMs / 1000}s`)),
+          timeoutMs,
+        )
+      })
       return Promise.race([
         git.listServerRefs({
           url,
-          onAuth: getAuthCallback(url)
+          corsProxy,
+          onAuth: getAuthCallback(url),
         }),
-        timeoutPromise
-      ]);
-    };
-
-    const refs = await listRefsWithTimeout(30000);
-
-    if (!refs || refs.length === 0) {
-      throw new Error('Repository not found or no refs available');
+        timeoutPromise,
+      ])
     }
 
-    onProgress?.('Cloning repository...', 20);
+    const refs = await listRefsWithTimeout(30000)
+
+    if (!refs || refs.length === 0) {
+      throw new Error("Repository not found or no refs available")
+    }
+
+    onProgress?.("Cloning repository...", 20)
 
     const cloneOptions: any = {
       dir,
       url,
+      corsProxy,
       onAuth: getAuthCallback(url),
       singleBranch: false,
       noCheckout: false,
       onProgress: (progress: any) => {
-        if (progress.phase === 'Receiving objects') {
-          const pct = 20 + (progress.loaded / progress.total) * 60;
-          onProgress?.(`Downloading objects (${progress.loaded}/${progress.total})...`, pct);
-        } else if (progress.phase === 'Resolving deltas') {
-          const pct = 80 + (progress.loaded / progress.total) * 15;
-          onProgress?.(`Resolving deltas (${progress.loaded}/${progress.total})...`, pct);
+        if (progress.phase === "Receiving objects") {
+          const pct = 20 + (progress.loaded / progress.total) * 60
+          onProgress?.(`Downloading objects (${progress.loaded}/${progress.total})...`, pct)
+        } else if (progress.phase === "Resolving deltas") {
+          const pct = 80 + (progress.loaded / progress.total) * 15
+          onProgress?.(`Resolving deltas (${progress.loaded}/${progress.total})...`, pct)
         }
-      }
-    };
-    if (depth && depth > 0) cloneOptions.depth = depth;
+      },
+    }
+    if (depth && depth > 0) cloneOptions.depth = depth
 
     // Add timeout to prevent clone from hanging indefinitely (2 minutes for clone)
     const cloneWithTimeout = async (timeoutMs: number = 120000) => {
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error(`Timeout: clone operation took longer than ${timeoutMs / 1000}s`)), timeoutMs);
-      });
-      return Promise.race([
-        git.clone(cloneOptions),
-        timeoutPromise
-      ]);
-    };
+        setTimeout(
+          () => reject(new Error(`Timeout: clone operation took longer than ${timeoutMs / 1000}s`)),
+          timeoutMs,
+        )
+      })
+      return Promise.race([git.clone(cloneOptions), timeoutPromise])
+    }
 
-    await cloneWithTimeout(120000);
+    await cloneWithTimeout(120000)
 
     // Ensure origin remote is properly configured with fetch refspec
     // isomorphic-git's clone may not create the full config in all cases
-    await ensureOriginRemoteConfig(git, dir, url);
+    await ensureOriginRemoteConfig(git, dir, url)
 
-    onProgress?.('Setting up local branches...', 95);
+    onProgress?.("Setting up local branches...", 95)
 
-    const defaultBranch = await resolveBranchName(git, dir);
-    await git.checkout({ dir, ref: defaultBranch });
+    const defaultBranch = await resolveBranchName(git, dir)
+    await git.checkout({dir, ref: defaultBranch})
 
-    const headCommit = await git.resolveRef({ dir, ref: 'HEAD' });
-    const branches = await git.listBranches({ dir });
+    const headCommit = await git.resolveRef({dir, ref: "HEAD"})
+    const branches = await git.listBranches({dir})
 
     const cache: RepoCache = {
       repoId: dir,
       lastUpdated: Date.now(),
       headCommit,
-      dataLevel: depth ? 'shallow' : 'full',
-      branches: branches.map((name: string) => ({ name, commit: '' })),
-      cloneUrls: [url]
-    };
+      dataLevel: depth ? "shallow" : "full",
+      branches: branches.map((name: string) => ({name, commit: ""})),
+      cloneUrls: [url],
+    }
 
-    await cacheManager.init();
-    await cacheManager.setRepoCache(cache);
+    await cacheManager.init()
+    await cacheManager.setRepoCache(cache)
 
-    onProgress?.('Clone completed successfully!', 100);
+    onProgress?.("Clone completed successfully!", 100)
   } catch (error) {
     // Clean up on failure using provider fs, but ignore errors
     try {
-      const fs: any = getProviderFs(git);
-      await safeRmrf(fs, dir);
+      const fs: any = getProviderFs(git)
+      await safeRmrf(fs, dir)
     } catch {}
 
-    throw new Error(`Clone failed: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Clone failed: ${error instanceof Error ? error.message : String(error)}`)
   }
 }

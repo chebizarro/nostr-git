@@ -1,4 +1,4 @@
-import type { GitProvider } from "./provider.js"
+import type {GitProvider} from "./provider.js"
 import {IsomorphicGitProvider} from "./isomorphic-git-provider.js"
 import {CachedGitProvider} from "./cached-provider.js"
 import {loadConfig, type GitConfig} from "./config.js"
@@ -11,14 +11,14 @@ let singleton: GitProvider | null = null
 
 export interface CreateGitProviderOptions extends Partial<GitConfig> {
   /** Custom HTTP client (for NIP-98 auth injection) */
-  http?: any;
+  http?: any
   /** Skip singleton caching (for creating isolated providers) */
-  skipSingleton?: boolean;
+  skipSingleton?: boolean
 }
 
 export function createGitProvider(overrides?: CreateGitProviderOptions): GitProvider {
-  const skipSingleton = overrides?.skipSingleton ?? false;
-  
+  const skipSingleton = overrides?.skipSingleton ?? false
+
   if (!skipSingleton && singleton) return singleton
 
   const cfg = loadConfig(overrides)
@@ -33,10 +33,12 @@ export function createGitProvider(overrides?: CreateGitProviderOptions): GitProv
   const fs = isBrowserLike ? new LightningFS("nostr-git") : fsNode
   // Use custom HTTP client if provided, otherwise use default
   const http = overrides?.http ?? (isBrowserLike ? httpWeb : httpNode)
+  const corsProxy =
+    cfg.defaultCorsProxy === undefined ? "https://cors.isomorphic-git.org" : cfg.defaultCorsProxy
   const provider = new IsomorphicGitProvider({
     fs,
     http,
-    corsProxy: cfg.defaultCorsProxy ?? "https://cors.isomorphic-git.org",
+    corsProxy,
   })
 
   if (cfg.cacheMode === "off") {

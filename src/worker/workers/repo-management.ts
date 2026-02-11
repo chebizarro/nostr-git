@@ -11,6 +11,7 @@ import {getGitServiceApi} from "../../git/provider-factory.js"
 import {getProviderFs, ensureDir, isRepoClonedFs} from "./fs-utils.js"
 import {cloneRemoteRepoUtil} from "./repos.js"
 import {resolveBranchName as resolveRobustBranch} from "./branches.js"
+import {resolveDefaultCorsProxy} from "./git-config.js"
 import {parseRepoId} from "../../utils/repo-id.js"
 
 // Helper to generate canonical repo key from repoId
@@ -762,6 +763,7 @@ export async function forkAndCloneRepo(
         console.log("[forkAndCloneRepo] Unshallowing clone by fetching full history...")
         onProgress?.("Fetching full commit history...", 72)
 
+        const corsProxy = resolveDefaultCorsProxy()
         let unshallowed = false
 
         // First, try to fetch from the existing origin remote (this is the URL that worked for the initial clone)
@@ -779,7 +781,7 @@ export async function forkAndCloneRepo(
               dir: workingDir,
               remote: "origin",
               tags: true, // Also fetch tags
-              corsProxy: "https://cors.isomorphic-git.org",
+              corsProxy,
             })
             console.log("[forkAndCloneRepo] Fetch from origin succeeded")
             unshallowed = true
@@ -800,7 +802,7 @@ export async function forkAndCloneRepo(
                 dir: workingDir,
                 url: sourceUrl,
                 tags: true, // Also fetch tags
-                corsProxy: "https://cors.isomorphic-git.org",
+                corsProxy,
               })
               console.log("[forkAndCloneRepo] Fetch succeeded from:", sourceUrl)
               unshallowed = true

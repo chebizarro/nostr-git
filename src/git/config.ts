@@ -13,6 +13,16 @@ const defaultConfig: GitConfig = {
   cacheMaxAgeMs: 60_000, // 60s idle TTL by default
 }
 
+let defaultCorsProxyOverride: string | null | undefined
+
+export function setDefaultCorsProxyOverride(value?: string | null): void {
+  defaultCorsProxyOverride = value
+}
+
+export function getDefaultCorsProxyOverride(): string | null | undefined {
+  return defaultCorsProxyOverride
+}
+
 export function loadConfig(overrides?: Partial<GitConfig>): GitConfig {
   const env =
     typeof process !== "undefined" && (process as any).env ? (process as any).env : ({} as any)
@@ -29,11 +39,21 @@ export function loadConfig(overrides?: Partial<GitConfig>): GitConfig {
     (env.GIT_CACHE_TTL_MS ? Number(env.GIT_CACHE_TTL_MS) : defaultConfig.cacheMaxAgeMs)
 
   // New: read default CORS proxy configuration
-  const defaultCorsProxyEnv = env.GIT_DEFAULT_CORS_PROXY
-  const defaultCorsProxy =
-    defaultCorsProxyEnv === "none"
-      ? null
-      : defaultCorsProxyEnv ?? "https://cors.isomorphic-git.org"
+  const hasDefaultCorsProxyOverride =
+    overrides && Object.prototype.hasOwnProperty.call(overrides, "defaultCorsProxy")
+  const overrideValue = hasDefaultCorsProxyOverride
+    ? overrides!.defaultCorsProxy
+    : defaultCorsProxyOverride
+  let defaultCorsProxy: string | null | undefined
+  if (overrideValue !== undefined) {
+    defaultCorsProxy = overrideValue ?? null
+  } else {
+    const defaultCorsProxyEnv = env.GIT_DEFAULT_CORS_PROXY
+    defaultCorsProxy =
+      defaultCorsProxyEnv === "none"
+        ? null
+        : (defaultCorsProxyEnv ?? "https://cors.isomorphic-git.org")
+  }
 
-  return { compatMode, cacheMode, cacheMaxAgeMs, defaultCorsProxy }
+  return {compatMode, cacheMode, cacheMaxAgeMs, defaultCorsProxy}
 }
