@@ -554,6 +554,26 @@ const api = {
     return await needsUpdateUtil(git, key, cloneUrls, cache, now ?? Date.now())
   },
 
+  async listServerRefs(opts: {url: string; prefix?: string; symrefs?: boolean}) {
+    try {
+      const refs = await git.listServerRefs({
+        url: opts.url,
+        prefix: opts.prefix,
+        symrefs: opts.symrefs ?? true,
+        onAuth: getAuthCallback(opts.url),
+      })
+      return toPlain(refs)
+    } catch (error: any) {
+      const status = error?.status ?? error?.code ?? error?.data?.status
+      const message = String(error?.message ?? error ?? "")
+      const isNotFound = status === 404 || message.includes("404") || message.includes("Not Found")
+      if (!isNotFound) {
+        console.error("[listServerRefs] Error:", error)
+      }
+      throw error
+    }
+  },
+
   // Patch analysis & application
   async analyzePatchMerge(opts: AnalyzePatchMergeOptions) {
     const {repoId} = opts
