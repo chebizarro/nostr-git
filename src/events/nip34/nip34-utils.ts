@@ -626,7 +626,11 @@ export interface Patch {
 
 export function parsePatchEvent(event: PatchEvent): Patch {
   const getTag = (name: string) => event.tags.find(t => t[0] === name)?.[1]
-  const getAllTags = (name: string) => event.tags.filter(t => t[0] === name).map(t => t[1])
+  const getAllTags = (name: string) =>
+    event.tags
+      .filter(t => t[0] === name)
+      .map(t => t[1])
+      .filter((value): value is string => value !== undefined)
   const authorTag = event.tags.find(t => t[0] === "committer")
   const author = {
     pubkey: event.pubkey,
@@ -781,7 +785,11 @@ export function isDeletedRepoAnnouncement(event: RepoAnnouncementEvent): boolean
 
 export function parseRepoAnnouncementEvent(event: RepoAnnouncementEvent): RepoAnnouncement {
   const getTag = (name: string) => event.tags.find(t => t[0] === name)?.[1]
-  const getAllTags = (name: string) => event.tags.filter(t => t[0] === name).map(t => t[1])
+  const getAllTags = (name: string) =>
+    event.tags
+      .filter(t => t[0] === name)
+      .map(t => t[1])
+      .filter((value): value is string => value !== undefined)
   const getMultiTag = (name: string) =>
     event.tags.filter(t => t[0] === name).flatMap(t => t.slice(1))
   const relaysTag = () => {
@@ -823,13 +831,17 @@ export interface RepoState {
 
 export function parseRepoStateEvent(event: RepoStateEvent): RepoState {
   const getTag = (name: string) => event.tags.find(t => t[0] === name)?.[1]
-  const refs = event.tags
-    .filter(t => t[0].startsWith("refs/"))
-    .map(t => ({
-      ref: t[0],
-      commit: t[1],
-      lineage: t.length > 2 ? t.slice(2) : undefined,
-    }))
+  const isRefTag = (
+    tag: RepoStateTag,
+  ): tag is Extract<
+    RepoStateTag,
+    [`refs/heads/${string}` | `refs/tags/${string}`, string, ...string[]]
+  > => tag[0].startsWith("refs/") && typeof tag[1] === "string"
+  const refs = event.tags.filter(isRefTag).map(tag => ({
+    ref: tag[0],
+    commit: tag[1],
+    lineage: tag.length > 2 ? tag.slice(2) : undefined,
+  }))
   const head = getTag("HEAD")
   return {
     id: event.id,
