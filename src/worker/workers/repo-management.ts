@@ -8,6 +8,7 @@
 import type {GitProvider} from "../../git/provider.js"
 import type {GitVendor} from "../../git/vendor-providers.js"
 import {getGitServiceApi} from "../../git/provider-factory.js"
+import {parseRepoFromUrl} from "../../git/vendor-provider-factory.js"
 import {getProviderFs, ensureDir, isRepoClonedFs} from "./fs-utils.js"
 import {cloneRemoteRepoUtil} from "./repos.js"
 import {resolveBranchName as resolveRobustBranch} from "./branches.js"
@@ -1127,6 +1128,16 @@ export interface UpdateRemoteRepoMetadataResult {
   error?: string
 }
 
+export interface DeleteRemoteRepoOptions {
+  remoteUrl: string
+  token: string
+}
+
+export interface DeleteRemoteRepoResult {
+  success: boolean
+  error?: string
+}
+
 /**
  * Update remote repository metadata via Git provider API
  */
@@ -1153,6 +1164,30 @@ export async function updateRemoteRepoMetadata(
     return {
       success: false,
       error: error.message || "Failed to update repository metadata",
+    }
+  }
+}
+
+/**
+ * Delete a remote repository via Git provider API
+ */
+export async function deleteRemoteRepo(
+  options: DeleteRemoteRepoOptions,
+): Promise<DeleteRemoteRepoResult> {
+  const {remoteUrl, token} = options
+
+  try {
+    const parsed = parseRepoFromUrl(remoteUrl)
+    if (!parsed) {
+      throw new Error("Unable to parse repository URL")
+    }
+    const {provider, owner, repo} = parsed
+    await provider.deleteRepo(owner, repo, token)
+    return {success: true}
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error?.message || "Failed to delete repository",
     }
   }
 }

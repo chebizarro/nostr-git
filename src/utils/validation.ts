@@ -1,4 +1,4 @@
-import { z, RefinementCtx } from "zod"
+import {z, RefinementCtx} from "zod"
 
 // A Nostr tag is a tuple where the first element is the tag name and
 // subsequent elements are string values. Example: ["e", "<event-id>"]
@@ -66,7 +66,8 @@ export const RepoAnnouncementTagsSchema = z.array(RepoAnnouncementTagSchema)
 // Repository state tags (kind 30618)
 export const RefsTag = z.tuple([z.string().startsWith("refs/"), z.string()]).rest(z.string())
 export const HeadRefTag = z.tuple([z.literal("HEAD"), z.string().startsWith("ref: refs/heads/")])
-export const RepoStateTagSchema = z.union([DTag, RefsTag, HeadRefTag])
+export const DeletedTag = z.tuple([z.literal("deleted")]).rest(z.string())
+export const RepoStateTagSchema = z.union([DTag, RefsTag, HeadRefTag, DeletedTag])
 export const RepoStateTagsSchema = z.array(RepoStateTagSchema)
 
 // Patch tags (kind 1617)
@@ -167,12 +168,7 @@ export const StackATag = AddressRepoTag
 export const StackIdTag = z.tuple([z.literal("stack"), z.string()])
 export const StackMemberTag = z.tuple([z.literal("member"), z.string()])
 export const StackOrderTag = z.tuple([z.literal("order"), z.string()]).rest(z.string())
-export const StackTagSchema = z.union([
-  StackATag,
-  StackIdTag,
-  StackMemberTag,
-  StackOrderTag,
-])
+export const StackTagSchema = z.union([StackATag, StackIdTag, StackMemberTag, StackOrderTag])
 export const StackTagsSchema = z.array(StackTagSchema)
 
 // Merge Metadata (kind 30411)
@@ -180,7 +176,10 @@ export const MergeMetaATag = AddressRepoTag
 export const MergeMetaRootETag = ETagRoot
 export const MergeBaseBranchTag = z.tuple([z.literal("base-branch"), z.string()])
 export const MergeTargetBranchTag = z.tuple([z.literal("target-branch"), z.string()])
-export const MergeResultTag = z.tuple([z.literal("result"), z.union([z.literal("clean"), z.literal("ff"), z.literal("conflict")])])
+export const MergeResultTag = z.tuple([
+  z.literal("result"),
+  z.union([z.literal("clean"), z.literal("ff"), z.literal("conflict")]),
+])
 export const MergeMetaTagSchema = z.union([
   MergeMetaATag,
   MergeMetaRootETag,
@@ -321,10 +320,16 @@ export const StackEventSchema = NostrEventSchema.extend({
   tags: StackTagsSchema,
 }).superRefine((evt: NostrEventLike, ctx: RefinementCtx) => {
   if (!hasTagName(evt.tags as unknown[], "a")) {
-    ctx.addIssue({code: z.ZodIssueCode.custom, message: "Stack must include an 'a' tag (repo address)"})
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Stack must include an 'a' tag (repo address)",
+    })
   }
   if (!hasTagName(evt.tags as unknown[], "stack")) {
-    ctx.addIssue({code: z.ZodIssueCode.custom, message: "Stack must include a 'stack' tag (stack id)"})
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Stack must include a 'stack' tag (stack id)",
+    })
   }
 })
 
@@ -333,7 +338,10 @@ export const MergeMetadataEventSchema = NostrEventSchema.extend({
   tags: MergeMetaTagsSchema,
 }).superRefine((evt: NostrEventLike, ctx: RefinementCtx) => {
   if (!hasTagName(evt.tags as unknown[], "a") || !hasTagName(evt.tags as unknown[], "e")) {
-    ctx.addIssue({code: z.ZodIssueCode.custom, message: "Merge metadata must include 'a' (repo) and 'e' (root) tags"})
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Merge metadata must include 'a' (repo) and 'e' (root) tags",
+    })
   }
 })
 
@@ -342,7 +350,10 @@ export const ConflictMetadataEventSchema = NostrEventSchema.extend({
   tags: ConflictMetaTagsSchema,
 }).superRefine((evt: NostrEventLike, ctx: RefinementCtx) => {
   if (!hasTagName(evt.tags as unknown[], "a") || !hasTagName(evt.tags as unknown[], "e")) {
-    ctx.addIssue({code: z.ZodIssueCode.custom, message: "Conflict metadata must include 'a' (repo) and 'e' (root) tags"})
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Conflict metadata must include 'a' (repo) and 'e' (root) tags",
+    })
   }
 })
 
@@ -355,8 +366,10 @@ export const validateStatusEvent = (evt: unknown) => StatusEventSchema.safeParse
 
 // Convenience per-kind validators
 export const validatePullRequestEvent = (evt: unknown) => PullRequestEventSchema.safeParse(evt)
-export const validatePullRequestUpdateEvent = (evt: unknown) => PullRequestUpdateEventSchema.safeParse(evt)
+export const validatePullRequestUpdateEvent = (evt: unknown) =>
+  PullRequestUpdateEventSchema.safeParse(evt)
 export const validateUserGraspListEvent = (evt: unknown) => UserGraspListEventSchema.safeParse(evt)
 export const validateStackEvent = (evt: unknown) => StackEventSchema.safeParse(evt)
 export const validateMergeMetadataEvent = (evt: unknown) => MergeMetadataEventSchema.safeParse(evt)
-export const validateConflictMetadataEvent = (evt: unknown) => ConflictMetadataEventSchema.safeParse(evt)
+export const validateConflictMetadataEvent = (evt: unknown) =>
+  ConflictMetadataEventSchema.safeParse(evt)

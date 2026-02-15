@@ -28,7 +28,7 @@ import {
   GIT_MERGE_METADATA,
   GIT_CONFLICT_METADATA,
 } from "./nip34.js"
-import type { CommentEvent } from "../nip22/nip22.js"
+import type {CommentEvent} from "../nip22/nip22.js"
 import {sanitizeRelays} from "../../utils/sanitize-relays.js"
 
 // Stronger typing for tag helpers: map known tag names to their tuple types
@@ -76,7 +76,10 @@ export function createStackEvent(opts: {
   content?: string
   created_at?: number
 }): StackEvent {
-  const tags: any[] = [["a", opts.repoAddr], ["stack", opts.stackId]]
+  const tags: any[] = [
+    ["a", opts.repoAddr],
+    ["stack", opts.stackId],
+  ]
   if (opts.members) opts.members.forEach(m => tags.push(["member", m]))
   if (opts.order && opts.order.length) tags.push(["order", ...opts.order])
   return {
@@ -97,7 +100,10 @@ export function createMergeMetadataEvent(opts: {
   content?: string // JSON
   created_at?: number
 }): MergeMetadataEvent {
-  const tags: any[] = [["a", opts.repoAddr], ["e", opts.rootId, "", "root"]]
+  const tags: any[] = [
+    ["a", opts.repoAddr],
+    ["e", opts.rootId, "", "root"],
+  ]
   if (opts.baseBranch) tags.push(["base-branch", opts.baseBranch])
   if (opts.targetBranch) tags.push(["target-branch", opts.targetBranch])
   if (opts.result) tags.push(["result", opts.result])
@@ -117,7 +123,10 @@ export function createConflictMetadataEvent(opts: {
   content?: string // JSON with markers
   created_at?: number
 }): ConflictMetadataEvent {
-  const tags: any[] = [["a", opts.repoAddr], ["e", opts.rootId, "", "root"]]
+  const tags: any[] = [
+    ["a", opts.repoAddr],
+    ["e", opts.rootId, "", "root"],
+  ]
   if (opts.files) opts.files.forEach(f => tags.push(["file", f]))
   return {
     kind: GIT_CONFLICT_METADATA,
@@ -761,8 +770,13 @@ export interface RepoAnnouncement {
   maintainers?: string[]
   hashtags?: string[]
   earliestUniqueCommit?: string // NIP-34 r tag with 'euc' marker
+  deleted?: boolean
   createdAt: string
   raw: RepoAnnouncementEvent
+}
+
+export function isDeletedRepoAnnouncement(event: RepoAnnouncementEvent): boolean {
+  return (event.tags || []).some(t => t[0] === "deleted")
 }
 
 export function parseRepoAnnouncementEvent(event: RepoAnnouncementEvent): RepoAnnouncement {
@@ -774,6 +788,7 @@ export function parseRepoAnnouncementEvent(event: RepoAnnouncementEvent): RepoAn
     const raw = getMultiTag("relays")
     return raw.length > 0 ? sanitizeRelays(raw) : []
   }
+  const deleted = isDeletedRepoAnnouncement(event)
   // Extract earliest unique commit from r tag with 'euc' marker
   const eucTag = event.tags.find(t => t[0] === "r" && t[2] === "euc")
   const earliestUniqueCommit = eucTag?.[1]
@@ -791,6 +806,7 @@ export function parseRepoAnnouncementEvent(event: RepoAnnouncementEvent): RepoAn
     maintainers: getMultiTag("maintainers"),
     hashtags: getAllTags("t"),
     earliestUniqueCommit,
+    deleted,
     createdAt: new Date(event.created_at * 1000).toISOString(),
     raw: event,
   }

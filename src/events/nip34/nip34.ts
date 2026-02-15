@@ -1,6 +1,6 @@
 // NIP-34: Git Collaboration Event Types for Nostr
 // https://github.com/nostr-protocol/nips/blob/master/34.md
-import type { Event as NostrEvent } from "nostr-tools"
+import type {Event as NostrEvent} from "nostr-tools"
 import {nip19} from "nostr-tools"
 
 /**
@@ -53,6 +53,8 @@ export type RepoAnnouncementTag =
   | ["r", string, "euc"]
   | ["maintainers", ...string[]]
   | ["t", string]
+  | ["deleted"]
+  | ["deleted", string]
 
 export interface RepoAnnouncementEvent extends NostrEvent {
   kind: typeof GIT_REPO_ANNOUNCEMENT
@@ -66,6 +68,8 @@ export type RepoStateTag =
   | ["d", string]
   | [`refs/heads/${string}` | `refs/tags/${string}`, string, ...string[]]
   | ["HEAD", `ref: refs/heads/${string}`]
+  | ["deleted"]
+  | ["deleted", string]
 
 export interface RepoStateEvent extends NostrEvent {
   kind: typeof GIT_REPO_STATE
@@ -275,23 +279,23 @@ export type Nip34EventByKind<K extends Nip34Event["kind"]> = Extract<Nip34Event,
 // -------------------
 
 // Repo address pointer using 30617 (NIP-34 repo announcement kind)
-export type RepoAddressA = `30617:${string}:${string}`;
+export type RepoAddressA = `30617:${string}:${string}`
 
 // Extract r:euc (Encoded URL Component) tag value
 export function parseEucTag(tags: string[][]): string | undefined {
-  const r = tags.find(t => t[0] === "r" && t[2] === "euc");
-  return r ? r[1] : undefined;
+  const r = tags.find(t => t[0] === "r" && t[2] === "euc")
+  return r ? r[1] : undefined
 }
 
 // Build repo key: `${npub}/${name}` if name provided, otherwise `${npub}`
 export function buildRepoKey(pubkey: string, name?: string): string {
-  const cleanName = (name ?? "").trim();
+  const cleanName = (name ?? "").trim()
   try {
-    const npub = nip19.npubEncode(pubkey);
-    return cleanName.length > 0 ? `${npub}/${cleanName}` : npub;
+    const npub = nip19.npubEncode(pubkey)
+    return cleanName.length > 0 ? `${npub}/${cleanName}` : npub
   } catch (_e) {
     // Fallback to raw pubkey if encoding fails
-    return cleanName.length > 0 ? `${pubkey}/${cleanName}` : pubkey;
+    return cleanName.length > 0 ? `${pubkey}/${cleanName}` : pubkey
   }
 }
 
@@ -299,5 +303,5 @@ export enum GitIssueStatus {
   OPEN = "Open",
   CLOSED = "Closed",
   RESOLVED = "Resolved",
-  DRAFT = "Draft"
+  DRAFT = "Draft",
 }

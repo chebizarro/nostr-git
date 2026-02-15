@@ -186,11 +186,13 @@ import {
   createLocalRepo,
   createRemoteRepo,
   forkAndCloneRepo,
+  deleteRemoteRepo,
   updateRemoteRepoMetadata,
   updateAndPushFiles,
   type CreateLocalRepoOptions,
   type CreateRemoteRepoOptions,
   type ForkAndCloneOptions,
+  type DeleteRemoteRepoOptions,
   type UpdateRemoteRepoMetadataOptions,
   type UpdateAndPushFilesOptions,
 } from "./workers/repo-management.js"
@@ -1189,11 +1191,47 @@ const api = {
       console.warn(`Failed to delete cache for ${opts.repoId}:`, error)
     }
 
-    try {
-      const fs: any = getProviderFs(git)
-      if (fs?.promises?.rmdir) {
-        await fs.promises.rmdir(dir, {recursive: true})
+    const fs: any = getProviderFs(git)
+
+    const removeDirRecursive = async (path: string): Promise<void> => {
+      if (fs?.promises?.rm) {
+        await fs.promises.rm(path, {recursive: true, force: true})
+        return
       }
+
+      if (fs?.promises?.rmdir) {
+        try {
+          await fs.promises.rmdir(path, {recursive: true})
+          return
+        } catch (error: any) {
+          if (error?.code !== "ENOTEMPTY") {
+            throw error
+          }
+        }
+      }
+
+      if (!fs?.promises?.readdir || !fs?.promises?.stat || !fs?.promises?.unlink) {
+        throw new Error("Filesystem does not support recursive deletion")
+      }
+
+      const entries = await fs.promises.readdir(path)
+      for (const entry of entries) {
+        const child = `${path}/${entry}`
+        const stat = await fs.promises.stat(child)
+        if (stat?.isDirectory?.()) {
+          await removeDirRecursive(child)
+        } else {
+          await fs.promises.unlink(child)
+        }
+      }
+
+      if (fs?.promises?.rmdir) {
+        await fs.promises.rmdir(path)
+      }
+    }
+
+    try {
+      await removeDirRecursive(dir)
       return toPlain({success: true, repoId: opts.repoId})
     } catch (error) {
       console.error(`Failed to delete repo directory ${dir}:`, error)
@@ -1625,6 +1663,12 @@ const api = {
   // Fork and clone a repository
   async forkAndCloneRepo(opts: ForkAndCloneOptions) {
     const result = await forkAndCloneRepo(git, cacheManager, rootDir, opts)
+    return toPlain(result)
+  },
+
+  // Delete a remote repository
+  async deleteRemoteRepo(opts: DeleteRemoteRepoOptions) {
+    const result = await deleteRemoteRepo(opts)
     return toPlain(result)
   },
 
