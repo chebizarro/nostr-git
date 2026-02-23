@@ -139,6 +139,15 @@ export async function safePushToRemoteUtil(
     if (ok === undefined) {
       return { success: false, error: 'Push operation returned invalid response (no success field)' };
     }
+    if (ok === false) {
+      const errorMessage = (pushRes as any)?.error || 'Push failed';
+      const hasWorkflowScopeIssue = /workflow|\.github\/workflows/i.test(errorMessage);
+      const reason =
+        (pushRes as any)?.reason ||
+        (pushRes as any)?.code ||
+        (hasWorkflowScopeIssue ? 'workflow_scope_missing' : 'push_failed');
+      return { success: false, error: errorMessage, reason };
+    }
     const result: {
       success: boolean;
       pushed?: boolean;

@@ -479,6 +479,7 @@ export interface ForkAndCloneOptions {
   baseUrl?: string
   sourceCloneUrls?: string[] // For cross-platform forking (e.g., Nostr repo to GitHub)
   sourceRepoId?: string // Canonical repo ID for finding existing local clone
+  workflowFilesAction?: "include" | "omit"
   onProgress?: (stage: string, pct?: number) => void
 }
 
@@ -490,6 +491,8 @@ export interface ForkAndCloneResult {
   branches: string[]
   tags: string[]
   error?: string
+  requiresWorkflowDecision?: boolean
+  workflowFiles?: string[]
 }
 
 /**
@@ -512,6 +515,7 @@ export async function forkAndCloneRepo(
     baseUrl,
     sourceCloneUrls,
     sourceRepoId,
+    workflowFilesAction,
     onProgress,
   } = options
 
@@ -549,6 +553,8 @@ export async function forkAndCloneRepo(
       throw error
     }
   }
+
+  let workflowRestoreState: {dir: string; branch: string; head: string} | null = null
 
   try {
     onProgress?.("Creating remote fork...", 10)
@@ -748,20 +754,58 @@ export async function forkAndCloneRepo(
         }
       }
 
+      const listWorkflowFiles = async (): Promise<string[]> => {
+        try {
+          const files = await git.listFiles({dir: workingDir})
+          return files.filter((file: string) => file.startsWith(".github/workflows/"))
+        } catch (listErr: any) {
+          console.warn("[forkAndCloneRepo] Failed to list workflow files:", listErr?.message)
+          return []
+        }
+      }
+
+      const workflowFiles = provider === "github" ? await listWorkflowFiles() : []
+      if (provider === "github" && workflowFiles.length > 0 && !workflowFilesAction) {
+        return {
+          success: false,
+          repoId: "",
+          forkUrl: "",
+          defaultBranch: "",
+          branches: [],
+          tags: [],
+          error:
+            "GitHub workflow files detected. Pushing workflows requires the workflow token scope.",
+          requiresWorkflowDecision: true,
+          workflowFiles,
+        }
+      }
+
       onProgress?.("Creating new repository on target platform...", 55)
 
       // Create a new empty repo on the target platform
-      const newRepoResult = await runTimed(
-        "createRepo",
-        FORK_TIMEOUTS.createRepoMs,
-        () =>
-          gitServiceApi.createRepo({
-            name: forkName,
-            description: `Fork of ${owner}/${repo}`,
-            private: visibility === "private",
-          }),
-        {provider, forkName},
-      )
+      let newRepoResult
+      try {
+        newRepoResult = await runTimed(
+          "createRepo",
+          FORK_TIMEOUTS.createRepoMs,
+          () =>
+            gitServiceApi.createRepo({
+              name: forkName,
+              description: `Fork of ${owner}/${repo}`,
+              private: visibility === "private",
+            }),
+          {provider, forkName},
+        )
+      } catch (createErr: any) {
+        console.warn("[forkAndCloneRepo] createRepo failed, checking for existing repo:", createErr)
+        try {
+          const currentUser = await gitServiceApi.getCurrentUser()
+          newRepoResult = await gitServiceApi.getRepo(currentUser.login, forkName)
+          console.log("[forkAndCloneRepo] Using existing repo:", newRepoResult?.cloneUrl)
+        } catch {
+          throw createErr
+        }
+      }
 
       forkUrl = newRepoResult.cloneUrl
       forkOwnerLogin = newRepoResult.owner.login
@@ -802,6 +846,91 @@ export async function forkAndCloneRepo(
       )
       console.log("[forkAndCloneRepo] Push URL:", forkUrl, "token length:", token?.length)
 
+      const corsProxy = resolveDefaultCorsProxy()
+      console.log("[forkAndCloneRepo] Using corsProxy for fetch:", corsProxy)
+      const isWorkflowScopeError = (error: any): boolean => {
+        if (provider !== "github") return false
+        const message = [
+          error?.message,
+          error?.data?.prettyDetails,
+          error?.data?.result?.refs?.["refs/heads/master"]?.error,
+          error?.data?.result?.refs?.["refs/heads/main"]?.error,
+        ]
+          .filter(Boolean)
+          .join(" ")
+        return /workflow|\.github\/workflows/i.test(message)
+      }
+
+      const isNostrRelayUrl = (url: string): boolean =>
+        /relay\.ngit\.dev|gitnostr\.com|grasp/i.test(url)
+
+      const resolveSourceUrls = (reason: string): string[] => {
+        if (!sourceCloneUrls || sourceCloneUrls.length === 0) return []
+
+        const deduped: string[] = []
+        for (const url of sourceCloneUrls) {
+          if (!deduped.includes(url)) deduped.push(url)
+        }
+
+        if (reason === "missing objects") {
+          const nonRelay = deduped.filter(url => !isNostrRelayUrl(url))
+          const relay = deduped.filter(isNostrRelayUrl)
+          return [...nonRelay, ...relay]
+        }
+
+        return deduped
+      }
+
+      const fetchFromSourceUrls = async (reason: string): Promise<boolean> => {
+        const urlsToTry = resolveSourceUrls(reason)
+        if (urlsToTry.length === 0) return false
+
+        console.log(`[forkAndCloneRepo] ${reason} - trying source URLs:`, urlsToTry)
+
+        for (const sourceUrl of urlsToTry) {
+          try {
+            console.log(`[forkAndCloneRepo] ${reason} - fetching full history from:`, sourceUrl)
+            await runTimed(
+              `fetch full history (source ${reason})`,
+              FORK_TIMEOUTS.fetchHistoryMs,
+              () =>
+                git.fetch({
+                  dir: workingDir,
+                  url: sourceUrl,
+                  tags: true,
+                  corsProxy,
+                }),
+              {url: sourceUrl},
+            )
+            console.log("[forkAndCloneRepo] Fetch succeeded from:", sourceUrl)
+            return true
+          } catch (fetchErr: any) {
+            console.warn("[forkAndCloneRepo] Fetch failed for:", sourceUrl, fetchErr?.message)
+          }
+        }
+
+        return false
+      }
+
+      const resolveHeadCommit = async (): Promise<string | undefined> => {
+        const candidateRefs = [
+          `refs/heads/${defaultBranch}`,
+          defaultBranch,
+          `refs/remotes/origin/${defaultBranch}`,
+          "HEAD",
+          "FETCH_HEAD",
+        ]
+
+        for (const ref of candidateRefs) {
+          try {
+            const oid = await git.resolveRef({dir: workingDir, ref})
+            if (oid) return oid
+          } catch {}
+        }
+
+        return undefined
+      }
+
       // For cross-platform fork, we ALWAYS need to fetch full history before pushing
       // The local clone may be shallow or missing objects even if .git/shallow doesn't exist
       // GitHub will reject pushes with missing parent commits
@@ -825,8 +954,6 @@ export async function forkAndCloneRepo(
         console.log("[forkAndCloneRepo] Unshallowing clone by fetching full history...")
         onProgress?.("Fetching full commit history...", 72)
 
-        const corsProxy = resolveDefaultCorsProxy()
-        console.log("[forkAndCloneRepo] Using corsProxy for fetch:", corsProxy)
         let unshallowed = false
 
         // First, try to fetch from the existing origin remote (this is the URL that worked for the initial clone)
@@ -860,31 +987,10 @@ export async function forkAndCloneRepo(
         }
 
         // If origin fetch failed, try the provided source URLs
-        if (!unshallowed && sourceCloneUrls && sourceCloneUrls.length > 0) {
-          console.log("[forkAndCloneRepo] Trying source URLs:", sourceCloneUrls)
-
-          for (const sourceUrl of sourceCloneUrls) {
-            try {
-              console.log("[forkAndCloneRepo] Fetching full history from:", sourceUrl)
-              // Fetch ALL refs without depth limit to get complete history
-              await runTimed(
-                "fetch full history (source)",
-                FORK_TIMEOUTS.fetchHistoryMs,
-                () =>
-                  git.fetch({
-                    dir: workingDir,
-                    url: sourceUrl,
-                    tags: true, // Also fetch tags
-                    corsProxy,
-                  }),
-                {url: sourceUrl},
-              )
-              console.log("[forkAndCloneRepo] Fetch succeeded from:", sourceUrl)
-              unshallowed = true
-              break
-            } catch (fetchErr: any) {
-              console.warn("[forkAndCloneRepo] Fetch failed for:", sourceUrl, fetchErr?.message)
-            }
+        if (!unshallowed) {
+          const fetchedFromSources = await fetchFromSourceUrls("fallback")
+          if (fetchedFromSources) {
+            unshallowed = true
           }
         }
 
@@ -905,6 +1011,7 @@ export async function forkAndCloneRepo(
 
       // Verify we have commits and check for missing objects
       let headCommit: string | undefined
+      let historyIncomplete = false
       try {
         const log = await git.log({dir: workingDir, depth: 100, ref: defaultBranch})
         console.log(
@@ -932,13 +1039,37 @@ export async function forkAndCloneRepo(
             if (missingParent) break
           }
           if (missingParent) {
+            historyIncomplete = true
             console.log(
               "[forkAndCloneRepo] Repository has incomplete history - some parent commits are missing",
             )
           }
+        } else {
+          historyIncomplete = true
         }
       } catch (logErr: any) {
+        historyIncomplete = true
         console.warn("[forkAndCloneRepo] Could not get log:", logErr?.message)
+      }
+
+      if (!headCommit) {
+        headCommit = await resolveHeadCommit()
+        if (headCommit) {
+          console.log(
+            "[forkAndCloneRepo] Resolved head commit from refs:",
+            headCommit.substring(0, 8),
+          )
+        }
+      }
+
+      if (historyIncomplete) {
+        console.warn(
+          "[forkAndCloneRepo] Detected incomplete history - attempting to fetch missing objects",
+        )
+        const refetched = await fetchFromSourceUrls("missing objects")
+        if (refetched && !headCommit) {
+          headCommit = await resolveHeadCommit()
+        }
       }
 
       // Push the default branch with retry logic
@@ -946,6 +1077,61 @@ export async function forkAndCloneRepo(
       const maxPushRetries = 3
       let pushSuccess = false
       let lastPushError: Error | null = null
+      let retriedMissingObjects = false
+
+      const shouldOmitWorkflows =
+        provider === "github" && workflowFilesAction === "omit" && workflowFiles.length > 0
+
+      if (shouldOmitWorkflows) {
+        const originalHead = await git
+          .resolveRef({dir: workingDir, ref: `refs/heads/${defaultBranch}`})
+          .catch(() => undefined)
+
+        if (originalHead) {
+          workflowRestoreState = {
+            dir: workingDir,
+            branch: defaultBranch,
+            head: originalHead,
+          }
+        }
+
+        for (const filepath of workflowFiles) {
+          try {
+            await git.remove({dir: workingDir, filepath})
+          } catch (removeErr: any) {
+            console.warn(
+              "[forkAndCloneRepo] Failed to remove workflow file:",
+              filepath,
+              removeErr?.message,
+            )
+          }
+        }
+
+        const omitCommitOid = await git.commit({
+          dir: workingDir,
+          message: `Fork of ${owner}/${repo}\n\nWorkflows omitted to avoid GitHub workflow-scope restrictions.`,
+          parent: [],
+          author: {
+            name: "Flotilla Fork",
+            email: "fork@flotilla.app",
+            timestamp: Math.floor(Date.now() / 1000),
+            timezoneOffset: 0,
+          },
+          committer: {
+            name: "Flotilla Fork",
+            email: "fork@flotilla.app",
+            timestamp: Math.floor(Date.now() / 1000),
+            timezoneOffset: 0,
+          },
+        })
+
+        await git.writeRef({
+          dir: workingDir,
+          ref: `refs/heads/${defaultBranch}`,
+          value: omitCommitOid,
+          force: true,
+        })
+      }
 
       // First, try a normal push
       for (let attempt = 1; attempt <= maxPushRetries && !pushSuccess; attempt++) {
@@ -1001,23 +1187,70 @@ export async function forkAndCloneRepo(
             console.warn("[forkAndCloneRepo] Error code:", pushError.code)
           }
 
+          if (isNotFoundError && !retriedMissingObjects) {
+            retriedMissingObjects = true
+            console.warn(
+              "[forkAndCloneRepo] Missing objects detected - refetching from source URLs",
+            )
+            const refetched = await fetchFromSourceUrls("missing objects")
+            if (refetched && !headCommit) {
+              headCommit = await resolveHeadCommit()
+            }
+          }
+
+          if (isWorkflowScopeError(pushError)) {
+            return {
+              success: false,
+              repoId: "",
+              forkUrl: "",
+              defaultBranch: "",
+              branches: [],
+              tags: [],
+              error:
+                "GitHub rejected this push because the token lacks workflow scope for .github/workflows files.",
+              requiresWorkflowDecision: true,
+              workflowFiles,
+            }
+          }
+
           // If we're missing objects, try creating an orphan commit with the current tree
-          if (isNotFoundError && attempt === maxPushRetries && headCommit) {
+          if (isNotFoundError && attempt === maxPushRetries) {
             console.log(
               "[forkAndCloneRepo] Missing git objects - creating orphan commit with current tree state",
             )
             onProgress?.("Creating fresh commit from current files...", 80)
 
             try {
-              // Read the current commit to get its tree
-              const currentCommit = await git.readCommit({dir: workingDir, oid: headCommit})
-              const treeOid = currentCommit.commit.tree
+              let treeOid: string | undefined
+              const originalHead = headCommit || "unavailable"
+
+              if (headCommit) {
+                try {
+                  const currentCommit = await git.readCommit({dir: workingDir, oid: headCommit})
+                  treeOid = currentCommit.commit.tree
+                } catch (readCommitErr: any) {
+                  console.warn(
+                    "[forkAndCloneRepo] Failed to read head commit, falling back to writeTree:",
+                    readCommitErr?.message,
+                  )
+                }
+              }
+
+              if (!treeOid) {
+                try {
+                  treeOid = await git.writeTree({dir: workingDir})
+                } catch (writeTreeErr: any) {
+                  console.warn(
+                    "[forkAndCloneRepo] Failed to write tree from working directory:",
+                    writeTreeErr?.message,
+                  )
+                }
+              }
 
               // Create a new orphan commit with no parents
-              const orphanCommitOid = await git.commit({
+              const commitOptions: any = {
                 dir: workingDir,
-                message: `Fork of ${owner}/${repo}\n\nCreated from Nostr repository with incomplete history.\nOriginal HEAD: ${headCommit}`,
-                tree: treeOid,
+                message: `Fork of ${owner}/${repo}\n\nCreated from Nostr repository with incomplete history.\nOriginal HEAD: ${originalHead}`,
                 parent: [], // No parents = orphan commit
                 author: {
                   name: "Flotilla Fork",
@@ -1031,7 +1264,13 @@ export async function forkAndCloneRepo(
                   timestamp: Math.floor(Date.now() / 1000),
                   timezoneOffset: 0,
                 },
-              })
+              }
+
+              if (treeOid) {
+                commitOptions.tree = treeOid
+              }
+
+              const orphanCommitOid = await git.commit(commitOptions)
 
               console.log("[forkAndCloneRepo] Created orphan commit:", orphanCommitOid)
 
@@ -1170,6 +1409,23 @@ export async function forkAndCloneRepo(
     const branches = await git.listBranches({dir: metadataDir})
     const tags = await git.listTags({dir: metadataDir})
 
+    if (workflowRestoreState) {
+      try {
+        await git.writeRef({
+          dir: workflowRestoreState.dir,
+          ref: `refs/heads/${workflowRestoreState.branch}`,
+          value: workflowRestoreState.head,
+          force: true,
+        })
+        await git.checkout({dir: workflowRestoreState.dir, ref: workflowRestoreState.branch})
+      } catch (restoreErr: any) {
+        console.warn(
+          "[forkAndCloneRepo] Failed to restore workflow files after fork:",
+          restoreErr?.message,
+        )
+      }
+    }
+
     onProgress?.("Fork completed successfully!", 100)
 
     return {
@@ -1182,6 +1438,23 @@ export async function forkAndCloneRepo(
     }
   } catch (error: any) {
     console.error("Fork and clone failed:", error)
+
+    if (workflowRestoreState) {
+      try {
+        await git.writeRef({
+          dir: workflowRestoreState.dir,
+          ref: `refs/heads/${workflowRestoreState.branch}`,
+          value: workflowRestoreState.head,
+          force: true,
+        })
+        await git.checkout({dir: workflowRestoreState.dir, ref: workflowRestoreState.branch})
+      } catch (restoreErr: any) {
+        console.warn(
+          "[forkAndCloneRepo] Failed to restore workflow files after error:",
+          restoreErr?.message,
+        )
+      }
+    }
 
     // Cleanup partial clone on error
     try {
