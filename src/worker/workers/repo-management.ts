@@ -13,6 +13,7 @@ import {getProviderFs, ensureDir, isRepoClonedFs} from "./fs-utils.js"
 import {cloneRemoteRepoUtil} from "./repos.js"
 import {resolveBranchName as resolveRobustBranch} from "./branches.js"
 import {resolveDefaultCorsProxy} from "./git-config.js"
+import {withTimeout} from "./timeout.js"
 import {parseRepoId} from "../../utils/repo-id.js"
 
 // Helper to generate canonical repo key from repoId
@@ -57,6 +58,14 @@ async function ensureOriginFetchRefspec(
       await git.setConfig({dir, path: "remote.origin.url", value: url})
     }
   } catch {}
+}
+
+const FORK_TIMEOUTS = {
+  forkRepoMs: 60_000,
+  getRepoMs: 10_000,
+  createRepoMs: 60_000,
+  fetchHistoryMs: 120_000,
+  pushMs: 180_000,
 }
 
 // ============================================================================
@@ -506,6 +515,41 @@ export async function forkAndCloneRepo(
     onProgress,
   } = options
 
+  const forkContext = {
+    operation: "forkAndCloneRepo",
+    provider,
+    owner,
+    repo,
+    forkName,
+    baseUrl,
+  }
+
+  const runTimed = async <T>(
+    label: string,
+    timeoutMs: number,
+    operation: () => Promise<T>,
+    detail?: Record<string, unknown>,
+  ): Promise<T> => {
+    const startedAt = Date.now()
+    if (detail) {
+      console.log(`[forkAndCloneRepo] ${label} start`, detail)
+    } else {
+      console.log(`[forkAndCloneRepo] ${label} start`)
+    }
+    try {
+      const result = await withTimeout(operation(), {
+        timeoutMs,
+        label,
+        context: {...forkContext, operation: label},
+      })
+      console.log(`[forkAndCloneRepo] ${label} success in ${Date.now() - startedAt}ms`)
+      return result
+    } catch (error) {
+      console.error(`[forkAndCloneRepo] ${label} failed after ${Date.now() - startedAt}ms`, error)
+      throw error
+    }
+  }
+
   try {
     onProgress?.("Creating remote fork...", 10)
 
@@ -532,7 +576,12 @@ export async function forkAndCloneRepo(
     let isCrossPlatformFork = false
 
     try {
-      forkResult = await gitServiceApi.forkRepo(owner, repo, {name: forkName})
+      forkResult = await runTimed(
+        "forkRepo",
+        FORK_TIMEOUTS.forkRepoMs,
+        () => gitServiceApi.forkRepo(owner, repo, {name: forkName}),
+        {provider, owner, repo, forkName},
+      )
     } catch (e: any) {
       console.error("[forkAndCloneRepo] forkRepo failed", {
         owner,
@@ -634,6 +683,7 @@ export async function forkAndCloneRepo(
 
         for (const sourceUrl of sourceCloneUrls!) {
           try {
+            const cloneStartedAt = Date.now()
             console.log("[forkAndCloneRepo] Trying to clone from:", sourceUrl)
             await cloneRemoteRepoUtil(git, cacheManager, {
               url: sourceUrl,
@@ -644,6 +694,11 @@ export async function forkAndCloneRepo(
                 onProgress?.(message, 20 + (percentage || 0) * 0.3)
               },
             })
+            console.log(
+              "[forkAndCloneRepo] Clone succeeded from:",
+              sourceUrl,
+              `in ${Date.now() - cloneStartedAt}ms`,
+            )
             cloneSuccess = true
             break
           } catch (cloneError: any) {
@@ -696,11 +751,17 @@ export async function forkAndCloneRepo(
       onProgress?.("Creating new repository on target platform...", 55)
 
       // Create a new empty repo on the target platform
-      const newRepoResult = await gitServiceApi.createRepo({
-        name: forkName,
-        description: `Fork of ${owner}/${repo}`,
-        private: visibility === "private",
-      })
+      const newRepoResult = await runTimed(
+        "createRepo",
+        FORK_TIMEOUTS.createRepoMs,
+        () =>
+          gitServiceApi.createRepo({
+            name: forkName,
+            description: `Fork of ${owner}/${repo}`,
+            private: visibility === "private",
+          }),
+        {provider, forkName},
+      )
 
       forkUrl = newRepoResult.cloneUrl
       forkOwnerLogin = newRepoResult.owner.login
@@ -765,6 +826,7 @@ export async function forkAndCloneRepo(
         onProgress?.("Fetching full commit history...", 72)
 
         const corsProxy = resolveDefaultCorsProxy()
+        console.log("[forkAndCloneRepo] Using corsProxy for fetch:", corsProxy)
         let unshallowed = false
 
         // First, try to fetch from the existing origin remote (this is the URL that worked for the initial clone)
@@ -778,12 +840,18 @@ export async function forkAndCloneRepo(
             )
             await ensureOriginFetchRefspec(git, workingDir, originRemote.url)
             // Fetch ALL refs without depth limit to get complete history
-            await git.fetch({
-              dir: workingDir,
-              remote: "origin",
-              tags: true, // Also fetch tags
-              corsProxy,
-            })
+            await runTimed(
+              "fetch full history (origin)",
+              FORK_TIMEOUTS.fetchHistoryMs,
+              () =>
+                git.fetch({
+                  dir: workingDir,
+                  remote: "origin",
+                  tags: true, // Also fetch tags
+                  corsProxy,
+                }),
+              {remote: "origin", url: originRemote.url},
+            )
             console.log("[forkAndCloneRepo] Fetch from origin succeeded")
             unshallowed = true
           }
@@ -799,12 +867,18 @@ export async function forkAndCloneRepo(
             try {
               console.log("[forkAndCloneRepo] Fetching full history from:", sourceUrl)
               // Fetch ALL refs without depth limit to get complete history
-              await git.fetch({
-                dir: workingDir,
-                url: sourceUrl,
-                tags: true, // Also fetch tags
-                corsProxy,
-              })
+              await runTimed(
+                "fetch full history (source)",
+                FORK_TIMEOUTS.fetchHistoryMs,
+                () =>
+                  git.fetch({
+                    dir: workingDir,
+                    url: sourceUrl,
+                    tags: true, // Also fetch tags
+                    corsProxy,
+                  }),
+                {url: sourceUrl},
+              )
               console.log("[forkAndCloneRepo] Fetch succeeded from:", sourceUrl)
               unshallowed = true
               break
@@ -878,31 +952,37 @@ export async function forkAndCloneRepo(
         try {
           console.log(`[forkAndCloneRepo] Push attempt ${attempt}/${maxPushRetries}`)
 
-          await git.push({
-            dir: workingDir,
-            url: forkUrl,
-            ref: defaultBranch,
-            remoteRef: `refs/heads/${defaultBranch}`,
-            force: true,
-            corsProxy: undefined,
-            onAuth: () => {
-              console.log("[forkAndCloneRepo] onAuth called for push, provider:", provider)
-              // Different providers use different auth formats:
-              // GitHub: username can be "token", "x-access-token", or the actual username
-              // GitLab: username should be "oauth2" for PATs
-              if (provider === "gitlab") {
-                return {username: "oauth2", password: token}
-              }
-              return {username: "token", password: token}
-            },
-            onAuthSuccess: () => {
-              console.log("[forkAndCloneRepo] Auth succeeded")
-            },
-            onAuthFailure: (url: string, auth: any) => {
-              console.error("[forkAndCloneRepo] Auth failure for URL:", url)
-              return undefined
-            },
-          })
+          await runTimed(
+            "push",
+            FORK_TIMEOUTS.pushMs,
+            () =>
+              git.push({
+                dir: workingDir,
+                url: forkUrl,
+                ref: defaultBranch,
+                remoteRef: `refs/heads/${defaultBranch}`,
+                force: true,
+                corsProxy: undefined,
+                onAuth: () => {
+                  console.log("[forkAndCloneRepo] onAuth called for push, provider:", provider)
+                  // Different providers use different auth formats:
+                  // GitHub: username can be "token", "x-access-token", or the actual username
+                  // GitLab: username should be "oauth2" for PATs
+                  if (provider === "gitlab") {
+                    return {username: "oauth2", password: token}
+                  }
+                  return {username: "token", password: token}
+                },
+                onAuthSuccess: () => {
+                  console.log("[forkAndCloneRepo] Auth succeeded")
+                },
+                onAuthFailure: (url: string, auth: any) => {
+                  console.error("[forkAndCloneRepo] Auth failure for URL:", url)
+                  return undefined
+                },
+              }),
+            {attempt, forkUrl, defaultBranch},
+          )
           console.log("[forkAndCloneRepo] Push successful")
           pushSuccess = true
         } catch (pushError: any) {
@@ -964,18 +1044,24 @@ export async function forkAndCloneRepo(
               })
 
               // Try pushing the orphan commit
-              await git.push({
-                dir: workingDir,
-                url: forkUrl,
-                ref: defaultBranch,
-                remoteRef: `refs/heads/${defaultBranch}`,
-                force: true,
-                corsProxy: undefined,
-                onAuth: () =>
-                  provider === "gitlab"
-                    ? {username: "oauth2", password: token}
-                    : {username: "token", password: token},
-              })
+              await runTimed(
+                "push orphan commit",
+                FORK_TIMEOUTS.pushMs,
+                () =>
+                  git.push({
+                    dir: workingDir,
+                    url: forkUrl,
+                    ref: defaultBranch,
+                    remoteRef: `refs/heads/${defaultBranch}`,
+                    force: true,
+                    corsProxy: undefined,
+                    onAuth: () =>
+                      provider === "gitlab"
+                        ? {username: "oauth2", password: token}
+                        : {username: "token", password: token},
+                  }),
+                {forkUrl, defaultBranch},
+              )
 
               console.log("[forkAndCloneRepo] Push of orphan commit successful")
               pushSuccess = true
@@ -1027,7 +1113,12 @@ export async function forkAndCloneRepo(
 
       while (pollAttempts < maxPollAttempts) {
         try {
-          const repoMetadata = await gitServiceApi.getRepo(forkOwnerLogin, forkName)
+          const repoMetadata = await runTimed(
+            "getRepo (poll)",
+            FORK_TIMEOUTS.getRepoMs,
+            () => gitServiceApi.getRepo(forkOwnerLogin, forkName),
+            {attempt: pollAttempts + 1, max: maxPollAttempts, forkOwnerLogin, forkName},
+          )
           if (repoMetadata?.id) break
         } catch (error: any) {
           if (!error.message?.includes("404") && !error.message?.includes("Not Found")) {
@@ -1055,6 +1146,8 @@ export async function forkAndCloneRepo(
           ? forkUrl.replace("ws://", "http://").replace("wss://", "https://")
           : forkUrl
 
+      const forkCloneStartedAt = Date.now()
+      console.log("[forkAndCloneRepo] Cloning fork locally:", {cloneUrl, dir: absoluteDir})
       await cloneRemoteRepoUtil(git, cacheManager, {
         url: cloneUrl,
         dir: absoluteDir,
@@ -1064,6 +1157,10 @@ export async function forkAndCloneRepo(
           onProgress?.(message, 60 + (percentage || 0) * 0.35)
         },
       })
+      console.log(
+        "[forkAndCloneRepo] Fork clone completed in",
+        `${Date.now() - forkCloneStartedAt}ms`,
+      )
     }
 
     onProgress?.("Gathering repository metadata...", 95)
