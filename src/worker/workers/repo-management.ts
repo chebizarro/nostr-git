@@ -581,46 +581,59 @@ export async function forkAndCloneRepo(
     let forkResult
     let isCrossPlatformFork = false
 
-    try {
-      forkResult = await runTimed(
-        "forkRepo",
-        FORK_TIMEOUTS.forkRepoMs,
-        () => gitServiceApi.forkRepo(owner, repo, {name: forkName}),
-        {provider, owner, repo, forkName},
-      )
-    } catch (e: any) {
-      console.error("[forkAndCloneRepo] forkRepo failed", {
-        owner,
-        repo,
+    const shouldUseCustomNameFallback =
+      provider === "github" && forkName !== repo && !!sourceCloneUrls?.length
+
+    if (shouldUseCustomNameFallback) {
+      console.log(
+        "[forkAndCloneRepo] Using cross-platform path for custom GitHub fork name:",
         forkName,
-        error: e?.message,
-      })
+      )
+      isCrossPlatformFork = true
+    }
 
-      // Check if this is an error indicating source repo doesn't exist on target platform
-      // or that we need to do a cross-platform fork
-      // - 404: GitHub/GitLab repo not found
-      // - 422: GitLab "Unable to access repository" when trying to import
-      // - GRASP: "not supported without external EventIO" - need cross-platform fork
-      const is404 = e?.message?.includes("404") || e?.message?.includes("Not Found")
-      const isGitLabImportError =
-        e?.message?.includes("422") && e?.message?.includes("Unable to access")
-      const isGraspNotSupported =
-        e?.message?.includes("GRASP") && e?.message?.includes("not supported")
+    if (!isCrossPlatformFork) {
+      try {
+        forkResult = await runTimed(
+          "forkRepo",
+          FORK_TIMEOUTS.forkRepoMs,
+          () => gitServiceApi.forkRepo(owner, repo, {name: forkName}),
+          {provider, owner, repo, forkName},
+        )
+      } catch (e: any) {
+        console.error("[forkAndCloneRepo] forkRepo failed", {
+          owner,
+          repo,
+          forkName,
+          error: e?.message,
+        })
 
-      if (is404 || isGitLabImportError || isGraspNotSupported) {
-        if (sourceCloneUrls && sourceCloneUrls.length > 0) {
-          console.log(
-            "[forkAndCloneRepo] Source repo not found on target platform, attempting cross-platform fork",
-          )
-          isCrossPlatformFork = true
+        // Check if this is an error indicating source repo doesn't exist on target platform
+        // or that we need to do a cross-platform fork
+        // - 404: GitHub/GitLab repo not found
+        // - 422: GitLab "Unable to access repository" when trying to import
+        // - GRASP: "not supported without external EventIO" - need cross-platform fork
+        const is404 = e?.message?.includes("404") || e?.message?.includes("Not Found")
+        const isGitLabImportError =
+          e?.message?.includes("422") && e?.message?.includes("Unable to access")
+        const isGraspNotSupported =
+          e?.message?.includes("GRASP") && e?.message?.includes("not supported")
+
+        if (is404 || isGitLabImportError || isGraspNotSupported) {
+          if (sourceCloneUrls && sourceCloneUrls.length > 0) {
+            console.log(
+              "[forkAndCloneRepo] Source repo not found on target platform, attempting cross-platform fork",
+            )
+            isCrossPlatformFork = true
+          } else {
+            throw new Error(
+              `Source repository "${owner}/${repo}" not found on ${provider}. ` +
+                `For cross-platform forking, the source repository's clone URLs must be provided.`,
+            )
+          }
         } else {
-          throw new Error(
-            `Source repository "${owner}/${repo}" not found on ${provider}. ` +
-              `For cross-platform forking, the source repository's clone URLs must be provided.`,
-          )
+          throw e
         }
-      } else {
-        throw e
       }
     }
 
