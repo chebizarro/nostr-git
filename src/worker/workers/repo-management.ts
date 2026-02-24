@@ -555,6 +555,7 @@ export async function forkAndCloneRepo(
   }
 
   let workflowRestoreState: {dir: string; branch: string; head: string} | null = null
+  let fallbackMetadata: {defaultBranch?: string; branches?: string[]; tags?: string[]} | null = null
 
   try {
     onProgress?.("Creating remote fork...", 10)
@@ -767,32 +768,6 @@ export async function forkAndCloneRepo(
         }
       }
 
-      const listWorkflowFiles = async (): Promise<string[]> => {
-        try {
-          const files = await git.listFiles({dir: workingDir})
-          return files.filter((file: string) => file.startsWith(".github/workflows/"))
-        } catch (listErr: any) {
-          console.warn("[forkAndCloneRepo] Failed to list workflow files:", listErr?.message)
-          return []
-        }
-      }
-
-      const workflowFiles = provider === "github" ? await listWorkflowFiles() : []
-      if (provider === "github" && workflowFiles.length > 0 && !workflowFilesAction) {
-        return {
-          success: false,
-          repoId: "",
-          forkUrl: "",
-          defaultBranch: "",
-          branches: [],
-          tags: [],
-          error:
-            "GitHub workflow files detected. Pushing workflows requires the workflow token scope.",
-          requiresWorkflowDecision: true,
-          workflowFiles,
-        }
-      }
-
       onProgress?.("Creating new repository on target platform...", 55)
 
       // Create a new empty repo on the target platform
@@ -851,6 +826,9 @@ export async function forkAndCloneRepo(
         defaultBranch = "master"
       }
 
+      const tags = await git.listTags({dir: workingDir}).catch(() => [])
+      fallbackMetadata = {defaultBranch, branches, tags}
+
       console.log(
         "[forkAndCloneRepo] Pushing branch:",
         defaultBranch,
@@ -872,6 +850,30 @@ export async function forkAndCloneRepo(
           .filter(Boolean)
           .join(" ")
         return /workflow|\.github\/workflows/i.test(message)
+      }
+
+      const listWorkflowFiles = async (): Promise<string[]> => {
+        try {
+          const files = await git.listFiles({dir: workingDir})
+          return files.filter(file => file.startsWith(".github/workflows/"))
+        } catch (listErr: any) {
+          console.warn("[forkAndCloneRepo] Failed to list workflow files:", listErr?.message)
+          return []
+        }
+      }
+
+      const listWorkflowFilesFromTree = async (commitOid: string): Promise<string[]> => {
+        try {
+          const {tree} = await git.readTree({
+            dir: workingDir,
+            oid: commitOid,
+            filepath: ".github/workflows",
+          })
+          return tree.map((entry: any) => `.github/workflows/${entry.path}`)
+        } catch (treeErr: any) {
+          console.warn("[forkAndCloneRepo] Failed to read workflow tree:", treeErr?.message)
+          return []
+        }
       }
 
       const isNostrRelayUrl = (url: string): boolean =>
@@ -1085,6 +1087,19 @@ export async function forkAndCloneRepo(
         }
       }
 
+      let workflowFiles = provider === "github" ? await listWorkflowFiles() : []
+      if (provider === "github" && workflowFiles.length === 0) {
+        const headOid = headCommit || (await resolveHeadCommit())
+        if (headOid) {
+          workflowFiles = await listWorkflowFilesFromTree(headOid)
+        }
+      }
+
+      console.log("[forkAndCloneRepo] Workflow files detected:", {
+        count: workflowFiles.length,
+        workflowFilesAction,
+      })
+
       // Push the default branch with retry logic
       // New GitHub repos may need a moment to be ready for push
       const maxPushRetries = 3
@@ -1096,6 +1111,14 @@ export async function forkAndCloneRepo(
         provider === "github" && workflowFilesAction === "omit" && workflowFiles.length > 0
 
       if (shouldOmitWorkflows) {
+        try {
+          await git.checkout({dir: workingDir, ref: defaultBranch})
+        } catch (checkoutErr: any) {
+          console.warn(
+            "[forkAndCloneRepo] Failed to checkout default branch before omit:",
+            checkoutErr?.message,
+          )
+        }
         const originalHead = await git
           .resolveRef({dir: workingDir, ref: `refs/heads/${defaultBranch}`})
           .catch(() => undefined)
@@ -1144,6 +1167,16 @@ export async function forkAndCloneRepo(
           value: omitCommitOid,
           force: true,
         })
+
+        const remainingWorkflowFiles = await listWorkflowFiles()
+        if (remainingWorkflowFiles.length > 0) {
+          console.warn(
+            "[forkAndCloneRepo] Workflow files still present after omit attempt:",
+            remainingWorkflowFiles,
+          )
+        }
+
+        console.log("[forkAndCloneRepo] Created workflow-omitted commit:", omitCommitOid)
       }
 
       // First, try a normal push
@@ -1161,7 +1194,6 @@ export async function forkAndCloneRepo(
                 ref: defaultBranch,
                 remoteRef: `refs/heads/${defaultBranch}`,
                 force: true,
-                corsProxy: undefined,
                 onAuth: () => {
                   console.log("[forkAndCloneRepo] onAuth called for push, provider:", provider)
                   // Different providers use different auth formats:
@@ -1212,6 +1244,18 @@ export async function forkAndCloneRepo(
           }
 
           if (isWorkflowScopeError(pushError)) {
+            if (workflowFilesAction) {
+              return {
+                success: false,
+                repoId: "",
+                forkUrl: "",
+                defaultBranch: "",
+                branches: [],
+                tags: [],
+                error:
+                  "GitHub rejected this push because the token lacks workflow scope for .github/workflows files. Update your token or remove workflow files and retry.",
+              }
+            }
             return {
               success: false,
               repoId: "",
@@ -1306,7 +1350,6 @@ export async function forkAndCloneRepo(
                     ref: defaultBranch,
                     remoteRef: `refs/heads/${defaultBranch}`,
                     force: true,
-                    corsProxy: undefined,
                     onAuth: () =>
                       provider === "gitlab"
                         ? {username: "oauth2", password: token}
@@ -1418,9 +1461,22 @@ export async function forkAndCloneRepo(
     onProgress?.("Gathering repository metadata...", 95)
 
     // Get repository metadata (use metadataDir which may be existing local clone for cross-platform forks)
-    const defaultBranch = await resolveRobustBranch(git, metadataDir)
-    const branches = await git.listBranches({dir: metadataDir})
-    const tags = await git.listTags({dir: metadataDir})
+    let defaultBranch = fallbackMetadata?.defaultBranch
+    let branches = fallbackMetadata?.branches
+    let tags = fallbackMetadata?.tags
+    try {
+      defaultBranch = await resolveRobustBranch(git, metadataDir)
+      branches = await git.listBranches({dir: metadataDir})
+      tags = await git.listTags({dir: metadataDir})
+    } catch (metaErr: any) {
+      console.warn(
+        "[forkAndCloneRepo] Failed to load metadata after push, using fallback:",
+        metaErr?.message,
+      )
+      if (!defaultBranch) defaultBranch = "main"
+      if (!branches) branches = defaultBranch ? [defaultBranch] : []
+      if (!tags) tags = []
+    }
 
     if (workflowRestoreState) {
       try {
@@ -1439,15 +1495,19 @@ export async function forkAndCloneRepo(
       }
     }
 
+    const finalDefaultBranch = defaultBranch || "main"
+    const finalBranches = branches ?? (finalDefaultBranch ? [finalDefaultBranch] : [])
+    const finalTags = tags ?? []
+
     onProgress?.("Fork completed successfully!", 100)
 
     return {
       success: true,
       repoId: `${forkOwnerLogin}/${forkName}`,
       forkUrl,
-      defaultBranch,
-      branches,
-      tags,
+      defaultBranch: finalDefaultBranch,
+      branches: finalBranches,
+      tags: finalTags,
     }
   } catch (error: any) {
     console.error("Fork and clone failed:", error)
