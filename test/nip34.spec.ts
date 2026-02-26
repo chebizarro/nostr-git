@@ -70,6 +70,8 @@ describe("NIP-34 Pull Request Events", () => {
         kind: GIT_PULL_REQUEST_UPDATE,
         tags: [
           ["a", "30617:repo-id"],
+          ["E", "pr-root-id"],
+          ["P", "pr-author-pubkey"],
           ["r", "https://github.com/user/repo"],
           ["p", "author-pubkey"],
           ["c", "commit-hash"],
@@ -133,6 +135,8 @@ describe("NIP-34 Pull Request Events", () => {
     it("should create pull request update events", () => {
       const event = createPullRequestUpdateEvent({
         repoAddr: "30617:test-repo",
+        pullRequestEventId: "pr-event-123",
+        pullRequestAuthorPubkey: "pr-author-pubkey",
         recipients: ["author-pubkey"],
         commits: ["commit-hash"],
         clone: ["https://github.com/user/repo"],
@@ -142,6 +146,8 @@ describe("NIP-34 Pull Request Events", () => {
       expect(event.kind).toBe(GIT_PULL_REQUEST_UPDATE)
       expect(event.content).toBe("")
       expect(event.tags).toContainEqual(["a", "30617:test-repo"])
+      expect(event.tags).toContainEqual(["E", "pr-event-123"])
+      expect(event.tags).toContainEqual(["P", "pr-author-pubkey"])
       expect(event.tags).toContainEqual(["p", "author-pubkey"])
       expect(event.tags).toContainEqual(["c", "commit-hash"])
       expect(event.tags).toContainEqual(["clone", "https://github.com/user/repo"])
@@ -202,6 +208,8 @@ describe("NIP-34 Pull Request Events", () => {
         kind: GIT_PULL_REQUEST_UPDATE,
         tags: [
           ["a", "30617:repo-id"],
+          ["E", "pr-root-event-id"],
+          ["P", "pr-author-pubkey"],
           ["r", "https://github.com/user/repo"],
           ["p", "author-pubkey"],
           ["c", "commit-hash"],
@@ -214,6 +222,8 @@ describe("NIP-34 Pull Request Events", () => {
 
       const parsed = parsePullRequestUpdateEvent(event)
       expect(parsed.repoId).toBe("30617:repo-id")
+      expect(parsed.pullRequestEventId).toBe("pr-root-event-id")
+      expect(parsed.pullRequestAuthorPubkey).toBe("pr-author-pubkey")
       expect(parsed.commits).toEqual(["commit-hash"])
       expect(parsed.mergeBase).toBe("base-commit")
       expect(parsed.author.pubkey).toBe("test-pubkey")
@@ -273,6 +283,8 @@ describe("NIP-34 Pull Request Events", () => {
         kind: GIT_PULL_REQUEST_UPDATE,
         tags: [
           ["a", "30617:repo-id"],
+          ["E", "pr-root-event-id"],
+          ["P", "pr-author-pubkey"],
           ["r", "https://github.com/user/repo"],
           ["p", "author-pubkey"],
           ["c", "commit-hash"],

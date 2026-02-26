@@ -187,10 +187,13 @@ export interface PullRequestEvent extends NostrEvent {
 
 // -------------------
 // Pull Request Update (kind: 1619)
+// NIP-22: E = pull-request-event-id, P = pull-request-author
 // -------------------
 export type PullRequestUpdateTag =
   | ["a", string]
   | ["r", string]
+  | ["E", string]
+  | ["P", string]
   | ["p", string]
   | ["c", string]
   | ["clone", ...string[]]

@@ -482,6 +482,7 @@ export function createPullRequestEvent(opts: {
   labels?: string[]
   commits?: string[]
   clone?: string[]
+  /** branchName = target branch (merge-into) per NIP-34. Source is identified by tip commit (c tags). */
   branchName?: string
   mergeBase?: string
   tags?: PullRequestTag[]
@@ -505,10 +506,13 @@ export function createPullRequestEvent(opts: {
 }
 
 /**
- * Create a pull request update event (kind 1619)
+ * Create a pull request update event (kind 1619).
+ * NIP-22: E and P tags reference the PR being updated.
  */
 export function createPullRequestUpdateEvent(opts: {
   repoAddr: string
+  pullRequestEventId: string
+  pullRequestAuthorPubkey: string
   recipients?: string[]
   commits?: string[]
   clone?: string[]
@@ -517,6 +521,8 @@ export function createPullRequestUpdateEvent(opts: {
   created_at?: number
 }): PullRequestUpdateEvent {
   const tags: PullRequestUpdateTag[] = [["a", opts.repoAddr]]
+  tags.push(["E", opts.pullRequestEventId])
+  tags.push(["P", opts.pullRequestAuthorPubkey])
   if (opts.recipients) opts.recipients.forEach(p => tags.push(["p", p]))
   if (opts.commits) opts.commits.forEach(c => tags.push(["c", c]))
   if (opts.clone && opts.clone.length > 0) tags.push(["clone", ...opts.clone])
@@ -694,6 +700,7 @@ export interface PullRequest {
   author: {pubkey: string}
   labels: string[]
   commits: string[]
+  /** Target branch (merge-into) per NIP-34; legacy PRs may have used this for source */
   branchName?: string
   mergeBase?: string
   createdAt: string
@@ -721,6 +728,8 @@ export function parsePullRequestEvent(event: PullRequestEvent): PullRequest {
 export interface PullRequestUpdate {
   id: string
   repoId: string
+  pullRequestEventId: string
+  pullRequestAuthorPubkey: string
   commits: string[]
   mergeBase?: string
   author: {pubkey: string}
@@ -734,6 +743,8 @@ export function parsePullRequestUpdateEvent(event: PullRequestUpdateEvent): Pull
   return {
     id: event.id,
     repoId: getTag("a") || "",
+    pullRequestEventId: getTag("E") || "",
+    pullRequestAuthorPubkey: getTag("P") || "",
     commits: getAllTags("c"),
     mergeBase: getTag("merge-base"),
     author: {pubkey: event.pubkey},
@@ -836,11 +847,11 @@ export function parseRepoStateEvent(event: RepoStateEvent): RepoState {
   ): tag is Extract<
     RepoStateTag,
     [`refs/heads/${string}` | `refs/tags/${string}`, string, ...string[]]
-  > => tag[0].startsWith("refs/") && typeof tag[1] === "string"
+  > => tag[0].startsWith("refs/") && tag[1] != null && typeof tag[1] === "string"
   const refs = event.tags.filter(isRefTag).map(tag => ({
     ref: tag[0],
-    commit: tag[1],
-    lineage: tag.length > 2 ? tag.slice(2) : undefined,
+    commit: tag[1]!,
+    lineage: tag.length > 2 ? tag.slice(2).filter((s): s is string => typeof s === "string") : undefined,
   }))
   const head = getTag("HEAD")
   return {

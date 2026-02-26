@@ -224,14 +224,14 @@ describe('NIP-34 parsers (nip34-utils)', () => {
     expect(parsed.labels).toEqual([]);
   });
 
-  it('parsePullRequestEvent parses commits, labels and optional fields', () => {
+  it('parsePullRequestEvent parses commits, labels, branchName (target) and optional fields', () => {
     const built = createPullRequestEvent({
       content: 'pr',
       repoAddr: '30617:pk:repo',
       subject: 'PR',
       labels: ['enhancement'],
       commits: ['c1', 'c2'],
-      branchName: 'feature/x',
+      branchName: 'main',
       mergeBase: 'mb',
       created_at: 1700000400
     });
@@ -248,13 +248,15 @@ describe('NIP-34 parsers (nip34-utils)', () => {
     expect(parsed.subject).toBe('PR');
     expect(parsed.labels).toEqual(['enhancement']);
     expect(parsed.commits).toEqual(['c1', 'c2']);
-    expect(parsed.branchName).toBe('feature/x');
+    expect(parsed.branchName).toBe('main');
     expect(parsed.mergeBase).toBe('mb');
   });
 
-  it('parsePullRequestUpdateEvent parses commits and merge base', () => {
+  it('parsePullRequestUpdateEvent parses commits, merge base, and NIP-22 E/P', () => {
     const built = createPullRequestUpdateEvent({
       repoAddr: '30617:pk:repo',
+      pullRequestEventId: 'pr-root-1',
+      pullRequestAuthorPubkey: 'pr-author-pk',
       commits: ['c1'],
       mergeBase: 'mb',
       created_at: 1700000500
@@ -269,6 +271,8 @@ describe('NIP-34 parsers (nip34-utils)', () => {
     const parsed = parsePullRequestUpdateEvent(evt);
     expect(parsed.id).toBe('pru-1');
     expect(parsed.repoId).toBe('30617:pk:repo');
+    expect(parsed.pullRequestEventId).toBe('pr-root-1');
+    expect(parsed.pullRequestAuthorPubkey).toBe('pr-author-pk');
     expect(parsed.commits).toEqual(['c1']);
     expect(parsed.mergeBase).toBe('mb');
   });

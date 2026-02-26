@@ -176,7 +176,7 @@ describe('NIP-34 builders', () => {
     expect((applied as any)[1]).toBe('c1');
   });
 
-  it('createPullRequestEvent encodes commits, clone URLs, branch name, merge base, recipients, labels', () => {
+  it('createPullRequestEvent encodes commits, clone URLs, branch name (target), merge base, recipients, labels', () => {
     const evt = createPullRequestEvent({
       content: 'pr body',
       repoAddr: '30617:pubkey:repo',
@@ -185,7 +185,7 @@ describe('NIP-34 builders', () => {
       labels: ['enhancement'],
       commits: ['c1', 'c2'],
       clone: ['https://example.com/repo.git', 'https://mirror.example.com/repo.git'],
-      branchName: 'feature/x',
+      branchName: 'main',
       mergeBase: 'base-oid',
       created_at: 1700000005
     });
@@ -202,13 +202,15 @@ describe('NIP-34 builders', () => {
     expect(clone).toBeTruthy();
     expect((clone as any).slice(1)).toEqual(['https://example.com/repo.git', 'https://mirror.example.com/repo.git']);
 
-    expect(getTagValue(evt as any, 'branch-name')).toBe('feature/x');
+    expect(getTagValue(evt as any, 'branch-name')).toBe('main');
     expect(getTagValue(evt as any, 'merge-base')).toBe('base-oid');
   });
 
-  it('createPullRequestUpdateEvent encodes commits, clone URLs, merge base, recipients', () => {
+  it('createPullRequestUpdateEvent encodes E/P, commits, clone URLs, merge base, recipients', () => {
     const evt = createPullRequestUpdateEvent({
       repoAddr: '30617:pubkey:repo',
+      pullRequestEventId: 'pr-evt-id',
+      pullRequestAuthorPubkey: 'pr-author-pk',
       recipients: ['pk1', 'pk2'],
       commits: ['c1'],
       clone: ['https://example.com/repo.git'],
@@ -218,6 +220,8 @@ describe('NIP-34 builders', () => {
 
     expect(evt.kind).toBe(1619);
     expect(getTagValue(evt as any, 'a')).toBe('30617:pubkey:repo');
+    expect(getTagValue(evt as any, 'E')).toBe('pr-evt-id');
+    expect(getTagValue(evt as any, 'P')).toBe('pr-author-pk');
     expect(getTags(evt as any, 'p').map((t: any) => t[1]).sort()).toEqual(['pk1', 'pk2'].sort());
     expect(getTags(evt as any, 'c').map((t: any) => t[1])).toEqual(['c1']);
 

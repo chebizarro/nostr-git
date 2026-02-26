@@ -51,7 +51,11 @@ const pendingFullClones = new Map<string, Promise<any>>()
  * isomorphic-git's shallow/singleBranch clone may not create the full config,
  * which causes "NoRefspecError: Could not find a fetch refspec for remote origin".
  */
-async function ensureOriginRemoteConfig(git: GitProvider, dir: string, url: string): Promise<void> {
+export async function ensureOriginRemoteConfig(
+  git: GitProvider,
+  dir: string,
+  url: string,
+): Promise<void> {
   try {
     // First try to add the remote (will fail if it already exists, which is fine)
     try {

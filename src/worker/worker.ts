@@ -117,10 +117,15 @@
 import {expose} from "comlink"
 import httpWeb from "isomorphic-git/http/web"
 
-import type {GitProvider} from "../git/provider.js"
-import {createGitProvider} from "../git/factory-browser.js"
-import {rootDir} from "../git/git.js"
-import {analyzePatchMergeability} from "../git/merge-analysis.js"
+import type { GitProvider } from "../git/provider.js";
+import { createGitProvider } from "../git/factory-browser.js";
+import { rootDir } from "../git/git.js";
+import {
+  analyzePatchMergeability,
+  getPRPreviewData,
+  getCommitsAheadOfTipData,
+  getMergeBaseBetween as getMergeBaseBetweenData,
+} from "../git/merge-analysis.js";
 
 import {
   wrapError,
@@ -139,11 +144,16 @@ import {
 } from "../api/git-provider.js"
 
 import {parseRepoId} from "../utils/repo-id.js"
+import {filterValidCloneUrls, reorderUrlsByPreference, withUrlFallback} from "../utils/clone-url-fallback.js"
 
 import type {AuthConfig} from "./workers/auth.js"
 import {getAuthCallback, getConfiguredAuthHosts, setAuthConfig} from "./workers/auth.js"
 import type {GitWorkerConfig} from "./workers/git-config.js"
-import {applyGitConfigToProvider, setGitConfig as setWorkerGitConfig} from "./workers/git-config.js"
+import {
+  applyGitConfigToProvider,
+  setGitConfig as setWorkerGitConfig,
+  resolveDefaultCorsProxy,
+} from "./workers/git-config.js"
 
 // Import event-based git operations
 import {
@@ -167,6 +177,7 @@ import {
   clearCloneTracking,
   cloneRemoteRepoUtil,
   ensureFullCloneUtil,
+  ensureOriginRemoteConfig,
   ensureShallowCloneUtil,
   initializeRepoUtil,
   smartInitializeRepoUtil,
@@ -174,8 +185,10 @@ import {
 
 import {needsUpdateUtil, syncWithRemoteUtil} from "./workers/sync.js"
 
-import type {AnalyzePatchMergeOptions, ApplyPatchAndPushOptions} from "./workers/patches.js"
-import {analyzePatchMergeUtil, applyPatchAndPushUtil} from "./workers/patches.js"
+import type { AnalyzePatchMergeOptions, ApplyPatchAndPushOptions } from "./workers/patches.js";
+import { analyzePatchMergeUtil, applyPatchAndPushUtil } from "./workers/patches.js";
+import type { AnalyzePRMergeOptions, MergePRAndPushOptions } from "./workers/pr-merge.js";
+import { analyzePRMergeUtil, mergePRAndPushUtil } from "./workers/pr-merge.js";
 
 import type {SafePushOptions} from "./workers/push.js"
 import {safePushToRemoteUtil} from "./workers/push.js"
@@ -576,6 +589,37 @@ const api = {
     }
   },
 
+  /**
+   * List branch names from clone URLs without cloning (uses listServerRefs).
+   * Used by NewPRForm when creating PRs from forks to populate source branch dropdown.
+   */
+  async listBranchesFromUrls(opts: {cloneUrls: string[]}): Promise<{branches: string[]}> {
+    const validUrls = filterValidCloneUrls(opts.cloneUrls);
+    if (validUrls.length === 0) {
+      return toPlain({ branches: [] });
+    }
+    const ordered = reorderUrlsByPreference(validUrls, "fork-preview");
+    for (const url of ordered) {
+      try {
+        const refs = await git.listServerRefs({
+          url,
+          prefix: "refs/heads/",
+          symrefs: false,
+          onAuth: getAuthCallback(url),
+        });
+        const branches = (refs || [])
+          .filter((r: any) => r?.ref?.startsWith("refs/heads/"))
+          .map((r: any) => r.ref.replace(/^refs\/heads\//, ""))
+          .filter(Boolean);
+        return toPlain({ branches });
+      } catch (err) {
+        console.warn("[listBranchesFromUrls] Failed for", url, err);
+        continue;
+      }
+    }
+    return toPlain({ branches: [] });
+  },
+
   // Patch analysis & application
   async analyzePatchMerge(opts: AnalyzePatchMergeOptions) {
     const {repoId} = opts
@@ -590,6 +634,20 @@ const api = {
     })
     sendProgress("Analysis complete")
     return toPlain(result)
+  },
+
+  async analyzePRMerge(opts: AnalyzePRMergeOptions) {
+    const { repoId } = opts;
+    const sendProgress = makeProgress(repoId, "merge-progress");
+    sendProgress("Fetching PR from clone URL...");
+    const result = await analyzePRMergeUtil(git, opts, {
+      rootDir,
+      parseRepoId,
+      resolveBranchName: async (dir: string, requested?: string) =>
+        resolveRobustBranchUtil(git, dir, requested),
+    });
+    sendProgress("Analysis complete");
+    return toPlain(result);
   },
 
   async applyPatchAndPush(opts: ApplyPatchAndPushOptions) {
@@ -627,6 +685,46 @@ const api = {
       getProviderFs: (g: GitProvider) => getProviderFs(g),
     })
     sendProgress("Apply complete")
+    return toPlain(result)
+  },
+
+  async mergePRAndPush(opts: MergePRAndPushOptions) {
+    const {repoId} = opts
+    const sendProgress = makeProgress(repoId, "merge-progress")
+    const optsWithProgress = {
+      ...opts,
+      onProgress: (step: string, pct: number) => sendProgress(step),
+    }
+    const result = await mergePRAndPushUtil(git, optsWithProgress, {
+      rootDir,
+      parseRepoId,
+      resolveBranchName: async (dir: string, requested?: string) =>
+        resolveRobustBranchUtil(git, dir, requested),
+      ensureFullClone: async (args: {
+        repoId: string
+        branch?: string
+        depth?: number
+        cloneUrls?: string[]
+      }) =>
+        ensureFullCloneUtil(
+          git,
+          args,
+          {
+            rootDir,
+            parseRepoId,
+            repoDataLevels,
+            clonedRepos,
+            isRepoCloned: async (g: GitProvider, dir: string) => isRepoClonedFs(g, dir),
+            resolveBranchName: async (dir: string, requested?: string) =>
+              resolveRobustBranchUtil(git, dir, requested),
+            cacheManager,
+          },
+          makeProgress(args.repoId, "clone-progress"),
+        ),
+      getAuthCallback,
+      getConfiguredAuthHosts,
+    })
+    sendProgress("Merge complete")
     return toPlain(result)
   },
 
@@ -1103,6 +1201,316 @@ const api = {
   async listBranchesFromEvent(opts: {repoEvent: RepoAnnouncementEvent}) {
     const result = await listBranchesFromEvent(opts)
     return toPlain(result)
+  },
+
+  async getPRPreview(opts: {
+    repoId: string;
+    sourceBranch: string;
+    targetBranch: string;
+    cloneUrls: string[];
+    /** When present (fork PR), source branch is fetched from these URLs; cloneUrls = target/upstream */
+    sourceCloneUrls?: string[];
+  }) {
+    const { key, dir } = repoKeyAndDir(opts.repoId);
+    const isForkPR = opts.sourceCloneUrls && opts.sourceCloneUrls.length > 0;
+    const targetUrls = filterValidCloneUrls(opts.cloneUrls);
+
+    try {
+      await smartInitializeRepoUtil(
+        git,
+        cacheManager,
+        { repoId: opts.repoId, cloneUrls: targetUrls },
+        {
+          rootDir,
+          parseRepoId,
+          repoDataLevels,
+          clonedRepos,
+          isRepoCloned: async (g: GitProvider, d: string) => isRepoClonedFs(g, d),
+          resolveBranchName: async (d: string, requested?: string) =>
+            resolveRobustBranchUtil(git, d, requested),
+        },
+        makeProgress(opts.repoId, "clone-progress")
+      );
+
+      // Fetch target (upstream) branches
+      const orderedUrls = reorderUrlsByPreference(targetUrls, key);
+      const corsProxy = resolveDefaultCorsProxy();
+      if (orderedUrls.length > 0) {
+        const fetchResult = await withUrlFallback(
+          orderedUrls,
+          async (cloneUrl: string) => {
+            await ensureOriginRemoteConfig(git, dir, cloneUrl);
+            await git.fetch({
+              dir,
+              url: cloneUrl,
+              singleBranch: false,
+              depth: 50,
+              corsProxy: corsProxy ?? undefined,
+            });
+          },
+          { repoId: key, perUrlTimeoutMs: 15000 }
+        );
+        if (!fetchResult.success) {
+          console.warn(
+            "[getPRPreview] Fetch failed for all URLs, attempting preview with existing refs:",
+            fetchResult.attempts.map((a) => a.error)
+          );
+        }
+      }
+
+      let sourceRemote: string | undefined;
+      if (isForkPR) {
+        const sourceUrls = filterValidCloneUrls(opts.sourceCloneUrls!);
+        const sourceOrdered = reorderUrlsByPreference(sourceUrls, key);
+        const prSourceRemote = `pr-source-${Date.now().toString(36)}`;
+        const sourceFetchResult = await withUrlFallback(
+          sourceOrdered,
+          async (url: string) => {
+            await git.addRemote({ dir, remote: prSourceRemote, url });
+            try {
+              await git.setConfig({
+                dir,
+                path: `remote.${prSourceRemote}.fetch`,
+                value: `+refs/heads/*:refs/remotes/${prSourceRemote}/*`,
+              });
+            } catch {
+              /* ignore */
+            }
+            await git.fetch({
+              dir,
+              remote: prSourceRemote,
+              ref: opts.sourceBranch,
+              singleBranch: true,
+              depth: 50,
+              corsProxy: corsProxy ?? undefined,
+            });
+          },
+          { repoId: key, perUrlTimeoutMs: 15000 }
+        );
+        if (!sourceFetchResult.success) {
+          try {
+            await git.deleteRemote({ dir, remote: prSourceRemote });
+          } catch {
+            /* ignore */
+          }
+          return toPlain({
+            success: false,
+            error: `Failed to fetch source branch from fork: ${sourceFetchResult.attempts?.map((a) => a.error).join("; ") ?? "unknown"}`,
+            commits: [],
+            commitOids: [],
+            filesChanged: [],
+          });
+        }
+        sourceRemote = prSourceRemote;
+      }
+
+      const result = await getPRPreviewData(
+        git,
+        dir,
+        opts.sourceBranch,
+        opts.targetBranch,
+        {
+          ...(sourceRemote && { sourceRemote }),
+          preferRemoteRefs: true, // Use remote refs first; local refs/heads may be stale after push
+        }
+      );
+
+      if (sourceRemote) {
+        try {
+          await git.deleteRemote({ dir, remote: sourceRemote });
+        } catch {
+          /* ignore cleanup */
+        }
+      }
+
+      return toPlain(result);
+    } catch (error: any) {
+      return toPlain({
+        success: false,
+        error: error?.message || String(error),
+        commits: [],
+        commitOids: [],
+        filesChanged: [],
+      });
+    }
+  },
+
+  /**
+   * Find commits ahead of tip OID in the source remote. Source-only - no target.
+   * For fork: sourceCloneUrls = fork; cloneUrls = target (for repo init).
+   * For same-repo: sourceCloneUrls empty; cloneUrls = repo.
+   */
+  async getCommitsAheadOfTip(opts: {
+    repoId: string;
+    tipOid: string;
+    cloneUrls: string[];
+    /** When present (fork PR), source is fetched from these; cloneUrls = target for init */
+    sourceCloneUrls?: string[];
+  }) {
+    const { key, dir } = repoKeyAndDir(opts.repoId);
+    const isForkPR = opts.sourceCloneUrls && opts.sourceCloneUrls.length > 0;
+    const targetUrls = filterValidCloneUrls(opts.cloneUrls);
+
+    try {
+      await smartInitializeRepoUtil(
+        git,
+        cacheManager,
+        { repoId: opts.repoId, cloneUrls: targetUrls },
+        {
+          rootDir,
+          parseRepoId,
+          repoDataLevels,
+          clonedRepos,
+          isRepoCloned: async (g: GitProvider, d: string) => isRepoClonedFs(g, d),
+          resolveBranchName: async (d: string, requested?: string) =>
+            resolveRobustBranchUtil(git, d, requested),
+        },
+        makeProgress(opts.repoId, "clone-progress")
+      );
+
+      const corsProxy = resolveDefaultCorsProxy();
+      let sourceRemote: string | undefined;
+
+      if (isForkPR) {
+        const sourceUrls = filterValidCloneUrls(opts.sourceCloneUrls!);
+        const sourceOrdered = reorderUrlsByPreference(sourceUrls, key);
+        const prSourceRemote = `pr-source-${Date.now().toString(36)}`;
+        const sourceFetchResult = await withUrlFallback(
+          sourceOrdered,
+          async (url: string) => {
+            await git.addRemote({ dir, remote: prSourceRemote, url });
+            try {
+              await git.setConfig({
+                dir,
+                path: `remote.${prSourceRemote}.fetch`,
+                value: `+refs/heads/*:refs/remotes/${prSourceRemote}/*`,
+              });
+            } catch {
+              /* ignore */
+            }
+            await git.fetch({
+              dir,
+              remote: prSourceRemote,
+              singleBranch: false,
+              depth: 50,
+              corsProxy: corsProxy ?? undefined,
+            });
+          },
+          { repoId: key, perUrlTimeoutMs: 15000 }
+        );
+        if (!sourceFetchResult.success) {
+          try {
+            await git.deleteRemote({ dir, remote: prSourceRemote });
+          } catch {
+            /* ignore */
+          }
+          return toPlain({
+            success: false,
+            error: `Failed to fetch from fork: ${sourceFetchResult.attempts?.map((a) => a.error).join("; ") ?? "unknown"}`,
+            commits: [],
+            commitOids: [],
+          });
+        }
+        sourceRemote = prSourceRemote;
+      } else {
+        const orderedUrls = reorderUrlsByPreference(targetUrls, key);
+        if (orderedUrls.length > 0) {
+          const fetchResult = await withUrlFallback(
+            orderedUrls,
+            async (cloneUrl: string) => {
+              await ensureOriginRemoteConfig(git, dir, cloneUrl);
+              await git.fetch({
+                dir,
+                url: cloneUrl,
+                singleBranch: false,
+                depth: 50,
+                corsProxy: corsProxy ?? undefined,
+              });
+            },
+            { repoId: key, perUrlTimeoutMs: 15000 }
+          );
+          if (!fetchResult.success) {
+            console.warn(
+              "[getCommitsAheadOfTip] Fetch failed, attempting with existing refs:",
+              fetchResult.attempts.map((a) => a.error)
+            );
+          }
+        }
+      }
+
+      const result = await getCommitsAheadOfTipData(
+        git,
+        dir,
+        opts.tipOid,
+        sourceRemote ? { sourceRemote } : undefined
+      );
+
+      if (sourceRemote) {
+        try {
+          await git.deleteRemote({ dir, remote: sourceRemote });
+        } catch {
+          /* ignore cleanup */
+        }
+      }
+
+      return toPlain(result);
+    } catch (error: any) {
+      return toPlain({
+        success: false,
+        error: error?.message || String(error),
+        commits: [],
+        commitOids: [],
+      });
+    }
+  },
+
+  /**
+   * Get merge base between head commit and target branch. Used when preparing PR update.
+   */
+  async getMergeBaseBetween(opts: {
+    repoId: string;
+    headOid: string;
+    targetBranch: string;
+    cloneUrls: string[];
+    /** For fork PR, target may be in origin; sourceRemote unused for this call */
+    sourceCloneUrls?: string[];
+  }) {
+    const { key, dir } = repoKeyAndDir(opts.repoId);
+    const targetUrls = filterValidCloneUrls(opts.cloneUrls);
+    try {
+      if (targetUrls.length > 0) {
+        const orderedUrls = reorderUrlsByPreference(targetUrls, key);
+        const corsProxy = resolveDefaultCorsProxy();
+        await withUrlFallback(
+          orderedUrls,
+          async (cloneUrl: string) => {
+            await ensureOriginRemoteConfig(git, dir, cloneUrl);
+            await git.fetch({
+              dir,
+              url: cloneUrl,
+              ref: opts.targetBranch,
+              singleBranch: true,
+              depth: 50,
+              corsProxy: corsProxy ?? undefined,
+            });
+          },
+          { repoId: key, perUrlTimeoutMs: 15000 }
+        );
+      }
+      const result = await getMergeBaseBetweenData(
+        git,
+        dir,
+        opts.headOid,
+        opts.targetBranch,
+        undefined
+      );
+      return toPlain(result);
+    } catch (error: any) {
+      return toPlain({
+        mergeBase: undefined,
+        error: error?.message || String(error),
+      });
+    }
   },
 
   async fileExistsAtCommit(opts: {
@@ -1594,6 +2002,191 @@ const api = {
           naddr: opts.repoId,
           ref: opts.commitId,
           operation: "getCommitDetails",
+        }),
+      })
+    }
+  },
+
+  /**
+   * Get diff between two commits (baseOid -> headOid).
+   * Returns changes with diffHunks in the same format as getCommitDetails.
+   * Used for PR diff display when base=merge-base and head=PR tip.
+   */
+  async getDiffBetween(opts: {
+    repoId: string
+    baseOid: string
+    headOid: string
+  }): Promise<{
+    success: boolean
+    changes?: Array<{
+      path: string
+      status: "added" | "modified" | "deleted" | "renamed"
+      diffHunks: Array<{
+        oldStart: number
+        oldLines: number
+        newStart: number
+        newLines: number
+        patches: Array<{line: string; type: "+" | "-" | " "}>
+      }>
+    }>
+    error?: string
+  }> {
+    const {key, dir} = repoKeyAndDir(opts.repoId)
+
+    try {
+      await ensureFullCloneUtil(
+        git,
+        {repoId: opts.repoId, depth: 100},
+        {
+          rootDir,
+          parseRepoId,
+          repoDataLevels,
+          clonedRepos,
+          isRepoCloned: async (g: GitProvider, d: string) => isRepoClonedFs(g, d),
+          resolveBranchName: async (d: string, requested?: string) =>
+            resolveRobustBranchUtil(git, d, requested),
+          cacheManager,
+        },
+        makeProgress(opts.repoId, "clone-progress"),
+      )
+
+      const changes: Array<{
+        path: string
+        status: "added" | "modified" | "deleted" | "renamed"
+        diffHunks: Array<{
+          oldStart: number
+          oldLines: number
+          newStart: number
+          newLines: number
+          patches: Array<{line: string; type: "+" | "-" | " "}>
+        }>
+      }> = []
+
+      const changedFiles = await (git as any).walk({
+        dir,
+        trees: [(git as any).TREE({ref: opts.baseOid}), (git as any).TREE({ref: opts.headOid})],
+        map: async function (filepath: string, [A, B]: any[]) {
+          if (filepath === ".") return
+          try {
+            const at = A ? await A.type() : undefined
+            const bt = B ? await B.type() : undefined
+            const isABlob = at === "blob"
+            const isBBlob = bt === "blob"
+            if (!isABlob && !isBBlob) return
+          } catch {
+            return
+          }
+
+          const Aoid = await A?.oid()
+          const Boid = await B?.oid()
+
+          let status: "added" | "modified" | "deleted" | "renamed" = "modified"
+          if (Aoid === undefined && Boid !== undefined) {
+            status = "added"
+          } else if (Aoid !== undefined && Boid === undefined) {
+            status = "deleted"
+          } else if (Aoid !== Boid) {
+            status = "modified"
+          } else {
+            return
+          }
+
+          let diffHunks: Array<{
+            oldStart: number
+            oldLines: number
+            newStart: number
+            newLines: number
+            patches: Array<{line: string; type: "+" | "-" | " "}>
+          }> = []
+
+          try {
+            if (status === "added") {
+              const blob = await B!.content()
+              const lines = new TextDecoder().decode(blob).split("\n")
+              diffHunks = [
+                {
+                  oldStart: 0,
+                  oldLines: 0,
+                  newStart: 1,
+                  newLines: lines.length,
+                  patches: lines.map((line: string) => ({line, type: "+" as const})),
+                },
+              ]
+            } else if (status === "deleted") {
+              const blob = await A!.content()
+              const lines = new TextDecoder().decode(blob).split("\n")
+              diffHunks = [
+                {
+                  oldStart: 1,
+                  oldLines: lines.length,
+                  newStart: 0,
+                  newLines: 0,
+                  patches: lines.map((line: string) => ({line, type: "-" as const})),
+                },
+              ]
+            } else {
+              const oldBlob = await A!.content()
+              const newBlob = await B!.content()
+              const oldText = new TextDecoder().decode(oldBlob)
+              const newText = new TextDecoder().decode(newBlob)
+              const oldLines = oldText.split("\n")
+              const newLines = newText.split("\n")
+
+              const patches: Array<{line: string; type: "+" | "-" | " "}> = []
+              let oldIndex = 0
+              let newIndex = 0
+
+              while (oldIndex < oldLines.length || newIndex < newLines.length) {
+                const oldLine = oldLines[oldIndex]
+                const newLine = newLines[newIndex]
+
+                if (oldIndex >= oldLines.length) {
+                  patches.push({line: newLine, type: "+"})
+                  newIndex++
+                } else if (newIndex >= newLines.length) {
+                  patches.push({line: oldLine, type: "-"})
+                  oldIndex++
+                } else if (oldLine === newLine) {
+                  patches.push({line: oldLine, type: " "})
+                  oldIndex++
+                  newIndex++
+                } else {
+                  patches.push({line: oldLine, type: "-"})
+                  patches.push({line: newLine, type: "+"})
+                  oldIndex++
+                  newIndex++
+                }
+              }
+
+              if (patches.length > 0) {
+                diffHunks = [
+                  {
+                    oldStart: 1,
+                    oldLines: oldLines.length,
+                    newStart: 1,
+                    newLines: newLines.length,
+                    patches,
+                  },
+                ]
+              }
+            }
+          } catch (diffError) {
+            console.warn(`Failed to generate diff for ${filepath}:`, diffError)
+          }
+
+          return {path: filepath, status, diffHunks}
+        },
+      })
+
+      changes.push(...changedFiles.filter(Boolean))
+      return toPlain({success: true, changes})
+    } catch (error) {
+      return toPlain({
+        success: false,
+        ...formatError(error, {
+          naddr: opts.repoId,
+          ref: opts.headOid,
+          operation: "getDiffBetween",
         }),
       })
     }

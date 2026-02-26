@@ -99,7 +99,11 @@ describe('Zod event validators (src/utils/validation.ts)', () => {
     const issue = createIssueEvent({ content: 'issue', repoAddr: '30617:pk:repo' });
     const status = createStatusEvent({ kind: 1630, content: 'open', rootId: 'root-evt', recipients: ['pk1'] });
     const pr = createPullRequestEvent({ content: 'pr', repoAddr: '30617:pk:repo' });
-    const pru = createPullRequestUpdateEvent({ repoAddr: '30617:pk:repo' });
+    const pru = createPullRequestUpdateEvent({
+      repoAddr: '30617:pk:repo',
+      pullRequestEventId: 'pr-evt-1',
+      pullRequestAuthorPubkey: 'pk',
+    });
     const grasp = createUserGraspListEvent({ services: ['github'] });
     const stack = createStackEvent({ repoAddr: '30617:pk:repo', stackId: 's1', members: ['p1'] });
     const mergeMeta = createMergeMetadataEvent({ repoAddr: '30617:pk:repo', rootId: 'root', targetBranch: 'main', result: 'clean' });

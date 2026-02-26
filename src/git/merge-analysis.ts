@@ -109,6 +109,10 @@ async function resolveRobustBranchInMergeAnalysis(
   repoDir: string,
   preferredBranch?: string
 ): Promise<string> {
+  // Note: Do NOT return 'HEAD' - refs/heads/HEAD does not exist. We must return
+  // an actual branch name for use with refs/heads/<branch>. Fall through to
+  // named branch resolution (preferredBranch, main, master, etc.).
+
   const candidates = preferredBranch ? [preferredBranch, "main", "master", "develop", "dev"] : ["main", "master", "develop", "dev"];
 
   for (const branch of candidates) {
@@ -437,7 +441,47 @@ async function checkIfPatchApplied(
 }
 
 /**
- * Find the merge base between two commits
+ * Check if PR is already applied to the target branch.
+ * PR applied = tip commit is in target. Partial commits (some but not tip) = NOT applied.
+ */
+async function checkIfPRApplied(
+  git: GitProvider,
+  repoDir: string,
+  targetBranch: string,
+  tipOid: string
+): Promise<boolean> {
+  try {
+    const targetCommit = await git.resolveRef({
+      dir: repoDir,
+      ref: `refs/heads/${targetBranch}`,
+    });
+    const targetContainsTip = await git.isDescendent({
+      dir: repoDir,
+      oid: targetCommit,
+      ancestor: tipOid,
+    });
+    if (targetContainsTip) {
+      console.log(`PR already merged: target branch ${targetBranch} contains tip ${tipOid.substring(0, 8)}`);
+      return true;
+    }
+
+    const log = await git.log({ dir: repoDir, ref: targetBranch, depth: 500 });
+    const targetCommits = log.map((commit: any) => commit.oid);
+    if (targetCommits.includes(tipOid)) {
+      console.log(`PR already merged: tip ${tipOid.substring(0, 8)} found in branch ${targetBranch}`);
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    console.warn("Error checking if PR is applied:", error);
+    return false;
+  }
+}
+
+/**
+ * Find the merge base between two commits.
+ * Normalizes result: isomorphic-git may return string or array of strings.
  */
 async function findMergeBase(
   git: GitProvider,
@@ -446,11 +490,13 @@ async function findMergeBase(
   commit2: string
 ): Promise<string | undefined> {
   try {
-    const mergeBase = await git.findMergeBase({
+    const result = await git.findMergeBase({
       dir: repoDir,
       oids: [commit1, commit2],
     });
-    return mergeBase;
+    if (typeof result === "string") return result;
+    if (Array.isArray(result) && result.length > 0 && typeof result[0] === "string") return result[0];
+    return undefined;
   } catch {
     return undefined;
   }
@@ -701,6 +747,812 @@ async function detectConflictMarkers(file: any, currentContent: string): Promise
   }
 
   return markers;
+}
+
+/**
+ * Extended result for PR merge analysis (includes files changed and clone URL used).
+ *
+ * Unlike patch analysis, PR analysis fetches commits from remote URLs and performs
+ * a real git merge for conflict detection. This interface adds PR-specific fields
+ * for UI display and debugging.
+ */
+export interface PRMergeAnalysisResult extends MergeAnalysisResult {
+  /** Files changed between merge-base and tip commit (for PR diff display) */
+  filesChanged?: string[];  // TODO: remove this
+  /** Clone URL that succeeded when using fallback (helps debug fetch failures) */
+  usedCloneUrl?: string;
+  /** Commit metadata for display (oid, message, author) */
+  prCommits?: Array<{ oid: string; message: string; author?: { name?: string; email?: string } }>;
+}
+
+/**
+ * Analyze if a PR can be merged into the target branch.
+ *
+ * Flow:
+ * 1. Filter and validate clone URLs from the PR
+ * 2. Try each URL (with fallback) until fetch succeeds
+ * 3. Add temporary remote, fetch PR branch, resolve tip commit
+ * 4. Check if PR is already merged (up-to-date)
+ * 5. Find merge base, determine fast-forward vs merge
+ * 6. For non-FF: perform actual git merge (dry-run) to detect conflicts
+ * 7. Collect files changed and commit log for result
+ * 8. Remove temporary remote
+ */
+export async function analyzePRMergeability(
+  git: GitProvider,
+  repoDir: string,
+  opts: {
+    /** Clone URLs from PR/update event - used to fetch source branch */
+    cloneUrls: string[];
+    /** Clone URLs from repo (base) - used to fetch target branch when not present */
+    targetCloneUrls?: string[];
+    tipCommitOid: string;
+    targetBranch: string;
+    allCommitOids?: string[];
+  }
+): Promise<PRMergeAnalysisResult> {
+  const { cloneUrls, targetCloneUrls, tipCommitOid, targetBranch, allCommitOids = [] } = opts;
+  const { withUrlFallback, filterValidCloneUrls } = await import("../utils/clone-url-fallback.js");
+
+  console.log(`[analyzePRMergeability] Starting PR merge analysis: tip=${tipCommitOid.substring(0, 8)}, target=${targetBranch}, cloneUrls=${cloneUrls.length}`);
+
+  const returnObj: PRMergeAnalysisResult = {
+    canMerge: false,
+    hasConflicts: false,
+    conflictFiles: [],
+    conflictDetails: [],
+    upToDate: false,
+    fastForward: false,
+    patchCommits: allCommitOids.length ? allCommitOids : [tipCommitOid],
+    analysis: "error",
+    errorMessage: "Placeholder error message",
+  }
+
+
+  const validUrls = filterValidCloneUrls(cloneUrls);
+  if (validUrls.length === 0) {
+    console.warn(`[analyzePRMergeability] No valid clone URLs after filtering (input: ${cloneUrls.length} URLs)`);
+    return {
+      ...returnObj,
+      analysis: "error",
+      errorMessage: "No valid clone URLs in PR",
+    };
+  }
+  console.log(`[analyzePRMergeability] ${validUrls.length} valid clone URL(s) to try`);
+
+  const errResult = (msg: string): PRMergeAnalysisResult => ({
+    ...returnObj,
+    analysis: "error",
+    errorMessage: msg,
+  });
+
+  // Use unique remote name per invocation to avoid race when multiple analyses run concurrently
+  const prRemote = `pr-source-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+
+  const result = await withUrlFallback(
+    validUrls,
+    async (url: string) => {
+      try {
+        await git.addRemote({ dir: repoDir, remote: prRemote, url });
+        // isomorphic-git requires a fetch refspec; addRemote alone does not set it
+        try {
+          await git.setConfig({
+            dir: repoDir,
+            path: `remote.${prRemote}.fetch`,
+            value: `+refs/heads/*:refs/remotes/${prRemote}/*`,
+          });
+        } catch (configErr) {
+          console.warn(`[analyzePRMergeability] Could not set fetch refspec for ${prRemote}:`, configErr);
+        }
+        console.log(`[analyzePRMergeability] Fetching from ${url} (all refs)`);
+
+        await git.fetch({
+          dir: repoDir,
+          remote: prRemote,
+          url,
+          singleBranch: false,
+          depth: 100,
+        });
+
+        // Ensure target branch exists locally; fetch from repo (target) clone URLs if not
+        const effectiveTargetBranch = targetBranch || "main";
+        try {
+          await git.resolveRef({ dir: repoDir, ref: `refs/heads/${effectiveTargetBranch}` });
+        } catch {
+          const urlsToTry = targetCloneUrls?.length ? filterValidCloneUrls(targetCloneUrls) : [];
+          if (urlsToTry.length > 0) {
+            const targetFetchResult = await withUrlFallback(
+              urlsToTry,
+              async (targetUrl: string) => {
+                const targetRemote = `pr-target-${Date.now().toString(36)}`;
+                await git.addRemote({ dir: repoDir, remote: targetRemote, url: targetUrl });
+                try {
+                  await git.setConfig({
+                    dir: repoDir,
+                    path: `remote.${targetRemote}.fetch`,
+                    value: `+refs/heads/*:refs/remotes/${targetRemote}/*`,
+                  });
+                } catch {
+                  /* ignore */
+                }
+                const toFetch = effectiveTargetBranch;
+                await git.fetch({
+                  dir: repoDir,
+                  remote: targetRemote,
+                  url: targetUrl,
+                  ref: toFetch,
+                  singleBranch: true,
+                  depth: 100,
+                });
+                const remoteRef = `refs/remotes/${targetRemote}/${toFetch}`;
+                const oid = await git.resolveRef({ dir: repoDir, ref: remoteRef });
+                return { oid, targetRemote };
+              },
+              { perUrlTimeoutMs: 15000 }
+            );
+            if (targetFetchResult.success && targetFetchResult.result) {
+              const { oid: remoteTargetOid, targetRemote } = targetFetchResult.result;
+              await git.writeRef({
+                dir: repoDir,
+                ref: `refs/heads/${effectiveTargetBranch}`,
+                value: remoteTargetOid,
+                force: true,
+              });
+              console.log(`[analyzePRMergeability] Created local branch ${effectiveTargetBranch} from repo clone URL`);
+              try {
+                await git.deleteRemote({ dir: repoDir, remote: targetRemote });
+              } catch {
+                /* ignore */
+              }
+            } else {
+              console.warn(`[analyzePRMergeability] Could not fetch target branch ${effectiveTargetBranch} from repo clone URLs`);
+            }
+          }
+        }
+
+        const tipOid = tipCommitOid;
+
+        const resolvedBranch = await resolveRobustBranchInMergeAnalysis(git, repoDir, effectiveTargetBranch);
+        const targetCommit = await git.resolveRef({
+          dir: repoDir,
+          ref: `refs/heads/${resolvedBranch}`,
+        });
+        console.log(`[analyzePRMergeability] Target branch ${resolvedBranch} @ ${targetCommit?.substring(0, 8)}`);
+
+        const prTipRef = tipOid;
+        const prTipOid = tipOid;
+        const patchCommits = allCommitOids.length ? allCommitOids : [tipOid];
+
+        // Check if PR is already in target (tip must be present; partial commits = not merged)
+        const isUpToDate = await checkIfPRApplied(git, repoDir, resolvedBranch, prTipOid);
+        if (isUpToDate) {
+          console.log(`[analyzePRMergeability] PR already up-to-date (commits present in ${resolvedBranch})`);
+          return {
+            canMerge: true,
+            hasConflicts: false,
+            conflictFiles: [],
+            conflictDetails: [],
+            upToDate: true,
+            fastForward: false,
+            targetCommit,
+            remoteCommit: undefined,
+            patchCommits,
+            analysis: "up-to-date",
+            filesChanged: [],
+            usedCloneUrl: url,
+            prCommits: [],
+          } as PRMergeAnalysisResult;
+        }
+
+          // Use prTipOid (not prTipRef) - findMergeBase requires OIDs
+        const mergeBase = await findMergeBase(git, repoDir, prTipOid, targetCommit);
+        const mergeBaseShort = typeof mergeBase === "string" ? mergeBase.substring(0, 8) : "none";
+        console.log(`[analyzePRMergeability] Merge base: ${mergeBaseShort}`);
+
+        // Fast-forward: target is ancestor of PR tip (no merge commit needed)
+        let isFastForward = false;
+        try {
+          const descendant = await git.isDescendent({
+            dir: repoDir,
+            oid: prTipOid,
+            ancestor: targetCommit,
+          });
+          isFastForward = descendant || mergeBase === targetCommit;
+        } catch {
+          isFastForward = mergeBase === targetCommit;
+        }
+
+        if (isFastForward) {
+          console.log(`[analyzePRMergeability] Fast-forward merge possible`);
+          const baseForDiff = mergeBase ?? targetCommit;
+          const filesChanged = baseForDiff ? await getChangedFilesBetween(git, repoDir, baseForDiff, prTipRef) : [];
+          return {
+            canMerge: true,
+            hasConflicts: false,
+            conflictFiles: [],
+            conflictDetails: [],
+            upToDate: false,
+            fastForward: true,
+            mergeBase,
+            targetCommit,
+            remoteCommit: undefined,
+            patchCommits,
+            analysis: "clean",
+            filesChanged,
+            usedCloneUrl: url,
+            prCommits: [],
+          } as PRMergeAnalysisResult;
+        }
+
+        // Non-FF: perform real git merge to detect conflicts
+        // Pass prTipRef (not tipOid) so merge uses a ref that exists; tipOid may not resolve
+        const mergeResult = await performPRDryRunMerge(git, repoDir, prTipRef, resolvedBranch);
+        console.log(`[analyzePRMergeability] Dry-run merge: conflicts=${mergeResult.hasConflicts}, files=${mergeResult.conflictFiles.length}`);
+
+        const baseForDiff = mergeBase ?? targetCommit;
+        const filesChanged = baseForDiff ? await getChangedFilesBetween(git, repoDir, baseForDiff, prTipRef) : [];
+        const prCommits = await getPRCommitsOnly(git, repoDir, prTipRef, mergeBase ?? targetCommit, 50);
+        console.log(`[analyzePRMergeability] Success via ${url}: analysis=${mergeResult.hasConflicts ? "conflicts" : "clean"}, filesChanged=${filesChanged.length}`);
+
+        return {
+          canMerge: !mergeResult.hasConflicts,
+          hasConflicts: mergeResult.hasConflicts,
+          conflictFiles: mergeResult.conflictFiles,
+          conflictDetails: mergeResult.conflictDetails,
+          upToDate: false,
+          fastForward: false,
+          mergeBase,
+          targetCommit,
+          remoteCommit: undefined,
+          patchCommits,
+          analysis: mergeResult.hasConflicts ? "conflicts" : "clean",
+          filesChanged,
+          usedCloneUrl: url,
+          prCommits,
+        } as PRMergeAnalysisResult;
+      } finally {
+        try {
+          await git.deleteRemote({ dir: repoDir, remote: prRemote });
+        } catch {
+          /* ignore */
+        }
+      }
+    },
+    { perUrlTimeoutMs: 20000 }
+  );
+
+  if (!result.success || !result.result) {
+    const errMsg = result.attempts?.length
+      ? result.attempts.map((a) => `${a.url}: ${a.error || "failed"}`).join("; ")
+      : "Failed to fetch PR from any clone URL";
+    console.warn(`[analyzePRMergeability] All clone URLs failed: ${errMsg}`);
+    return errResult(errMsg);
+  }
+
+  return result.result;
+}
+
+/**
+ * Get list of files that differ between two commits (fromOid -> toOid).
+ * Uses git walk to compare tree blobs; only returns leaf files (not directories).
+ * Used for PR diff display (files changed in the PR).
+ */
+async function getChangedFilesBetween(
+  git: GitProvider,
+  repoDir: string,
+  fromOid: string,
+  toOid: string
+): Promise<string[]> {
+  try {
+    if (!git.TREE) {
+      console.warn("[getChangedFilesBetween] GitProvider has no TREE, returning []");
+      return [];
+    }
+    // Must call git.TREE() so `this` is bound; extracted TREE() loses context (e.g. CachedGitProvider.inner)
+    const results = await git.walk({
+      dir: repoDir,
+      trees: [git.TREE({ ref: fromOid }), git.TREE({ ref: toOid })],
+      map: async (filepath: string, [A, B]: [any, any]) => {
+        if (filepath === ".") return;
+        const Atype = await A?.type?.();
+        const Btype = await B?.type?.();
+        if (Atype === "tree" || Btype === "tree") return; // Skip directories
+        const Aoid = await A?.oid?.();
+        const Boid = await B?.oid?.();
+        if (Aoid === Boid) return; // Same content, not changed
+        return filepath;
+      },
+    });
+    const files = (results || []).filter(Boolean);
+    return files;
+  } catch (err) {
+    console.warn("[getChangedFilesBetween] Failed:", err);
+    return [];
+  }
+}
+
+/**
+ * Get commit log from ref (up to depth commits).
+ * Returns flattened metadata (oid, message, author) for UI display.
+ */
+async function getCommitLog(
+  git: GitProvider,
+  repoDir: string,
+  ref: string,
+  depth: number
+): Promise<Array<{ oid: string; message: string; author?: { name?: string; email?: string } }>> {
+  try {
+    const log = await git.log({ dir: repoDir, ref, depth });
+    return log.map((c: any) => ({
+      oid: c.oid,
+      message: c.commit?.message || "",
+      author: c.commit?.author,
+    }));
+  } catch (err) {
+    console.warn(`[getCommitLog] Failed for ref=${ref}:`, err);
+    return [];
+  }
+}
+
+/**
+ * Get only commits that are in the PR branch (from mergeBase to PR tip), not in target.
+ * Stops when we reach mergeBase or the given stopRef.
+ */
+async function getPRCommitsOnly(
+  git: GitProvider,
+  repoDir: string,
+  prTipRef: string,
+  stopAtOidOrRef: string,
+  maxDepth: number
+): Promise<Array<{ oid: string; message: string; author?: { name?: string; email?: string } }>> {
+  try {
+    const log = await git.log({ dir: repoDir, ref: prTipRef, depth: maxDepth });
+    const result: Array<{ oid: string; message: string; author?: { name?: string; email?: string } }> = [];
+    for (const c of log) {
+      if (c.oid === stopAtOidOrRef) break; // Reached merge base, stop (don't include it)
+      result.push({
+        oid: c.oid,
+        message: c.commit?.message || "",
+        author: c.commit?.author,
+      });
+    }
+    return result;
+  } catch (err) {
+    console.warn(`[getPRCommitsOnly] Failed for ref=${prTipRef}:`, err);
+    return [];
+  }
+}
+
+/**
+ * Parse conflict markers (<<<<<<<, =======, >>>>>>>) from a file's content.
+ * Returns ConflictMarker[] with start/end line numbers and type.
+ */
+function parseConflictMarkers(content: string): ConflictMarker[] {
+  const markers: ConflictMarker[] = [];
+  const lines = content.split("\n");
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.startsWith("<<<<<<<")) {
+      const start = i + 1;
+      let sepIdx = -1;
+      let endIdx = -1;
+      for (let j = i + 1; j < lines.length; j++) {
+        if (lines[j].startsWith("=======")) {
+          sepIdx = j;
+          break;
+        }
+      }
+      for (let j = (sepIdx >= 0 ? sepIdx : i) + 1; j < lines.length; j++) {
+        if (lines[j].startsWith(">>>>>>>")) {
+          endIdx = j;
+          break;
+        }
+      }
+      const end = endIdx >= 0 ? endIdx + 1 : lines.length;
+      markers.push({
+        start,
+        end,
+        content: lines.slice(i, end).join("\n"),
+        type: "both-modified",
+      });
+      i = end;
+    } else {
+      i++;
+    }
+  }
+  return markers;
+}
+
+/**
+ * Read file from working tree and parse conflict markers.
+ * readFile: fs.promises.readFile or similar (path, encoding) => Promise<content>
+ */
+async function parseConflictMarkersFromPath(
+  readFile: (path: string, ...args: any[]) => Promise<string | Buffer>,
+  repoDir: string,
+  filepath: string
+): Promise<ConflictMarker[]> {
+  try {
+    const fullPath = `${repoDir}/${filepath}`.replace(/\/+/g, "/");
+    const data = await readFile(fullPath, "utf8").catch(() => readFile(fullPath));
+    const content = typeof data === "string" ? data : (data as Buffer)?.toString?.("utf8") ?? "";
+    return parseConflictMarkers(content);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Perform a dry-run merge of PR tip into target branch to detect conflicts.
+ *
+ * Strategy: Create temp branch from target, write PR tip to a ref, then run
+ * git.merge(ours=tempBranch, theirs=prTipRef). If merge succeeds -> no conflicts.
+ * If it throws -> read statusMatrix for conflicted files and return them.
+ *
+ * Cleanup: Always restore original branch and remove temp branch/ref.
+ */
+async function performPRDryRunMerge(
+  git: GitProvider,
+  repoDir: string,
+  prTipSource: string,
+  targetBranch: string
+): Promise<{
+  hasConflicts: boolean;
+  conflictFiles: string[];
+  conflictDetails: ConflictDetail[];
+}> {
+  const tempBranch = `pr-merge-temp-${Date.now()}`;
+  const prTipRef = "refs/pr-tip-merge";
+
+  try {
+    // Checkout target and create temp branch from it
+    await git.checkout({ dir: repoDir, ref: targetBranch });
+    await git.branch({ dir: repoDir, ref: tempBranch, checkout: true });
+
+    // Resolve ref (e.g. refs/remotes/pr-source/test) to OID; if already OID, use as-is
+    const tipOid = prTipSource.startsWith("refs/")
+      ? await git.resolveRef({ dir: repoDir, ref: prTipSource })
+      : prTipSource;
+    await git.writeRef({ dir: repoDir, ref: prTipRef, value: tipOid, force: true });
+
+    // Attempt merge: ours=target (temp), theirs=PR tip
+    await git.merge({
+      dir: repoDir,
+      ours: tempBranch,
+      theirs: prTipRef,
+      fastForward: false,
+      abortOnConflict: true,
+    } as any);
+
+    return { hasConflicts: false, conflictFiles: [], conflictDetails: [] };
+  } catch (err: any) {
+    const conflictFiles: string[] = [];
+    const conflictDetails: ConflictDetail[] = [];
+    try {
+      const status = await git.statusMatrix({ dir: repoDir });
+      const seen = new Set<string>();
+      for (const row of status) {
+        const filepath = row[0];
+        if (filepath && !seen.has(filepath)) {
+          seen.add(filepath);
+          conflictFiles.push(filepath);
+        }
+      }
+      console.log(`[performPRDryRunMerge] Merge failed, found ${conflictFiles.length} conflicted file(s): ${conflictFiles.slice(0, 5).join(", ")}${conflictFiles.length > 5 ? "..." : ""}`);
+
+      // Parse conflict markers from working tree for each conflicted file
+      const fs = (git as any)?.fs;
+      const readFile = fs?.promises?.readFile ?? fs?.readFile;
+      if (typeof readFile === "function") {
+        for (const filepath of conflictFiles) {
+          const markers = await parseConflictMarkersFromPath(readFile, repoDir, filepath);
+          conflictDetails.push({
+            file: filepath,
+            type: "content" as const,
+            conflictMarkers: markers,
+          });
+        }
+      }
+    } catch (statusErr) {
+      console.warn("[performPRDryRunMerge] Could not read statusMatrix after merge failure:", statusErr);
+    }
+    if (conflictDetails.length === 0) {
+      conflictDetails.push(
+        ...conflictFiles.map((f) => ({
+          file: f,
+          type: "content" as const,
+          conflictMarkers: [] as ConflictMarker[],
+        }))
+      );
+    }
+    return {
+      hasConflicts: true,
+      conflictFiles,
+      conflictDetails,
+    };
+  } finally {
+    // Restore repo state regardless of merge outcome
+    try {
+      await git.checkout({ dir: repoDir, ref: targetBranch });
+      await git.deleteBranch({ dir: repoDir, ref: tempBranch });
+      await git.deleteRef({ dir: repoDir, ref: prTipRef });
+    } catch (cleanupErr) {
+      console.warn("[performPRDryRunMerge] Cleanup failed (checkout/branch/ref):", cleanupErr);
+    }
+  }
+}
+
+/**
+ * Preview data for creating a PR: commits and files changed between source and target branches.
+ * Used by the Create PR modal to display commits and changes before creating the PR.
+ */
+export interface PRPreviewData {
+  success: boolean;
+  error?: string;
+  mergeBase?: string;
+  tipCommit?: string;
+  commits: Array<{ oid: string; message: string; author?: { name?: string; email?: string } }>;
+  commitOids: string[];
+  filesChanged: string[];
+}
+
+/**
+ * Options for cross-repo (fork) PR preview.
+ * When sourceRemote is set, the source branch is resolved from that remote (e.g. refs/remotes/source/main).
+ * When preferRemoteRefs is true, try refs/remotes/origin/* before refs/heads/* (avoids stale local refs after push).
+ */
+export interface GetPRPreviewOptions {
+  sourceRemote?: string;
+  preferRemoteRefs?: boolean;
+}
+
+/**
+ * Get PR preview data: commits and files changed between source branch and target branch.
+ * Both branches must exist in the repo (local or remote). Use after smartInitializeRepo.
+ * For fork PRs, pass sourceRemote so source branch is resolved from refs/remotes/{sourceRemote}/{sourceBranch}.
+ */
+export async function getPRPreviewData(
+  git: GitProvider,
+  repoDir: string,
+  sourceBranch: string,
+  targetBranch: string,
+  opts?: GetPRPreviewOptions
+): Promise<PRPreviewData> {
+  const empty: PRPreviewData = { success: false, commits: [], commitOids: [], filesChanged: [] };
+  const { sourceRemote, preferRemoteRefs } = opts ?? {};
+
+  const resolveBranchRef = async (
+    branch: string,
+    forSource: boolean
+  ): Promise<string | null> => {
+    const refs = forSource && sourceRemote
+      ? [
+          `refs/remotes/${sourceRemote}/${branch}`,
+          `${sourceRemote}/${branch}`,
+          `refs/heads/${branch}`,
+          branch,
+          `refs/remotes/origin/${branch}`,
+          `origin/${branch}`,
+        ]
+      : preferRemoteRefs
+        ? [
+            `refs/remotes/origin/${branch}`,
+            `origin/${branch}`,
+            `refs/heads/${branch}`,
+            branch,
+          ]
+        : [
+            `refs/heads/${branch}`,
+            branch,
+            `refs/remotes/origin/${branch}`,
+            `origin/${branch}`,
+          ];
+    for (const ref of refs) {
+      try {
+        const oid = await git.resolveRef({ dir: repoDir, ref });
+        if (oid && oid.length === 40) return oid;
+      } catch {
+        continue;
+      }
+    }
+    return null;
+  };
+
+  try {
+    const sourceOid = await resolveBranchRef(sourceBranch, true);
+    const targetOid = await resolveBranchRef(targetBranch, false);
+
+    if (!sourceOid) {
+      return { ...empty, error: `Source branch "${sourceBranch}" not found` };
+    }
+    if (!targetOid) {
+      return { ...empty, error: `Target branch "${targetBranch}" not found` };
+    }
+    if (sourceOid === targetOid) {
+      return { ...empty, error: "No commits to merge. The source branch is up to date with the target." };
+    }
+
+    const mergeBase = await findMergeBase(git, repoDir, sourceOid, targetOid);
+    const stopAt = mergeBase ?? targetOid;
+
+    const commits = await getPRCommitsOnly(git, repoDir, sourceOid, stopAt, 100);
+    const commitOids = commits.map((c) => c.oid);
+    const tipCommit = commitOids[0] ?? sourceOid;
+
+    const filesChanged =
+      stopAt && tipCommit
+        ? await getChangedFilesBetween(git, repoDir, stopAt, tipCommit)
+        : [];
+
+    return {
+      success: true,
+      mergeBase: mergeBase ?? undefined,
+      tipCommit,
+      commits,
+      commitOids,
+      filesChanged,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ...empty, error: `Failed to get PR preview: ${msg}` };
+  }
+}
+
+/**
+ * Result of finding commits ahead of a tip OID in a source remote.
+ */
+export interface CommitsAheadOfTipResult {
+  success: boolean;
+  error?: string;
+  commits: Array<{ oid: string; message: string; author?: { name?: string; email?: string } }>;
+  commitOids: string[];
+}
+
+/**
+ * Options for getCommitsAheadOfTipData. When sourceRemote is set, branches are resolved from that remote.
+ */
+export interface GetCommitsAheadOfTipOptions {
+  sourceRemote?: string;
+}
+
+/**
+ * Find commits that are ahead of a tip OID in the source remote.
+ * Fetches from source, lists branches containing the tip, returns commits on top.
+ * No target branch or merge base - purely source-oriented.
+ * Use after fetching from source (refs/heads/*).
+ */
+export async function getCommitsAheadOfTipData(
+  git: GitProvider,
+  repoDir: string,
+  tipOid: string,
+  opts?: GetCommitsAheadOfTipOptions
+): Promise<CommitsAheadOfTipResult> {
+  const empty: CommitsAheadOfTipResult = { success: false, commits: [], commitOids: [] };
+  const { sourceRemote } = opts ?? {};
+
+  const remoteName = sourceRemote || "origin";
+  let branches: string[];
+  try {
+    branches = await git.listBranches({ dir: repoDir, remote: remoteName });
+  } catch (err) {
+    return {
+      ...empty,
+      error: `Failed to list branches from ${remoteName}: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  const candidates: { branch: string; oid: string; commitCount: number }[] = [];
+
+  for (const branch of branches) {
+    const ref = sourceRemote
+      ? `refs/remotes/${sourceRemote}/${branch}`
+      : `refs/remotes/origin/${branch}`;
+    let branchOid: string;
+    try {
+      branchOid = await git.resolveRef({ dir: repoDir, ref });
+      if (!branchOid || branchOid.length !== 40) continue;
+    } catch {
+      continue;
+    }
+
+    if (branchOid === tipOid) continue;
+
+    let branchContainsTip = false;
+    try {
+      branchContainsTip = await git.isDescendent({
+        dir: repoDir,
+        oid: branchOid,
+        ancestor: tipOid,
+      });
+    } catch {
+      continue;
+    }
+
+    if (!branchContainsTip) continue;
+
+    const commits = await getPRCommitsOnly(git, repoDir, branchOid, tipOid, 100);
+    candidates.push({ branch, oid: branchOid, commitCount: commits.length });
+  }
+
+  if (candidates.length === 0) {
+    return {
+      ...empty,
+      error:
+        "No remote branch found that contains the PR tip. Push your commits and try again, or enter the source branch manually.",
+    };
+  }
+
+  const best = candidates.reduce((a, b) =>
+    a.commitCount >= b.commitCount ? a : b
+  );
+
+  if (best.commitCount === 0) {
+    return {
+      ...empty,
+      error: "No new commits on top of the PR tip. The branch is up to date.",
+    };
+  }
+
+  const commits = await getPRCommitsOnly(git, repoDir, best.oid, tipOid, 100);
+  const commitOids = commits.map((c) => c.oid);
+
+  return {
+    success: true,
+    commits,
+    commitOids,
+  };
+}
+
+/**
+ * Find the merge base between a head commit and the target branch.
+ * Ensures the repo has the target branch, then computes merge base.
+ */
+export async function getMergeBaseBetween(
+  git: GitProvider,
+  repoDir: string,
+  headOid: string,
+  targetBranch: string,
+  opts?: { sourceRemote?: string }
+): Promise<{ mergeBase?: string; error?: string }> {
+  const targetRefs = [
+    `refs/heads/${targetBranch}`,
+    targetBranch,
+    `refs/remotes/origin/${targetBranch}`,
+    `origin/${targetBranch}`,
+  ];
+  if (opts?.sourceRemote) {
+    targetRefs.unshift(
+      `refs/remotes/${opts.sourceRemote}/${targetBranch}`,
+      `${opts.sourceRemote}/${targetBranch}`
+    );
+  }
+
+  let targetOid: string | null = null;
+  for (const ref of targetRefs) {
+    try {
+      const oid = await git.resolveRef({ dir: repoDir, ref });
+      if (oid && oid.length === 40) {
+        targetOid = oid;
+        break;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  if (!targetOid) {
+    return { error: `Target branch "${targetBranch}" not found` };
+  }
+
+  try {
+    const mergeBase = await findMergeBase(git, repoDir, headOid, targetOid);
+    return { mergeBase: mergeBase ?? undefined };
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 /**

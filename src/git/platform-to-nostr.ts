@@ -384,7 +384,7 @@ export function convertPullRequestsToNostrEvents(
       repoAddr,
       subject: pr.title,
       labels,
-      branchName: pr.head.ref,
+      branchName: pr.base.ref,
       mergeBase: pr.base.ref,
       commits: commits?.length ? commits : undefined,
       created_at: currentTimestamp,

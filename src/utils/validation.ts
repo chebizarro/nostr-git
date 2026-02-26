@@ -148,10 +148,14 @@ export const PullRequestTagSchema = z.union([
 ])
 export const PullRequestTagsSchema = z.array(PullRequestTagSchema)
 
-// Pull Request Update tags (kind 1619)
+// Pull Request Update tags (kind 1619); NIP-22 E/P reference the PR
+export const PullRequestUpdateETag = z.tuple([z.literal("E"), z.string()])
+export const PullRequestUpdatePTag = z.tuple([z.literal("P"), z.string()])
 export const PullRequestUpdateTagSchema = z.union([
   AddressRepoTag,
   PatchRTag,
+  PullRequestUpdateETag,
+  PullRequestUpdatePTag,
   PTag,
   CTag,
   CloneTag,
@@ -305,6 +309,18 @@ export const PullRequestUpdateEventSchema = NostrEventSchema.extend({
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Pull Request update must include an 'a' tag (repo address)",
+    })
+  }
+  if (!hasTagName(evt.tags as unknown[], "E")) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Pull Request update must include an 'E' tag (NIP-22: PR event id)",
+    })
+  }
+  if (!hasTagName(evt.tags as unknown[], "P")) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Pull Request update must include a 'P' tag (NIP-22: PR author)",
     })
   }
 })
