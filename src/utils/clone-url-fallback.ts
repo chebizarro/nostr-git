@@ -6,6 +6,8 @@
  * Write Operations: Write to ALL URLs and report individual results
  */
 
+import { detectVendorFromUrl } from '../git/vendor-providers.js';
+
 export interface UrlAttemptResult<T = unknown> {
   url: string;
   success: boolean;
@@ -98,19 +100,64 @@ export function clearUrlPreferenceCache(repoId?: string): void {
 }
 
 /**
+ * Check if a URL points to a REST API-capable Git provider.
+ * These providers (GitHub, GitLab, Gitea, Bitbucket) support faster metadata
+ * fetching via REST API instead of full git clone.
+ */
+export function hasRestApiSupport(url: string): boolean {
+  const vendor = detectVendorFromUrl(url);
+  // These vendors have REST APIs that can be used for faster repo access
+  return vendor === 'github' || vendor === 'gitlab' || vendor === 'gitea' || vendor === 'bitbucket';
+}
+
+/**
+ * Sort URLs to prioritize REST API-capable providers.
+ * This allows faster initial repo loading by trying API-capable sources first.
+ */
+export function sortUrlsByApiPriority(urls: string[]): string[] {
+  if (urls.length <= 1) return urls;
+
+  const apiUrls: string[] = [];
+  const otherUrls: string[] = [];
+
+  for (const url of urls) {
+    if (hasRestApiSupport(url)) {
+      apiUrls.push(url);
+    } else {
+      otherUrls.push(url);
+    }
+  }
+
+  // Log when we're reordering for API priority
+  if (apiUrls.length > 0 && otherUrls.length > 0) {
+    console.log(`[sortUrlsByApiPriority] Prioritizing ${apiUrls.length} REST API-capable URL(s) over ${otherUrls.length} git-only URL(s)`);
+  }
+
+  // API-capable URLs first, then others
+  return [...apiUrls, ...otherUrls];
+}
+
+/**
  * Reorder URLs to put cached preferred URL first, if available.
+ * Also prioritizes REST API-capable URLs over git-only sources.
  */
 export function reorderUrlsByPreference(urls: string[], repoId?: string): string[] {
-  if (!repoId || urls.length <= 1) return urls;
+  if (urls.length <= 1) return urls;
+
+  // First, sort by API priority (REST API-capable sources first)
+  let orderedUrls = sortUrlsByApiPriority(urls);
+
+  // If no repoId, just return API-prioritized order
+  if (!repoId) return orderedUrls;
 
   const cached = getCachedUrlPreference(repoId);
-  if (!cached) return urls;
+  if (!cached) return orderedUrls;
 
   // Check if cached preference is stale (older than 1 hour)
   const maxCacheAge = 60 * 60 * 1000;
   if (Date.now() - cached.lastSuccessAt > maxCacheAge) {
     clearUrlPreferenceCache(repoId);
-    return urls;
+    return orderedUrls;
   }
 
   // Put preferred URL first, then non-failed URLs, then failed URLs last
@@ -120,19 +167,19 @@ export function reorderUrlsByPreference(urls: string[], repoId?: string): string
   const result: string[] = [];
 
   // Add preferred URL first if it's in the list
-  if (urls.includes(preferred)) {
+  if (orderedUrls.includes(preferred)) {
     result.push(preferred);
   }
 
-  // Add non-failed URLs
-  for (const url of urls) {
+  // Add non-failed URLs (maintaining API priority order)
+  for (const url of orderedUrls) {
     if (url !== preferred && !failed.has(url)) {
       result.push(url);
     }
   }
 
   // Add previously failed URLs last (they might work now)
-  for (const url of urls) {
+  for (const url of orderedUrls) {
     if (url !== preferred && failed.has(url)) {
       result.push(url);
     }
