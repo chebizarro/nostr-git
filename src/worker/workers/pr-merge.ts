@@ -3,7 +3,6 @@ import type { GitMergeResult } from "../../git/provider.js";
 import type { PRMergeAnalysisResult } from "../../git/merge-analysis.js";
 import { analyzePRMergeability } from "../../git/merge-analysis.js";
 import { withUrlFallback, filterValidCloneUrls } from "../../utils/clone-url-fallback.js";
-import { resolveDefaultCorsProxy } from "./git-config.js";
 
 export interface AnalyzePRMergeOptions {
   repoId: string;
@@ -23,6 +22,17 @@ export interface MergePRAndPushOptions {
   mergeCommitMessage?: string;
   fastForward?: boolean;
   onProgress?: (step: string, progress: number) => void;
+  /** Current user's pubkey (hex or npub) - required for GRASP push, not from token store (matches useNewRepo) */
+  userPubkey?: string;
+  /** Pre-created NIP-98 auth headers for GRASP (keyed by URL). Created on main thread before RPC. */
+  authHeaders?: Record<string, string>;
+  /**
+   * When true, perform the merge but skip the push phase. Returns the merge commit OID so the
+   * caller (main thread) can publish the Nostr state event with the new SHA before pushing.
+   * GRASP requires a signed state event (kind 30618) pointing to the new commit to be on the
+   * relay before it accepts a git push.
+   */
+  skipPush?: boolean;
 }
 
 export interface MergePRAndPushResult {
@@ -33,6 +43,50 @@ export interface MergePRAndPushResult {
   skippedRemotes?: string[];
   warning?: string;
   pushErrors?: Array<{ remote: string; url: string; error: string; code: string; stack: string }>;
+}
+
+/** Push to remote via worker's pushToRemote - for GRASP (direct push with authHeaders) */
+export type PushToRemoteFn = (opts: {
+  repoId: string;
+  remoteUrl: string;
+  branch: string;
+  token?: string;
+  provider?: string;
+  authHeaders?: Record<string, string>;
+}) => Promise<{ success?: boolean; error?: string }>;
+
+/** Safe push with preflight checks - for GitHub/GitLab/etc (mirrors useNewRepo) */
+export type SafePushToRemoteFn = (opts: {
+  repoId: string;
+  remoteUrl: string;
+  branch: string;
+  token?: string;
+  provider?: string;
+  preflight?: {
+    blockIfUncommitted?: boolean;
+    requireUpToDate?: boolean;
+    blockIfShallow?: boolean;
+  };
+}) => Promise<{
+  success?: boolean;
+  error?: string;
+  requiresConfirmation?: boolean;
+  warning?: string;
+  reason?: string;
+}>;
+
+/** Infer provider from remote URL (github.com, gitlab.com, relay.ngit.dev, etc.) */
+function inferProviderFromUrl(url: string): string | undefined {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (/relay\.ngit\.dev|gitnostr\.com|grasp/i.test(host)) return "grasp";
+    if (host === "github.com" || host.endsWith(".github.com")) return "github";
+    if (host === "gitlab.com" || host.endsWith(".gitlab.com") || host.includes("gitlab."))
+      return "gitlab";
+    return undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function mergePRAndPushUtil(
@@ -50,6 +104,12 @@ export async function mergePRAndPushUtil(
     }) => Promise<any>;
     getAuthCallback: (url: string) => any;
     getConfiguredAuthHosts?: () => string[];
+    /** Direct push (for GRASP with authHeaders) - mirrors useNewRepo */
+    pushToRemote: PushToRemoteFn;
+    /** Safe push with preflight (for GitHub/GitLab/etc) - mirrors useNewRepo */
+    safePushToRemote: SafePushToRemoteFn;
+    /** Get tokens for remote URL (for multi-token retry) */
+    getTokensForRemote: (url: string) => Promise<Array<{ token: string }>>;
   }
 ): Promise<MergePRAndPushResult> {
   const {
@@ -60,9 +120,19 @@ export async function mergePRAndPushUtil(
     mergeCommitMessage,
     fastForward = true,
     onProgress = () => {},
+    userPubkey,
+    skipPush = false,
   } = opts;
 
-  const { rootDir, parseRepoId, resolveBranchName, ensureFullClone } = deps;
+  const {
+    rootDir,
+    parseRepoId,
+    resolveBranchName,
+    ensureFullClone,
+    pushToRemote,
+    safePushToRemote,
+    getTokensForRemote,
+  } = deps;
   let usedTempRef = false;
   let prTipRef: string | null = null;
   const key = parseRepoId(repoId);
@@ -141,6 +211,8 @@ export async function mergePRAndPushUtil(
     onProgress("Checking out target branch...", 40);
     await git.checkout({ dir, ref: effectiveTargetBranch });
 
+    const preMergeTargetOid = await git.resolveRef({ dir, ref: effectiveTargetBranch });
+
     onProgress("Merging PR...", 50);
     const mergeResult = (await git.merge({
         dir,
@@ -157,6 +229,19 @@ export async function mergePRAndPushUtil(
       return {
         success: false,
         error: "Merge completed but no commit OID returned",
+      };
+    }
+
+    // Merge-only mode: return the new commit SHA so the caller can publish the
+    // Nostr state event (kind 30618) before doing the push. GRASP requires this.
+    if (skipPush) {
+      onProgress("Merge complete (push deferred)", 60);
+      return {
+        success: true,
+        mergeCommitOid,
+        pushedRemotes: [],
+        skippedRemotes: [],
+        warning: "Push deferred — caller must publish state event then push separately",
       };
     }
 
@@ -183,9 +268,6 @@ export async function mergePRAndPushUtil(
       };
     }
 
-    const { tryPushWithTokens } = await import("./auth.js");
-    const corsProxy = resolveDefaultCorsProxy();
-
     for (const remote of remotes) {
       try {
         if (!remote.url) {
@@ -199,61 +281,79 @@ export async function mergePRAndPushUtil(
           skippedRemotes.push(remote.remote);
           continue;
         }
-        await tryPushWithTokens(remote.url, async (authCallback) => {
-          await git.push({
-            dir,
-            url: remote.url,
-            ref: effectiveTargetBranch,
-            force: true,
-            corsProxy: corsProxy ?? undefined,
-            ...(authCallback && { onAuth: authCallback }),
+
+        const provider = inferProviderFromUrl(remote.url);
+        const pushUrl = remote.url;
+
+        // GRASP: direct push with NIP-98 auth headers (mirrors useNewRepo)
+        if (provider === "grasp") {
+          if (!userPubkey) {
+            throw new Error("GRASP push requires userPubkey (current user's pubkey)");
+          }
+
+          // Use pre-created auth headers (from main thread) for GRASP NIP-98
+          // Git push requires auth headers for TWO URLs: info/refs and git-receive-pack
+          const authHeaders = opts.authHeaders;
+
+          const pushRes = await pushToRemote({
+            repoId,
+            remoteUrl: pushUrl,
+            branch: effectiveTargetBranch,
+            token: userPubkey,
+            provider,
+            authHeaders: authHeaders ?? undefined,
           });
-        });
-        pushedRemotes.push(remote.remote);
+          if (!pushRes?.success) {
+            throw new Error(pushRes?.error || "Push to GRASP remote failed");
+          }
+          pushedRemotes.push(remote.remote);
+          continue;
+        }
+
+        // Non-GRASP: use safePushToRemote with preflight (mirrors useNewRepo)
+        const tokens = await getTokensForRemote(remote.url);
+        if (tokens.length === 0) {
+          throw new Error(`No authentication token found for ${provider || "remote"} push`);
+        }
+
+        let lastError: Error | null = null;
+        for (const { token } of tokens) {
+          try {
+            const result = await safePushToRemote({
+              repoId,
+              remoteUrl: pushUrl,
+              branch: effectiveTargetBranch,
+              token: token || undefined,
+              provider: provider as any,
+              preflight: {
+                blockIfUncommitted: true,
+                requireUpToDate: true,
+                blockIfShallow: false,
+              },
+            });
+            if (result?.success) {
+              pushedRemotes.push(remote.remote);
+              lastError = null;
+              break;
+            }
+            if (result?.requiresConfirmation) {
+              throw new Error(result.warning || "Force push requires confirmation.");
+            }
+            if (result?.reason === "workflow_scope_missing") {
+              throw new Error(
+                "GitHub requires the workflow token scope to push files under .github/workflows. Update your token or remove those files."
+              );
+            }
+            lastError = new Error(result?.error || "Safe push failed");
+          } catch (err) {
+            lastError = err instanceof Error ? err : new Error(String(err));
+          }
+        }
+        if (lastError) throw lastError;
       } catch (pushError: any) {
         const rawMsg =
           pushError instanceof Error ? pushError.message || "" : String(pushError || "");
         const code = (pushError?.code || pushError?.name || "UNKNOWN") as string;
-        const looksProtected =
-          /pre-receive hook declined/i.test(rawMsg) || /protected branch/i.test(rawMsg);
-        const graspLike = /relay\.ngit\.dev|grasp/i.test(remote.url || "");
-
-        if (looksProtected || graspLike) {
-          try {
-            const topicBranch = `grasp/pr-${tipCommitOid.slice(0, 8)}`;
-            await tryPushWithTokens(remote.url || "", async (authCallback) => {
-              await git.push({
-                dir,
-                url: remote.url as string,
-                ref: effectiveTargetBranch,
-                remoteRef: `refs/heads/${topicBranch}`,
-                force: false,
-                corsProxy: corsProxy ?? undefined,
-                ...(authCallback && { onAuth: authCallback }),
-              } as any);
-            });
-            pushedRemotes.push(`${remote.remote}:${topicBranch}`);
-            pushErrors.push({
-              remote: remote.remote,
-              url: remote.url || "N/A",
-              error: `Primary push rejected. Fallback pushed to ${topicBranch}. Original: ${rawMsg}`,
-              code: "FALLBACK_TOPIC_PUSH",
-              stack: "",
-            });
-            continue;
-          } catch (fallbackErr: any) {
-            pushErrors.push({
-              remote: remote.remote,
-              url: remote.url || "N/A",
-              error: fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr),
-              code: fallbackErr?.code || "FALLBACK_FAILED",
-              stack: fallbackErr?.stack || "",
-            });
-            skippedRemotes.push(remote.remote);
-            continue;
-          }
-        }
-
         pushErrors.push({
           remote: remote.remote,
           url: remote.url || "N/A",
@@ -267,13 +367,19 @@ export async function mergePRAndPushUtil(
 
     onProgress("Merge complete", 100);
 
-    const hadFallback = pushErrors.some((e) => e.code === "FALLBACK_TOPIC_PUSH");
-    const warning = hadFallback
-      ? "Primary push rejected by remote policy; PR was pushed to a topic branch for review."
-      : undefined;
-
-    // If we had remotes to push to but none succeeded, treat as failure
+    // If all pushes failed: reset local state to pre-merge and return failure
     if (remotes.length > 0 && pushedRemotes.length === 0) {
+      try {
+        await git.writeRef({
+          dir,
+          ref: `refs/heads/${effectiveTargetBranch}`,
+          value: preMergeTargetOid,
+          force: true,
+        });
+        await git.checkout({ dir, ref: effectiveTargetBranch, force: true });
+      } catch (resetErr) {
+        console.warn("[mergePRAndPush] Failed to reset local state after push failure:", resetErr);
+      }
       const firstError = pushErrors[0];
       const errorMsg = firstError
         ? `Push to ${firstError.remote} failed: ${firstError.error}`
@@ -281,10 +387,8 @@ export async function mergePRAndPushUtil(
       return {
         success: false,
         error: errorMsg,
-        mergeCommitOid,
         pushedRemotes,
         skippedRemotes,
-        warning,
         pushErrors: pushErrors.length ? pushErrors : undefined,
       };
     }
@@ -294,7 +398,6 @@ export async function mergePRAndPushUtil(
       mergeCommitOid,
       pushedRemotes,
       skippedRemotes,
-      warning,
       pushErrors: pushErrors.length ? pushErrors : undefined,
     };
   } catch (error: any) {

@@ -164,7 +164,6 @@ import {
 } from "../git/files.js"
 import {listBranchesFromEvent} from "../git/branches.js"
 import type {RepoAnnouncementEvent} from "../events/index.js"
-import {createRepoStateEvent} from "../events/index.js"
 
 import {resolveBranchName as resolveRobustBranchUtil} from "./workers/branches.js"
 import {getProviderFs, isRepoClonedFs} from "./workers/fs-utils.js"
@@ -695,6 +694,7 @@ const api = {
       ...opts,
       onProgress: (step: string, pct: number) => sendProgress(step),
     }
+    const { getTokensForHost } = await import("./workers/auth.js")
     const result = await mergePRAndPushUtil(git, optsWithProgress, {
       rootDir,
       parseRepoId,
@@ -723,6 +723,33 @@ const api = {
         ),
       getAuthCallback,
       getConfiguredAuthHosts,
+      pushToRemote: async (opts) => {
+        const r = await api.pushToRemote(opts)
+        return r
+      },
+      safePushToRemote: async (args) => {
+        const r = await api.safePushToRemote({
+          ...args,
+          provider: args.provider as any,
+          preflight: args.preflight,
+        })
+        return {
+          success: r?.success,
+          error: r?.error,
+          requiresConfirmation: r?.requiresConfirmation,
+          warning: r?.warning,
+          reason: r?.reason,
+        }
+      },
+      getTokensForRemote: async (url: string) => {
+        try {
+          const hostname = new URL(url).hostname
+          const tokens = await getTokensForHost(hostname)
+          return tokens.map((t) => ({ token: t.token }))
+        } catch {
+          return []
+        }
+      },
     })
     sendProgress("Merge complete")
     return toPlain(result)
@@ -752,81 +779,6 @@ const api = {
       if (provider === "grasp") {
         if (!token) {
           throw new Error("GRASP provider requires a pubkey token")
-        }
-
-        // Build relay base URL for state publishing
-        let relayBaseUrl = remoteUrl
-        try {
-          const u = new URL(remoteUrl)
-          const origin = `${u.protocol}//${u.host}`
-          relayBaseUrl = origin.replace(/^http:\/\//, "ws://").replace(/^https:\/\//, "wss://")
-        } catch {
-          relayBaseUrl = remoteUrl
-            .replace(/^http:\/\//, "ws://")
-            .replace(/^https:\/\//, "wss://")
-            .replace(/(ws[s]?:\/\/[^/]+).*/, "$1")
-        }
-
-        console.log(`[GRASP] Using relay base URL: ${relayBaseUrl}`)
-
-        // Publish repo state (30618) before pushing
-        try {
-          const io = eventIO
-          const u = new URL(remoteUrl)
-          const parts = u.pathname.replace(/^\//, "").split("/")
-          const npub = parts[0] || ""
-          const repo = (parts[1] || "").replace(/\.git$/, "")
-
-          // Collect local refs
-          const heads = await (git as any).listBranches({dir})
-          const tags = await (git as any).listTags({dir})
-          const refs: Record<string, string> = {}
-
-          for (const b of heads) {
-            try {
-              const sha = await (git as any).resolveRef({dir, ref: `refs/heads/${b}`})
-              refs[`refs/heads/${b}`] = sha
-            } catch {}
-          }
-          for (const t of tags) {
-            try {
-              const sha = await (git as any).resolveRef({dir, ref: `refs/tags/${t}`})
-              refs[`refs/tags/${t}`] = sha
-            } catch {}
-          }
-
-          const headRef = targetBranch ? `refs/heads/${targetBranch}` : undefined
-          // For GRASP/ngit compatibility, the state event's d tag should be just the repo name
-          // (the "identifier"), not the full npub:name format.
-          const stateRepoId = repo
-          const stateEvent = createRepoStateEvent({
-            repoId: stateRepoId,
-            head: targetBranch, // Just the branch name, createRepoStateEvent adds refs/heads/ prefix
-            refs: Object.entries(refs).map(([ref, commit]) => {
-              // Extract just the branch/tag name from the full ref path
-              // e.g., "refs/heads/master" -> "master", "refs/tags/v1.0" -> "v1.0"
-              const isHead = ref.startsWith("refs/heads/")
-              const name = isHead ? ref.replace("refs/heads/", "") : ref.replace("refs/tags/", "")
-              return {
-                type: isHead ? ("heads" as const) : ("tags" as const),
-                name,
-                commit,
-              }
-            }),
-          })
-
-          if (headRef && !stateEvent.tags.find((t: string[]) => t[0] === "HEAD")) {
-            stateEvent.tags.push(["HEAD", `ref: ${headRef}` as any])
-          }
-
-          // Publish via EventIO if available
-          if (io && typeof (io as any).publishEvent === "function") {
-            const pub = (io as any).publishEvent(stateEvent as any, [relayBaseUrl])
-            await Promise.race([pub, new Promise(resolve => setTimeout(resolve, 3000))])
-            console.log("[GRASP] Pre-push state publish attempted to", relayBaseUrl)
-          }
-        } catch (e) {
-          console.warn("[GRASP] Failed to publish pre-push state; proceeding anyway", e)
         }
 
         // Build Smart HTTP URL
@@ -983,6 +935,12 @@ const api = {
   async listBranches(opts: {repoId: string}): Promise<string[]> {
     const {dir} = repoKeyAndDir(opts.repoId)
     return toPlain(await (git as any).listBranches({dir}))
+  },
+
+  async listRemotes(opts: {repoId: string}): Promise<Array<{remote: string; url: string}>> {
+    const {dir} = repoKeyAndDir(opts.repoId)
+    const remotes = await (git as any).listRemotes({dir})
+    return toPlain(remotes || [])
   },
 
   async resolveBranch(opts: {repoId: string; branch?: string}): Promise<string> {
