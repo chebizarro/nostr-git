@@ -15,6 +15,7 @@ import { GitLabApi } from '../api/providers/gitlab.js';
 import { GiteaApi } from '../api/providers/gitea.js';
 import { BitbucketApi } from '../api/providers/bitbucket.js';
 import { GraspApiProvider } from '../api/providers/grasp.js';
+import { GraspRestApiProvider } from '../api/providers/grasp-rest.js';
 import { createInvalidInputError, type GitErrorContext } from '../errors/index.js';
 
 /**
@@ -65,6 +66,16 @@ export function getGitServiceApi(
       // Note: GRASP no longer takes EventIO. Event publishing moved to the UI layer (useNewRepo.svelte.ts).
       // This GraspApiProvider instance only handles Smart HTTP Git operations.
       return new GraspApiProvider(baseUrl, token);
+
+    case 'grasp-rest':
+      if (!baseUrl) {
+        throw createInvalidInputError(
+          'GRASP REST provider requires a relay URL as baseUrl parameter',
+          buildContext({ operation: 'getGitServiceApi', remote: baseUrl })
+        );
+      }
+      // GRASP REST API provider uses the git-natural-api approach for querying repos
+      return new GraspRestApiProvider(baseUrl, token);
 
     case 'generic':
       throw createInvalidInputError(
@@ -127,7 +138,8 @@ export function getGitServiceApiFromUrl(url: string, token: string): GitServiceA
     baseUrl = 'https://api.bitbucket.org/2.0';
   } else if (normalizedUrl.startsWith('ws://') || normalizedUrl.startsWith('wss://')) {
     // GRASP URLs start with ws:// or wss:// protocols
-    provider = 'grasp';
+    // Default to grasp-rest for REST API support
+    provider = 'grasp-rest';
     baseUrl = url; // For GRASP, the URL is the relay URL
   } else {
     throw createInvalidInputError(
@@ -145,7 +157,7 @@ export function getGitServiceApiFromUrl(url: string, token: string): GitServiceA
  * @returns Array of supported Git service provider names
  */
 export function getAvailableProviders(): GitVendor[] {
-  return ['github', 'gitlab', 'gitea', 'bitbucket', 'grasp'];
+  return ['github', 'gitlab', 'gitea', 'bitbucket', 'grasp', 'grasp-rest'];
 }
 
 /**
@@ -155,7 +167,7 @@ export function getAvailableProviders(): GitVendor[] {
  * @returns true if the provider supports REST API operations
  */
 export function supportsRestApi(provider: GitVendor): boolean {
-  return ['github', 'gitlab', 'gitea', 'bitbucket', 'grasp'].includes(provider);
+  return ['github', 'gitlab', 'gitea', 'bitbucket', 'grasp', 'grasp-rest'].includes(provider);
 }
 
 /**
@@ -180,6 +192,11 @@ export function getDefaultApiBaseUrl(provider: GitVendor): string {
     case 'grasp':
       throw createInvalidInputError(
         'GRASP provider requires a custom relay URL',
+        buildContext({ operation: 'getDefaultApiBaseUrl' })
+      );
+    case 'grasp-rest':
+      throw createInvalidInputError(
+        'GRASP REST provider requires a custom relay URL',
         buildContext({ operation: 'getDefaultApiBaseUrl' })
       );
     case 'generic':

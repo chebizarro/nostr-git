@@ -1284,24 +1284,35 @@ const api = {
     const {key, dir} = repoKeyAndDir(opts.repoId)
 
     try {
-      // Ensure we have the repository with sufficient depth
-      await ensureFullCloneUtil(
-        git,
-        {repoId: opts.repoId, branch: opts.branch, depth: 100},
-        {
-          rootDir,
-          parseRepoId,
-          repoDataLevels,
-          clonedRepos,
-          isRepoCloned: async (g: GitProvider, d: string) => isRepoClonedFs(g, d),
-          resolveBranchName: async (d: string, requested?: string) =>
-            resolveRobustBranchUtil(git, d, requested),
-          cacheManager,
-        },
-        makeProgress(opts.repoId, "clone-progress"),
-      )
+      // Optimization: Try to read commit locally first before triggering expensive fetch
+      let commits: any[] = []
+      try {
+        commits = await (git as any).log({dir, depth: 1, ref: opts.commitId})
+      } catch (error) {
+        // Commit not found locally, need to fetch
+        console.log(`[getCommitDetails] Commit ${opts.commitId} not found locally, fetching...`)
+      }
 
-      const commits = await (git as any).log({dir, depth: 1, ref: opts.commitId})
+      // Only fetch if commit wasn't found locally
+      if (commits.length === 0) {
+        await ensureFullCloneUtil(
+          git,
+          {repoId: opts.repoId, branch: opts.branch, depth: 100},
+          {
+            rootDir,
+            parseRepoId,
+            repoDataLevels,
+            clonedRepos,
+            isRepoCloned: async (g: GitProvider, d: string) => isRepoClonedFs(g, d),
+            resolveBranchName: async (d: string, requested?: string) =>
+              resolveRobustBranchUtil(git, d, requested),
+            cacheManager,
+          },
+          makeProgress(opts.repoId, "clone-progress"),
+        )
+
+        commits = await (git as any).log({dir, depth: 1, ref: opts.commitId})
+      }
       if (commits.length === 0) {
         throw new Error(`Commit ${opts.commitId} not found`)
       }

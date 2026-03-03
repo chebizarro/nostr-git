@@ -7,10 +7,12 @@ export * from "./providers/nostr-git-factory.js";
 export * from "./providers/grasp.js";
 
 // Vendor REST adapters (present in repo; exported for completeness)
-export * from "./providers/github.js";
-export * from "./providers/gitlab.js";
-export * from "./providers/gitea.js";
-export * from "./providers/bitbucket.js";
+export {GitHubApi} from "./providers/github.js"
+export {GitLabApi} from "./providers/gitlab.js"
+export {GiteaApi} from "./providers/gitea.js"
+export {BitbucketApi} from "./providers/bitbucket.js"
+export {GraspApiProvider} from "./providers/grasp.js"
+export {GraspRestApiProvider} from "./providers/grasp-rest.js"
 
 // GRASP internals (present in repo; exported for advanced use)
 export * from "./providers/grasp-api.js";

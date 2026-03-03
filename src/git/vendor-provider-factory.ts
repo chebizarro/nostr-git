@@ -39,6 +39,8 @@ class RestVendorProvider implements VendorProvider {
         return this.hostname === "bitbucket.org" ? undefined : `https://${this.hostname}/api/2.0`
       case "grasp":
         return this.originalUrl.startsWith("ws") ? this.originalUrl : `wss://${this.hostname}`
+      case "grasp-rest":
+        return this.originalUrl.startsWith("ws") ? this.originalUrl : `wss://${this.hostname}`
       default:
         return undefined
     }
@@ -94,7 +96,7 @@ class RestVendorProvider implements VendorProvider {
   }
 
   getCloneUrl(owner: string, repo: string): string {
-    if (this.vendor === "grasp") {
+    if (this.vendor === "grasp" || this.vendor === "grasp-rest") {
       const base = this.originalUrl.replace(/\/$/, "")
       return `${base}/${owner}/${repo}.git`
     }
@@ -226,7 +228,7 @@ export function getVendorProvider(vendor: GitVendor, hostname: string): VendorPr
     return providerRegistry.get(key)!
   }
 
-  const defaultUrl = vendor === "grasp" ? `wss://${hostname}` : `https://${hostname}`
+  const defaultUrl = (vendor === "grasp" || vendor === "grasp-rest") ? `wss://${hostname}` : `https://${hostname}`
   const provider = new RestVendorProvider(vendor, defaultUrl)
 
   providerRegistry.set(key, provider)
