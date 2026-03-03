@@ -1295,23 +1295,80 @@ const api = {
 
       // Only fetch if commit wasn't found locally
       if (commits.length === 0) {
-        await ensureFullCloneUtil(
-          git,
-          {repoId: opts.repoId, branch: opts.branch, depth: 100},
-          {
-            rootDir,
-            parseRepoId,
-            repoDataLevels,
-            clonedRepos,
-            isRepoCloned: async (g: GitProvider, d: string) => isRepoClonedFs(g, d),
-            resolveBranchName: async (d: string, requested?: string) =>
-              resolveRobustBranchUtil(git, d, requested),
-            cacheManager,
-          },
-          makeProgress(opts.repoId, "clone-progress"),
-        )
+        // Try to use REST API if available (GitHub, GitLab, Gitea, Bitbucket)
+        let usedRestApi = false
+        try {
+          const cache = await cacheManager.getRepoCache(key)
+          if (cache?.cloneUrls?.length) {
+            const {filterValidCloneUrls, reorderUrlsByPreference, hasRestApiSupport} = await import(
+              "../utils/clone-url-fallback.js"
+            )
+            const {getGitServiceApi} = await import("../git/provider-factory.js")
+            const {parseRepoFromUrl} = await import("../git/vendor-provider-factory.js")
 
-        commits = await (git as any).log({dir, depth: 1, ref: opts.commitId})
+            const validUrls = filterValidCloneUrls(cache.cloneUrls)
+            const orderedUrls = reorderUrlsByPreference(validUrls, key)
+
+            // Find first REST API-capable URL
+            for (const url of orderedUrls) {
+              if (hasRestApiSupport(url)) {
+                try {
+                  console.log(`[getCommitDetails] Trying REST API for ${url}`)
+                  const parsed = parseRepoFromUrl(url)
+                  if (!parsed) {
+                    console.warn(`[getCommitDetails] Failed to parse repo URL: ${url}`)
+                    continue
+                  }
+
+                  const {owner, repo, provider} = parsed
+                  // Use empty token for public repo access - authentication not required for reading commits
+                  const api = getGitServiceApi(provider.vendor, "")
+                  const commitData = await api.getCommit(owner, repo, opts.commitId)
+
+                  // Convert REST API response to our format
+                  return toPlain({
+                    success: true,
+                    meta: {
+                      sha: commitData.sha,
+                      author: commitData.author.name,
+                      email: commitData.author.email,
+                      date: new Date(commitData.author.date).getTime(),
+                      message: commitData.message,
+                      parents: commitData.parents?.map((p: any) => p.sha) || [],
+                    },
+                    changes: [], // REST API doesn't provide detailed file diffs in the same format
+                  })
+                } catch (apiError) {
+                  console.warn(`[getCommitDetails] REST API failed for ${url}:`, apiError)
+                  // Continue to next URL or fall back to clone
+                }
+              }
+            }
+          }
+        } catch (cacheError) {
+          console.warn(`[getCommitDetails] Failed to check cache for REST API:`, cacheError)
+        }
+
+        // Fall back to cloning if REST API didn't work
+        if (!usedRestApi) {
+          await ensureFullCloneUtil(
+            git,
+            {repoId: opts.repoId, branch: opts.branch, depth: 100},
+            {
+              rootDir,
+              parseRepoId,
+              repoDataLevels,
+              clonedRepos,
+              isRepoCloned: async (g: GitProvider, d: string) => isRepoClonedFs(g, d),
+              resolveBranchName: async (d: string, requested?: string) =>
+                resolveRobustBranchUtil(git, d, requested),
+              cacheManager,
+            },
+            makeProgress(opts.repoId, "clone-progress"),
+          )
+
+          commits = await (git as any).log({dir, depth: 1, ref: opts.commitId})
+        }
       }
       if (commits.length === 0) {
         throw new Error(`Commit ${opts.commitId} not found`)
