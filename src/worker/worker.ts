@@ -1299,6 +1299,12 @@ const api = {
         let usedRestApi = false
         try {
           const cache = await cacheManager.getRepoCache(key)
+          console.log(`[getCommitDetails] Cache lookup for ${key}:`, {
+            hasCache: !!cache,
+            cloneUrls: cache?.cloneUrls,
+            cloneUrlCount: cache?.cloneUrls?.length || 0,
+          })
+          
           if (cache?.cloneUrls?.length) {
             const {filterValidCloneUrls, reorderUrlsByPreference, hasRestApiSupport} = await import(
               "../utils/clone-url-fallback.js"
@@ -1308,10 +1314,19 @@ const api = {
 
             const validUrls = filterValidCloneUrls(cache.cloneUrls)
             const orderedUrls = reorderUrlsByPreference(validUrls, key)
+            
+            console.log(`[getCommitDetails] URL analysis:`, {
+              original: cache.cloneUrls,
+              valid: validUrls,
+              ordered: orderedUrls,
+            })
 
             // Find first REST API-capable URL
             for (const url of orderedUrls) {
-              if (hasRestApiSupport(url)) {
+              const hasApi = hasRestApiSupport(url)
+              console.log(`[getCommitDetails] Checking URL ${url}: hasRestApi=${hasApi}`)
+              
+              if (hasApi) {
                 try {
                   console.log(`[getCommitDetails] Trying REST API for ${url}`)
                   const parsed = parseRepoFromUrl(url)
@@ -1321,10 +1336,15 @@ const api = {
                   }
 
                   const {owner, repo, provider} = parsed
+                  console.log(`[getCommitDetails] Parsed: owner=${owner}, repo=${repo}, vendor=${provider.vendor}`)
+                  
                   // Use empty token for public repo access - authentication not required for reading commits
                   const api = getGitServiceApi(provider.vendor, "")
                   const commitData = await api.getCommit(owner, repo, opts.commitId)
 
+                  console.log(`[getCommitDetails] REST API success for commit ${opts.commitId}`)
+                  usedRestApi = true
+                  
                   // Convert REST API response to our format
                   return toPlain({
                     success: true,
@@ -1344,6 +1364,8 @@ const api = {
                 }
               }
             }
+          } else {
+            console.log(`[getCommitDetails] No clone URLs in cache, will attempt clone`)
           }
         } catch (cacheError) {
           console.warn(`[getCommitDetails] Failed to check cache for REST API:`, cacheError)

@@ -43,14 +43,19 @@ export class GitHubApi implements GitServiceApi {
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`
 
+    const headers: Record<string, string> = {
+      Accept: "application/vnd.github.v3+json",
+      ...((options.headers as Record<string, string>) || {}),
+    }
+
+    // Only add Authorization header if token is provided
+    if (this.token && this.token.trim()) {
+      headers.Authorization = `token ${this.token}`
+    }
+
     const response = await fetch(url, {
       ...options,
-      headers: {
-        Authorization: `token ${this.token}`,
-        Accept: "application/vnd.github.v3+json",
-        "User-Agent": "nostr-git-client",
-        ...options.headers,
-      },
+      headers,
     })
 
     if (!response.ok) {
