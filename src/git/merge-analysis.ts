@@ -101,6 +101,18 @@ export interface ConflictMarker {
   type: "both-modified" | "deleted-by-us" | "deleted-by-them" | "added-by-both";
 }
 
+// Constants for conflict detection
+const CONFLICT_DETECTION_CONSTANTS = {
+  MAX_FILES_TO_PREVIEW: 5,
+  MAX_FILES_TO_SCAN: 10,
+  CONFLICT_MARKERS: {
+    START: '<<<<<<<',
+    SEPARATOR: '=======',
+    END: '>>>>>>>'
+  } as const
+} as const;
+
+
 /**
  * Resolve the target branch using robust multi-fallback strategy
  */
@@ -1177,10 +1189,232 @@ async function parseConflictMarkersFromPath(
     const fullPath = `${repoDir}/${filepath}`.replace(/\/+/g, "/");
     const data = await readFile(fullPath, "utf8").catch(() => readFile(fullPath));
     const content = typeof data === "string" ? data : (data as Buffer)?.toString?.("utf8") ?? "";
+    console.log(`[parseConflictMarkersFromPath] Parsing conflict markers from ${filepath}:`, content);
     return parseConflictMarkers(content);
   } catch {
     return [];
   }
+}
+
+/**
+ * Detect conflicts from MergeConflictError data
+ */
+async function detectConflictsFromError(err: any): Promise<string[]> {
+  console.log(`[performPRDryRunMerge] Detecting conflicts from error: ${JSON.stringify(err)}`);
+  const errFilepaths: string[] | undefined = err?.data?.filepaths;
+  if (Array.isArray(errFilepaths) && errFilepaths.length > 0) {
+    const preview = errFilepaths.length > CONFLICT_DETECTION_CONSTANTS.MAX_FILES_TO_PREVIEW 
+      ? `${errFilepaths.slice(0, CONFLICT_DETECTION_CONSTANTS.MAX_FILES_TO_PREVIEW).join(", ")}... (+${errFilepaths.length - CONFLICT_DETECTION_CONSTANTS.MAX_FILES_TO_PREVIEW} more)`
+      : errFilepaths.join(", ");
+    console.log(`[performPRDryRunMerge] MergeConflictError in ${errFilepaths.length} files: ${preview}`);
+    return errFilepaths;
+  }
+  return [];
+}
+
+/**
+ * Detect conflicts by performing fallback merge and analyzing status matrix
+ */
+async function detectConflictsFromStatusMatrix(
+  git: GitProvider,
+  repoDir: string,
+  targetBranch: string,
+  tempBranch: string,
+  prTipRef: string,
+  tipOid: string
+): Promise<string[]> {
+  await git.checkout({ dir: repoDir, ref: targetBranch });
+  try { 
+    await git.deleteBranch({ dir: repoDir, ref: tempBranch }); 
+  } catch { 
+    /* ignore */ 
+  }
+  await git.branch({ dir: repoDir, ref: tempBranch, checkout: true });
+
+  await git.merge({
+    dir: repoDir,
+    ours: tempBranch,
+    theirs: prTipRef,
+    fastForward: false,
+    abortOnConflict: false, // Allow merge to continue with conflict markers
+    message: `Analysis fallback merge test (${tipOid.substring(0, 8)})`,
+    author: { name: "Repository Maintainer", email: "maintainer@nostr-git.local" },
+  } as any);
+
+  // Check status matrix for conflicted files
+  const status = await git.statusMatrix({ dir: repoDir });
+  const conflictFiles: string[] = [];
+  const seen = new Set<string>();
+  
+  for (const row of status) {
+    const [filepath, head, workdir, stage] = row;
+    if (filepath && !seen.has(filepath)) {
+      // Multiple stage entries for same file or unmerged files = conflict
+      if (stage === 1 || (head === 1 && workdir === 2 && stage === 0)) {
+        seen.add(filepath);
+        conflictFiles.push(filepath as string);
+      }
+    }
+  }
+
+  // Additional check: scan for conflict markers in modified files
+  const additionalConflicts = await detectConflictsFromMarkers(git, repoDir, status, conflictFiles);
+  const allConflicts = [...new Set([...conflictFiles, ...additionalConflicts])];
+  
+  console.log(`[performPRDryRunMerge] Status matrix + marker detection: ${allConflicts.length} conflicted files`);
+  return allConflicts;
+}
+
+/**
+ * Detect conflicts by scanning for conflict markers in file content
+ */
+async function detectConflictsFromMarkers(
+  git: GitProvider, 
+  repoDir: string, 
+  status: any[], 
+  existingConflicts: string[]
+): Promise<string[]> {
+  if (existingConflicts.length > 0) {
+    return []; // Skip if we already found conflicts through other means
+  }
+
+  const fs = (git as any)?.fs;
+  const readFile = fs?.promises?.readFile ?? fs?.readFile;
+  
+  if (typeof readFile !== "function") {
+    return [];
+  }
+
+  const modifiedFiles = status
+    .filter(([, head, workdir]: any[]) => head === 1 && workdir === 2)
+    .map(([filepath]: any[]) => filepath as string)
+    .slice(0, CONFLICT_DETECTION_CONSTANTS.MAX_FILES_TO_SCAN);
+
+  const conflictFiles: string[] = [];
+  const seen = new Set<string>();
+
+  for (const filepath of modifiedFiles) {
+    try {
+      const fullPath = `${repoDir}/${filepath}`.replace(/\/+/g, "/");
+      const data = await readFile(fullPath, "utf8").catch(() => readFile(fullPath));
+      const content = typeof data === "string" ? data : (data as Buffer)?.toString?.("utf8") ?? "";
+      
+      const { START, SEPARATOR, END } = CONFLICT_DETECTION_CONSTANTS.CONFLICT_MARKERS;
+      if (content.includes(START) && content.includes(SEPARATOR) && content.includes(END)) {
+        console.log(`[performPRDryRunMerge] Found conflict markers in ${filepath}`);
+        if (!seen.has(filepath)) {
+          conflictFiles.push(filepath);
+          seen.add(filepath);
+        }
+      }
+    } catch {
+      // Ignore file read errors
+    }
+  }
+
+  return conflictFiles;
+}
+
+/**
+ * Parse conflict markers from all conflicted files
+ */
+async function parseConflictMarkersFromFiles(
+  git: GitProvider,
+  repoDir: string,
+  conflictFiles: string[]
+): Promise<ConflictDetail[]> {
+  const fs = (git as any)?.fs;
+  const readFile = fs?.promises?.readFile ?? fs?.readFile;
+  
+  if (typeof readFile !== "function") {
+    console.warn(`[performPRDryRunMerge] File system not available, cannot parse conflict markers`);
+    return createEmptyConflictDetails(conflictFiles);
+  }
+
+  console.log(`[performPRDryRunMerge] File system available, parsing conflict markers from ${conflictFiles.length} files`);
+  const conflictDetails: ConflictDetail[] = [];
+
+  for (const filepath of conflictFiles) {
+    try {
+      const markers = await parseConflictMarkersFromPath(readFile, repoDir, filepath);
+      console.log(`[performPRDryRunMerge] Parsed ${markers.length} conflict markers from ${filepath}`);
+      conflictDetails.push({
+        file: filepath,
+        type: "content" as const,
+        conflictMarkers: markers,
+      });
+    } catch (error) {
+      console.warn(`[performPRDryRunMerge] Failed to parse conflict markers from ${filepath}:`, error);
+      conflictDetails.push({
+        file: filepath,
+        type: "content" as const,
+        conflictMarkers: [],
+      });
+    }
+  }
+
+  return conflictDetails;
+}
+
+/**
+ * Create empty conflict details for files where markers couldn't be parsed
+ */
+function createEmptyConflictDetails(conflictFiles: string[]): ConflictDetail[] {
+  console.log(`[performPRDryRunMerge] Creating empty conflict details for ${conflictFiles.length} files (no markers parsed)`);
+  return conflictFiles.map((f) => ({
+    file: f,
+    type: "content" as const,
+    conflictMarkers: [] as ConflictMarker[],
+  }));
+}
+
+/**
+ * Handle merge conflicts through multiple detection strategies
+ */
+async function handleMergeConflicts(
+  err: any,
+  git: GitProvider,
+  repoDir: string,
+  targetBranch: string,
+  tempBranch: string,
+  prTipRef: string,
+  tipOid: string
+): Promise<{ conflictFiles: string[]; conflictDetails: ConflictDetail[] }> {
+  let conflictFiles: string[] = [];
+
+  try {
+    // Strategy 1: Try to get conflicts from error data
+    conflictFiles = await detectConflictsFromError(err);
+
+    // Strategy 2: Fallback to status matrix analysis if no conflicts found in error
+    if (conflictFiles.length === 0) {
+      conflictFiles = await detectConflictsFromStatusMatrix(
+        git, repoDir, targetBranch, tempBranch, prTipRef, tipOid
+      );
+    }
+  } catch (detectionError) {
+    console.error('[performPRDryRunMerge] All conflict detection methods failed:', detectionError);
+    throw new Error('Unable to determine merge conflicts');
+  }
+
+  // Early return for clean merges
+  if (conflictFiles.length === 0) {
+    return { conflictFiles: [], conflictDetails: [] };
+  }
+
+  // Parse conflict markers from conflicted files
+  console.log(`[performPRDryRunMerge] Processing ${conflictFiles.length} conflict files for marker parsing`);
+  let conflictDetails = await parseConflictMarkersFromFiles(git, repoDir, conflictFiles);
+  
+  // Ensure we have conflict details for all files
+  if (conflictDetails.length === 0 && conflictFiles.length > 0) {
+    conflictDetails = createEmptyConflictDetails(conflictFiles);
+  }
+  
+  const totalMarkers = conflictDetails.reduce((sum, d) => sum + d.conflictMarkers.length, 0);
+  console.log(`[performPRDryRunMerge] Final conflict processing: ${conflictFiles.length} files, ${conflictDetails.length} details, ${totalMarkers} total markers`);
+  
+  return { conflictFiles, conflictDetails };
 }
 
 /**
@@ -1203,73 +1437,61 @@ async function performPRDryRunMerge(
   conflictDetails: ConflictDetail[];
 }> {
   const tempBranch = `pr-merge-temp-${Date.now()}`;
-  const prTipRef = "refs/pr-tip-merge";
+  const prTipRef = `refs/pr-tip-analysis-${Date.now()}`; // Use unique name for analysis
+  let tipOid: string = prTipSource; // Declare outside try-catch for fallback access
 
   try {
-    // Checkout target and create temp branch from it
+    // Ensure we're working with the latest state - checkout target branch first
     await git.checkout({ dir: repoDir, ref: targetBranch });
-    await git.branch({ dir: repoDir, ref: tempBranch, checkout: true });
+    
+    // Get the current target branch HEAD to ensure we're using the latest commit
+    const targetOid = await git.resolveRef({ dir: repoDir, ref: `refs/heads/${targetBranch}` });
+    
+    // Create temp branch from the current target HEAD (not the ref, to avoid stale references)
+    await git.branch({ dir: repoDir, ref: tempBranch, start: targetOid, checkout: true });
 
-    // Resolve ref (e.g. refs/remotes/pr-source/test) to OID; if already OID, use as-is
-    const tipOid = prTipSource.startsWith("refs/")
-      ? await git.resolveRef({ dir: repoDir, ref: prTipSource })
-      : prTipSource;
+    // Resolve PR tip ref consistently - handle both OID and ref cases
+    if (prTipSource.startsWith("refs/")) {
+      tipOid = await git.resolveRef({ dir: repoDir, ref: prTipSource });
+    } else if (prTipSource.length === 40 && /^[a-f0-9]{40}$/i.test(prTipSource)) {
+      // Already an OID
+      tipOid = prTipSource;
+    } else {
+      // Try to resolve as a ref first, fallback to treating as OID
+      try {
+        tipOid = await git.resolveRef({ dir: repoDir, ref: prTipSource });
+      } catch {
+        tipOid = prTipSource;
+      }
+    }
+    
     await git.writeRef({ dir: repoDir, ref: prTipRef, value: tipOid, force: true });
+    
+    // Log the commit IDs being merged for debugging
+    console.log(`[performPRDryRunMerge] Merging: target=${targetOid.substring(0, 8)} (${targetBranch}) + PR=${tipOid.substring(0, 8)}`);
 
     // Attempt merge: ours=target (temp), theirs=PR tip
+    // Use same merge parameters as actual merge for consistency
     await git.merge({
       dir: repoDir,
       ours: tempBranch,
       theirs: prTipRef,
-      fastForward: false,
+      fastForward: false, // Analysis always tests non-FF merge to detect conflicts
       abortOnConflict: true,
+      message: `Analysis merge test (${tipOid.substring(0, 8)})`,
+      author: { name: "Repository Maintainer", email: "maintainer@nostr-git.local" },
     } as any);
 
+    console.log(`[performPRDryRunMerge] Merge succeeded with abortOnConflict=true - no conflicts detected`);
     return { hasConflicts: false, conflictFiles: [], conflictDetails: [] };
   } catch (err: any) {
-    const conflictFiles: string[] = [];
-    const conflictDetails: ConflictDetail[] = [];
-    try {
-      const status = await git.statusMatrix({ dir: repoDir });
-      const seen = new Set<string>();
-      for (const row of status) {
-        const filepath = row[0];
-        if (filepath && !seen.has(filepath)) {
-          seen.add(filepath);
-          conflictFiles.push(filepath);
-        }
-      }
-      console.log(`[performPRDryRunMerge] Merge failed, found ${conflictFiles.length} conflicted file(s): ${conflictFiles.slice(0, 5).join(", ")}${conflictFiles.length > 5 ? "..." : ""}`);
-
-      // Parse conflict markers from working tree for each conflicted file
-      const fs = (git as any)?.fs;
-      const readFile = fs?.promises?.readFile ?? fs?.readFile;
-      if (typeof readFile === "function") {
-        for (const filepath of conflictFiles) {
-          const markers = await parseConflictMarkersFromPath(readFile, repoDir, filepath);
-          conflictDetails.push({
-            file: filepath,
-            type: "content" as const,
-            conflictMarkers: markers,
-          });
-        }
-      }
-    } catch (statusErr) {
-      console.warn("[performPRDryRunMerge] Could not read statusMatrix after merge failure:", statusErr);
-    }
-    if (conflictDetails.length === 0) {
-      conflictDetails.push(
-        ...conflictFiles.map((f) => ({
-          file: f,
-          type: "content" as const,
-          conflictMarkers: [] as ConflictMarker[],
-        }))
-      );
-    }
+    const conflictResult = await handleMergeConflicts(
+      err, git, repoDir, targetBranch, tempBranch, prTipRef, tipOid
+    );
+    
     return {
-      hasConflicts: true,
-      conflictFiles,
-      conflictDetails,
+      hasConflicts: conflictResult.conflictFiles.length > 0,
+      ...conflictResult,
     };
   } finally {
     // Restore repo state regardless of merge outcome

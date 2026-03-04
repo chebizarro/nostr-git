@@ -203,26 +203,90 @@ export async function mergePRAndPushUtil(
     const { prTipRef: fetchedPrTipRef, tipOid } = fetchResult.result;
     // When we fetched all (no source branch), write tip to temp ref for merge
     usedTempRef = !fetchedPrTipRef;
-    prTipRef = fetchedPrTipRef ?? "refs/pr-tip-merge";
+    prTipRef = fetchedPrTipRef ?? `refs/pr-tip-merge-${Date.now()}`;
     if (usedTempRef) {
       await git.writeRef({ dir, ref: prTipRef, value: tipOid, force: true });
+      console.log(`[mergePRAndPush] Created temp ref ${prTipRef} -> ${tipOid.substring(0, 8)}`);
     }
 
     onProgress("Checking out target branch...", 40);
     await git.checkout({ dir, ref: effectiveTargetBranch });
 
     const preMergeTargetOid = await git.resolveRef({ dir, ref: effectiveTargetBranch });
+    
+    // Log merge state for debugging  
+    const prTipOid = usedTempRef ? tipOid : await git.resolveRef({ dir, ref: prTipRef! });
+    console.log(`[mergePRAndPush] About to merge: target=${preMergeTargetOid.substring(0, 8)} (${effectiveTargetBranch}) + PR=${prTipOid.substring(0, 8)} (${prTipRef})`);
 
     onProgress("Merging PR...", 50);
-    const mergeResult = (await git.merge({
+    
+    // Validate that our references are still valid before attempting merge
+    try {
+      // Ensure target branch ref exists
+      await git.resolveRef({ dir, ref: `refs/heads/${effectiveTargetBranch}` });
+      
+      // Ensure PR tip ref exists (either fetched or temp)
+      if (usedTempRef && prTipRef) {
+        const currentTipOid = await git.resolveRef({ dir, ref: prTipRef });
+        if (currentTipOid !== tipOid) {
+          console.warn(`[mergePRAndPush] Temp ref ${prTipRef} changed: ${currentTipOid} != ${tipOid}`);
+          await git.writeRef({ dir, ref: prTipRef, value: tipOid, force: true });
+        }
+      } else if (prTipRef) {
+        // Verify fetched ref still exists
+        await git.resolveRef({ dir, ref: prTipRef });
+      }
+    } catch (error) {
+      // Critical ref missing, try to recreate temp ref if needed
+      if (usedTempRef && prTipRef) {
+        console.warn(`[mergePRAndPush] Recreating missing temp ref ${prTipRef} -> ${tipOid.substring(0, 8)}`);
+        await git.writeRef({ dir, ref: prTipRef, value: tipOid, force: true });
+      } else {
+        return {
+          success: false,
+          error: `Reference validation failed: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+    }
+    
+    // If analysis shows clean but we still get conflicts, log detailed state for debugging
+    let mergeResult: GitMergeResult;
+    try {
+      mergeResult = (await git.merge({
         dir,
         ours: effectiveTargetBranch,
         theirs: prTipRef,
-        fastForward,
+        fastForward: fastForward === true, // Explicitly require true for fast-forward
         abortOnConflict: true,
         message: mergeCommitMessage || `Merge PR (${tipCommitOid.slice(0, 8)})`,
         author: { name: "Repository Maintainer", email: "maintainer@nostr-git.local" },
       } as any)) as GitMergeResult;
+    } catch (mergeError: any) {
+      // Log detailed state for debugging when merge fails
+      console.error("[mergePRAndPush] Merge failed:", {
+        targetBranch: effectiveTargetBranch,
+        prTipRef,
+        tipCommitOid,
+        mergeError: mergeError.message,
+        conflictFiles: mergeError?.data?.filepaths || [],
+      });
+      
+      // Extract conflict files from merge error if available
+      const conflictFiles = mergeError?.data?.filepaths || [];
+      if (conflictFiles.length > 0) {
+        const conflictList = conflictFiles.slice(0, 5).join(", ");
+        const moreFiles = conflictFiles.length > 5 ? `... and ${conflictFiles.length - 5} more` : "";
+        return {
+          success: false,
+          error: `Merge conflicts in: ${conflictList}${moreFiles}. Analysis showed clean but actual merge failed.`,
+        };
+      }
+      
+      return {
+        success: false,
+        error: `Merge failed: ${mergeError.message || "Unknown merge error"}`,
+      };
+    }
 
     const mergeCommitOid = mergeResult?.oid;
     if (!mergeCommitOid) {
@@ -326,7 +390,7 @@ export async function mergePRAndPushUtil(
               token: token || undefined,
               provider: provider as any,
               preflight: {
-                blockIfUncommitted: true,
+                blockIfUncommitted: false,
                 requireUpToDate: true,
                 blockIfShallow: false,
               },
