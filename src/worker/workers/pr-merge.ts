@@ -76,7 +76,7 @@ export type SafePushToRemoteFn = (opts: {
 }>;
 
 /** Infer provider from remote URL (github.com, gitlab.com, relay.ngit.dev, etc.) */
-function inferProviderFromUrl(url: string): string | undefined {
+export function inferProviderFromUrl(url: string): string | undefined {
   try {
     const host = new URL(url).hostname.toLowerCase();
     if (/relay\.ngit\.dev|gitnostr\.com|grasp/i.test(host)) return "grasp";

@@ -341,4 +341,380 @@ describe("NIP-34 Pull Request Events", () => {
       expect(getNostrKindLabel(GIT_USER_GRASP_LIST)).toBe("User Grasp List")
     })
   })
+
+  describe("Event Creation - Edge Cases", () => {
+    it("should create minimal pull request with only required fields", () => {
+      const event = createPullRequestEvent({
+        repoAddr: "30617:npub123/repo",
+        content: "",
+      })
+
+      expect(event.kind).toBe(GIT_PULL_REQUEST)
+      expect(event.content).toBe("")
+      expect(event.tags).toContainEqual(["a", "30617:npub123/repo"])
+      expect(event.tags.length).toBe(1)
+    })
+
+    it("should create PR with multiple commits, labels, and clone URLs", () => {
+      const event = createPullRequestEvent({
+        repoAddr: "30617:test-repo",
+        content: "Description",
+        subject: "Multi-commit PR",
+        labels: ["bug", "enhancement", "documentation"],
+        commits: ["abc123", "def456", "ghi789"],
+        clone: ["https://github.com/user/repo.git", "https://gitlab.com/user/repo.git"],
+        recipients: ["pk1", "pk2"],
+      })
+
+      expect(event.tags.filter(t => t[0] === "c")).toHaveLength(3)
+      expect(event.tags.filter(t => t[0] === "t")).toHaveLength(3)
+      expect(event.tags.filter(t => t[0] === "clone").flat().slice(1)).toEqual([
+        "https://github.com/user/repo.git",
+        "https://gitlab.com/user/repo.git",
+      ])
+      expect(event.tags.filter(t => t[0] === "p")).toHaveLength(2)
+    })
+
+    it("should create PR with custom created_at", () => {
+      const ts = 1700000000
+      const event = createPullRequestEvent({
+        repoAddr: "30617:repo",
+        content: "x",
+        created_at: ts,
+      })
+      expect(event.created_at).toBe(ts)
+    })
+
+    it("should create PR update with only required E and P tags", () => {
+      const event = createPullRequestUpdateEvent({
+        repoAddr: "30617:repo",
+        pullRequestEventId: "pr-abc",
+        pullRequestAuthorPubkey: "author-pk",
+      })
+      expect(event.kind).toBe(GIT_PULL_REQUEST_UPDATE)
+      expect(event.tags).toContainEqual(["a", "30617:repo"])
+      expect(event.tags).toContainEqual(["E", "pr-abc"])
+      expect(event.tags).toContainEqual(["P", "author-pk"])
+    })
+
+    it("should create PR update with multiple commits", () => {
+      const event = createPullRequestUpdateEvent({
+        repoAddr: "30617:repo",
+        pullRequestEventId: "pr-id",
+        pullRequestAuthorPubkey: "author",
+        commits: ["c1", "c2", "c3"],
+      })
+      const cTags = event.tags.filter(t => t[0] === "c")
+      expect(cTags).toHaveLength(3)
+      expect(cTags.map(t => t[1])).toEqual(["c1", "c2", "c3"])
+    })
+  })
+
+  describe("Type Guards - Rejection", () => {
+    it("should reject non-PR events for isPullRequestEvent", () => {
+      expect(isPullRequestEvent({ kind: 1617 } as any)).toBe(false)
+      expect(isPullRequestEvent({ kind: 1619 } as any)).toBe(false)
+      expect(isPullRequestEvent({ kind: 1621 } as any)).toBe(false)
+    })
+
+    it("should reject non-PR-update events for isPullRequestUpdateEvent", () => {
+      expect(isPullRequestUpdateEvent({ kind: 1618 } as any)).toBe(false)
+      expect(isPullRequestUpdateEvent({ kind: 1617 } as any)).toBe(false)
+    })
+  })
+
+  describe("Event Parsing - Edge Cases", () => {
+    it("should parse minimal PR with only a tag", () => {
+      const event: PullRequestEvent = {
+        id: "min-id",
+        pubkey: "pk",
+        created_at: 1234567890,
+        kind: GIT_PULL_REQUEST,
+        tags: [["a", "30617:repo"]],
+        content: "",
+        sig: "",
+      }
+      const parsed = parsePullRequestEvent(event)
+      expect(parsed.id).toBe("min-id")
+      expect(parsed.repoId).toBe("30617:repo")
+      expect(parsed.subject).toBe("")
+      expect(parsed.labels).toEqual([])
+      expect(parsed.commits).toEqual([])
+      expect(parsed.branchName).toBeUndefined()
+      expect(parsed.mergeBase).toBeUndefined()
+      expect(parsed.content).toBe("")
+      expect(parsed.author.pubkey).toBe("pk")
+      expect(parsed.raw).toBe(event)
+    })
+
+    it("should parse PR with multiple labels and commits", () => {
+      const event: PullRequestEvent = {
+        id: "id",
+        pubkey: "pk",
+        created_at: 1234567890,
+        kind: GIT_PULL_REQUEST,
+        tags: [
+          ["a", "30617:repo"],
+          ["subject", "Title"],
+          ["t", "bug"],
+          ["t", "enhancement"],
+          ["c", "c1"],
+          ["c", "c2"],
+        ],
+        content: "Body",
+        sig: "",
+      }
+      const parsed = parsePullRequestEvent(event)
+      expect(parsed.labels).toEqual(["bug", "enhancement"])
+      expect(parsed.commits).toEqual(["c1", "c2"])
+    })
+
+    it("should parse PR update with minimal tags", () => {
+      const event: PullRequestUpdateEvent = {
+        id: "up-id",
+        pubkey: "pk",
+        created_at: 1234567890,
+        kind: GIT_PULL_REQUEST_UPDATE,
+        tags: [
+          ["a", "30617:repo"],
+          ["E", "pr-root-id"],
+          ["P", "pr-author-pk"],
+        ],
+        content: "",
+        sig: "",
+      }
+      const parsed = parsePullRequestUpdateEvent(event)
+      expect(parsed.pullRequestEventId).toBe("pr-root-id")
+      expect(parsed.pullRequestAuthorPubkey).toBe("pr-author-pk")
+      expect(parsed.commits).toEqual([])
+      expect(parsed.mergeBase).toBeUndefined()
+    })
+
+    it("should include createdAt as ISO string", () => {
+      const event: PullRequestEvent = {
+        id: "id",
+        pubkey: "pk",
+        created_at: 1234567890,
+        kind: GIT_PULL_REQUEST,
+        tags: [["a", "30617:repo"]],
+        content: "",
+        sig: "",
+      }
+      const parsed = parsePullRequestEvent(event)
+      expect(parsed.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)
+    })
+  })
+
+  describe("Round-trip: Create -> Parse", () => {
+    it("should round-trip full PR event", () => {
+      const created = createPullRequestEvent({
+        repoAddr: "30617:npub1abc/repo",
+        content: "PR body",
+        subject: "Add feature",
+        labels: ["enhancement"],
+        commits: ["abc123"],
+        clone: ["https://github.com/user/repo.git"],
+        branchName: "main",
+        mergeBase: "base123",
+        recipients: ["pk1"],
+      })
+      const parsed = parsePullRequestEvent(created as PullRequestEvent)
+      expect(parsed.repoId).toBe("30617:npub1abc/repo")
+      expect(parsed.subject).toBe("Add feature")
+      expect(parsed.content).toBe("PR body")
+      expect(parsed.labels).toEqual(["enhancement"])
+      expect(parsed.commits).toEqual(["abc123"])
+      expect(parsed.branchName).toBe("main")
+      expect(parsed.mergeBase).toBe("base123")
+      expect(parsed.raw).toBe(created)
+    })
+
+    it("should round-trip full PR update event", () => {
+      const created = createPullRequestUpdateEvent({
+        repoAddr: "30617:repo",
+        pullRequestEventId: "pr-xyz",
+        pullRequestAuthorPubkey: "author-pk",
+        commits: ["c1", "c2"],
+        mergeBase: "mb",
+      })
+      const parsed = parsePullRequestUpdateEvent(created as PullRequestUpdateEvent)
+      expect(parsed.pullRequestEventId).toBe("pr-xyz")
+      expect(parsed.pullRequestAuthorPubkey).toBe("author-pk")
+      expect(parsed.commits).toEqual(["c1", "c2"])
+      expect(parsed.mergeBase).toBe("mb")
+    })
+  })
+
+  describe("Validation - PR Update NIP-22 Requirements", () => {
+    it("should reject PR update missing E tag", () => {
+      const event = {
+        kind: GIT_PULL_REQUEST_UPDATE,
+        tags: [
+          ["a", "30617:repo"],
+          ["P", "author-pk"],
+        ],
+        content: "",
+      }
+      const result = validatePullRequestUpdateEvent(event)
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        expect(result.error.message).toContain("E")
+      }
+    })
+
+    it("should reject PR update missing P tag", () => {
+      const event = {
+        kind: GIT_PULL_REQUEST_UPDATE,
+        tags: [
+          ["a", "30617:repo"],
+          ["E", "pr-event-id"],
+        ],
+        content: "",
+      }
+      const result = validatePullRequestUpdateEvent(event)
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        expect(result.error.message).toContain("P")
+      }
+    })
+
+    it("should reject PR update missing a tag", () => {
+      const event = {
+        kind: GIT_PULL_REQUEST_UPDATE,
+        tags: [
+          ["E", "pr-id"],
+          ["P", "author-pk"],
+        ],
+        content: "",
+      }
+      const result = validatePullRequestUpdateEvent(event)
+      expect(result.success).toBe(false)
+    })
+
+    it("should reject PR with wrong kind", () => {
+      const event = {
+        kind: 1617,
+        tags: [["a", "30617:repo"]],
+        content: "",
+      }
+      const result = validatePullRequestEvent(event)
+      expect(result.success).toBe(false)
+    })
+  })
+
+  describe("PR Update Chain - Effective Tip Derivation", () => {
+    /**
+     * Replicates PRView's prEffectiveTipAndCommits logic for testing.
+     * When PR has updates, use latest update's commits; else use PR's commits.
+     */
+    function getEffectiveTipAndCommits(
+      pr: ReturnType<typeof parsePullRequestEvent> | undefined,
+      updates: ReturnType<typeof parsePullRequestUpdateEvent>[],
+    ): { tipOid: string; allCommitOids: string[] } | null {
+      if (!pr) return null
+      if (updates.length > 0) {
+        const latest = updates[updates.length - 1]
+        const commits = latest.commits || []
+        const tipOid = commits[0]
+        return tipOid ? { tipOid, allCommitOids: commits } : null
+      }
+      const commits = pr.commits || []
+      return commits.length > 0 ? { tipOid: commits[0], allCommitOids: commits } : null
+    }
+
+    it("should use PR commits when no updates", () => {
+      const pr = parsePullRequestEvent({
+        id: "pr-1",
+        pubkey: "pk",
+        created_at: 1,
+        kind: GIT_PULL_REQUEST,
+        tags: [["a", "30617:r"], ["c", "c1"], ["c", "c2"]],
+        content: "",
+        sig: "",
+      } as PullRequestEvent)
+      const result = getEffectiveTipAndCommits(pr, [])
+      expect(result).toEqual({ tipOid: "c1", allCommitOids: ["c1", "c2"] })
+    })
+
+    it("should use latest update commits when updates exist", () => {
+      const pr = parsePullRequestEvent({
+        id: "pr-1",
+        pubkey: "pk",
+        created_at: 1,
+        kind: GIT_PULL_REQUEST,
+        tags: [["a", "30617:r"], ["c", "old1"], ["c", "old2"]],
+        content: "",
+        sig: "",
+      } as PullRequestEvent)
+      const update1 = parsePullRequestUpdateEvent({
+        id: "up-1",
+        pubkey: "pk",
+        created_at: 2,
+        kind: GIT_PULL_REQUEST_UPDATE,
+        tags: [["a", "30617:r"], ["E", "pr-1"], ["P", "pk"], ["c", "new1"], ["c", "new2"]],
+        content: "",
+        sig: "",
+      } as PullRequestUpdateEvent)
+      const result = getEffectiveTipAndCommits(pr, [update1])
+      expect(result).toEqual({ tipOid: "new1", allCommitOids: ["new1", "new2"] })
+    })
+
+    it("should use latest of multiple updates", () => {
+      const pr = parsePullRequestEvent({
+        id: "pr-1",
+        pubkey: "pk",
+        created_at: 1,
+        kind: GIT_PULL_REQUEST,
+        tags: [["a", "30617:r"], ["c", "c1"]],
+        content: "",
+        sig: "",
+      } as PullRequestEvent)
+      const up1 = parsePullRequestUpdateEvent({
+        id: "u1",
+        pubkey: "pk",
+        created_at: 2,
+        kind: GIT_PULL_REQUEST_UPDATE,
+        tags: [["a", "30617:r"], ["E", "pr-1"], ["P", "pk"], ["c", "c2"]],
+        content: "",
+        sig: "",
+      } as PullRequestUpdateEvent)
+      const up2 = parsePullRequestUpdateEvent({
+        id: "u2",
+        pubkey: "pk",
+        created_at: 3,
+        kind: GIT_PULL_REQUEST_UPDATE,
+        tags: [["a", "30617:r"], ["E", "pr-1"], ["P", "pk"], ["c", "c3"], ["c", "c4"]],
+        content: "",
+        sig: "",
+      } as PullRequestUpdateEvent)
+      const result = getEffectiveTipAndCommits(pr, [up1, up2])
+      expect(result).toEqual({ tipOid: "c3", allCommitOids: ["c3", "c4"] })
+    })
+
+    it("should return null when pr is undefined", () => {
+      expect(getEffectiveTipAndCommits(undefined, [])).toBeNull()
+    })
+
+    it("should return null when PR and updates have no commits", () => {
+      const pr = parsePullRequestEvent({
+        id: "pr-1",
+        pubkey: "pk",
+        created_at: 1,
+        kind: GIT_PULL_REQUEST,
+        tags: [["a", "30617:r"]],
+        content: "",
+        sig: "",
+      } as PullRequestEvent)
+      const update = parsePullRequestUpdateEvent({
+        id: "u1",
+        pubkey: "pk",
+        created_at: 2,
+        kind: GIT_PULL_REQUEST_UPDATE,
+        tags: [["a", "30617:r"], ["E", "pr-1"], ["P", "pk"]],
+        content: "",
+        sig: "",
+      } as PullRequestUpdateEvent)
+      expect(getEffectiveTipAndCommits(pr, [update])).toBeNull()
+    })
+  })
 })
