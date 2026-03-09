@@ -8,6 +8,7 @@ import {detectVendorFromUrl, extractHostname} from "./vendor-providers.js"
 import type {GitForkOptions, RepoMetadata} from "../api/api.js"
 import {getGitServiceApi} from "./provider-factory.js"
 import {createAuthRequiredError, type GitErrorContext} from "../errors/index.js"
+import {toNpub} from "../utils/nostr-pubkey.js"
 
 // Registry of vendor providers
 const providerRegistry = new Map<string, VendorProvider>()
@@ -98,7 +99,14 @@ class RestVendorProvider implements VendorProvider {
   getCloneUrl(owner: string, repo: string): string {
     if (this.vendor === "grasp" || this.vendor === "grasp-rest") {
       const base = this.originalUrl.replace(/\/$/, "")
-      return `${base}/${owner}/${repo}.git`
+      const ownerSegment = (() => {
+        try {
+          return toNpub(owner)
+        } catch {
+          return owner
+        }
+      })()
+      return `${base}/${ownerSegment}/${repo}.git`
     }
     return `https://${this.hostname}/${owner}/${repo}.git`
   }
@@ -228,7 +236,8 @@ export function getVendorProvider(vendor: GitVendor, hostname: string): VendorPr
     return providerRegistry.get(key)!
   }
 
-  const defaultUrl = (vendor === "grasp" || vendor === "grasp-rest") ? `wss://${hostname}` : `https://${hostname}`
+  const defaultUrl =
+    vendor === "grasp" || vendor === "grasp-rest" ? `wss://${hostname}` : `https://${hostname}`
   const provider = new RestVendorProvider(vendor, defaultUrl)
 
   providerRegistry.set(key, provider)

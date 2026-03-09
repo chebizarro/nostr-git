@@ -24,6 +24,7 @@ import type {
   GitForkOptions,
 } from "../api.js"
 import {nip19, SimplePool} from "nostr-tools"
+import {toNpub, toHexPubkey} from "../../utils/nostr-pubkey.js"
 import type {NostrFilter, EventIO} from "../../types/index.js"
 import {createRepoStateEvent, getTagValue, getTags} from "../../events/index.js"
 import {
@@ -229,7 +230,7 @@ export class GraspApiProvider implements GitServiceApi {
     owner: string,
     repo: string,
   ): Promise<{head?: string; refs: Record<string, string>} | null> {
-    const npub = nip19.npubEncode(owner)
+    const npub = toNpub(owner)
     const addr = `${npub}:${repo}`
     try {
       const events = await this.queryEvents([{kinds: [30618], "#a": [addr], limit: 1}])
@@ -244,7 +245,7 @@ export class GraspApiProvider implements GitServiceApi {
   async getRepo(owner: string, repo: string): Promise<RepoMetadata> {
     // Mirrors ngit repo_ref.rs::get_repo_coordinates_when_remote_unknown + repo_state.rs
     await this.ensureCapabilities()
-    const npub = nip19.npubEncode(owner)
+    const npub = toNpub(owner)
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl)
     const webUrl = `${httpOrigin}/${npub}/${repo}`
     const cloneUrl = `${webUrl}.git`
@@ -254,7 +255,7 @@ export class GraspApiProvider implements GitServiceApi {
       (async () => {
         try {
           const evs = await this.queryEvents([
-            {kinds: [30617], authors: [owner], "#d": [repo], limit: 1},
+            {kinds: [30617], authors: [toHexPubkey(owner)], "#d": [repo], limit: 1},
           ])
           return evs?.[0] ?? null
         } catch {
@@ -300,7 +301,7 @@ export class GraspApiProvider implements GitServiceApi {
       console.warn("Relay does not support GRASP-01")
       return null
     }
-    const npub = nip19.npubEncode(owner)
+    const npub = toNpub(owner)
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl)
     const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`
     try {
@@ -331,7 +332,7 @@ export class GraspApiProvider implements GitServiceApi {
 
       const event = createRepoStateEvent({
         // Mirrors ngit repo_state.rs address tag: "a" -> "<npub>:<repo>"
-        repoId: encodeRepoAddress(owner, repo),
+        repoId: encodeRepoAddress(toHexPubkey(owner), repo),
         head: headRef,
         refs: Object.entries(refs).map(([ref, commit]) => ({
           type: ref.startsWith("refs/heads/") ? "heads" : "tags",
@@ -376,7 +377,7 @@ export class GraspApiProvider implements GitServiceApi {
     console.log("[GraspApiProvider] createRepo - pubkey type:", typeof this.pubkey)
 
     await this.ensureCapabilities()
-    const npub = nip19.npubEncode(this.pubkey)
+    const npub = toNpub(this.pubkey)
     console.log("[GraspApiProvider] createRepo - npub:", npub)
 
     // Use derived Smart HTTP base from NIP-11 (may include path like /git). Mirrors ngit client.rs discovery
@@ -446,7 +447,7 @@ export class GraspApiProvider implements GitServiceApi {
    */
   async listCommits(owner: string, repo: string, options?: ListCommitsOptions): Promise<Commit[]> {
     await this.ensureCapabilities()
-    const npub = nip19.npubEncode(owner)
+    const npub = toNpub(owner)
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl)
     const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`
     // Mirrors ngit git/mod.rs::get_main_or_master_branch + traversal
@@ -514,7 +515,7 @@ export class GraspApiProvider implements GitServiceApi {
 
   async getCommit(owner: string, repo: string, sha: string): Promise<Commit> {
     await this.ensureCapabilities()
-    const npub = nip19.npubEncode(owner)
+    const npub = toNpub(owner)
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl)
     const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`
     try {
@@ -751,12 +752,12 @@ export class GraspApiProvider implements GitServiceApi {
       head: {
         ref: "patch-branch",
         sha: patch.commits[0]?.sha || "",
-        repo: {name: repo, owner: nip19.npubEncode(owner)},
+        repo: {name: repo, owner: toNpub(owner)},
       },
       base: {
         ref: baseRef,
         sha: "",
-        repo: {name: repo, owner: nip19.npubEncode(owner)},
+        repo: {name: repo, owner: toNpub(owner)},
       },
       mergeable: undefined,
       merged: false,
@@ -832,7 +833,7 @@ export class GraspApiProvider implements GitServiceApi {
    * User Operations
    */
   async getCurrentUser(): Promise<User> {
-    const npub = nip19.npubEncode(this.pubkey)
+    const npub = toNpub(this.pubkey)
 
     // Query for profile metadata (NIP-01 kind 0)
     const events = await this.queryEvents([
@@ -920,7 +921,7 @@ export class GraspApiProvider implements GitServiceApi {
     ref?: string,
   ): Promise<{content: string; encoding: string; sha: string}> {
     await this.ensureCapabilities()
-    const npub = nip19.npubEncode(owner)
+    const npub = toNpub(owner)
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl)
     const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`
     try {
@@ -966,7 +967,7 @@ export class GraspApiProvider implements GitServiceApi {
     repo: string,
   ): Promise<Array<{name: string; commit: {sha: string; url: string}}>> {
     await this.ensureCapabilities()
-    const npub = nip19.npubEncode(owner)
+    const npub = toNpub(owner)
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl)
     const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`
     try {
@@ -995,7 +996,7 @@ export class GraspApiProvider implements GitServiceApi {
     branch: string,
   ): Promise<{name: string; commit: {sha: string; url: string}; protected: boolean}> {
     await this.ensureCapabilities()
-    const npub = nip19.npubEncode(owner)
+    const npub = toNpub(owner)
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl)
     const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`
     try {
@@ -1021,7 +1022,7 @@ export class GraspApiProvider implements GitServiceApi {
     repo: string,
   ): Promise<Array<{name: string; commit: {sha: string; url: string}}>> {
     await this.ensureCapabilities()
-    const npub = nip19.npubEncode(owner)
+    const npub = toNpub(owner)
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl)
     const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`
     try {
@@ -1061,7 +1062,7 @@ export class GraspApiProvider implements GitServiceApi {
     tarballUrl: string
   }> {
     await this.ensureCapabilities()
-    const npub = nip19.npubEncode(owner)
+    const npub = toNpub(owner)
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl)
     const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`
     const webUrl = `${httpOrigin}/${npub}/${repo}`

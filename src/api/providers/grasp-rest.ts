@@ -26,6 +26,7 @@ import type {
   GitForkOptions,
 } from "../api.js"
 import {nip19} from "nostr-tools"
+import {toNpub} from "../../utils/nostr-pubkey.js"
 import {
   createInvalidInputError,
   createRepoNotFoundError,
@@ -113,14 +114,12 @@ export class GraspRestApiProvider implements GitServiceApi {
    * Get repository information from info/refs endpoint
    */
   private async getInfoRefs(owner: string, repo: string): Promise<InfoRefsResponse> {
-    const npub = nip19.npubEncode(owner)
+    const npub = toNpub(owner)
     const url = `${this.baseUrl}/${npub}/${repo}.git/info/refs?service=git-upload-pack`
 
     const response = await fetch(url)
     if (!response.ok) {
-      throw createRepoNotFoundError(
-        this.buildContext({remote: url, operation: "getInfoRefs"}),
-      )
+      throw createRepoNotFoundError(this.buildContext({remote: url, operation: "getInfoRefs"}))
     }
 
     const text = await response.text()
@@ -257,7 +256,7 @@ export class GraspRestApiProvider implements GitServiceApi {
    */
   async getRepo(owner: string, repo: string): Promise<RepoMetadata> {
     const info = await this.getInfoRefs(owner, repo)
-    const npub = nip19.npubEncode(owner)
+    const npub = toNpub(owner)
     const defaultBranch = this.getDefaultBranch(info)
 
     return {
@@ -481,7 +480,7 @@ export class GraspRestApiProvider implements GitServiceApi {
    * User Operations
    */
   async getCurrentUser(): Promise<User> {
-    const npub = nip19.npubEncode(this.pubkey)
+    const npub = toNpub(this.pubkey)
     return {
       login: npub,
       id: parseInt(this.pubkey.slice(-8), 16),
@@ -548,7 +547,7 @@ export class GraspRestApiProvider implements GitServiceApi {
     repo: string,
   ): Promise<Array<{name: string; commit: {sha: string; url: string}}>> {
     const info = await this.getInfoRefs(owner, repo)
-    const npub = nip19.npubEncode(owner)
+    const npub = toNpub(owner)
     const branches: Array<{name: string; commit: {sha: string; url: string}}> = []
 
     for (const [ref, sha] of Object.entries(info.refs)) {
@@ -596,7 +595,7 @@ export class GraspRestApiProvider implements GitServiceApi {
     repo: string,
   ): Promise<Array<{name: string; commit: {sha: string; url: string}}>> {
     const info = await this.getInfoRefs(owner, repo)
-    const npub = nip19.npubEncode(owner)
+    const npub = toNpub(owner)
     const tags: Array<{name: string; commit: {sha: string; url: string}}> = []
 
     for (const [ref, sha] of Object.entries(info.refs)) {
@@ -635,7 +634,7 @@ export class GraspRestApiProvider implements GitServiceApi {
       )
     }
 
-    const npub = nip19.npubEncode(owner)
+    const npub = toNpub(owner)
     return {
       ...found,
       zipballUrl: `${this.baseUrl}/${npub}/${repo}/archive/${tag}.zip`,

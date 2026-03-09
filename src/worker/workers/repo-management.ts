@@ -15,6 +15,7 @@ import {resolveBranchName as resolveRobustBranch} from "./branches.js"
 import {resolveDefaultCorsProxy} from "./git-config.js"
 import {withTimeout} from "./timeout.js"
 import {parseRepoId} from "../../utils/repo-id.js"
+import {toNpub} from "../../utils/nostr-pubkey.js"
 
 // Helper to generate canonical repo key from repoId
 function canonicalRepoKey(repoId: string): string {
@@ -486,10 +487,15 @@ export interface ForkAndCloneOptions {
 export interface ForkAndCloneResult {
   success: boolean
   repoId: string
+  /** Local repo key used for subsequent worker operations (push/read). */
+  localRepoId?: string
   forkUrl: string
   defaultBranch: string
   branches: string[]
   tags: string[]
+  /** Optional ref tip map for constructing accurate state events. */
+  branchCommits?: Record<string, string>
+  tagCommits?: Record<string, string>
   error?: string
   requiresWorkflowDecision?: boolean
   workflowFiles?: string[]
@@ -743,28 +749,54 @@ export async function forkAndCloneRepo(
         )
         onProgress?.("Repository cloned locally, ready for Nostr announcement...", 90)
 
+        const ownerNpub = toNpub(token)
+
         // Get branch info for the result
         const branches = await git.listBranches({dir: workingDir})
         let defaultBranch = branches[0] || "main"
         if (branches.includes("main")) defaultBranch = "main"
         else if (branches.includes("master")) defaultBranch = "master"
 
+        const branchCommits: Record<string, string> = {}
+        for (const branch of branches) {
+          try {
+            const oid = await git.resolveRef({dir: workingDir, ref: `refs/heads/${branch}`})
+            if (oid) branchCommits[branch] = oid
+          } catch {}
+        }
+
+        const tags = await git.listTags({dir: workingDir})
+        const tagCommits: Record<string, string> = {}
+        for (const tag of tags) {
+          try {
+            const oid = await git.resolveRef({dir: workingDir, ref: `refs/tags/${tag}`})
+            if (oid) tagCommits[tag] = oid
+          } catch {}
+        }
+
         // For GRASP, the fork URL will be constructed by the UI using the relay URL
         // Use the baseUrl (relay URL) as the base for the clone URL
         const graspCloneUrl = baseUrl
-          ? `${baseUrl.replace("wss://", "https://")}/${token}/${forkName}.git`
+          ? `${baseUrl.replace("wss://", "https://")}/${ownerNpub}/${forkName}.git`
           : ""
+
+        const localRepoId = workingDir.startsWith(`${rootDir}/`)
+          ? workingDir.slice(rootDir.length + 1)
+          : `${owner}/${repo}`
 
         metadataDir = workingDir
 
         // Return success - the UI will handle publishing the Nostr events
         return {
           success: true,
-          repoId: `${token}/${forkName}`, // For GRASP, token is the user's pubkey
+          repoId: `${ownerNpub}/${forkName}`,
+          localRepoId,
           forkUrl: graspCloneUrl,
           defaultBranch,
           branches,
-          tags: await git.listTags({dir: workingDir}),
+          tags,
+          branchCommits,
+          tagCommits,
         }
       }
 
