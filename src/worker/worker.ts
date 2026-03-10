@@ -116,16 +116,17 @@
 
 import {expose} from "comlink"
 import httpWeb from "isomorphic-git/http/web"
+import {diffArrays} from "diff"
 
-import type { GitProvider } from "../git/provider.js";
-import { createGitProvider } from "../git/factory-browser.js";
-import { rootDir } from "../git/git.js";
+import type {GitProvider} from "../git/provider.js"
+import {createGitProvider} from "../git/factory-browser.js"
+import {rootDir} from "../git/git.js"
 import {
   analyzePatchMergeability,
   getPRPreviewData,
   getCommitsAheadOfTipData,
   getMergeBaseBetween as getMergeBaseBetweenData,
-} from "../git/merge-analysis.js";
+} from "../git/merge-analysis.js"
 
 import {
   wrapError,
@@ -144,7 +145,11 @@ import {
 } from "../api/git-provider.js"
 
 import {parseRepoId} from "../utils/repo-id.js"
-import {filterValidCloneUrls, reorderUrlsByPreference, withUrlFallback} from "../utils/clone-url-fallback.js"
+import {
+  filterValidCloneUrls,
+  reorderUrlsByPreference,
+  withUrlFallback,
+} from "../utils/clone-url-fallback.js"
 
 import type {AuthConfig} from "./workers/auth.js"
 import {getAuthCallback, getConfiguredAuthHosts, setAuthConfig} from "./workers/auth.js"
@@ -184,10 +189,10 @@ import {
 
 import {needsUpdateUtil, syncWithRemoteUtil} from "./workers/sync.js"
 
-import type { AnalyzePatchMergeOptions, ApplyPatchAndPushOptions } from "./workers/patches.js";
-import { analyzePatchMergeUtil, applyPatchAndPushUtil } from "./workers/patches.js";
-import type { AnalyzePRMergeOptions, MergePRAndPushOptions } from "./workers/pr-merge.js";
-import { analyzePRMergeUtil, mergePRAndPushUtil } from "./workers/pr-merge.js";
+import type {AnalyzePatchMergeOptions, ApplyPatchAndPushOptions} from "./workers/patches.js"
+import {analyzePatchMergeUtil, applyPatchAndPushUtil} from "./workers/patches.js"
+import type {AnalyzePRMergeOptions, MergePRAndPushOptions} from "./workers/pr-merge.js"
+import {analyzePRMergeUtil, mergePRAndPushUtil} from "./workers/pr-merge.js"
 
 import type {SafePushOptions} from "./workers/push.js"
 import {safePushToRemoteUtil} from "./workers/push.js"
@@ -217,6 +222,45 @@ function toPlain<T>(val: T): T {
   } catch {
     return val
   }
+}
+
+function buildModifiedFileDiffHunks(
+  oldText: string,
+  newText: string,
+): Array<{
+  oldStart: number
+  oldLines: number
+  newStart: number
+  newLines: number
+  patches: Array<{line: string; type: "+" | "-" | " "}>
+}> {
+  const oldLines = oldText.split("\n")
+  const newLines = newText.split("\n")
+  const chunks = diffArrays(oldLines, newLines)
+  const patches: Array<{line: string; type: "+" | "-" | " "}> = []
+
+  for (const chunk of chunks) {
+    const lines = chunk.value || []
+    if (chunk.added) {
+      for (const line of lines) patches.push({line, type: "+"})
+    } else if (chunk.removed) {
+      for (const line of lines) patches.push({line, type: "-"})
+    } else {
+      for (const line of lines) patches.push({line, type: " "})
+    }
+  }
+
+  if (patches.length === 0) return []
+
+  return [
+    {
+      oldStart: 1,
+      oldLines: oldLines.length,
+      newStart: 1,
+      newLines: newLines.length,
+      patches,
+    },
+  ]
 }
 
 /**
@@ -593,11 +637,11 @@ const api = {
    * Used by NewPRForm when creating PRs from forks to populate source branch dropdown.
    */
   async listBranchesFromUrls(opts: {cloneUrls: string[]}): Promise<{branches: string[]}> {
-    const validUrls = filterValidCloneUrls(opts.cloneUrls);
+    const validUrls = filterValidCloneUrls(opts.cloneUrls)
     if (validUrls.length === 0) {
-      return toPlain({ branches: [] });
+      return toPlain({branches: []})
     }
-    const ordered = reorderUrlsByPreference(validUrls, "fork-preview");
+    const ordered = reorderUrlsByPreference(validUrls, "fork-preview")
     for (const url of ordered) {
       try {
         const refs = await git.listServerRefs({
@@ -605,18 +649,18 @@ const api = {
           prefix: "refs/heads/",
           symrefs: false,
           onAuth: getAuthCallback(url),
-        });
+        })
         const branches = (refs || [])
           .filter((r: any) => r?.ref?.startsWith("refs/heads/"))
           .map((r: any) => r.ref.replace(/^refs\/heads\//, ""))
-          .filter(Boolean);
-        return toPlain({ branches });
+          .filter(Boolean)
+        return toPlain({branches})
       } catch (err) {
-        console.warn("[listBranchesFromUrls] Failed for", url, err);
-        continue;
+        console.warn("[listBranchesFromUrls] Failed for", url, err)
+        continue
       }
     }
-    return toPlain({ branches: [] });
+    return toPlain({branches: []})
   },
 
   // Patch analysis & application
@@ -636,17 +680,17 @@ const api = {
   },
 
   async analyzePRMerge(opts: AnalyzePRMergeOptions) {
-    const { repoId } = opts;
-    const sendProgress = makeProgress(repoId, "merge-progress");
-    sendProgress("Fetching PR from clone URL...");
+    const {repoId} = opts
+    const sendProgress = makeProgress(repoId, "merge-progress")
+    sendProgress("Fetching PR from clone URL...")
     const result = await analyzePRMergeUtil(git, opts, {
       rootDir,
       parseRepoId,
       resolveBranchName: async (dir: string, requested?: string) =>
         resolveRobustBranchUtil(git, dir, requested),
-    });
-    sendProgress("Analysis complete");
-    return toPlain(result);
+    })
+    sendProgress("Analysis complete")
+    return toPlain(result)
   },
 
   async applyPatchAndPush(opts: ApplyPatchAndPushOptions) {
@@ -694,7 +738,7 @@ const api = {
       ...opts,
       onProgress: (step: string, pct: number) => sendProgress(step),
     }
-    const { getTokensForHost } = await import("./workers/auth.js")
+    const {getTokensForHost} = await import("./workers/auth.js")
     const result = await mergePRAndPushUtil(git, optsWithProgress, {
       rootDir,
       parseRepoId,
@@ -723,11 +767,11 @@ const api = {
         ),
       getAuthCallback,
       getConfiguredAuthHosts,
-      pushToRemote: async (opts) => {
+      pushToRemote: async opts => {
         const r = await api.pushToRemote(opts)
         return r
       },
-      safePushToRemote: async (args) => {
+      safePushToRemote: async args => {
         const r = await api.safePushToRemote({
           ...args,
           provider: args.provider as any,
@@ -745,7 +789,7 @@ const api = {
         try {
           const hostname = new URL(url).hostname
           const tokens = await getTokensForHost(hostname)
-          return tokens.map((t) => ({ token: t.token }))
+          return tokens.map(t => ({token: t.token}))
         } catch {
           return []
         }
@@ -1162,22 +1206,22 @@ const api = {
   },
 
   async getPRPreview(opts: {
-    repoId: string;
-    sourceBranch: string;
-    targetBranch: string;
-    cloneUrls: string[];
+    repoId: string
+    sourceBranch: string
+    targetBranch: string
+    cloneUrls: string[]
     /** When present (fork PR), source branch is fetched from these URLs; cloneUrls = target/upstream */
-    sourceCloneUrls?: string[];
+    sourceCloneUrls?: string[]
   }) {
-    const { key, dir } = repoKeyAndDir(opts.repoId);
-    const isForkPR = opts.sourceCloneUrls && opts.sourceCloneUrls.length > 0;
-    const targetUrls = filterValidCloneUrls(opts.cloneUrls);
+    const {key, dir} = repoKeyAndDir(opts.repoId)
+    const isForkPR = opts.sourceCloneUrls && opts.sourceCloneUrls.length > 0
+    const targetUrls = filterValidCloneUrls(opts.cloneUrls)
 
     try {
       await smartInitializeRepoUtil(
         git,
         cacheManager,
-        { repoId: opts.repoId, cloneUrls: targetUrls },
+        {repoId: opts.repoId, cloneUrls: targetUrls},
         {
           rootDir,
           parseRepoId,
@@ -1187,50 +1231,50 @@ const api = {
           resolveBranchName: async (d: string, requested?: string) =>
             resolveRobustBranchUtil(git, d, requested),
         },
-        makeProgress(opts.repoId, "clone-progress")
-      );
+        makeProgress(opts.repoId, "clone-progress"),
+      )
 
       // Fetch target (upstream) branches
-      const orderedUrls = reorderUrlsByPreference(targetUrls, key);
-      const corsProxy = resolveDefaultCorsProxy();
+      const orderedUrls = reorderUrlsByPreference(targetUrls, key)
+      const corsProxy = resolveDefaultCorsProxy()
       if (orderedUrls.length > 0) {
         const fetchResult = await withUrlFallback(
           orderedUrls,
           async (cloneUrl: string) => {
-            await ensureOriginRemoteConfig(git, dir, cloneUrl);
+            await ensureOriginRemoteConfig(git, dir, cloneUrl)
             await git.fetch({
               dir,
               url: cloneUrl,
               singleBranch: false,
               depth: 50,
               corsProxy: corsProxy ?? undefined,
-            });
+            })
           },
-          { repoId: key, perUrlTimeoutMs: 15000 }
-        );
+          {repoId: key, perUrlTimeoutMs: 15000},
+        )
         if (!fetchResult.success) {
           console.warn(
             "[getPRPreview] Fetch failed for all URLs, attempting preview with existing refs:",
-            fetchResult.attempts.map((a) => a.error)
-          );
+            fetchResult.attempts.map(a => a.error),
+          )
         }
       }
 
-      let sourceRemote: string | undefined;
+      let sourceRemote: string | undefined
       if (isForkPR) {
-        const sourceUrls = filterValidCloneUrls(opts.sourceCloneUrls!);
-        const sourceOrdered = reorderUrlsByPreference(sourceUrls, key);
-        const prSourceRemote = `pr-source-${Date.now().toString(36)}`;
+        const sourceUrls = filterValidCloneUrls(opts.sourceCloneUrls!)
+        const sourceOrdered = reorderUrlsByPreference(sourceUrls, key)
+        const prSourceRemote = `pr-source-${Date.now().toString(36)}`
         const sourceFetchResult = await withUrlFallback(
           sourceOrdered,
           async (url: string) => {
-            await git.addRemote({ dir, remote: prSourceRemote, url });
+            await git.addRemote({dir, remote: prSourceRemote, url})
             try {
               await git.setConfig({
                 dir,
                 path: `remote.${prSourceRemote}.fetch`,
                 value: `+refs/heads/*:refs/remotes/${prSourceRemote}/*`,
-              });
+              })
             } catch {
               /* ignore */
             }
@@ -1241,47 +1285,41 @@ const api = {
               singleBranch: true,
               depth: 50,
               corsProxy: corsProxy ?? undefined,
-            });
+            })
           },
-          { repoId: key, perUrlTimeoutMs: 15000 }
-        );
+          {repoId: key, perUrlTimeoutMs: 15000},
+        )
         if (!sourceFetchResult.success) {
           try {
-            await git.deleteRemote({ dir, remote: prSourceRemote });
+            await git.deleteRemote({dir, remote: prSourceRemote})
           } catch {
             /* ignore */
           }
           return toPlain({
             success: false,
-            error: `Failed to fetch source branch from fork: ${sourceFetchResult.attempts?.map((a) => a.error).join("; ") ?? "unknown"}`,
+            error: `Failed to fetch source branch from fork: ${sourceFetchResult.attempts?.map(a => a.error).join("; ") ?? "unknown"}`,
             commits: [],
             commitOids: [],
             filesChanged: [],
-          });
+          })
         }
-        sourceRemote = prSourceRemote;
+        sourceRemote = prSourceRemote
       }
 
-      const result = await getPRPreviewData(
-        git,
-        dir,
-        opts.sourceBranch,
-        opts.targetBranch,
-        {
-          ...(sourceRemote && { sourceRemote }),
-          preferRemoteRefs: true, // Use remote refs first; local refs/heads may be stale after push
-        }
-      );
+      const result = await getPRPreviewData(git, dir, opts.sourceBranch, opts.targetBranch, {
+        ...(sourceRemote && {sourceRemote}),
+        preferRemoteRefs: true, // Use remote refs first; local refs/heads may be stale after push
+      })
 
       if (sourceRemote) {
         try {
-          await git.deleteRemote({ dir, remote: sourceRemote });
+          await git.deleteRemote({dir, remote: sourceRemote})
         } catch {
           /* ignore cleanup */
         }
       }
 
-      return toPlain(result);
+      return toPlain(result)
     } catch (error: any) {
       return toPlain({
         success: false,
@@ -1289,7 +1327,7 @@ const api = {
         commits: [],
         commitOids: [],
         filesChanged: [],
-      });
+      })
     }
   },
 
@@ -1299,21 +1337,21 @@ const api = {
    * For same-repo: sourceCloneUrls empty; cloneUrls = repo.
    */
   async getCommitsAheadOfTip(opts: {
-    repoId: string;
-    tipOid: string;
-    cloneUrls: string[];
+    repoId: string
+    tipOid: string
+    cloneUrls: string[]
     /** When present (fork PR), source is fetched from these; cloneUrls = target for init */
-    sourceCloneUrls?: string[];
+    sourceCloneUrls?: string[]
   }) {
-    const { key, dir } = repoKeyAndDir(opts.repoId);
-    const isForkPR = opts.sourceCloneUrls && opts.sourceCloneUrls.length > 0;
-    const targetUrls = filterValidCloneUrls(opts.cloneUrls);
+    const {key, dir} = repoKeyAndDir(opts.repoId)
+    const isForkPR = opts.sourceCloneUrls && opts.sourceCloneUrls.length > 0
+    const targetUrls = filterValidCloneUrls(opts.cloneUrls)
 
     try {
       await smartInitializeRepoUtil(
         git,
         cacheManager,
-        { repoId: opts.repoId, cloneUrls: targetUrls },
+        {repoId: opts.repoId, cloneUrls: targetUrls},
         {
           rootDir,
           parseRepoId,
@@ -1323,26 +1361,26 @@ const api = {
           resolveBranchName: async (d: string, requested?: string) =>
             resolveRobustBranchUtil(git, d, requested),
         },
-        makeProgress(opts.repoId, "clone-progress")
-      );
+        makeProgress(opts.repoId, "clone-progress"),
+      )
 
-      const corsProxy = resolveDefaultCorsProxy();
-      let sourceRemote: string | undefined;
+      const corsProxy = resolveDefaultCorsProxy()
+      let sourceRemote: string | undefined
 
       if (isForkPR) {
-        const sourceUrls = filterValidCloneUrls(opts.sourceCloneUrls!);
-        const sourceOrdered = reorderUrlsByPreference(sourceUrls, key);
-        const prSourceRemote = `pr-source-${Date.now().toString(36)}`;
+        const sourceUrls = filterValidCloneUrls(opts.sourceCloneUrls!)
+        const sourceOrdered = reorderUrlsByPreference(sourceUrls, key)
+        const prSourceRemote = `pr-source-${Date.now().toString(36)}`
         const sourceFetchResult = await withUrlFallback(
           sourceOrdered,
           async (url: string) => {
-            await git.addRemote({ dir, remote: prSourceRemote, url });
+            await git.addRemote({dir, remote: prSourceRemote, url})
             try {
               await git.setConfig({
                 dir,
                 path: `remote.${prSourceRemote}.fetch`,
                 value: `+refs/heads/*:refs/remotes/${prSourceRemote}/*`,
-              });
+              })
             } catch {
               /* ignore */
             }
@@ -1352,46 +1390,46 @@ const api = {
               singleBranch: false,
               depth: 50,
               corsProxy: corsProxy ?? undefined,
-            });
+            })
           },
-          { repoId: key, perUrlTimeoutMs: 15000 }
-        );
+          {repoId: key, perUrlTimeoutMs: 15000},
+        )
         if (!sourceFetchResult.success) {
           try {
-            await git.deleteRemote({ dir, remote: prSourceRemote });
+            await git.deleteRemote({dir, remote: prSourceRemote})
           } catch {
             /* ignore */
           }
           return toPlain({
             success: false,
-            error: `Failed to fetch from fork: ${sourceFetchResult.attempts?.map((a) => a.error).join("; ") ?? "unknown"}`,
+            error: `Failed to fetch from fork: ${sourceFetchResult.attempts?.map(a => a.error).join("; ") ?? "unknown"}`,
             commits: [],
             commitOids: [],
-          });
+          })
         }
-        sourceRemote = prSourceRemote;
+        sourceRemote = prSourceRemote
       } else {
-        const orderedUrls = reorderUrlsByPreference(targetUrls, key);
+        const orderedUrls = reorderUrlsByPreference(targetUrls, key)
         if (orderedUrls.length > 0) {
           const fetchResult = await withUrlFallback(
             orderedUrls,
             async (cloneUrl: string) => {
-              await ensureOriginRemoteConfig(git, dir, cloneUrl);
+              await ensureOriginRemoteConfig(git, dir, cloneUrl)
               await git.fetch({
                 dir,
                 url: cloneUrl,
                 singleBranch: false,
                 depth: 50,
                 corsProxy: corsProxy ?? undefined,
-              });
+              })
             },
-            { repoId: key, perUrlTimeoutMs: 15000 }
-          );
+            {repoId: key, perUrlTimeoutMs: 15000},
+          )
           if (!fetchResult.success) {
             console.warn(
               "[getCommitsAheadOfTip] Fetch failed, attempting with existing refs:",
-              fetchResult.attempts.map((a) => a.error)
-            );
+              fetchResult.attempts.map(a => a.error),
+            )
           }
         }
       }
@@ -1400,25 +1438,25 @@ const api = {
         git,
         dir,
         opts.tipOid,
-        sourceRemote ? { sourceRemote } : undefined
-      );
+        sourceRemote ? {sourceRemote} : undefined,
+      )
 
       if (sourceRemote) {
         try {
-          await git.deleteRemote({ dir, remote: sourceRemote });
+          await git.deleteRemote({dir, remote: sourceRemote})
         } catch {
           /* ignore cleanup */
         }
       }
 
-      return toPlain(result);
+      return toPlain(result)
     } catch (error: any) {
       return toPlain({
         success: false,
         error: error?.message || String(error),
         commits: [],
         commitOids: [],
-      });
+      })
     }
   },
 
@@ -1426,23 +1464,23 @@ const api = {
    * Get merge base between head commit and target branch. Used when preparing PR update.
    */
   async getMergeBaseBetween(opts: {
-    repoId: string;
-    headOid: string;
-    targetBranch: string;
-    cloneUrls: string[];
+    repoId: string
+    headOid: string
+    targetBranch: string
+    cloneUrls: string[]
     /** For fork PR, target may be in origin; sourceRemote unused for this call */
-    sourceCloneUrls?: string[];
+    sourceCloneUrls?: string[]
   }) {
-    const { key, dir } = repoKeyAndDir(opts.repoId);
-    const targetUrls = filterValidCloneUrls(opts.cloneUrls);
+    const {key, dir} = repoKeyAndDir(opts.repoId)
+    const targetUrls = filterValidCloneUrls(opts.cloneUrls)
     try {
       if (targetUrls.length > 0) {
-        const orderedUrls = reorderUrlsByPreference(targetUrls, key);
-        const corsProxy = resolveDefaultCorsProxy();
+        const orderedUrls = reorderUrlsByPreference(targetUrls, key)
+        const corsProxy = resolveDefaultCorsProxy()
         await withUrlFallback(
           orderedUrls,
           async (cloneUrl: string) => {
-            await ensureOriginRemoteConfig(git, dir, cloneUrl);
+            await ensureOriginRemoteConfig(git, dir, cloneUrl)
             await git.fetch({
               dir,
               url: cloneUrl,
@@ -1450,24 +1488,24 @@ const api = {
               singleBranch: true,
               depth: 50,
               corsProxy: corsProxy ?? undefined,
-            });
+            })
           },
-          { repoId: key, perUrlTimeoutMs: 15000 }
-        );
+          {repoId: key, perUrlTimeoutMs: 15000},
+        )
       }
       const result = await getMergeBaseBetweenData(
         git,
         dir,
         opts.headOid,
         opts.targetBranch,
-        undefined
-      );
-      return toPlain(result);
+        undefined,
+      )
+      return toPlain(result)
     } catch (error: any) {
       return toPlain({
         mergeBase: undefined,
         error: error?.message || String(error),
-      });
+      })
     }
   },
 
@@ -1670,17 +1708,16 @@ const api = {
             cloneUrls: cache?.cloneUrls,
             cloneUrlCount: cache?.cloneUrls?.length || 0,
           })
-          
+
           if (cache?.cloneUrls?.length) {
-            const {filterValidCloneUrls, reorderUrlsByPreference, hasRestApiSupport} = await import(
-              "../utils/clone-url-fallback.js"
-            )
+            const {filterValidCloneUrls, reorderUrlsByPreference, hasRestApiSupport} =
+              await import("../utils/clone-url-fallback.js")
             const {getGitServiceApi} = await import("../git/provider-factory.js")
             const {parseRepoFromUrl} = await import("../git/vendor-provider-factory.js")
 
             const validUrls = filterValidCloneUrls(cache.cloneUrls)
             const orderedUrls = reorderUrlsByPreference(validUrls, key)
-            
+
             console.log(`[getCommitDetails] URL analysis:`, {
               original: cache.cloneUrls,
               valid: validUrls,
@@ -1691,7 +1728,7 @@ const api = {
             for (const url of orderedUrls) {
               const hasApi = hasRestApiSupport(url)
               console.log(`[getCommitDetails] Checking URL ${url}: hasRestApi=${hasApi}`)
-              
+
               if (hasApi) {
                 try {
                   console.log(`[getCommitDetails] Trying REST API for ${url}`)
@@ -1702,15 +1739,17 @@ const api = {
                   }
 
                   const {owner, repo, provider} = parsed
-                  console.log(`[getCommitDetails] Parsed: owner=${owner}, repo=${repo}, vendor=${provider.vendor}`)
-                  
+                  console.log(
+                    `[getCommitDetails] Parsed: owner=${owner}, repo=${repo}, vendor=${provider.vendor}`,
+                  )
+
                   // Use empty token for public repo access - authentication not required for reading commits
                   const api = getGitServiceApi(provider.vendor, "")
                   const commitData = await api.getCommit(owner, repo, opts.commitId)
 
                   console.log(`[getCommitDetails] REST API success for commit ${opts.commitId}`)
                   usedRestApi = true
-                  
+
                   // Convert REST API response to our format
                   return toPlain({
                     success: true,
@@ -1860,52 +1899,12 @@ const api = {
                   },
                 ]
               } else {
-                // For modified files, compute actual diff
+                // For modified files, compute aligned diff with LCS/Myers
                 const oldBlob = await A!.content()
                 const newBlob = await B!.content()
                 const oldText = new TextDecoder().decode(oldBlob)
                 const newText = new TextDecoder().decode(newBlob)
-                const oldLines = oldText.split("\n")
-                const newLines = newText.split("\n")
-
-                // Basic diff implementation
-                const patches: Array<{line: string; type: "+" | "-" | " "}> = []
-                let oldIndex = 0
-                let newIndex = 0
-
-                while (oldIndex < oldLines.length || newIndex < newLines.length) {
-                  const oldLine = oldLines[oldIndex]
-                  const newLine = newLines[newIndex]
-
-                  if (oldIndex >= oldLines.length) {
-                    patches.push({line: newLine, type: "+"})
-                    newIndex++
-                  } else if (newIndex >= newLines.length) {
-                    patches.push({line: oldLine, type: "-"})
-                    oldIndex++
-                  } else if (oldLine === newLine) {
-                    patches.push({line: oldLine, type: " "})
-                    oldIndex++
-                    newIndex++
-                  } else {
-                    patches.push({line: oldLine, type: "-"})
-                    patches.push({line: newLine, type: "+"})
-                    oldIndex++
-                    newIndex++
-                  }
-                }
-
-                if (patches.length > 0) {
-                  diffHunks = [
-                    {
-                      oldStart: 1,
-                      oldLines: oldLines.length,
-                      newStart: 1,
-                      newLines: newLines.length,
-                      patches,
-                    },
-                  ]
-                }
+                diffHunks = buildModifiedFileDiffHunks(oldText, newText)
               }
             } catch (diffError) {
               console.warn(`Failed to generate diff for ${filepath}:`, diffError)
@@ -1970,11 +1969,7 @@ const api = {
    * Returns changes with diffHunks in the same format as getCommitDetails.
    * Used for PR diff display when base=merge-base and head=PR tip.
    */
-  async getDiffBetween(opts: {
-    repoId: string
-    baseOid: string
-    headOid: string
-  }): Promise<{
+  async getDiffBetween(opts: {repoId: string; baseOid: string; headOid: string}): Promise<{
     success: boolean
     changes?: Array<{
       path: string
@@ -2087,46 +2082,7 @@ const api = {
               const newBlob = await B!.content()
               const oldText = new TextDecoder().decode(oldBlob)
               const newText = new TextDecoder().decode(newBlob)
-              const oldLines = oldText.split("\n")
-              const newLines = newText.split("\n")
-
-              const patches: Array<{line: string; type: "+" | "-" | " "}> = []
-              let oldIndex = 0
-              let newIndex = 0
-
-              while (oldIndex < oldLines.length || newIndex < newLines.length) {
-                const oldLine = oldLines[oldIndex]
-                const newLine = newLines[newIndex]
-
-                if (oldIndex >= oldLines.length) {
-                  patches.push({line: newLine, type: "+"})
-                  newIndex++
-                } else if (newIndex >= newLines.length) {
-                  patches.push({line: oldLine, type: "-"})
-                  oldIndex++
-                } else if (oldLine === newLine) {
-                  patches.push({line: oldLine, type: " "})
-                  oldIndex++
-                  newIndex++
-                } else {
-                  patches.push({line: oldLine, type: "-"})
-                  patches.push({line: newLine, type: "+"})
-                  oldIndex++
-                  newIndex++
-                }
-              }
-
-              if (patches.length > 0) {
-                diffHunks = [
-                  {
-                    oldStart: 1,
-                    oldLines: oldLines.length,
-                    newStart: 1,
-                    newLines: newLines.length,
-                    patches,
-                  },
-                ]
-              }
+              diffHunks = buildModifiedFileDiffHunks(oldText, newText)
             }
           } catch (diffError) {
             console.warn(`Failed to generate diff for ${filepath}:`, diffError)
