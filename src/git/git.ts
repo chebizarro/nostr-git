@@ -329,7 +329,8 @@ export async function ensureRepoFromEvent(
     });
 
     // Try to clone without specifying a branch first (let git use default)
-    // IMPORTANT: noCheckout must be false to create local branch refs
+    // Use noCheckout: true to avoid "commit not available locally" errors during shallow clones
+    // We'll manually set up refs afterward
     // Use singleBranch: true for shallow clones - non-GitHub servers (Forgejo, Gitea)
     // don't properly handle singleBranch: false with shallow depth during pack negotiation
     const clonePromise = git.clone({
@@ -338,7 +339,7 @@ export async function ensureRepoFromEvent(
       // Don't specify ref initially - let git use the remote's default
       singleBranch: true,  // Critical: use single branch for shallow clone compatibility
       depth,
-      noCheckout: false,   // Must be false to create local branch refs properly
+      noCheckout: true,    // Avoid checkout errors when commit not in shallow fetch
       noTags: true,
       // Optimize for speed over completeness
       since: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Only last 30 days
