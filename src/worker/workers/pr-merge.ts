@@ -1,91 +1,90 @@
-import type { GitProvider } from "../../git/provider.js";
-import type { GitMergeResult } from "../../git/provider.js";
-import type { PRMergeAnalysisResult } from "../../git/merge-analysis.js";
-import { analyzePRMergeability } from "../../git/merge-analysis.js";
-import { withUrlFallback, filterValidCloneUrls } from "../../utils/clone-url-fallback.js";
+import type {GitProvider} from "../../git/provider.js"
+import type {GitMergeResult} from "../../git/provider.js"
+import type {PRMergeAnalysisResult} from "../../git/merge-analysis.js"
+import {analyzePRMergeability} from "../../git/merge-analysis.js"
+import {withUrlFallback, filterValidCloneUrls} from "../../utils/clone-url-fallback.js"
 
 export interface AnalyzePRMergeOptions {
-  repoId: string;
-  prCloneUrls: string[];
+  repoId: string
+  prCloneUrls: string[]
   /** Clone URLs from repo (base) - for fetching target branch */
-  targetCloneUrls?: string[];
-  tipCommitOid: string;
-  targetBranch?: string;
-  allCommitOids?: string[];
+  targetCloneUrls?: string[]
+  tipCommitOid: string
+  targetBranch?: string
 }
 
 export interface MergePRAndPushOptions {
-  repoId: string;
-  cloneUrls: string[];
-  tipCommitOid: string;
-  targetBranch?: string;
-  mergeCommitMessage?: string;
-  fastForward?: boolean;
-  onProgress?: (step: string, progress: number) => void;
+  repoId: string
+  cloneUrls: string[]
+  tipCommitOid: string
+  targetBranch?: string
+  mergeCommitMessage?: string
+  fastForward?: boolean
+  onProgress?: (step: string, progress: number) => void
   /** Current user's pubkey (hex or npub) - required for GRASP push, not from token store (matches useNewRepo) */
-  userPubkey?: string;
+  userPubkey?: string
   /** Pre-created NIP-98 auth headers for GRASP (keyed by URL). Created on main thread before RPC. */
-  authHeaders?: Record<string, string>;
+  authHeaders?: Record<string, string>
   /**
    * When true, perform the merge but skip the push phase. Returns the merge commit OID so the
    * caller (main thread) can publish the Nostr state event with the new SHA before pushing.
    * GRASP requires a signed state event (kind 30618) pointing to the new commit to be on the
    * relay before it accepts a git push.
    */
-  skipPush?: boolean;
+  skipPush?: boolean
 }
 
 export interface MergePRAndPushResult {
-  success: boolean;
-  error?: string;
-  mergeCommitOid?: string;
-  pushedRemotes?: string[];
-  skippedRemotes?: string[];
-  warning?: string;
-  pushErrors?: Array<{ remote: string; url: string; error: string; code: string; stack: string }>;
+  success: boolean
+  error?: string
+  mergeCommitOid?: string
+  pushedRemotes?: string[]
+  skippedRemotes?: string[]
+  warning?: string
+  pushErrors?: Array<{remote: string; url: string; error: string; code: string; stack: string}>
 }
 
 /** Push to remote via worker's pushToRemote - for GRASP (direct push with authHeaders) */
 export type PushToRemoteFn = (opts: {
-  repoId: string;
-  remoteUrl: string;
-  branch: string;
-  token?: string;
-  provider?: string;
-  authHeaders?: Record<string, string>;
-}) => Promise<{ success?: boolean; error?: string }>;
+  repoId: string
+  remoteUrl: string
+  branch: string
+  token?: string
+  provider?: string
+  authHeaders?: Record<string, string>
+}) => Promise<{success?: boolean; error?: string}>
 
 /** Safe push with preflight checks - for GitHub/GitLab/etc (mirrors useNewRepo) */
 export type SafePushToRemoteFn = (opts: {
-  repoId: string;
-  remoteUrl: string;
-  branch: string;
-  token?: string;
-  provider?: string;
+  repoId: string
+  remoteUrl: string
+  branch: string
+  token?: string
+  provider?: string
   preflight?: {
-    blockIfUncommitted?: boolean;
-    requireUpToDate?: boolean;
-    blockIfShallow?: boolean;
-  };
+    blockIfUncommitted?: boolean
+    requireUpToDate?: boolean
+    blockIfShallow?: boolean
+  }
 }) => Promise<{
-  success?: boolean;
-  error?: string;
-  requiresConfirmation?: boolean;
-  warning?: string;
-  reason?: string;
-}>;
+  success?: boolean
+  error?: string
+  requiresConfirmation?: boolean
+  warning?: string
+  reason?: string
+}>
 
 /** Infer provider from remote URL (github.com, gitlab.com, relay.ngit.dev, etc.) */
 export function inferProviderFromUrl(url: string): string | undefined {
   try {
-    const host = new URL(url).hostname.toLowerCase();
-    if (/relay\.ngit\.dev|gitnostr\.com|grasp/i.test(host)) return "grasp";
-    if (host === "github.com" || host.endsWith(".github.com")) return "github";
+    const host = new URL(url).hostname.toLowerCase()
+    if (/relay\.ngit\.dev|gitnostr\.com|grasp/i.test(host)) return "grasp"
+    if (host === "github.com" || host.endsWith(".github.com")) return "github"
     if (host === "gitlab.com" || host.endsWith(".gitlab.com") || host.includes("gitlab."))
-      return "gitlab";
-    return undefined;
+      return "gitlab"
+    return undefined
   } catch {
-    return undefined;
+    return undefined
   }
 }
 
@@ -93,24 +92,24 @@ export async function mergePRAndPushUtil(
   git: GitProvider,
   opts: MergePRAndPushOptions,
   deps: {
-    rootDir: string;
-    parseRepoId: (id: string) => string;
-    resolveBranchName: (dir: string, requested?: string) => Promise<string>;
+    rootDir: string
+    parseRepoId: (id: string) => string
+    resolveBranchName: (dir: string, requested?: string) => Promise<string>
     ensureFullClone: (args: {
-      repoId: string;
-      branch?: string;
-      depth?: number;
-      cloneUrls?: string[];
-    }) => Promise<any>;
-    getAuthCallback: (url: string) => any;
-    getConfiguredAuthHosts?: () => string[];
+      repoId: string
+      branch?: string
+      depth?: number
+      cloneUrls?: string[]
+    }) => Promise<any>
+    getAuthCallback: (url: string) => any
+    getConfiguredAuthHosts?: () => string[]
     /** Direct push (for GRASP with authHeaders) - mirrors useNewRepo */
-    pushToRemote: PushToRemoteFn;
+    pushToRemote: PushToRemoteFn
     /** Safe push with preflight (for GitHub/GitLab/etc) - mirrors useNewRepo */
-    safePushToRemote: SafePushToRemoteFn;
+    safePushToRemote: SafePushToRemoteFn
     /** Get tokens for remote URL (for multi-token retry) */
-    getTokensForRemote: (url: string) => Promise<Array<{ token: string }>>;
-  }
+    getTokensForRemote: (url: string) => Promise<Array<{token: string}>>
+  },
 ): Promise<MergePRAndPushResult> {
   const {
     repoId,
@@ -122,7 +121,7 @@ export async function mergePRAndPushUtil(
     onProgress = () => {},
     userPubkey,
     skipPush = false,
-  } = opts;
+  } = opts
 
   const {
     rootDir,
@@ -132,125 +131,130 @@ export async function mergePRAndPushUtil(
     pushToRemote,
     safePushToRemote,
     getTokensForRemote,
-  } = deps;
-  let usedTempRef = false;
-  let prTipRef: string | null = null;
-  const key = parseRepoId(repoId);
-  const dir = `${rootDir}/${key}`;
+  } = deps
+  let usedTempRef = false
+  let prTipRef: string | null = null
+  const key = parseRepoId(repoId)
+  const dir = `${rootDir}/${key}`
 
   try {
+    onProgress("Resolving target branch...", 5)
+    const effectiveTargetBranch = await resolveBranchName(dir, targetBranch || "main")
 
-    onProgress("Resolving target branch...", 5);
-    const effectiveTargetBranch = await resolveBranchName(dir, targetBranch || "main");
+    onProgress("Ensuring repository is ready...", 10)
+    await ensureFullClone({repoId, branch: effectiveTargetBranch})
 
-    onProgress("Ensuring repository is ready...", 10);
-    await ensureFullClone({ repoId, branch: effectiveTargetBranch });
-
-    const validUrls = filterValidCloneUrls(cloneUrls);
+    const validUrls = filterValidCloneUrls(cloneUrls)
     if (validUrls.length === 0) {
       return {
         success: false,
         error: "No valid clone URLs in PR",
-      };
+      }
     }
 
-    const prRemote = `pr-source-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+    const prRemote = `pr-source-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
 
     const fetchResult = await withUrlFallback(
       validUrls,
       async (url: string) => {
         try {
-          await git.addRemote({ dir, remote: prRemote, url });
+          await git.addRemote({dir, remote: prRemote, url})
           try {
             await git.setConfig({
               dir,
               path: `remote.${prRemote}.fetch`,
               value: `+refs/heads/*:refs/remotes/${prRemote}/*`,
-            });
+            })
           } catch {
             /* ignore */
           }
 
-          onProgress("Fetching PR branch...", 20);
+          onProgress("Fetching PR branch...", 20)
           await git.fetch({
             dir,
             remote: prRemote,
             url,
             singleBranch: false,
             depth: 100,
-          });
+          })
 
-          const tipOid = tipCommitOid;
-          return { prTipRef: undefined, tipOid };
+          const tipOid = tipCommitOid
+          return {prTipRef: undefined, tipOid}
         } finally {
           try {
-            await git.deleteRemote({ dir, remote: prRemote });
+            await git.deleteRemote({dir, remote: prRemote})
           } catch {
             /* ignore */
           }
         }
       },
-      { perUrlTimeoutMs: 20000 }
-    );
+      {perUrlTimeoutMs: 20000},
+    )
 
     if (!fetchResult.success || !fetchResult.result) {
       const errMsg = fetchResult.attempts?.length
-        ? fetchResult.attempts.map((a) => `${a.url}: ${a.error || "failed"}`).join("; ")
-        : "Failed to fetch PR from any clone URL";
-      return { success: false, error: errMsg };
+        ? fetchResult.attempts.map(a => `${a.url}: ${a.error || "failed"}`).join("; ")
+        : "Failed to fetch PR from any clone URL"
+      return {success: false, error: errMsg}
     }
 
-    const { prTipRef: fetchedPrTipRef, tipOid } = fetchResult.result;
+    const {prTipRef: fetchedPrTipRef, tipOid} = fetchResult.result
     // When we fetched all (no source branch), write tip to temp ref for merge
-    usedTempRef = !fetchedPrTipRef;
-    prTipRef = fetchedPrTipRef ?? `refs/pr-tip-merge-${Date.now()}`;
+    usedTempRef = !fetchedPrTipRef
+    prTipRef = fetchedPrTipRef ?? `refs/pr-tip-merge-${Date.now()}`
     if (usedTempRef) {
-      await git.writeRef({ dir, ref: prTipRef, value: tipOid, force: true });
-      console.log(`[mergePRAndPush] Created temp ref ${prTipRef} -> ${tipOid.substring(0, 8)}`);
+      await git.writeRef({dir, ref: prTipRef, value: tipOid, force: true})
+      console.log(`[mergePRAndPush] Created temp ref ${prTipRef} -> ${tipOid.substring(0, 8)}`)
     }
 
-    onProgress("Checking out target branch...", 40);
-    await git.checkout({ dir, ref: effectiveTargetBranch });
+    onProgress("Checking out target branch...", 40)
+    await git.checkout({dir, ref: effectiveTargetBranch})
 
-    const preMergeTargetOid = await git.resolveRef({ dir, ref: effectiveTargetBranch });
-    
-    // Log merge state for debugging  
-    const prTipOid = usedTempRef ? tipOid : await git.resolveRef({ dir, ref: prTipRef! });
-    console.log(`[mergePRAndPush] About to merge: target=${preMergeTargetOid.substring(0, 8)} (${effectiveTargetBranch}) + PR=${prTipOid.substring(0, 8)} (${prTipRef})`);
+    const preMergeTargetOid = await git.resolveRef({dir, ref: effectiveTargetBranch})
 
-    onProgress("Merging PR...", 50);
-    
+    // Log merge state for debugging
+    const prTipOid = usedTempRef ? tipOid : await git.resolveRef({dir, ref: prTipRef!})
+    console.log(
+      `[mergePRAndPush] About to merge: target=${preMergeTargetOid.substring(0, 8)} (${effectiveTargetBranch}) + PR=${prTipOid.substring(0, 8)} (${prTipRef})`,
+    )
+
+    onProgress("Merging PR...", 50)
+
     // Validate that our references are still valid before attempting merge
     try {
       // Ensure target branch ref exists
-      await git.resolveRef({ dir, ref: `refs/heads/${effectiveTargetBranch}` });
-      
+      await git.resolveRef({dir, ref: `refs/heads/${effectiveTargetBranch}`})
+
       // Ensure PR tip ref exists (either fetched or temp)
       if (usedTempRef && prTipRef) {
-        const currentTipOid = await git.resolveRef({ dir, ref: prTipRef });
+        const currentTipOid = await git.resolveRef({dir, ref: prTipRef})
         if (currentTipOid !== tipOid) {
-          console.warn(`[mergePRAndPush] Temp ref ${prTipRef} changed: ${currentTipOid} != ${tipOid}`);
-          await git.writeRef({ dir, ref: prTipRef, value: tipOid, force: true });
+          console.warn(
+            `[mergePRAndPush] Temp ref ${prTipRef} changed: ${currentTipOid} != ${tipOid}`,
+          )
+          await git.writeRef({dir, ref: prTipRef, value: tipOid, force: true})
         }
       } else if (prTipRef) {
         // Verify fetched ref still exists
-        await git.resolveRef({ dir, ref: prTipRef });
+        await git.resolveRef({dir, ref: prTipRef})
       }
     } catch (error) {
       // Critical ref missing, try to recreate temp ref if needed
       if (usedTempRef && prTipRef) {
-        console.warn(`[mergePRAndPush] Recreating missing temp ref ${prTipRef} -> ${tipOid.substring(0, 8)}`);
-        await git.writeRef({ dir, ref: prTipRef, value: tipOid, force: true });
+        console.warn(
+          `[mergePRAndPush] Recreating missing temp ref ${prTipRef} -> ${tipOid.substring(0, 8)}`,
+        )
+        await git.writeRef({dir, ref: prTipRef, value: tipOid, force: true})
       } else {
         return {
           success: false,
           error: `Reference validation failed: ${error instanceof Error ? error.message : String(error)}`,
-        };
+        }
       }
     }
-    
+
     // If analysis shows clean but we still get conflicts, log detailed state for debugging
-    let mergeResult: GitMergeResult;
+    let mergeResult: GitMergeResult
     try {
       mergeResult = (await git.merge({
         dir,
@@ -259,8 +263,8 @@ export async function mergePRAndPushUtil(
         fastForward: fastForward === true, // Explicitly require true for fast-forward
         abortOnConflict: true,
         message: mergeCommitMessage || `Merge PR (${tipCommitOid.slice(0, 8)})`,
-        author: { name: "Repository Maintainer", email: "maintainer@nostr-git.local" },
-      } as any)) as GitMergeResult;
+        author: {name: "Repository Maintainer", email: "maintainer@nostr-git.local"},
+      } as any)) as GitMergeResult
     } catch (mergeError: any) {
       // Log detailed state for debugging when merge fails
       console.error("[mergePRAndPush] Merge failed:", {
@@ -269,58 +273,58 @@ export async function mergePRAndPushUtil(
         tipCommitOid,
         mergeError: mergeError.message,
         conflictFiles: mergeError?.data?.filepaths || [],
-      });
-      
+      })
+
       // Extract conflict files from merge error if available
-      const conflictFiles = mergeError?.data?.filepaths || [];
+      const conflictFiles = mergeError?.data?.filepaths || []
       if (conflictFiles.length > 0) {
-        const conflictList = conflictFiles.slice(0, 5).join(", ");
-        const moreFiles = conflictFiles.length > 5 ? `... and ${conflictFiles.length - 5} more` : "";
+        const conflictList = conflictFiles.slice(0, 5).join(", ")
+        const moreFiles = conflictFiles.length > 5 ? `... and ${conflictFiles.length - 5} more` : ""
         return {
           success: false,
           error: `Merge conflicts in: ${conflictList}${moreFiles}. Analysis showed clean but actual merge failed.`,
-        };
+        }
       }
-      
+
       return {
         success: false,
         error: `Merge failed: ${mergeError.message || "Unknown merge error"}`,
-      };
+      }
     }
 
-    const mergeCommitOid = mergeResult?.oid;
+    const mergeCommitOid = mergeResult?.oid
     if (!mergeCommitOid) {
       return {
         success: false,
         error: "Merge completed but no commit OID returned",
-      };
+      }
     }
 
     // Merge-only mode: return the new commit SHA so the caller can publish the
     // Nostr state event (kind 30618) before doing the push. GRASP requires this.
     if (skipPush) {
-      onProgress("Merge complete (push deferred)", 60);
+      onProgress("Merge complete (push deferred)", 60)
       return {
         success: true,
         mergeCommitOid,
         pushedRemotes: [],
         skippedRemotes: [],
         warning: "Push deferred — caller must publish state event then push separately",
-      };
+      }
     }
 
-    onProgress("Pushing to remotes...", 70);
+    onProgress("Pushing to remotes...", 70)
 
-    const remotes = await git.listRemotes({ dir });
-    const pushedRemotes: string[] = [];
-    const skippedRemotes: string[] = [];
+    const remotes = await git.listRemotes({dir})
+    const pushedRemotes: string[] = []
+    const skippedRemotes: string[] = []
     const pushErrors: Array<{
-        remote: string;
-        url: string;
-        error: string;
-        code: string;
-        stack: string;
-    }> = [];
+      remote: string
+      url: string
+      error: string
+      code: string
+      stack: string
+    }> = []
 
     if (remotes.length === 0) {
       return {
@@ -329,7 +333,7 @@ export async function mergePRAndPushUtil(
         pushedRemotes: [],
         skippedRemotes: [],
         warning: "No remotes configured - changes only applied locally",
-      };
+      }
     }
 
     for (const remote of remotes) {
@@ -341,23 +345,23 @@ export async function mergePRAndPushUtil(
             error: `Remote ${remote.remote} has no URL configured`,
             code: "NO_URL",
             stack: "",
-          });
-          skippedRemotes.push(remote.remote);
-          continue;
+          })
+          skippedRemotes.push(remote.remote)
+          continue
         }
 
-        const provider = inferProviderFromUrl(remote.url);
-        const pushUrl = remote.url;
+        const provider = inferProviderFromUrl(remote.url)
+        const pushUrl = remote.url
 
         // GRASP: direct push with NIP-98 auth headers (mirrors useNewRepo)
         if (provider === "grasp") {
           if (!userPubkey) {
-            throw new Error("GRASP push requires userPubkey (current user's pubkey)");
+            throw new Error("GRASP push requires userPubkey (current user's pubkey)")
           }
 
           // Use pre-created auth headers (from main thread) for GRASP NIP-98
           // Git push requires auth headers for TWO URLs: info/refs and git-receive-pack
-          const authHeaders = opts.authHeaders;
+          const authHeaders = opts.authHeaders
 
           const pushRes = await pushToRemote({
             repoId,
@@ -366,22 +370,22 @@ export async function mergePRAndPushUtil(
             token: userPubkey,
             provider,
             authHeaders: authHeaders ?? undefined,
-          });
+          })
           if (!pushRes?.success) {
-            throw new Error(pushRes?.error || "Push to GRASP remote failed");
+            throw new Error(pushRes?.error || "Push to GRASP remote failed")
           }
-          pushedRemotes.push(remote.remote);
-          continue;
+          pushedRemotes.push(remote.remote)
+          continue
         }
 
         // Non-GRASP: use safePushToRemote with preflight (mirrors useNewRepo)
-        const tokens = await getTokensForRemote(remote.url);
+        const tokens = await getTokensForRemote(remote.url)
         if (tokens.length === 0) {
-          throw new Error(`No authentication token found for ${provider || "remote"} push`);
+          throw new Error(`No authentication token found for ${provider || "remote"} push`)
         }
 
-        let lastError: Error | null = null;
-        for (const { token } of tokens) {
+        let lastError: Error | null = null
+        for (const {token} of tokens) {
           try {
             const result = await safePushToRemote({
               repoId,
@@ -394,42 +398,42 @@ export async function mergePRAndPushUtil(
                 requireUpToDate: true,
                 blockIfShallow: false,
               },
-            });
+            })
             if (result?.success) {
-              pushedRemotes.push(remote.remote);
-              lastError = null;
-              break;
+              pushedRemotes.push(remote.remote)
+              lastError = null
+              break
             }
             if (result?.requiresConfirmation) {
-              throw new Error(result.warning || "Force push requires confirmation.");
+              throw new Error(result.warning || "Force push requires confirmation.")
             }
             if (result?.reason === "workflow_scope_missing") {
               throw new Error(
-                "GitHub requires the workflow token scope to push files under .github/workflows. Update your token or remove those files."
-              );
+                "GitHub requires the workflow token scope to push files under .github/workflows. Update your token or remove those files.",
+              )
             }
-            lastError = new Error(result?.error || "Safe push failed");
+            lastError = new Error(result?.error || "Safe push failed")
           } catch (err) {
-            lastError = err instanceof Error ? err : new Error(String(err));
+            lastError = err instanceof Error ? err : new Error(String(err))
           }
         }
-        if (lastError) throw lastError;
+        if (lastError) throw lastError
       } catch (pushError: any) {
         const rawMsg =
-          pushError instanceof Error ? pushError.message || "" : String(pushError || "");
-        const code = (pushError?.code || pushError?.name || "UNKNOWN") as string;
+          pushError instanceof Error ? pushError.message || "" : String(pushError || "")
+        const code = (pushError?.code || pushError?.name || "UNKNOWN") as string
         pushErrors.push({
           remote: remote.remote,
           url: remote.url || "N/A",
           error: rawMsg,
           code,
           stack: pushError?.stack || "",
-        });
-        skippedRemotes.push(remote.remote);
+        })
+        skippedRemotes.push(remote.remote)
       }
     }
 
-    onProgress("Merge complete", 100);
+    onProgress("Merge complete", 100)
 
     // If all pushes failed: reset local state to pre-merge and return failure
     if (remotes.length > 0 && pushedRemotes.length === 0) {
@@ -439,22 +443,22 @@ export async function mergePRAndPushUtil(
           ref: `refs/heads/${effectiveTargetBranch}`,
           value: preMergeTargetOid,
           force: true,
-        });
-        await git.checkout({ dir, ref: effectiveTargetBranch, force: true });
+        })
+        await git.checkout({dir, ref: effectiveTargetBranch, force: true})
       } catch (resetErr) {
-        console.warn("[mergePRAndPush] Failed to reset local state after push failure:", resetErr);
+        console.warn("[mergePRAndPush] Failed to reset local state after push failure:", resetErr)
       }
-      const firstError = pushErrors[0];
+      const firstError = pushErrors[0]
       const errorMsg = firstError
         ? `Push to ${firstError.remote} failed: ${firstError.error}`
-        : "Push to all remotes failed";
+        : "Push to all remotes failed"
       return {
         success: false,
         error: errorMsg,
         pushedRemotes,
         skippedRemotes,
         pushErrors: pushErrors.length ? pushErrors : undefined,
-      };
+      }
     }
 
     return {
@@ -463,16 +467,16 @@ export async function mergePRAndPushUtil(
       pushedRemotes,
       skippedRemotes,
       pushErrors: pushErrors.length ? pushErrors : undefined,
-    };
+    }
   } catch (error: any) {
     return {
       success: false,
       error: error?.message || String(error),
-    };
+    }
   } finally {
     if (usedTempRef && prTipRef) {
       try {
-        await git.deleteRef({ dir, ref: prTipRef });
+        await git.deleteRef({dir, ref: prTipRef})
       } catch {
         /* ignore */
       }
@@ -484,27 +488,26 @@ export async function analyzePRMergeUtil(
   git: GitProvider,
   opts: AnalyzePRMergeOptions,
   deps: {
-    rootDir: string;
-    parseRepoId: (id: string) => string;
-    resolveBranchName: (dir: string, requested?: string) => Promise<string>;
-  }
+    rootDir: string
+    parseRepoId: (id: string) => string
+    resolveBranchName: (dir: string, requested?: string) => Promise<string>
+  },
 ): Promise<PRMergeAnalysisResult> {
-  const { repoId, prCloneUrls, targetCloneUrls, tipCommitOid, targetBranch, allCommitOids } = opts;
-  const { rootDir, parseRepoId, resolveBranchName } = deps;
+  const {repoId, prCloneUrls, targetCloneUrls, tipCommitOid, targetBranch} = opts
+  const {rootDir, parseRepoId, resolveBranchName} = deps
 
-  const key = parseRepoId(repoId);
-  const dir = `${rootDir}/${key}`;
+  const key = parseRepoId(repoId)
+  const dir = `${rootDir}/${key}`
 
   // Pass target branch directly; analyzePRMergeability will fetch it if not present
-  const effectiveTargetBranch = targetBranch || "main";
+  const effectiveTargetBranch = targetBranch || "main"
 
   const result = await analyzePRMergeability(git, dir, {
     cloneUrls: prCloneUrls,
     targetCloneUrls,
     tipCommitOid,
     targetBranch: effectiveTargetBranch,
-    allCommitOids,
-  });
+  })
 
-  return result;
+  return result
 }

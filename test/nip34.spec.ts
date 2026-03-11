@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest"
+import {describe, it, expect} from "vitest"
 import {
   GIT_PULL_REQUEST,
   GIT_PULL_REQUEST_UPDATE,
@@ -51,12 +51,12 @@ describe("NIP-34 Pull Request Events", () => {
           ["clone", "https://github.com/user/repo"],
           ["branch-name", "feature-branch"],
           ["e", "event-id"],
-          ["merge-base", "base-commit"]
+          ["merge-base", "base-commit"],
         ],
         content: "PR description in markdown",
-        sig: "test-sig"
+        sig: "test-sig",
       }
-      
+
       expect(isPullRequestEvent(event)).toBe(true)
       expect(isPullRequestUpdateEvent(event)).toBe(false)
       expect(isUserGraspListEvent(event)).toBe(false)
@@ -76,12 +76,12 @@ describe("NIP-34 Pull Request Events", () => {
           ["p", "author-pubkey"],
           ["c", "commit-hash"],
           ["clone", "https://github.com/user/repo"],
-          ["merge-base", "base-commit"]
+          ["merge-base", "base-commit"],
         ],
         content: "",
-        sig: "test-sig"
+        sig: "test-sig",
       }
-      
+
       expect(isPullRequestUpdateEvent(event)).toBe(true)
       expect(isPullRequestEvent(event)).toBe(false)
       expect(isUserGraspListEvent(event)).toBe(false)
@@ -93,13 +93,11 @@ describe("NIP-34 Pull Request Events", () => {
         pubkey: "test-pubkey",
         created_at: 1234567890,
         kind: GIT_USER_GRASP_LIST,
-        tags: [
-          ["g", "https://grasp.example.com"]
-        ],
+        tags: [["g", "https://grasp.example.com"]],
         content: "",
-        sig: "test-sig"
+        sig: "test-sig",
       }
-      
+
       expect(isUserGraspListEvent(event)).toBe(true)
       expect(isPullRequestEvent(event)).toBe(false)
       expect(isPullRequestUpdateEvent(event)).toBe(false)
@@ -113,11 +111,11 @@ describe("NIP-34 Pull Request Events", () => {
         recipients: ["author-pubkey"],
         subject: "PR Title",
         labels: ["bug"],
-        commits: ["commit-hash"],
+        tipCommitOid: "commit-hash",
         clone: ["https://github.com/user/repo"],
         branchName: "feature-branch",
         mergeBase: "base-commit",
-        content: "PR description"
+        content: "PR description",
       })
 
       expect(event.kind).toBe(GIT_PULL_REQUEST)
@@ -138,9 +136,9 @@ describe("NIP-34 Pull Request Events", () => {
         pullRequestEventId: "pr-event-123",
         pullRequestAuthorPubkey: "pr-author-pubkey",
         recipients: ["author-pubkey"],
-        commits: ["commit-hash"],
+        tipCommitOid: "commit-hash",
         clone: ["https://github.com/user/repo"],
-        mergeBase: "base-commit"
+        mergeBase: "base-commit",
       })
 
       expect(event.kind).toBe(GIT_PULL_REQUEST_UPDATE)
@@ -156,7 +154,7 @@ describe("NIP-34 Pull Request Events", () => {
 
     it("should create user grasp list events", () => {
       const event = createUserGraspListEvent({
-        services: ["https://grasp.example.com", "https://grasp2.example.com"]
+        services: ["https://grasp.example.com", "https://grasp2.example.com"],
       })
 
       expect(event.kind).toBe(GIT_USER_GRASP_LIST)
@@ -183,17 +181,17 @@ describe("NIP-34 Pull Request Events", () => {
           ["clone", "https://github.com/user/repo"],
           ["branch-name", "feature-branch"],
           ["e", "event-id"],
-          ["merge-base", "base-commit"]
+          ["merge-base", "base-commit"],
         ],
         content: "PR description",
-        sig: "test-sig"
+        sig: "test-sig",
       }
 
       const parsed = parsePullRequestEvent(event)
       expect(parsed.repoId).toBe("30617:repo-id")
       expect(parsed.subject).toBe("PR Title")
       expect(parsed.labels).toEqual(["bug"])
-      expect(parsed.commits).toEqual(["commit-hash"])
+      expect(parsed.tipCommitOid).toBe("commit-hash")
       expect(parsed.branchName).toBe("feature-branch")
       expect(parsed.mergeBase).toBe("base-commit")
       expect(parsed.content).toBe("PR description")
@@ -214,17 +212,17 @@ describe("NIP-34 Pull Request Events", () => {
           ["p", "author-pubkey"],
           ["c", "commit-hash"],
           ["clone", "https://github.com/user/repo"],
-          ["merge-base", "base-commit"]
+          ["merge-base", "base-commit"],
         ],
         content: "",
-        sig: "test-sig"
+        sig: "test-sig",
       }
 
       const parsed = parsePullRequestUpdateEvent(event)
       expect(parsed.repoId).toBe("30617:repo-id")
       expect(parsed.pullRequestEventId).toBe("pr-root-event-id")
       expect(parsed.pullRequestAuthorPubkey).toBe("pr-author-pubkey")
-      expect(parsed.commits).toEqual(["commit-hash"])
+      expect(parsed.tipCommitOid).toBe("commit-hash")
       expect(parsed.mergeBase).toBe("base-commit")
       expect(parsed.author.pubkey).toBe("test-pubkey")
     })
@@ -237,10 +235,10 @@ describe("NIP-34 Pull Request Events", () => {
         kind: GIT_USER_GRASP_LIST,
         tags: [
           ["g", "https://grasp.example.com"],
-          ["g", "https://grasp2.example.com"]
+          ["g", "https://grasp2.example.com"],
         ],
         content: "",
-        sig: "test-sig"
+        sig: "test-sig",
       }
 
       const parsed = parseUserGraspListEvent(event)
@@ -265,10 +263,10 @@ describe("NIP-34 Pull Request Events", () => {
           ["clone", "https://github.com/user/repo"],
           ["branch-name", "feature-branch"],
           ["e", "event-id"],
-          ["merge-base", "base-commit"]
+          ["merge-base", "base-commit"],
         ],
         content: "PR description",
-        sig: "test-sig"
+        sig: "test-sig",
       }
 
       const result = validatePullRequestEvent(event)
@@ -289,14 +287,54 @@ describe("NIP-34 Pull Request Events", () => {
           ["p", "author-pubkey"],
           ["c", "commit-hash"],
           ["clone", "https://github.com/user/repo"],
-          ["merge-base", "base-commit"]
+          ["merge-base", "base-commit"],
         ],
         content: "",
-        sig: "test-sig"
+        sig: "test-sig",
       }
 
       const result = validatePullRequestUpdateEvent(event)
       expect(result.success).toBe(true)
+    })
+
+    it("should reject pull request events with multiple c tags", () => {
+      const event: PullRequestEvent = {
+        id: "test-id",
+        pubkey: "test-pubkey",
+        created_at: 1234567890,
+        kind: GIT_PULL_REQUEST,
+        tags: [
+          ["a", "30617:repo-id"],
+          ["c", "tip-a"],
+          ["c", "tip-b"],
+        ],
+        content: "PR description",
+        sig: "test-sig",
+      }
+
+      const result = validatePullRequestEvent(event)
+      expect(result.success).toBe(false)
+    })
+
+    it("should reject pull request update events with multiple c tags", () => {
+      const event: PullRequestUpdateEvent = {
+        id: "test-id",
+        pubkey: "test-pubkey",
+        created_at: 1234567890,
+        kind: GIT_PULL_REQUEST_UPDATE,
+        tags: [
+          ["a", "30617:repo-id"],
+          ["E", "pr-root-event-id"],
+          ["P", "pr-author-pubkey"],
+          ["c", "tip-a"],
+          ["c", "tip-b"],
+        ],
+        content: "",
+        sig: "test-sig",
+      }
+
+      const result = validatePullRequestUpdateEvent(event)
+      expect(result.success).toBe(false)
     })
 
     it("should validate user grasp list events", () => {
@@ -305,11 +343,9 @@ describe("NIP-34 Pull Request Events", () => {
         pubkey: "test-pubkey",
         created_at: 1234567890,
         kind: GIT_USER_GRASP_LIST,
-        tags: [
-          ["g", "https://grasp.example.com"]
-        ],
+        tags: [["g", "https://grasp.example.com"]],
         content: "",
-        sig: "test-sig"
+        sig: "test-sig",
       }
 
       const result = validateUserGraspListEvent(event)
@@ -326,7 +362,7 @@ describe("NIP-34 Pull Request Events", () => {
           // Missing required tags
         ],
         content: "PR description",
-        sig: "test-sig"
+        sig: "test-sig",
       }
 
       const result = validatePullRequestEvent(invalidEvent as any)
@@ -347,31 +383,35 @@ describe("NIP-34 Pull Request Events", () => {
       const event = createPullRequestEvent({
         repoAddr: "30617:npub123/repo",
         content: "",
+        tipCommitOid: "tip-commit",
       })
 
       expect(event.kind).toBe(GIT_PULL_REQUEST)
       expect(event.content).toBe("")
       expect(event.tags).toContainEqual(["a", "30617:npub123/repo"])
-      expect(event.tags.length).toBe(1)
+      expect(event.tags).toContainEqual(["c", "tip-commit"])
     })
 
-    it("should create PR with multiple commits, labels, and clone URLs", () => {
+    it("should create PR with one tip commit, labels, and clone URLs", () => {
       const event = createPullRequestEvent({
         repoAddr: "30617:test-repo",
         content: "Description",
-        subject: "Multi-commit PR",
+        subject: "Tip-only PR",
         labels: ["bug", "enhancement", "documentation"],
-        commits: ["abc123", "def456", "ghi789"],
+        tipCommitOid: "ghi789",
         clone: ["https://github.com/user/repo.git", "https://gitlab.com/user/repo.git"],
         recipients: ["pk1", "pk2"],
       })
 
-      expect(event.tags.filter(t => t[0] === "c")).toHaveLength(3)
+      expect(event.tags.filter(t => t[0] === "c")).toHaveLength(1)
+      expect(event.tags.find(t => t[0] === "c")?.[1]).toBe("ghi789")
       expect(event.tags.filter(t => t[0] === "t")).toHaveLength(3)
-      expect(event.tags.filter(t => t[0] === "clone").flat().slice(1)).toEqual([
-        "https://github.com/user/repo.git",
-        "https://gitlab.com/user/repo.git",
-      ])
+      expect(
+        event.tags
+          .filter(t => t[0] === "clone")
+          .flat()
+          .slice(1),
+      ).toEqual(["https://github.com/user/repo.git", "https://gitlab.com/user/repo.git"])
       expect(event.tags.filter(t => t[0] === "p")).toHaveLength(2)
     })
 
@@ -380,6 +420,7 @@ describe("NIP-34 Pull Request Events", () => {
       const event = createPullRequestEvent({
         repoAddr: "30617:repo",
         content: "x",
+        tipCommitOid: "tip",
         created_at: ts,
       })
       expect(event.created_at).toBe(ts)
@@ -390,6 +431,7 @@ describe("NIP-34 Pull Request Events", () => {
         repoAddr: "30617:repo",
         pullRequestEventId: "pr-abc",
         pullRequestAuthorPubkey: "author-pk",
+        tipCommitOid: "tip",
       })
       expect(event.kind).toBe(GIT_PULL_REQUEST_UPDATE)
       expect(event.tags).toContainEqual(["a", "30617:repo"])
@@ -397,29 +439,29 @@ describe("NIP-34 Pull Request Events", () => {
       expect(event.tags).toContainEqual(["P", "author-pk"])
     })
 
-    it("should create PR update with multiple commits", () => {
+    it("should create PR update with one tip commit", () => {
       const event = createPullRequestUpdateEvent({
         repoAddr: "30617:repo",
         pullRequestEventId: "pr-id",
         pullRequestAuthorPubkey: "author",
-        commits: ["c1", "c2", "c3"],
+        tipCommitOid: "c3",
       })
       const cTags = event.tags.filter(t => t[0] === "c")
-      expect(cTags).toHaveLength(3)
-      expect(cTags.map(t => t[1])).toEqual(["c1", "c2", "c3"])
+      expect(cTags).toHaveLength(1)
+      expect(cTags.map(t => t[1])).toEqual(["c3"])
     })
   })
 
   describe("Type Guards - Rejection", () => {
     it("should reject non-PR events for isPullRequestEvent", () => {
-      expect(isPullRequestEvent({ kind: 1617 } as any)).toBe(false)
-      expect(isPullRequestEvent({ kind: 1619 } as any)).toBe(false)
-      expect(isPullRequestEvent({ kind: 1621 } as any)).toBe(false)
+      expect(isPullRequestEvent({kind: 1617} as any)).toBe(false)
+      expect(isPullRequestEvent({kind: 1619} as any)).toBe(false)
+      expect(isPullRequestEvent({kind: 1621} as any)).toBe(false)
     })
 
     it("should reject non-PR-update events for isPullRequestUpdateEvent", () => {
-      expect(isPullRequestUpdateEvent({ kind: 1618 } as any)).toBe(false)
-      expect(isPullRequestUpdateEvent({ kind: 1617 } as any)).toBe(false)
+      expect(isPullRequestUpdateEvent({kind: 1618} as any)).toBe(false)
+      expect(isPullRequestUpdateEvent({kind: 1617} as any)).toBe(false)
     })
   })
 
@@ -439,7 +481,7 @@ describe("NIP-34 Pull Request Events", () => {
       expect(parsed.repoId).toBe("30617:repo")
       expect(parsed.subject).toBe("")
       expect(parsed.labels).toEqual([])
-      expect(parsed.commits).toEqual([])
+      expect(parsed.tipCommitOid).toBe("")
       expect(parsed.branchName).toBeUndefined()
       expect(parsed.mergeBase).toBeUndefined()
       expect(parsed.content).toBe("")
@@ -447,7 +489,7 @@ describe("NIP-34 Pull Request Events", () => {
       expect(parsed.raw).toBe(event)
     })
 
-    it("should parse PR with multiple labels and commits", () => {
+    it("should parse PR with multiple labels and one tip commit", () => {
       const event: PullRequestEvent = {
         id: "id",
         pubkey: "pk",
@@ -458,7 +500,6 @@ describe("NIP-34 Pull Request Events", () => {
           ["subject", "Title"],
           ["t", "bug"],
           ["t", "enhancement"],
-          ["c", "c1"],
           ["c", "c2"],
         ],
         content: "Body",
@@ -466,7 +507,27 @@ describe("NIP-34 Pull Request Events", () => {
       }
       const parsed = parsePullRequestEvent(event)
       expect(parsed.labels).toEqual(["bug", "enhancement"])
-      expect(parsed.commits).toEqual(["c1", "c2"])
+      expect(parsed.tipCommitOid).toEqual("c2")
+    })
+
+    it("should treat PR with multiple c tags as invalid tip shape", () => {
+      const event: PullRequestEvent = {
+        id: "id",
+        pubkey: "pk",
+        created_at: 1234567890,
+        kind: GIT_PULL_REQUEST,
+        tags: [
+          ["a", "30617:repo"],
+          ["c", "c1"],
+          ["c", "c2"],
+        ],
+        content: "Body",
+        sig: "",
+      }
+      const parsed = parsePullRequestEvent(event)
+      expect(parsed.tipCommitOid).toBe("")
+      expect(parsed.tipError).toBe("ambiguous-tip")
+      expect(parsed.tipCandidates).toEqual(["c1", "c2"])
     })
 
     it("should parse PR update with minimal tags", () => {
@@ -486,8 +547,30 @@ describe("NIP-34 Pull Request Events", () => {
       const parsed = parsePullRequestUpdateEvent(event)
       expect(parsed.pullRequestEventId).toBe("pr-root-id")
       expect(parsed.pullRequestAuthorPubkey).toBe("pr-author-pk")
-      expect(parsed.commits).toEqual([])
+      expect(parsed.tipCommitOid).toBe("")
       expect(parsed.mergeBase).toBeUndefined()
+    })
+
+    it("should treat PR update with multiple c tags as invalid tip shape", () => {
+      const event: PullRequestUpdateEvent = {
+        id: "up-id",
+        pubkey: "pk",
+        created_at: 1234567890,
+        kind: GIT_PULL_REQUEST_UPDATE,
+        tags: [
+          ["a", "30617:repo"],
+          ["E", "pr-root-id"],
+          ["P", "pr-author-pk"],
+          ["c", "c1"],
+          ["c", "c2"],
+        ],
+        content: "",
+        sig: "",
+      }
+      const parsed = parsePullRequestUpdateEvent(event)
+      expect(parsed.tipCommitOid).toBe("")
+      expect(parsed.tipError).toBe("ambiguous-tip")
+      expect(parsed.tipCandidates).toEqual(["c1", "c2"])
     })
 
     it("should include createdAt as ISO string", () => {
@@ -512,7 +595,7 @@ describe("NIP-34 Pull Request Events", () => {
         content: "PR body",
         subject: "Add feature",
         labels: ["enhancement"],
-        commits: ["abc123"],
+        tipCommitOid: "abc123",
         clone: ["https://github.com/user/repo.git"],
         branchName: "main",
         mergeBase: "base123",
@@ -523,7 +606,7 @@ describe("NIP-34 Pull Request Events", () => {
       expect(parsed.subject).toBe("Add feature")
       expect(parsed.content).toBe("PR body")
       expect(parsed.labels).toEqual(["enhancement"])
-      expect(parsed.commits).toEqual(["abc123"])
+      expect(parsed.tipCommitOid).toEqual("abc123")
       expect(parsed.branchName).toBe("main")
       expect(parsed.mergeBase).toBe("base123")
       expect(parsed.raw).toBe(created)
@@ -534,13 +617,13 @@ describe("NIP-34 Pull Request Events", () => {
         repoAddr: "30617:repo",
         pullRequestEventId: "pr-xyz",
         pullRequestAuthorPubkey: "author-pk",
-        commits: ["c1", "c2"],
+        tipCommitOid: "c2",
         mergeBase: "mb",
       })
       const parsed = parsePullRequestUpdateEvent(created as PullRequestUpdateEvent)
       expect(parsed.pullRequestEventId).toBe("pr-xyz")
       expect(parsed.pullRequestAuthorPubkey).toBe("author-pk")
-      expect(parsed.commits).toEqual(["c1", "c2"])
+      expect(parsed.tipCommitOid).toEqual("c2")
       expect(parsed.mergeBase).toBe("mb")
     })
   })
@@ -603,46 +686,41 @@ describe("NIP-34 Pull Request Events", () => {
   })
 
   describe("PR Update Chain - Effective Tip Derivation", () => {
-    /**
-     * Replicates PRView's prEffectiveTipAndCommits logic for testing.
-     * When PR has updates, use latest update's commits; else use PR's commits.
-     */
-    function getEffectiveTipAndCommits(
+    function getEffectiveTipOid(
       pr: ReturnType<typeof parsePullRequestEvent> | undefined,
       updates: ReturnType<typeof parsePullRequestUpdateEvent>[],
-    ): { tipOid: string; allCommitOids: string[] } | null {
-      if (!pr) return null
-      if (updates.length > 0) {
-        const latest = updates[updates.length - 1]
-        const commits = latest.commits || []
-        const tipOid = commits[0]
-        return tipOid ? { tipOid, allCommitOids: commits } : null
-      }
-      const commits = pr.commits || []
-      return commits.length > 0 ? { tipOid: commits[0], allCommitOids: commits } : null
+    ): string {
+      if (!pr) return ""
+      if (updates.length > 0) return updates[updates.length - 1].tipCommitOid || ""
+      return pr.tipCommitOid || ""
     }
 
-    it("should use PR commits when no updates", () => {
+    it("should use PR tip when no updates", () => {
       const pr = parsePullRequestEvent({
         id: "pr-1",
         pubkey: "pk",
         created_at: 1,
         kind: GIT_PULL_REQUEST,
-        tags: [["a", "30617:r"], ["c", "c1"], ["c", "c2"]],
+        tags: [
+          ["a", "30617:r"],
+          ["c", "c1"],
+        ],
         content: "",
         sig: "",
       } as PullRequestEvent)
-      const result = getEffectiveTipAndCommits(pr, [])
-      expect(result).toEqual({ tipOid: "c1", allCommitOids: ["c1", "c2"] })
+      expect(getEffectiveTipOid(pr, [])).toBe("c1")
     })
 
-    it("should use latest update commits when updates exist", () => {
+    it("should use latest update tip when updates exist", () => {
       const pr = parsePullRequestEvent({
         id: "pr-1",
         pubkey: "pk",
         created_at: 1,
         kind: GIT_PULL_REQUEST,
-        tags: [["a", "30617:r"], ["c", "old1"], ["c", "old2"]],
+        tags: [
+          ["a", "30617:r"],
+          ["c", "old1"],
+        ],
         content: "",
         sig: "",
       } as PullRequestEvent)
@@ -651,51 +729,23 @@ describe("NIP-34 Pull Request Events", () => {
         pubkey: "pk",
         created_at: 2,
         kind: GIT_PULL_REQUEST_UPDATE,
-        tags: [["a", "30617:r"], ["E", "pr-1"], ["P", "pk"], ["c", "new1"], ["c", "new2"]],
+        tags: [
+          ["a", "30617:r"],
+          ["E", "pr-1"],
+          ["P", "pk"],
+          ["c", "new1"],
+        ],
         content: "",
         sig: "",
       } as PullRequestUpdateEvent)
-      const result = getEffectiveTipAndCommits(pr, [update1])
-      expect(result).toEqual({ tipOid: "new1", allCommitOids: ["new1", "new2"] })
+      expect(getEffectiveTipOid(pr, [update1])).toBe("new1")
     })
 
-    it("should use latest of multiple updates", () => {
-      const pr = parsePullRequestEvent({
-        id: "pr-1",
-        pubkey: "pk",
-        created_at: 1,
-        kind: GIT_PULL_REQUEST,
-        tags: [["a", "30617:r"], ["c", "c1"]],
-        content: "",
-        sig: "",
-      } as PullRequestEvent)
-      const up1 = parsePullRequestUpdateEvent({
-        id: "u1",
-        pubkey: "pk",
-        created_at: 2,
-        kind: GIT_PULL_REQUEST_UPDATE,
-        tags: [["a", "30617:r"], ["E", "pr-1"], ["P", "pk"], ["c", "c2"]],
-        content: "",
-        sig: "",
-      } as PullRequestUpdateEvent)
-      const up2 = parsePullRequestUpdateEvent({
-        id: "u2",
-        pubkey: "pk",
-        created_at: 3,
-        kind: GIT_PULL_REQUEST_UPDATE,
-        tags: [["a", "30617:r"], ["E", "pr-1"], ["P", "pk"], ["c", "c3"], ["c", "c4"]],
-        content: "",
-        sig: "",
-      } as PullRequestUpdateEvent)
-      const result = getEffectiveTipAndCommits(pr, [up1, up2])
-      expect(result).toEqual({ tipOid: "c3", allCommitOids: ["c3", "c4"] })
+    it("should return empty tip when pr is undefined", () => {
+      expect(getEffectiveTipOid(undefined, [])).toBe("")
     })
 
-    it("should return null when pr is undefined", () => {
-      expect(getEffectiveTipAndCommits(undefined, [])).toBeNull()
-    })
-
-    it("should return null when PR and updates have no commits", () => {
+    it("should return empty tip when PR and updates have no tip commit", () => {
       const pr = parsePullRequestEvent({
         id: "pr-1",
         pubkey: "pk",
@@ -710,11 +760,15 @@ describe("NIP-34 Pull Request Events", () => {
         pubkey: "pk",
         created_at: 2,
         kind: GIT_PULL_REQUEST_UPDATE,
-        tags: [["a", "30617:r"], ["E", "pr-1"], ["P", "pk"]],
+        tags: [
+          ["a", "30617:r"],
+          ["E", "pr-1"],
+          ["P", "pk"],
+        ],
         content: "",
         sig: "",
       } as PullRequestUpdateEvent)
-      expect(getEffectiveTipAndCommits(pr, [update])).toBeNull()
+      expect(getEffectiveTipOid(pr, [update])).toBe("")
     })
   })
 })

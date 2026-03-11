@@ -480,9 +480,9 @@ export function createPullRequestEvent(opts: {
   recipients?: string[]
   subject?: string
   labels?: string[]
-  commits?: string[]
+  tipCommitOid: string
   clone?: string[]
-  /** branchName = target branch (merge-into) per NIP-34. Source is identified by tip commit (c tags). */
+  /** branchName = target branch (merge-into) per NIP-34. Source is identified by tip commit (c tag). */
   branchName?: string
   mergeBase?: string
   tags?: PullRequestTag[]
@@ -492,7 +492,7 @@ export function createPullRequestEvent(opts: {
   if (opts.recipients) opts.recipients.forEach(p => tags.push(["p", p]))
   if (opts.subject) tags.push(["subject", opts.subject])
   if (opts.labels) opts.labels.forEach(l => tags.push(["t", l]))
-  if (opts.commits) opts.commits.forEach(c => tags.push(["c", c]))
+  tags.push(["c", opts.tipCommitOid])
   if (opts.clone && opts.clone.length > 0) tags.push(["clone", ...opts.clone])
   if (opts.branchName) tags.push(["branch-name", opts.branchName])
   if (opts.mergeBase) tags.push(["merge-base", opts.mergeBase])
@@ -514,7 +514,7 @@ export function createPullRequestUpdateEvent(opts: {
   pullRequestEventId: string
   pullRequestAuthorPubkey: string
   recipients?: string[]
-  commits?: string[]
+  tipCommitOid: string
   clone?: string[]
   mergeBase?: string
   tags?: PullRequestUpdateTag[]
@@ -524,7 +524,7 @@ export function createPullRequestUpdateEvent(opts: {
   tags.push(["E", opts.pullRequestEventId])
   tags.push(["P", opts.pullRequestAuthorPubkey])
   if (opts.recipients) opts.recipients.forEach(p => tags.push(["p", p]))
-  if (opts.commits) opts.commits.forEach(c => tags.push(["c", c]))
+  tags.push(["c", opts.tipCommitOid])
   if (opts.clone && opts.clone.length > 0) tags.push(["clone", ...opts.clone])
   if (opts.mergeBase) tags.push(["merge-base", opts.mergeBase])
   if (opts.tags) tags.push(...opts.tags)
@@ -574,7 +574,8 @@ export function createStatusEvent(opts: {
   if (opts.repoAddr) tags.push(["a", opts.repoAddr])
   if (opts.relays && opts.relays.length) tags.push(["r", opts.relays[0]])
   if (opts.mergedCommit) tags.push(["merge-commit", opts.mergedCommit])
-  if (opts.appliedCommits) tags.push(["applied-as-commits", opts.appliedCommits[0]])
+  if (opts.appliedCommits && opts.appliedCommits.length > 0)
+    tags.push(["applied-as-commits", ...opts.appliedCommits])
   if (opts.tags) tags.push(...opts.tags)
   return {
     kind: opts.kind,
@@ -699,17 +700,34 @@ export interface PullRequest {
   content: string
   author: {pubkey: string}
   labels: string[]
-  commits: string[]
-  /** Target branch (merge-into) per NIP-34; legacy PRs may have used this for source */
+  tipCommitOid: string
+  tipCandidates: string[]
+  tipError?: "missing-tip" | "ambiguous-tip"
+  /** Target branch (merge-into) per NIP-34 */
   branchName?: string
   mergeBase?: string
   createdAt: string
   raw: PullRequestEvent
 }
 
+function parseTipFromCTags(tags: string[]): {
+  tipCommitOid: string
+  tipCandidates: string[]
+  tipError?: "missing-tip" | "ambiguous-tip"
+} {
+  if (tags.length === 1) {
+    return {tipCommitOid: tags[0], tipCandidates: tags}
+  }
+  if (tags.length === 0) {
+    return {tipCommitOid: "", tipCandidates: [], tipError: "missing-tip"}
+  }
+  return {tipCommitOid: "", tipCandidates: tags, tipError: "ambiguous-tip"}
+}
+
 export function parsePullRequestEvent(event: PullRequestEvent): PullRequest {
   const getTag = (name: string) => event.tags.find(t => t[0] === name)?.[1]
   const getAllTags = (name: string) => event.tags.filter(t => t[0] === name).map(t => t[1])
+  const tip = parseTipFromCTags(getAllTags("c"))
   return {
     id: event.id,
     repoId: getTag("a") || "",
@@ -717,7 +735,9 @@ export function parsePullRequestEvent(event: PullRequestEvent): PullRequest {
     content: event.content,
     author: {pubkey: event.pubkey},
     labels: getAllTags("t"),
-    commits: getAllTags("c"),
+    tipCommitOid: tip.tipCommitOid,
+    tipCandidates: tip.tipCandidates,
+    tipError: tip.tipError,
     branchName: getTag("branch-name"),
     mergeBase: getTag("merge-base"),
     createdAt: new Date(event.created_at * 1000).toISOString(),
@@ -730,7 +750,9 @@ export interface PullRequestUpdate {
   repoId: string
   pullRequestEventId: string
   pullRequestAuthorPubkey: string
-  commits: string[]
+  tipCommitOid: string
+  tipCandidates: string[]
+  tipError?: "missing-tip" | "ambiguous-tip"
   mergeBase?: string
   author: {pubkey: string}
   createdAt: string
@@ -740,12 +762,15 @@ export interface PullRequestUpdate {
 export function parsePullRequestUpdateEvent(event: PullRequestUpdateEvent): PullRequestUpdate {
   const getTag = (name: string) => event.tags.find(t => t[0] === name)?.[1]
   const getAllTags = (name: string) => event.tags.filter(t => t[0] === name).map(t => t[1])
+  const tip = parseTipFromCTags(getAllTags("c"))
   return {
     id: event.id,
     repoId: getTag("a") || "",
     pullRequestEventId: getTag("E") || "",
     pullRequestAuthorPubkey: getTag("P") || "",
-    commits: getAllTags("c"),
+    tipCommitOid: tip.tipCommitOid,
+    tipCandidates: tip.tipCandidates,
+    tipError: tip.tipError,
     mergeBase: getTag("merge-base"),
     author: {pubkey: event.pubkey},
     createdAt: new Date(event.created_at * 1000).toISOString(),
@@ -851,7 +876,8 @@ export function parseRepoStateEvent(event: RepoStateEvent): RepoState {
   const refs = event.tags.filter(isRefTag).map(tag => ({
     ref: tag[0],
     commit: tag[1]!,
-    lineage: tag.length > 2 ? tag.slice(2).filter((s): s is string => typeof s === "string") : undefined,
+    lineage:
+      tag.length > 2 ? tag.slice(2).filter((s): s is string => typeof s === "string") : undefined,
   }))
   const head = getTag("HEAD")
   return {
@@ -868,6 +894,8 @@ export interface Status {
   id: string
   status: "open" | "applied" | "closed" | "draft" | "resolved"
   relatedIds: string[]
+  mergedCommit?: string
+  appliedCommits: string[]
   author: {pubkey: string}
   createdAt: string
   raw: StatusEvent
@@ -879,10 +907,17 @@ export function parseStatusEvent(event: StatusEvent): Status {
   else if (event.kind === 1632) status = "closed"
   else if (event.kind === 1633) status = "draft"
   const relatedIds = event.tags.filter(t => t[0] === "e").map(t => t[1])
+  const mergedCommit = event.tags.find(t => t[0] === "merge-commit")?.[1]
+  const appliedCommits = event.tags
+    .filter(t => t[0] === "applied-as-commits")
+    .flatMap(t => t.slice(1))
+    .filter((commit): commit is string => Boolean(commit))
   return {
     id: event.id,
     status,
     relatedIds,
+    mergedCommit,
+    appliedCommits,
     author: {pubkey: event.pubkey},
     createdAt: new Date(event.created_at * 1000).toISOString(),
     raw: event,

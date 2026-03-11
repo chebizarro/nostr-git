@@ -1687,6 +1687,18 @@ const api = {
   async getCommitDetails(opts: {repoId: string; commitId: string; branch?: string}) {
     const {key, dir} = repoKeyAndDir(opts.repoId)
 
+    const isMissingCommitObjectError = (error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error || "")
+      const lower = message.toLowerCase()
+      const code = (error as any)?.code
+      return (
+        code === "NotFoundError" ||
+        /could not find\s+[0-9a-f]{7,40}/i.test(message) ||
+        lower.includes("object not found") ||
+        lower.includes("notfounderror")
+      )
+    }
+
     try {
       // Optimization: Try to read commit locally first before triggering expensive fetch
       let commits: any[] = []
@@ -1811,8 +1823,151 @@ const api = {
         parents: commit.commit.parent || [],
       }
 
-      // Get file changes and diffs
-      const changes: Array<{
+      const collectCommitChanges = async () => {
+        const changes: Array<{
+          path: string
+          status: "added" | "modified" | "deleted" | "renamed"
+          diffHunks: Array<{
+            oldStart: number
+            oldLines: number
+            newStart: number
+            newLines: number
+            patches: Array<{line: string; type: "+" | "-" | " "}>
+          }>
+        }> = []
+
+        // If this is not the initial commit, compare with parent
+        if (commit.commit.parent && commit.commit.parent.length > 0) {
+          const parentCommit = commit.commit.parent[0]
+
+          // Get the list of changed files
+          const changedFiles = await (git as any).walk({
+            dir,
+            trees: [(git as any).TREE({ref: parentCommit}), (git as any).TREE({ref: commit.oid})],
+            map: async function (filepath: string, [A, B]: any[]) {
+              // Skip directories
+              if (filepath === ".") return
+              // Only process file blobs; ignore trees (directories) and other types
+              try {
+                const at = A ? await A.type() : undefined
+                const bt = B ? await B.type() : undefined
+                const isABlob = at === "blob"
+                const isBBlob = bt === "blob"
+                if (!isABlob && !isBBlob) {
+                  return
+                }
+              } catch (e) {
+                console.warn(`Type detection failed for ${filepath}:`, e)
+                // Continue but log the issue
+              }
+
+              const Aoid = await A?.oid()
+              const Boid = await B?.oid()
+
+              // Determine file status
+              let status: "added" | "modified" | "deleted" | "renamed" = "modified"
+              if (Aoid === undefined && Boid !== undefined) {
+                status = "added"
+              } else if (Aoid !== undefined && Boid === undefined) {
+                status = "deleted"
+              } else if (Aoid !== Boid) {
+                status = "modified"
+              } else {
+                return // No change
+              }
+
+              // Get diff for this file
+              let diffHunks: Array<{
+                oldStart: number
+                oldLines: number
+                newStart: number
+                newLines: number
+                patches: Array<{line: string; type: "+" | "-" | " "}>
+              }> = []
+
+              try {
+                if (status === "added") {
+                  const blob = await B!.content()
+                  const lines = new TextDecoder().decode(blob).split("\n")
+                  diffHunks = [
+                    {
+                      oldStart: 0,
+                      oldLines: 0,
+                      newStart: 1,
+                      newLines: lines.length,
+                      patches: lines.map((line: string) => ({line, type: "+" as const})),
+                    },
+                  ]
+                } else if (status === "deleted") {
+                  const blob = await A!.content()
+                  const lines = new TextDecoder().decode(blob).split("\n")
+                  diffHunks = [
+                    {
+                      oldStart: 1,
+                      oldLines: lines.length,
+                      newStart: 0,
+                      newLines: 0,
+                      patches: lines.map((line: string) => ({line, type: "-" as const})),
+                    },
+                  ]
+                } else {
+                  // For modified files, compute aligned diff with LCS/Myers
+                  const oldBlob = await A!.content()
+                  const newBlob = await B!.content()
+                  const oldText = new TextDecoder().decode(oldBlob)
+                  const newText = new TextDecoder().decode(newBlob)
+                  diffHunks = buildModifiedFileDiffHunks(oldText, newText)
+                }
+              } catch (diffError) {
+                console.warn(`Failed to generate diff for ${filepath}:`, diffError)
+                diffHunks = []
+              }
+
+              return {path: filepath, status, diffHunks}
+            },
+          })
+
+          changes.push(...changedFiles.filter(Boolean))
+        } else {
+          // Initial commit - show all files as added
+          const files = await (git as any).walk({
+            dir,
+            trees: [(git as any).TREE({ref: opts.commitId})],
+            map: async function (filepath: string, [A]: any[]) {
+              if (filepath === ".") return
+              const oid = await A?.oid()
+              if (!oid) return
+
+              try {
+                // When reading by OID, don't pass filepath - it's already resolved
+                const content = await (git as any).readBlob({dir, oid})
+                const lines = new TextDecoder().decode(content.blob).split("\n")
+                return {
+                  path: filepath,
+                  status: "added" as const,
+                  diffHunks: [
+                    {
+                      oldStart: 0,
+                      oldLines: 0,
+                      newStart: 1,
+                      newLines: lines.length,
+                      patches: lines.map((line: string) => ({line, type: "+" as const})),
+                    },
+                  ],
+                }
+              } catch (error) {
+                return {path: filepath, status: "added" as const, diffHunks: []}
+              }
+            },
+          })
+          changes.push(...files.filter(Boolean))
+        }
+
+        return changes
+      }
+
+      let warning: string | undefined
+      let changes: Array<{
         path: string
         status: "added" | "modified" | "deleted" | "renamed"
         diffHunks: Array<{
@@ -1824,134 +1979,80 @@ const api = {
         }>
       }> = []
 
-      // If this is not the initial commit, compare with parent
-      if (commit.commit.parent && commit.commit.parent.length > 0) {
-        const parentCommit = commit.commit.parent[0]
+      try {
+        changes = await collectCommitChanges()
+      } catch (diffError) {
+        if (!isMissingCommitObjectError(diffError)) {
+          throw diffError
+        }
 
-        // Get the list of changed files
-        const changedFiles = await (git as any).walk({
-          dir,
-          trees: [(git as any).TREE({ref: parentCommit}), (git as any).TREE({ref: commit.oid})],
-          map: async function (filepath: string, [A, B]: any[]) {
-            // Skip directories
-            if (filepath === ".") return
-            // Only process file blobs; ignore trees (directories) and other types
-            try {
-              const at = A ? await A.type() : undefined
-              const bt = B ? await B.type() : undefined
-              const isABlob = at === "blob"
-              const isBBlob = bt === "blob"
-              if (!isABlob && !isBBlob) {
-                return
-              }
-            } catch (e) {
-              console.warn(`Type detection failed for ${filepath}:`, e)
-              // Continue but log the issue
+        console.warn(
+          `[getCommitDetails] Missing commit objects for ${opts.commitId}, attempting ancestor refetch...`,
+          diffError,
+        )
+
+        let recovered = false
+        try {
+          const remotes = await git.listRemotes({dir})
+          const originRemote = remotes.find((r: any) => r.remote === "origin")
+          const urlsToTry: string[] = []
+          if (originRemote?.url) urlsToTry.push(originRemote.url)
+
+          try {
+            const cache = await cacheManager.getRepoCache(key)
+            for (const url of filterValidCloneUrls(cache?.cloneUrls || [])) {
+              if (!urlsToTry.includes(url)) urlsToTry.push(url)
             }
+          } catch {
+            // ignore cache errors
+          }
 
-            const Aoid = await A?.oid()
-            const Boid = await B?.oid()
+          const orderedUrls = reorderUrlsByPreference(filterValidCloneUrls(urlsToTry), key)
+          if (orderedUrls.length > 0) {
+            const corsProxy = resolveDefaultCorsProxy()
+            const fetchResult = await withUrlFallback(
+              orderedUrls,
+              async (url: string) => {
+                const authCallback = getAuthCallback(url)
+                await git.fetch({
+                  dir,
+                  url,
+                  singleBranch: false,
+                  depth: 1000,
+                  tags: false,
+                  corsProxy,
+                  ...(authCallback && {onAuth: authCallback}),
+                })
+                return true
+              },
+              {repoId: key, perUrlTimeoutMs: 20000},
+            )
+            recovered = fetchResult.success
+          }
+        } catch (recoverError) {
+          console.warn(
+            `[getCommitDetails] Ancestor refetch failed for ${opts.commitId}:`,
+            recoverError,
+          )
+        }
 
-            // Determine file status
-            let status: "added" | "modified" | "deleted" | "renamed" = "modified"
-            if (Aoid === undefined && Boid !== undefined) {
-              status = "added"
-            } else if (Aoid !== undefined && Boid === undefined) {
-              status = "deleted"
-            } else if (Aoid !== Boid) {
-              status = "modified"
-            } else {
-              return // No change
+        if (recovered) {
+          try {
+            changes = await collectCommitChanges()
+          } catch (retryError) {
+            if (!isMissingCommitObjectError(retryError)) {
+              throw retryError
             }
-
-            // Get diff for this file
-            let diffHunks: Array<{
-              oldStart: number
-              oldLines: number
-              newStart: number
-              newLines: number
-              patches: Array<{line: string; type: "+" | "-" | " "}>
-            }> = []
-
-            try {
-              if (status === "added") {
-                const blob = await B!.content()
-                const lines = new TextDecoder().decode(blob).split("\n")
-                diffHunks = [
-                  {
-                    oldStart: 0,
-                    oldLines: 0,
-                    newStart: 1,
-                    newLines: lines.length,
-                    patches: lines.map((line: string) => ({line, type: "+" as const})),
-                  },
-                ]
-              } else if (status === "deleted") {
-                const blob = await A!.content()
-                const lines = new TextDecoder().decode(blob).split("\n")
-                diffHunks = [
-                  {
-                    oldStart: 1,
-                    oldLines: lines.length,
-                    newStart: 0,
-                    newLines: 0,
-                    patches: lines.map((line: string) => ({line, type: "-" as const})),
-                  },
-                ]
-              } else {
-                // For modified files, compute aligned diff with LCS/Myers
-                const oldBlob = await A!.content()
-                const newBlob = await B!.content()
-                const oldText = new TextDecoder().decode(oldBlob)
-                const newText = new TextDecoder().decode(newBlob)
-                diffHunks = buildModifiedFileDiffHunks(oldText, newText)
-              }
-            } catch (diffError) {
-              console.warn(`Failed to generate diff for ${filepath}:`, diffError)
-              diffHunks = []
-            }
-
-            return {path: filepath, status, diffHunks}
-          },
-        })
-
-        changes.push(...changedFiles.filter(Boolean))
-      } else {
-        // Initial commit - show all files as added
-        const files = await (git as any).walk({
-          dir,
-          trees: [(git as any).TREE({ref: opts.commitId})],
-          map: async function (filepath: string, [A]: any[]) {
-            if (filepath === ".") return
-            const oid = await A?.oid()
-            if (!oid) return
-
-            try {
-              // When reading by OID, don't pass filepath - it's already resolved
-              const content = await (git as any).readBlob({dir, oid})
-              const lines = new TextDecoder().decode(content.blob).split("\n")
-              return {
-                path: filepath,
-                status: "added" as const,
-                diffHunks: [
-                  {
-                    oldStart: 0,
-                    oldLines: 0,
-                    newStart: 1,
-                    newLines: lines.length,
-                    patches: lines.map((line: string) => ({line, type: "+" as const})),
-                  },
-                ],
-              }
-            } catch (error) {
-              return {path: filepath, status: "added" as const, diffHunks: []}
-            }
-          },
-        })
-        changes.push(...files.filter(Boolean))
+            warning =
+              "Commit metadata loaded, but diff is unavailable because ancestor objects are missing."
+          }
+        } else {
+          warning =
+            "Commit metadata loaded, but diff is unavailable because ancestor objects are missing."
+        }
       }
 
-      return toPlain({success: true, meta, changes})
+      return toPlain({success: true, meta, changes, warning})
     } catch (error) {
       return toPlain({
         success: false,

@@ -813,10 +813,9 @@ export async function analyzePRMergeability(
     targetCloneUrls?: string[]
     tipCommitOid: string
     targetBranch: string
-    allCommitOids?: string[]
   },
 ): Promise<PRMergeAnalysisResult> {
-  const {cloneUrls, targetCloneUrls, tipCommitOid, targetBranch, allCommitOids = []} = opts
+  const {cloneUrls, targetCloneUrls, tipCommitOid, targetBranch} = opts
   const {withUrlFallback, filterValidCloneUrls} = await import("../utils/clone-url-fallback.js")
 
   console.log(
@@ -830,7 +829,7 @@ export async function analyzePRMergeability(
     conflictDetails: [],
     upToDate: false,
     fastForward: false,
-    patchCommits: allCommitOids.length ? allCommitOids : [tipCommitOid],
+    patchCommits: [tipCommitOid],
     analysis: "error",
     errorMessage: "Placeholder error message",
   }
@@ -967,8 +966,7 @@ export async function analyzePRMergeability(
 
         const prTipRef = tipOid
         const prTipOid = tipOid
-        const patchCommits = allCommitOids.length ? allCommitOids : [tipOid]
-        const prCommitsFromTags = await getCommitMetadataForOids(git, repoDir, patchCommits)
+        const patchCommits = [tipOid]
 
         // Check if PR is already in target (tip must be present; partial commits = not merged)
         const isUpToDate = await checkIfPRApplied(git, repoDir, resolvedBranch, prTipOid)
@@ -989,7 +987,7 @@ export async function analyzePRMergeability(
             analysis: "up-to-date",
             filesChanged: [],
             usedCloneUrl: url,
-            prCommits: prCommitsFromTags,
+            prCommits: await getCommitMetadataForOids(git, repoDir, patchCommits),
           } as PRMergeAnalysisResult
         }
 
@@ -1017,6 +1015,18 @@ export async function analyzePRMergeability(
           const filesChanged = baseForDiff
             ? await getChangedFilesBetween(git, repoDir, baseForDiff, prTipRef)
             : []
+          const prCommits = await getPRCommitsOnly(
+            git,
+            repoDir,
+            prTipRef,
+            mergeBase ?? targetCommit,
+            50,
+          )
+          const effectivePrCommits =
+            prCommits.length > 0
+              ? prCommits
+              : await getCommitMetadataForOids(git, repoDir, [prTipRef])
+          const patchCommitOids = effectivePrCommits.map(commit => commit.oid)
           return {
             canMerge: true,
             hasConflicts: false,
@@ -1027,11 +1037,11 @@ export async function analyzePRMergeability(
             mergeBase,
             targetCommit,
             remoteCommit: undefined,
-            patchCommits,
+            patchCommits: patchCommitOids.length > 0 ? patchCommitOids : patchCommits,
             analysis: "clean",
             filesChanged,
             usedCloneUrl: url,
-            prCommits: prCommitsFromTags,
+            prCommits: effectivePrCommits,
           } as PRMergeAnalysisResult
         }
 
@@ -1053,7 +1063,11 @@ export async function analyzePRMergeability(
           mergeBase ?? targetCommit,
           50,
         )
-        const effectivePrCommits = prCommits.length > 0 ? prCommits : prCommitsFromTags
+        const effectivePrCommits =
+          prCommits.length > 0
+            ? prCommits
+            : await getCommitMetadataForOids(git, repoDir, [prTipRef])
+        const patchCommitOids = effectivePrCommits.map(commit => commit.oid)
         console.log(
           `[analyzePRMergeability] Success via ${url}: analysis=${mergeResult.hasConflicts ? "conflicts" : "clean"}, filesChanged=${filesChanged.length}`,
         )
@@ -1068,7 +1082,7 @@ export async function analyzePRMergeability(
           mergeBase,
           targetCommit,
           remoteCommit: undefined,
-          patchCommits,
+          patchCommits: patchCommitOids.length > 0 ? patchCommitOids : patchCommits,
           analysis: mergeResult.hasConflicts ? "conflicts" : "clean",
           filesChanged,
           usedCloneUrl: url,

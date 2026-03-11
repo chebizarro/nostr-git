@@ -221,6 +221,11 @@ function hasTagName(tags: unknown[], name: string) {
   return Array.isArray(tags) && tags.some(t => Array.isArray(t) && t[0] === name)
 }
 
+function countTagName(tags: unknown[], name: string) {
+  if (!Array.isArray(tags)) return 0
+  return tags.filter(t => Array.isArray(t) && t[0] === name).length
+}
+
 export const RepoAnnouncementEventSchema = NostrEventSchema.extend({
   kind: z.literal(30617),
   tags: RepoAnnouncementTagsSchema,
@@ -298,6 +303,12 @@ export const PullRequestEventSchema = NostrEventSchema.extend({
       message: "Pull Request must include an 'a' tag (repo address)",
     })
   }
+  if (countTagName(evt.tags as unknown[], "c") !== 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Pull Request must include exactly one 'c' tag (tip commit)",
+    })
+  }
 })
 
 // Pull Request Update event (kind 1619)
@@ -321,6 +332,12 @@ export const PullRequestUpdateEventSchema = NostrEventSchema.extend({
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Pull Request update must include a 'P' tag (NIP-22: PR author)",
+    })
+  }
+  if (countTagName(evt.tags as unknown[], "c") !== 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Pull Request update must include exactly one 'c' tag (tip commit)",
     })
   }
 })

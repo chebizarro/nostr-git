@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import {describe, it, expect, vi, beforeEach} from "vitest"
 import {
   inferProviderFromUrl,
   mergePRAndPushUtil,
@@ -6,7 +6,7 @@ import {
   type MergePRAndPushOptions,
   type AnalyzePRMergeOptions,
 } from "../../src/worker/workers/pr-merge.js"
-import type { GitProvider } from "../../src/git/provider.js"
+import type {GitProvider} from "../../src/git/provider.js"
 
 describe("pr-merge", () => {
   describe("inferProviderFromUrl", () => {
@@ -66,12 +66,12 @@ describe("pr-merge", () => {
       fetch: vi.fn().mockResolvedValue(undefined),
       writeRef: vi.fn().mockResolvedValue(undefined),
       checkout: vi.fn().mockResolvedValue(undefined),
-      resolveRef: vi.fn().mockImplementation(({ ref }) => {
+      resolveRef: vi.fn().mockImplementation(({ref}) => {
         if (ref === "main" || ref === "refs/heads/main") return Promise.resolve("target-oid-123")
         if (ref?.startsWith("refs/pr-tip-merge-")) return Promise.resolve("tip-oid-456")
         return Promise.resolve("some-oid")
       }),
-      merge: vi.fn().mockResolvedValue({ oid: "merge-commit-oid-789" }),
+      merge: vi.fn().mockResolvedValue({oid: "merge-commit-oid-789"}),
       listRemotes: vi.fn().mockResolvedValue([]),
       deleteRef: vi.fn().mockResolvedValue(undefined),
     } as any
@@ -82,9 +82,9 @@ describe("pr-merge", () => {
       resolveBranchName: vi.fn().mockResolvedValue("main"),
       ensureFullClone: vi.fn().mockResolvedValue(undefined),
       getAuthCallback: vi.fn().mockReturnValue(undefined),
-      pushToRemote: vi.fn().mockResolvedValue({ success: true }),
-      safePushToRemote: vi.fn().mockResolvedValue({ success: true }),
-      getTokensForRemote: vi.fn().mockResolvedValue([{ token: "fake-token" }]),
+      pushToRemote: vi.fn().mockResolvedValue({success: true}),
+      safePushToRemote: vi.fn().mockResolvedValue({success: true}),
+      getTokensForRemote: vi.fn().mockResolvedValue([{token: "fake-token"}]),
     }
 
     beforeEach(() => {
@@ -92,24 +92,32 @@ describe("pr-merge", () => {
     })
 
     it("returns error when no valid clone URLs after filtering", async () => {
-      const result = await mergePRAndPushUtil(mockGit, {
-        repoId: "test-repo",
-        cloneUrls: ["nostr://relay.example.com", "", "  "],
-        tipCommitOid: "abc123",
-      } as MergePRAndPushOptions, baseDeps as any)
+      const result = await mergePRAndPushUtil(
+        mockGit,
+        {
+          repoId: "test-repo",
+          cloneUrls: ["nostr://relay.example.com", "", "  "],
+          tipCommitOid: "abc123",
+        } as MergePRAndPushOptions,
+        baseDeps as any,
+      )
 
       expect(result.success).toBe(false)
       expect(result.error).toContain("No valid clone URLs")
     })
 
     it("returns mergeCommitOid and skips push when skipPush is true", async () => {
-      const result = await mergePRAndPushUtil(mockGit, {
-        repoId: "test-repo",
-        cloneUrls: ["https://github.com/user/repo.git"],
-        tipCommitOid: "tip-oid-456",
-        targetBranch: "main",
-        skipPush: true,
-      } as MergePRAndPushOptions, baseDeps as any)
+      const result = await mergePRAndPushUtil(
+        mockGit,
+        {
+          repoId: "test-repo",
+          cloneUrls: ["https://github.com/user/repo.git"],
+          tipCommitOid: "tip-oid-456",
+          targetBranch: "main",
+          skipPush: true,
+        } as MergePRAndPushOptions,
+        baseDeps as any,
+      )
 
       expect(result.success).toBe(true)
       expect(result.mergeCommitOid).toBe("merge-commit-oid-789")
@@ -125,24 +133,32 @@ describe("pr-merge", () => {
         fetch: vi.fn().mockRejectedValue(new Error("Fetch failed")),
       } as any
 
-      const result = await mergePRAndPushUtil(gitWithFailingFetch, {
-        repoId: "test-repo",
-        cloneUrls: ["https://github.com/user/repo.git"],
-        tipCommitOid: "tip-oid",
-      } as MergePRAndPushOptions, baseDeps as any)
+      const result = await mergePRAndPushUtil(
+        gitWithFailingFetch,
+        {
+          repoId: "test-repo",
+          cloneUrls: ["https://github.com/user/repo.git"],
+          tipCommitOid: "tip-oid",
+        } as MergePRAndPushOptions,
+        baseDeps as any,
+      )
 
       expect(result.success).toBe(false)
       expect(result.error).toBeDefined()
     })
 
     it("calls resolveBranchName with dir and targetBranch", async () => {
-      await mergePRAndPushUtil(mockGit, {
-        repoId: "test-repo",
-        cloneUrls: ["https://github.com/user/repo.git"],
-        tipCommitOid: "tip-oid",
-        targetBranch: "develop",
-        skipPush: true,
-      } as MergePRAndPushOptions, baseDeps as any)
+      await mergePRAndPushUtil(
+        mockGit,
+        {
+          repoId: "test-repo",
+          cloneUrls: ["https://github.com/user/repo.git"],
+          tipCommitOid: "tip-oid",
+          targetBranch: "develop",
+          skipPush: true,
+        } as MergePRAndPushOptions,
+        baseDeps as any,
+      )
 
       expect(baseDeps.resolveBranchName).toHaveBeenCalledWith(
         expect.stringContaining("test-repo"),
@@ -157,12 +173,12 @@ describe("pr-merge", () => {
       deleteRemote: vi.fn().mockResolvedValue(undefined),
       setConfig: vi.fn().mockResolvedValue(undefined),
       fetch: vi.fn().mockResolvedValue(undefined),
-      resolveRef: vi.fn().mockImplementation(({ ref }) => {
+      resolveRef: vi.fn().mockImplementation(({ref}) => {
         if (ref === "refs/heads/main") return Promise.resolve("target-oid")
         if (ref?.includes("pr-source")) return Promise.resolve("tip-oid")
         return Promise.resolve("some-oid")
       }),
-      merge: vi.fn().mockResolvedValue({ oid: "merge-oid" }),
+      merge: vi.fn().mockResolvedValue({oid: "merge-oid"}),
       findMergeBase: vi.fn().mockResolvedValue("base-oid"),
       isDescendent: vi.fn().mockResolvedValue(false),
       listBranches: vi.fn().mockResolvedValue(["main"]),
@@ -184,7 +200,6 @@ describe("pr-merge", () => {
         prCloneUrls: ["https://github.com/user/fork.git"],
         tipCommitOid: "tip-oid",
         targetBranch: "main",
-        allCommitOids: ["c1", "c2"],
       }
 
       const result = await analyzePRMergeUtil(mockGit, opts, baseDeps as any)
