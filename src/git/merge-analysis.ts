@@ -952,6 +952,11 @@ export async function analyzePRMergeability(
           repoDir,
           effectiveTargetBranch,
         )
+        if (effectiveTargetBranch && resolvedBranch !== effectiveTargetBranch) {
+          return errResult(
+            `Target branch '${effectiveTargetBranch}' not found after sync (resolved '${resolvedBranch}' instead)`,
+          )
+        }
         const targetCommit = await git.resolveRef({
           dir: repoDir,
           ref: `refs/heads/${resolvedBranch}`,
