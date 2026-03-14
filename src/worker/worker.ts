@@ -561,11 +561,13 @@ const api = {
       if (originRemote?.url) {
         const resolvedBranch = await resolveRobustBranchUtil(git, dir)
         const pushAuthCallback = getAuthCallback(originRemote.url)
+        const corsProxy = resolveDefaultCorsProxy()
         await (git as any).push({
           dir,
           url: originRemote.url,
           ref: resolvedBranch,
           force: true,
+          ...(corsProxy !== null ? {corsProxy} : {}),
           ...(pushAuthCallback && {onAuth: pushAuthCallback}),
         })
       }
@@ -865,6 +867,7 @@ const api = {
             remoteRef: `refs/heads/${targetBranch}`,
             http: httpWeb,
             force: false,
+            corsProxy: null,
             headers: {
               "User-Agent": "git/isomorphic-git",
             },
@@ -916,11 +919,14 @@ const api = {
         })
       }
 
+      const corsProxy = resolveDefaultCorsProxy()
+
       await (git as any).push({
         dir,
         url: remoteUrl,
         ref: targetBranch,
         remoteRef: targetBranch,
+        ...(corsProxy !== null ? {corsProxy} : {}),
         onAuth,
       })
 

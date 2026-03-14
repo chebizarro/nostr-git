@@ -1226,6 +1226,7 @@ export async function forkAndCloneRepo(
                 ref: defaultBranch,
                 remoteRef: `refs/heads/${defaultBranch}`,
                 force: true,
+                ...(corsProxy !== null ? {corsProxy} : {}),
                 onAuth: () => {
                   console.log("[forkAndCloneRepo] onAuth called for push, provider:", provider)
                   // Different providers use different auth formats:
@@ -1382,6 +1383,7 @@ export async function forkAndCloneRepo(
                     ref: defaultBranch,
                     remoteRef: `refs/heads/${defaultBranch}`,
                     force: true,
+                    ...(corsProxy !== null ? {corsProxy} : {}),
                     onAuth: () =>
                       provider === "gitlab"
                         ? {username: "oauth2", password: token}
@@ -1734,7 +1736,13 @@ export async function updateAndPushFiles(
         ? () => ({username: token, password: "grasp"})
         : () => ({username: "token", password: token})
 
-    await git.push({dir, onAuth: authCallback, force: false})
+    const corsProxy = provider === "grasp" ? null : resolveDefaultCorsProxy()
+    await git.push({
+      dir,
+      onAuth: authCallback,
+      force: false,
+      ...(corsProxy !== null ? {corsProxy} : {}),
+    })
 
     onProgress?.("Files updated and pushed successfully!")
 
