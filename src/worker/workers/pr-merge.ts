@@ -491,6 +491,8 @@ export async function analyzePRMergeUtil(
     rootDir: string
     parseRepoId: (id: string) => string
     resolveBranchName: (dir: string, requested?: string) => Promise<string>
+    getAuthCallback?: (url: string) => any
+    corsProxy?: string | null
   },
 ): Promise<PRMergeAnalysisResult> {
   const {repoId, prCloneUrls, targetCloneUrls, tipCommitOid, targetBranch} = opts
@@ -507,6 +509,9 @@ export async function analyzePRMergeUtil(
     targetCloneUrls,
     tipCommitOid,
     targetBranch: effectiveTargetBranch,
+    strictTargetFresh: true,
+    getAuthCallback: deps.getAuthCallback,
+    corsProxy: deps.corsProxy,
   })
 
   return result

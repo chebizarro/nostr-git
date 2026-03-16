@@ -589,7 +589,13 @@ const api = {
   },
 
   // Sync helpers
-  async syncWithRemote(opts: {repoId: string; cloneUrls: string[]; branch?: string}) {
+  async syncWithRemote(opts: {
+    repoId: string
+    cloneUrls: string[]
+    branch?: string
+    requireRemoteSync?: boolean
+    requireTrackingRef?: boolean
+  }) {
     return toPlain(
       await syncWithRemoteUtil(git, cacheManager, opts, {
         rootDir,
@@ -598,6 +604,8 @@ const api = {
           resolveRobustBranchUtil(git, dir, requested),
         isRepoCloned: async (dir: string) => isRepoClonedFs(git, dir),
         toPlain,
+        getAuthCallback,
+        corsProxy: resolveDefaultCorsProxy(),
       }),
     )
   },
@@ -699,6 +707,8 @@ const api = {
       parseRepoId,
       resolveBranchName: async (dir: string, requested?: string) =>
         resolveRobustBranchUtil(git, dir, requested),
+      getAuthCallback,
+      corsProxy: resolveDefaultCorsProxy(),
     })
     sendProgress("Analysis complete")
     return toPlain(result)

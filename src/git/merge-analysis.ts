@@ -813,9 +813,20 @@ export async function analyzePRMergeability(
     targetCloneUrls?: string[]
     tipCommitOid: string
     targetBranch: string
+    strictTargetFresh?: boolean
+    corsProxy?: string | null
+    getAuthCallback?: (url: string) => any
   },
 ): Promise<PRMergeAnalysisResult> {
-  const {cloneUrls, targetCloneUrls, tipCommitOid, targetBranch} = opts
+  const {
+    cloneUrls,
+    targetCloneUrls,
+    tipCommitOid,
+    targetBranch,
+    strictTargetFresh = false,
+    corsProxy,
+    getAuthCallback,
+  } = opts
   const {withUrlFallback, filterValidCloneUrls} = await import("../utils/clone-url-fallback.js")
 
   console.log(
@@ -833,6 +844,8 @@ export async function analyzePRMergeability(
     analysis: "error",
     errorMessage: "Placeholder error message",
   }
+
+  const effectiveTargetBranch = targetBranch || "main"
 
   const validUrls = filterValidCloneUrls(cloneUrls)
   if (validUrls.length === 0) {
@@ -852,6 +865,84 @@ export async function analyzePRMergeability(
     analysis: "error",
     errorMessage: msg,
   })
+
+  const validTargetUrls = filterValidCloneUrls(targetCloneUrls || [])
+  if (strictTargetFresh && validTargetUrls.length === 0) {
+    return errResult(
+      `No valid target clone URLs available to refresh target branch "${effectiveTargetBranch}"`,
+    )
+  }
+
+  if (validTargetUrls.length > 0) {
+    const targetRemote = `pr-target-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
+    const targetFetchResult = await withUrlFallback(
+      validTargetUrls,
+      async (targetUrl: string) => {
+        try {
+          try {
+            await git.deleteRemote({dir: repoDir, remote: targetRemote})
+          } catch {
+            /* ignore */
+          }
+          await git.addRemote({dir: repoDir, remote: targetRemote, url: targetUrl})
+          try {
+            await git.setConfig({
+              dir: repoDir,
+              path: `remote.${targetRemote}.fetch`,
+              value: `+refs/heads/*:refs/remotes/${targetRemote}/*`,
+            })
+          } catch {
+            /* ignore */
+          }
+
+          const fetchOptions: any = {
+            dir: repoDir,
+            remote: targetRemote,
+            url: targetUrl,
+            ref: effectiveTargetBranch,
+            singleBranch: true,
+            depth: 100,
+            prune: true,
+            tags: false,
+          }
+          if (corsProxy !== undefined) {
+            fetchOptions.corsProxy = corsProxy
+          }
+          if (getAuthCallback) {
+            fetchOptions.onAuth = getAuthCallback(targetUrl)
+          }
+
+          await git.fetch(fetchOptions)
+          const remoteRef = `refs/remotes/${targetRemote}/${effectiveTargetBranch}`
+          const remoteOid = await git.resolveRef({dir: repoDir, ref: remoteRef})
+          await git.writeRef({
+            dir: repoDir,
+            ref: `refs/heads/${effectiveTargetBranch}`,
+            value: remoteOid,
+            force: true,
+          })
+
+          return {oid: remoteOid}
+        } finally {
+          try {
+            await git.deleteRemote({dir: repoDir, remote: targetRemote})
+          } catch {
+            /* ignore */
+          }
+        }
+      },
+      {perUrlTimeoutMs: 20000},
+    )
+
+    if (!targetFetchResult.success) {
+      const attempts = targetFetchResult.attempts?.length
+        ? targetFetchResult.attempts.map(a => `${a.url}: ${a.error || "failed"}`).join("; ")
+        : "unknown target fetch error"
+      return errResult(
+        `Failed to refresh target branch "${effectiveTargetBranch}" from remote: ${attempts}`,
+      )
+    }
+  }
 
   // Use unique remote name per invocation to avoid race when multiple analyses run concurrently
   const prRemote = `pr-source-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
@@ -876,72 +967,26 @@ export async function analyzePRMergeability(
         }
         console.log(`[analyzePRMergeability] Fetching from ${url} (all refs)`)
 
-        await git.fetch({
+        const sourceFetchOptions: any = {
           dir: repoDir,
           remote: prRemote,
           url,
           singleBranch: false,
           depth: 100,
-        })
+          prune: true,
+          tags: false,
+        }
+        if (corsProxy !== undefined) {
+          sourceFetchOptions.corsProxy = corsProxy
+        }
+        if (getAuthCallback) {
+          sourceFetchOptions.onAuth = getAuthCallback(url)
+        }
 
-        // Ensure target branch exists locally; fetch from repo (target) clone URLs if not
-        const effectiveTargetBranch = targetBranch || "main"
-        try {
+        await git.fetch(sourceFetchOptions)
+
+        if (strictTargetFresh) {
           await git.resolveRef({dir: repoDir, ref: `refs/heads/${effectiveTargetBranch}`})
-        } catch {
-          const urlsToTry = targetCloneUrls?.length ? filterValidCloneUrls(targetCloneUrls) : []
-          if (urlsToTry.length > 0) {
-            const targetFetchResult = await withUrlFallback(
-              urlsToTry,
-              async (targetUrl: string) => {
-                const targetRemote = `pr-target-${Date.now().toString(36)}`
-                await git.addRemote({dir: repoDir, remote: targetRemote, url: targetUrl})
-                try {
-                  await git.setConfig({
-                    dir: repoDir,
-                    path: `remote.${targetRemote}.fetch`,
-                    value: `+refs/heads/*:refs/remotes/${targetRemote}/*`,
-                  })
-                } catch {
-                  /* ignore */
-                }
-                const toFetch = effectiveTargetBranch
-                await git.fetch({
-                  dir: repoDir,
-                  remote: targetRemote,
-                  url: targetUrl,
-                  ref: toFetch,
-                  singleBranch: true,
-                  depth: 100,
-                })
-                const remoteRef = `refs/remotes/${targetRemote}/${toFetch}`
-                const oid = await git.resolveRef({dir: repoDir, ref: remoteRef})
-                return {oid, targetRemote}
-              },
-              {perUrlTimeoutMs: 15000},
-            )
-            if (targetFetchResult.success && targetFetchResult.result) {
-              const {oid: remoteTargetOid, targetRemote} = targetFetchResult.result
-              await git.writeRef({
-                dir: repoDir,
-                ref: `refs/heads/${effectiveTargetBranch}`,
-                value: remoteTargetOid,
-                force: true,
-              })
-              console.log(
-                `[analyzePRMergeability] Created local branch ${effectiveTargetBranch} from repo clone URL`,
-              )
-              try {
-                await git.deleteRemote({dir: repoDir, remote: targetRemote})
-              } catch {
-                /* ignore */
-              }
-            } else {
-              console.warn(
-                `[analyzePRMergeability] Could not fetch target branch ${effectiveTargetBranch} from repo clone URLs`,
-              )
-            }
-          }
         }
 
         const tipOid = tipCommitOid
