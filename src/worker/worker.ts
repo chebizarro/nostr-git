@@ -638,12 +638,15 @@ const api = {
    * List branch names from clone URLs without cloning (uses listServerRefs).
    * Used by NewPRForm when creating PRs from forks to populate source branch dropdown.
    */
-  async listBranchesFromUrls(opts: {cloneUrls: string[]}): Promise<{branches: string[]}> {
+  async listBranchesFromUrls(opts: {
+    cloneUrls: string[]
+  }): Promise<{branches: string[]; error?: string}> {
     const validUrls = filterValidCloneUrls(opts.cloneUrls)
     if (validUrls.length === 0) {
-      return toPlain({branches: []})
+      return toPlain({branches: [], error: "No valid clone URLs provided"})
     }
     const ordered = reorderUrlsByPreference(validUrls, "fork-preview")
+    const failures: string[] = []
     for (const url of ordered) {
       try {
         const refs = await git.listServerRefs({
@@ -659,10 +662,16 @@ const api = {
         return toPlain({branches})
       } catch (err) {
         console.warn("[listBranchesFromUrls] Failed for", url, err)
+        failures.push(`${url}: ${err instanceof Error ? err.message : String(err)}`)
         continue
       }
     }
-    return toPlain({branches: []})
+    return toPlain({
+      branches: [],
+      error: failures.length
+        ? `Failed to load fork branches: ${failures.join("; ")}`
+        : "Failed to load fork branches",
+    })
   },
 
   // Patch analysis & application
@@ -1222,6 +1231,7 @@ const api = {
     const {key, dir} = repoKeyAndDir(opts.repoId)
     const isForkPR = opts.sourceCloneUrls && opts.sourceCloneUrls.length > 0
     const targetUrls = filterValidCloneUrls(opts.cloneUrls)
+    let sourceRemote: string | undefined
 
     try {
       await smartInitializeRepoUtil(
@@ -1240,40 +1250,69 @@ const api = {
         makeProgress(opts.repoId, "clone-progress"),
       )
 
-      // Fetch target (upstream) branches
+      // Refresh target (upstream) branch and require freshness for PR preview.
       const orderedUrls = reorderUrlsByPreference(targetUrls, key)
-      const corsProxy = resolveDefaultCorsProxy()
-      if (orderedUrls.length > 0) {
-        const fetchResult = await withUrlFallback(
-          orderedUrls,
-          async (cloneUrl: string) => {
-            await ensureOriginRemoteConfig(git, dir, cloneUrl)
-            await git.fetch({
-              dir,
-              url: cloneUrl,
-              singleBranch: false,
-              depth: 50,
-              corsProxy: corsProxy ?? undefined,
-            })
-          },
-          {repoId: key, perUrlTimeoutMs: 15000},
-        )
-        if (!fetchResult.success) {
-          console.warn(
-            "[getPRPreview] Fetch failed for all URLs, attempting preview with existing refs:",
-            fetchResult.attempts.map(a => a.error),
-          )
-        }
+      if (orderedUrls.length === 0) {
+        return toPlain({
+          success: false,
+          error: "No valid target clone URLs available for PR preview",
+          commits: [],
+          commitOids: [],
+          filesChanged: [],
+        })
       }
 
-      let sourceRemote: string | undefined
+      const corsProxy = resolveDefaultCorsProxy()
+      const targetFetchResult = await withUrlFallback(
+        orderedUrls,
+        async (cloneUrl: string) => {
+          await ensureOriginRemoteConfig(git, dir, cloneUrl)
+          await git.fetch({
+            dir,
+            url: cloneUrl,
+            ref: opts.targetBranch,
+            singleBranch: true,
+            depth: 100,
+            prune: true,
+            tags: false,
+            corsProxy: corsProxy ?? undefined,
+            onAuth: getAuthCallback(cloneUrl),
+          })
+          await git.resolveRef({dir, ref: `refs/remotes/origin/${opts.targetBranch}`})
+        },
+        {repoId: key, perUrlTimeoutMs: 15000},
+      )
+      if (!targetFetchResult.success) {
+        return toPlain({
+          success: false,
+          error: `Failed to refresh target branch from remote: ${targetFetchResult.attempts?.map(a => a.error).join("; ") ?? "unknown"}`,
+          commits: [],
+          commitOids: [],
+          filesChanged: [],
+        })
+      }
+
       if (isForkPR) {
         const sourceUrls = filterValidCloneUrls(opts.sourceCloneUrls!)
+        if (sourceUrls.length === 0) {
+          return toPlain({
+            success: false,
+            error: "No valid fork clone URLs provided",
+            commits: [],
+            commitOids: [],
+            filesChanged: [],
+          })
+        }
         const sourceOrdered = reorderUrlsByPreference(sourceUrls, key)
         const prSourceRemote = `pr-source-${Date.now().toString(36)}`
         const sourceFetchResult = await withUrlFallback(
           sourceOrdered,
           async (url: string) => {
+            try {
+              await git.deleteRemote({dir, remote: prSourceRemote})
+            } catch {
+              /* ignore */
+            }
             await git.addRemote({dir, remote: prSourceRemote, url})
             try {
               await git.setConfig({
@@ -1284,23 +1323,34 @@ const api = {
             } catch {
               /* ignore */
             }
+            try {
+              await git.setConfig({
+                dir,
+                path: `remote.${prSourceRemote}.url`,
+                value: url,
+              })
+            } catch {
+              /* ignore */
+            }
             await git.fetch({
               dir,
               remote: prSourceRemote,
               ref: opts.sourceBranch,
               singleBranch: true,
-              depth: 50,
+              depth: 100,
+              prune: true,
+              tags: false,
               corsProxy: corsProxy ?? undefined,
+              onAuth: getAuthCallback(url),
+            })
+            await git.resolveRef({
+              dir,
+              ref: `refs/remotes/${prSourceRemote}/${opts.sourceBranch}`,
             })
           },
           {repoId: key, perUrlTimeoutMs: 15000},
         )
         if (!sourceFetchResult.success) {
-          try {
-            await git.deleteRemote({dir, remote: prSourceRemote})
-          } catch {
-            /* ignore */
-          }
           return toPlain({
             success: false,
             error: `Failed to fetch source branch from fork: ${sourceFetchResult.attempts?.map(a => a.error).join("; ") ?? "unknown"}`,
@@ -1317,14 +1367,6 @@ const api = {
         preferRemoteRefs: true, // Use remote refs first; local refs/heads may be stale after push
       })
 
-      if (sourceRemote) {
-        try {
-          await git.deleteRemote({dir, remote: sourceRemote})
-        } catch {
-          /* ignore cleanup */
-        }
-      }
-
       return toPlain(result)
     } catch (error: any) {
       return toPlain({
@@ -1334,6 +1376,14 @@ const api = {
         commitOids: [],
         filesChanged: [],
       })
+    } finally {
+      if (sourceRemote) {
+        try {
+          await git.deleteRemote({dir, remote: sourceRemote})
+        } catch {
+          /* ignore cleanup */
+        }
+      }
     }
   },
 
@@ -1352,6 +1402,7 @@ const api = {
     const {key, dir} = repoKeyAndDir(opts.repoId)
     const isForkPR = opts.sourceCloneUrls && opts.sourceCloneUrls.length > 0
     const targetUrls = filterValidCloneUrls(opts.cloneUrls)
+    let sourceRemote: string | undefined
 
     try {
       await smartInitializeRepoUtil(
@@ -1371,15 +1422,27 @@ const api = {
       )
 
       const corsProxy = resolveDefaultCorsProxy()
-      let sourceRemote: string | undefined
 
       if (isForkPR) {
         const sourceUrls = filterValidCloneUrls(opts.sourceCloneUrls!)
+        if (sourceUrls.length === 0) {
+          return toPlain({
+            success: false,
+            error: "No valid fork clone URLs provided",
+            commits: [],
+            commitOids: [],
+          })
+        }
         const sourceOrdered = reorderUrlsByPreference(sourceUrls, key)
         const prSourceRemote = `pr-source-${Date.now().toString(36)}`
         const sourceFetchResult = await withUrlFallback(
           sourceOrdered,
           async (url: string) => {
+            try {
+              await git.deleteRemote({dir, remote: prSourceRemote})
+            } catch {
+              /* ignore */
+            }
             await git.addRemote({dir, remote: prSourceRemote, url})
             try {
               await git.setConfig({
@@ -1390,22 +1453,34 @@ const api = {
             } catch {
               /* ignore */
             }
+            try {
+              await git.setConfig({
+                dir,
+                path: `remote.${prSourceRemote}.url`,
+                value: url,
+              })
+            } catch {
+              /* ignore */
+            }
             await git.fetch({
               dir,
               remote: prSourceRemote,
               singleBranch: false,
-              depth: 50,
+              depth: 100,
+              prune: true,
+              tags: false,
               corsProxy: corsProxy ?? undefined,
+              onAuth: getAuthCallback(url),
             })
+
+            const sourceBranches = await git.listBranches({dir, remote: prSourceRemote})
+            if (!Array.isArray(sourceBranches) || sourceBranches.length === 0) {
+              throw new Error("Fork fetch succeeded but no branches were discovered")
+            }
           },
           {repoId: key, perUrlTimeoutMs: 15000},
         )
         if (!sourceFetchResult.success) {
-          try {
-            await git.deleteRemote({dir, remote: prSourceRemote})
-          } catch {
-            /* ignore */
-          }
           return toPlain({
             success: false,
             error: `Failed to fetch from fork: ${sourceFetchResult.attempts?.map(a => a.error).join("; ") ?? "unknown"}`,
@@ -1416,27 +1491,38 @@ const api = {
         sourceRemote = prSourceRemote
       } else {
         const orderedUrls = reorderUrlsByPreference(targetUrls, key)
-        if (orderedUrls.length > 0) {
-          const fetchResult = await withUrlFallback(
-            orderedUrls,
-            async (cloneUrl: string) => {
-              await ensureOriginRemoteConfig(git, dir, cloneUrl)
-              await git.fetch({
-                dir,
-                url: cloneUrl,
-                singleBranch: false,
-                depth: 50,
-                corsProxy: corsProxy ?? undefined,
-              })
-            },
-            {repoId: key, perUrlTimeoutMs: 15000},
-          )
-          if (!fetchResult.success) {
-            console.warn(
-              "[getCommitsAheadOfTip] Fetch failed, attempting with existing refs:",
-              fetchResult.attempts.map(a => a.error),
-            )
-          }
+        if (orderedUrls.length === 0) {
+          return toPlain({
+            success: false,
+            error: "No valid target clone URLs available",
+            commits: [],
+            commitOids: [],
+          })
+        }
+        const fetchResult = await withUrlFallback(
+          orderedUrls,
+          async (cloneUrl: string) => {
+            await ensureOriginRemoteConfig(git, dir, cloneUrl)
+            await git.fetch({
+              dir,
+              url: cloneUrl,
+              singleBranch: false,
+              depth: 100,
+              prune: true,
+              tags: false,
+              corsProxy: corsProxy ?? undefined,
+              onAuth: getAuthCallback(cloneUrl),
+            })
+          },
+          {repoId: key, perUrlTimeoutMs: 15000},
+        )
+        if (!fetchResult.success) {
+          return toPlain({
+            success: false,
+            error: `Failed to refresh repository refs: ${fetchResult.attempts?.map(a => a.error).join("; ") ?? "unknown"}`,
+            commits: [],
+            commitOids: [],
+          })
         }
       }
 
@@ -1447,14 +1533,6 @@ const api = {
         sourceRemote ? {sourceRemote} : undefined,
       )
 
-      if (sourceRemote) {
-        try {
-          await git.deleteRemote({dir, remote: sourceRemote})
-        } catch {
-          /* ignore cleanup */
-        }
-      }
-
       return toPlain(result)
     } catch (error: any) {
       return toPlain({
@@ -1463,6 +1541,14 @@ const api = {
         commits: [],
         commitOids: [],
       })
+    } finally {
+      if (sourceRemote) {
+        try {
+          await git.deleteRemote({dir, remote: sourceRemote})
+        } catch {
+          /* ignore cleanup */
+        }
+      }
     }
   },
 

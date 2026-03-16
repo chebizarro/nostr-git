@@ -1676,14 +1676,7 @@ export async function getPRPreviewData(
   const resolveBranchRef = async (branch: string, forSource: boolean): Promise<string | null> => {
     const refs =
       forSource && sourceRemote
-        ? [
-            `refs/remotes/${sourceRemote}/${branch}`,
-            `${sourceRemote}/${branch}`,
-            `refs/heads/${branch}`,
-            branch,
-            `refs/remotes/origin/${branch}`,
-            `origin/${branch}`,
-          ]
+        ? [`refs/remotes/${sourceRemote}/${branch}`, `${sourceRemote}/${branch}`]
         : preferRemoteRefs
           ? [`refs/remotes/origin/${branch}`, `origin/${branch}`, `refs/heads/${branch}`, branch]
           : [`refs/heads/${branch}`, branch, `refs/remotes/origin/${branch}`, `origin/${branch}`]
@@ -1703,6 +1696,12 @@ export async function getPRPreviewData(
     const targetOid = await resolveBranchRef(targetBranch, false)
 
     if (!sourceOid) {
+      if (sourceRemote) {
+        return {
+          ...empty,
+          error: `Source branch "${sourceBranch}" not found on fork remote. Refresh fork refs and try again.`,
+        }
+      }
       return {...empty, error: `Source branch "${sourceBranch}" not found`}
     }
     if (!targetOid) {
