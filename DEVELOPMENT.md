@@ -209,26 +209,27 @@ pnpm -r format
 ### Starting Development
 
 ```bash
-# Start all packages in watch mode
-pnpm watch:all
+# Core package watch (tsc + worker bundle, fail-fast)
+pnpm watch
 
-# Or start specific packages
-pnpm watch:core      # Core library only
-pnpm watch:ui        # UI components only
-pnpm watch:shared-types  # Types package only
+# One-off local build
+pnpm build
+
+# In the app root, run everything together (app + core + ui)
+pnpm dev:full
 ```
 
 ### Package-Specific Development
 
 ```bash
 # Work on core library
-cd packages/core
+cd packages/nostr-git-core
 pnpm watch          # TypeScript compilation in watch mode
 pnpm typecheck      # Type checking
 pnpm test           # Run tests
 
 # Work on UI components
-cd packages/ui
+cd ../nostr-git-ui
 pnpm watch          # Svelte compilation + CSS copying
 pnpm build          # Production build
 ```

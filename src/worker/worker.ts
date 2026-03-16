@@ -348,12 +348,13 @@ const cacheManager: RepoCacheManager = new (RepoCacheManager as any)()
 const clonedRepos = new Set<string>()
 const repoDataLevels = new Map<string, DataLevel>()
 let eventIO: EventIO | null = null
+const WORKER_BUILD_ID = new Date().toISOString()
 
 // --- exposed Comlink API ---
 const api = {
   // Health check / handshake
-  async ping(): Promise<{ok: true; ts: number; apiVersion: string}> {
-    return {ok: true, ts: Date.now(), apiVersion: "2026-01-11"}
+  async ping(): Promise<{ok: true; ts: number; apiVersion: string; buildId: string}> {
+    return {ok: true, ts: Date.now(), apiVersion: "2026-03-16", buildId: WORKER_BUILD_ID}
   },
 
   // Configuration

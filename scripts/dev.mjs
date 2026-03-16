@@ -1,84 +1,90 @@
 #!/usr/bin/env node
-/**
- * Development watch script for @nostr-git/core
- *
- * Runs TypeScript compiler and worker bundler in watch mode concurrently.
- *
- * Usage: pnpm dev
- */
 
-import { spawn } from 'child_process';
-import { fileURLToPath } from 'url';
-import path from 'path';
+import {spawn} from "child_process"
+import {fileURLToPath} from "url"
+import path from "path"
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const rootDir = path.resolve(__dirname, '..');
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const rootDir = path.resolve(__dirname, "..")
 
-console.log('Starting @nostr-git/core development mode...\n');
+const tasks = [
+  {name: "tsc", color: "\x1b[36m", command: "pnpm", args: ["run", "watch:tsc"]},
+  {name: "worker", color: "\x1b[33m", command: "pnpm", args: ["run", "watch:worker"]},
+]
 
-// Start TypeScript watch
-const tsc = spawn('npx', ['tsc', '-p', 'tsconfig.base.json', '--watch', '--preserveWatchOutput'], {
-  cwd: rootDir,
-  stdio: ['inherit', 'pipe', 'pipe'],
-  shell: true,
-});
+let shuttingDown = false
+const children = []
 
-// Start worker bundler watch
-const worker = spawn('node', ['scripts/bundle-worker.mjs', '--watch'], {
-  cwd: rootDir,
-  stdio: ['inherit', 'pipe', 'pipe'],
-  shell: true,
-});
-
-// Prefix output with source indicator
 const prefixOutput = (stream, prefix, color) => {
-  stream.on('data', (data) => {
-    const lines = data.toString().split('\n').filter(l => l.trim());
+  stream?.on("data", data => {
+    const lines = data
+      .toString()
+      .split("\n")
+      .map(line => line.trimEnd())
+      .filter(Boolean)
     for (const line of lines) {
-      console.log(`${color}[${prefix}]${'\x1b[0m'} ${line}`);
+      console.log(`${color}[${prefix}]\x1b[0m ${line}`)
     }
-  });
-};
+  })
+}
 
-// TypeScript output in cyan
-prefixOutput(tsc.stdout, 'tsc', '\x1b[36m');
-prefixOutput(tsc.stderr, 'tsc', '\x1b[36m');
-
-// Worker bundler output in yellow
-prefixOutput(worker.stdout, 'worker', '\x1b[33m');
-prefixOutput(worker.stderr, 'worker', '\x1b[33m');
-
-// Handle process exit
-const cleanup = () => {
-  console.log('\nShutting down...');
-  tsc.kill();
-  worker.kill();
-  process.exit(0);
-};
-
-process.on('SIGINT', cleanup);
-process.on('SIGTERM', cleanup);
-
-// Handle child process errors
-tsc.on('error', (err) => {
-  console.error('\x1b[31m[tsc]\x1b[0m Error:', err.message);
-});
-
-worker.on('error', (err) => {
-  console.error('\x1b[31m[worker]\x1b[0m Error:', err.message);
-});
-
-// Handle child process exit
-tsc.on('exit', (code) => {
-  if (code !== null && code !== 0) {
-    console.error(`\x1b[31m[tsc]\x1b[0m Exited with code ${code}`);
+const shutdown = (exitCode = 0) => {
+  if (shuttingDown) return
+  shuttingDown = true
+  console.log("\nShutting down @nostr-git/core watch...")
+  for (const child of children) {
+    try {
+      child.kill("SIGTERM")
+    } catch {
+      // ignore
+    }
   }
-});
+  setTimeout(() => {
+    for (const child of children) {
+      if (!child.killed) {
+        try {
+          child.kill("SIGKILL")
+        } catch {
+          // ignore
+        }
+      }
+    }
+    process.exit(exitCode)
+  }, 800)
+}
 
-worker.on('exit', (code) => {
-  if (code !== null && code !== 0) {
-    console.error(`\x1b[31m[worker]\x1b[0m Exited with code ${code}`);
+const handleChildExit = (name, code, signal) => {
+  if (shuttingDown) return
+  const hasFailure = (code ?? 0) !== 0
+  if (hasFailure) {
+    console.error(`\x1b[31m[${name}]\x1b[0m exited with code ${code ?? "unknown"}`)
+  } else {
+    console.error(`\x1b[31m[${name}]\x1b[0m exited unexpectedly${signal ? ` (${signal})` : ""}`)
   }
-});
+  shutdown(1)
+}
 
-console.log('\x1b[32m✓\x1b[0m Watch mode started. Press Ctrl+C to stop.\n');
+for (const task of tasks) {
+  const child = spawn(task.command, task.args, {
+    cwd: rootDir,
+    stdio: ["inherit", "pipe", "pipe"],
+    shell: true,
+  })
+  children.push(child)
+  prefixOutput(child.stdout, task.name, task.color)
+  prefixOutput(child.stderr, task.name, task.color)
+
+  child.on("error", err => {
+    console.error(`\x1b[31m[${task.name}]\x1b[0m failed to start: ${err.message}`)
+    shutdown(1)
+  })
+
+  child.on("exit", (code, signal) => {
+    handleChildExit(task.name, code, signal)
+  })
+}
+
+process.on("SIGINT", () => shutdown(0))
+process.on("SIGTERM", () => shutdown(0))
+
+console.log("\x1b[32m✓\x1b[0m @nostr-git/core watch started. Press Ctrl+C to stop.\n")
