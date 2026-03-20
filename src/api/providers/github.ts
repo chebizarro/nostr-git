@@ -962,7 +962,8 @@ export class GitHubApi implements GitServiceApi {
     repo: string,
     branch: string,
   ): Promise<{name: string; commit: {sha: string; url: string}; protected: boolean}> {
-    const data = await this.request<any>(`/repos/${owner}/${repo}/branches/${branch}`)
+    const encodedBranch = encodeURIComponent(branch)
+    const data = await this.request<any>(`/repos/${owner}/${repo}/branches/${encodedBranch}`)
 
     return {
       name: data.name,

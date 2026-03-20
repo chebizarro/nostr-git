@@ -852,7 +852,8 @@ export class BitbucketApi implements GitServiceApi {
     ref?: string,
   ): Promise<{content: string; encoding: string; sha: string}> {
     const branch = ref || "main"
-    const endpoint = `/repositories/${owner}/${repo}/src/${branch}/${path}`
+    const encodedBranch = encodeURIComponent(branch)
+    const endpoint = `/repositories/${owner}/${repo}/src/${encodedBranch}/${path}`
 
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       headers: {
@@ -896,7 +897,10 @@ export class BitbucketApi implements GitServiceApi {
     repo: string,
     branch: string,
   ): Promise<{name: string; commit: {sha: string; url: string}; protected: boolean}> {
-    const data = await this.request<any>(`/repositories/${owner}/${repo}/refs/branches/${branch}`)
+    const encodedBranch = encodeURIComponent(branch)
+    const data = await this.request<any>(
+      `/repositories/${owner}/${repo}/refs/branches/${encodedBranch}`,
+    )
 
     return {
       name: data.name,
