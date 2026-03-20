@@ -868,17 +868,15 @@ const api = {
 
         console.log(`[GRASP] Pushing to ${pushUrl} (ref=refs/heads/${targetBranch})`)
 
-        // GRASP uses unauthenticated git smart HTTP - authorization is handled by
-        // the Nostr repo state events (kind 30617/30618), not HTTP headers.
-        // This matches ngit's behavior which uses UnauthHttps/UnauthHttp protocols.
-        // IMPORTANT: Must set User-Agent starting with "git/" for GRASP servers to accept the request
-        try {
-          console.log("[GRASP] Push params:", {
-            dir,
-            url: pushUrl,
-            ref: `refs/heads/${targetBranch}`,
-            remote: "origin",
-          })
+        const isMissingObjectsPushError = (error: any): boolean => {
+          const message = [error?.message, error?.data?.prettyDetails]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+          return message.includes("missing necessary objects")
+        }
+
+        const pushOnce = async () => {
           await git.push({
             dir,
             url: pushUrl,
@@ -892,9 +890,49 @@ const api = {
               "User-Agent": "git/isomorphic-git",
             },
           })
+        }
+
+        // GRASP uses unauthenticated git smart HTTP - authorization is handled by
+        // the Nostr repo state events (kind 30617/30618), not HTTP headers.
+        // This matches ngit's behavior which uses UnauthHttps/UnauthHttp protocols.
+        // IMPORTANT: Must set User-Agent starting with "git/" for GRASP servers to accept the request
+        try {
+          console.log("[GRASP] Push params:", {
+            dir,
+            url: pushUrl,
+            ref: `refs/heads/${targetBranch}`,
+            remote: "origin",
+          })
+          await pushOnce()
           console.log("[GRASP] Push successful (unauthenticated smart HTTP)")
           return toPlain({success: true, repoId, remoteUrl, branch: targetBranch})
         } catch (pushErr: any) {
+          if (isMissingObjectsPushError(pushErr)) {
+            console.warn(
+              "[GRASP] Push failed due to missing objects; attempting one repair fetch before retry",
+            )
+            try {
+              const remotes =
+                typeof (git as any).listRemotes === "function" ? await git.listRemotes({dir}) : []
+              const originRemote = (remotes || []).find((r: any) => r?.remote === "origin")
+              const corsProxy = resolveDefaultCorsProxy()
+
+              if (originRemote?.url && typeof (git as any).fetch === "function") {
+                await git.fetch({
+                  dir,
+                  remote: "origin",
+                  tags: true,
+                  ...(corsProxy !== null ? {corsProxy} : {}),
+                })
+                await pushOnce()
+                console.log("[GRASP] Push successful after repair fetch")
+                return toPlain({success: true, repoId, remoteUrl, branch: targetBranch})
+              }
+            } catch (retryErr: any) {
+              console.error("[GRASP] Repair fetch + retry push failed:", retryErr)
+            }
+          }
+
           console.error("[GRASP] Push failed:", pushErr)
           // Log more details for debugging
           if (pushErr.data) {

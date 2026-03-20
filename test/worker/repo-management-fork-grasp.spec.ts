@@ -1,5 +1,7 @@
 import {beforeEach, describe, expect, it, vi} from "vitest"
 import {nip19} from "nostr-tools"
+import {isRepoClonedFs} from "../../src/worker/workers/fs-utils.js"
+import {cloneRemoteRepoUtil} from "../../src/worker/workers/repos.js"
 
 vi.mock("../../src/git/provider-factory.js", () => ({
   getGitServiceApi: vi.fn(() => ({
@@ -24,6 +26,44 @@ import {forkAndCloneRepo} from "../../src/worker/workers/repo-management.js"
 describe("worker/repo-management GRASP fork output", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    ;(isRepoClonedFs as any).mockResolvedValue(true)
+  })
+
+  it("uses full clone (no depth) for GRASP cross-platform source clone", async () => {
+    ;(isRepoClonedFs as any).mockResolvedValue(false)
+    const tokenHex = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+
+    const git = {
+      listBranches: vi.fn(async () => ["main"]),
+      listTags: vi.fn(async () => []),
+      log: vi.fn(async () => [{oid: "c1", commit: {parent: []}}]),
+      readCommit: vi.fn(async () => ({commit: {}})),
+      resolveRef: vi.fn(async () => "abc123"),
+    } as any
+
+    const result = await forkAndCloneRepo(git, {} as any, "/root", {
+      owner: "upstream-owner",
+      repo: "upstream-repo",
+      forkName: "forked-repo",
+      visibility: "public",
+      token: tokenHex,
+      dir: "forked-repo",
+      provider: "grasp",
+      baseUrl: "wss://relay.example",
+      sourceCloneUrls: ["https://example.com/upstream-owner/upstream-repo.git"],
+      sourceRepoId: "upstream-owner/upstream-repo",
+    })
+
+    expect(result.success).toBe(true)
+    expect(cloneRemoteRepoUtil).toHaveBeenCalledWith(
+      git,
+      expect.anything(),
+      expect.objectContaining({
+        url: "https://example.com/upstream-owner/upstream-repo.git",
+        dir: "/root/forked-repo",
+      }),
+    )
+    expect((cloneRemoteRepoUtil as any).mock.calls[0][2]).not.toHaveProperty("depth")
   })
 
   it("returns npub-based repoId and forkUrl for hex pubkey token", async () => {
@@ -32,6 +72,9 @@ describe("worker/repo-management GRASP fork output", () => {
     const git = {
       listBranches: vi.fn(async () => ["main"]),
       listTags: vi.fn(async () => ["v1"]),
+      log: vi.fn(async () => [{oid: "c1", commit: {parent: []}}]),
+      readCommit: vi.fn(async () => ({commit: {}})),
+      resolveRef: vi.fn(async () => "abc123"),
     } as any
 
     const result = await forkAndCloneRepo(git, {} as any, "/root", {
@@ -50,5 +93,149 @@ describe("worker/repo-management GRASP fork output", () => {
     expect(result.success).toBe(true)
     expect(result.repoId).toBe(`${ownerNpub}/forked-repo`)
     expect(result.forkUrl).toBe(`https://relay.example/${ownerNpub}/forked-repo.git`)
+  })
+
+  it("repairs missing objects for GRASP cross-platform fork before returning success", async () => {
+    const tokenHex = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+    const ownerNpub = nip19.npubEncode(tokenHex)
+    const fetchMock = vi.fn(async () => {})
+    const readCommitMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("NotFoundError: missing parent"))
+      .mockResolvedValue({commit: {}})
+
+    const git = {
+      listBranches: vi.fn(async () => ["main"]),
+      listTags: vi.fn(async () => []),
+      log: vi.fn(async () => [{oid: "c1", commit: {parent: ["p1"]}}]),
+      readCommit: readCommitMock,
+      listRemotes: vi.fn(async () => [{remote: "origin", url: "https://github.com/o/r.git"}]),
+      fetch: fetchMock,
+      resolveRef: vi.fn(async () => "abc123"),
+    } as any
+
+    const result = await forkAndCloneRepo(git, {} as any, "/root", {
+      owner: "upstream-owner",
+      repo: "upstream-repo",
+      forkName: "forked-repo",
+      visibility: "public",
+      token: tokenHex,
+      dir: "forked-repo",
+      provider: "grasp",
+      baseUrl: "wss://relay.example",
+      sourceCloneUrls: ["https://example.com/upstream-owner/upstream-repo.git"],
+      sourceRepoId: "upstream-owner/upstream-repo",
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.repoId).toBe(`${ownerNpub}/forked-repo`)
+    expect(fetchMock).toHaveBeenCalled()
+    expect(readCommitMock).toHaveBeenCalled()
+  })
+
+  it("continues to push phase when GRASP missing-object check remains inconclusive", async () => {
+    const tokenHex = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+    const git = {
+      listBranches: vi.fn(async () => ["main"]),
+      listTags: vi.fn(async () => []),
+      log: vi.fn(async () => [{oid: "c1", commit: {parent: ["p1"]}}]),
+      readCommit: vi.fn(async () => {
+        throw Object.assign(new Error("missing necessary objects"), {code: "NotFoundError"})
+      }),
+      listRemotes: vi.fn(async () => [{remote: "origin", url: "https://github.com/o/r.git"}]),
+      fetch: vi.fn(async () => {}),
+      resolveRef: vi.fn(async () => "abc123"),
+    } as any
+
+    const result = await forkAndCloneRepo(git, {} as any, "/root", {
+      owner: "upstream-owner",
+      repo: "upstream-repo",
+      forkName: "forked-repo",
+      visibility: "public",
+      token: tokenHex,
+      dir: "forked-repo",
+      provider: "grasp",
+      baseUrl: "wss://relay.example",
+      sourceCloneUrls: ["https://example.com/upstream-owner/upstream-repo.git"],
+      sourceRepoId: "upstream-owner/upstream-repo",
+    })
+
+    expect(result.success).toBe(true)
+  })
+
+  it("re-clones destination with full history when reused clone cannot be repaired", async () => {
+    const tokenHex = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+    const readCommitMock = vi.fn(async ({dir}: {dir: string}) => {
+      if (dir === "/root/upstream-owner/upstream-repo") {
+        throw Object.assign(new Error("missing necessary objects"), {code: "NotFoundError"})
+      }
+      return {commit: {}}
+    })
+
+    const git = {
+      listBranches: vi.fn(async () => ["main"]),
+      listTags: vi.fn(async () => []),
+      log: vi.fn(async () => [{oid: "c1", commit: {parent: ["p1"]}}]),
+      readCommit: readCommitMock,
+      listRemotes: vi.fn(async () => [{remote: "origin", url: "https://github.com/o/r.git"}]),
+      fetch: vi.fn(async () => {}),
+      resolveRef: vi.fn(async () => "abc123"),
+    } as any
+
+    const result = await forkAndCloneRepo(git, {} as any, "/root", {
+      owner: "upstream-owner",
+      repo: "upstream-repo",
+      forkName: "forked-repo",
+      visibility: "public",
+      token: tokenHex,
+      dir: "forked-repo",
+      provider: "grasp",
+      baseUrl: "wss://relay.example",
+      sourceCloneUrls: ["https://example.com/upstream-owner/upstream-repo.git"],
+      sourceRepoId: "upstream-owner/upstream-repo",
+    })
+
+    expect(result.success).toBe(true)
+    expect(cloneRemoteRepoUtil).toHaveBeenCalledWith(
+      git,
+      expect.anything(),
+      expect.objectContaining({
+        dir: "/root/forked-repo",
+      }),
+    )
+  })
+
+  it("handles GRASP default branches containing slashes during history checks", async () => {
+    const tokenHex = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+    const logMock = vi.fn(async () => [{oid: "c1", commit: {parent: []}}])
+
+    const git = {
+      listBranches: vi.fn(async () => ["feature/nested-branch"]),
+      listTags: vi.fn(async () => []),
+      log: logMock,
+      readCommit: vi.fn(async () => ({commit: {}})),
+      resolveRef: vi.fn(async () => "abc123"),
+    } as any
+
+    const result = await forkAndCloneRepo(git, {} as any, "/root", {
+      owner: "upstream-owner",
+      repo: "upstream-repo",
+      forkName: "forked-repo",
+      visibility: "public",
+      token: tokenHex,
+      dir: "forked-repo",
+      provider: "grasp",
+      baseUrl: "wss://relay.example",
+      sourceCloneUrls: ["https://example.com/upstream-owner/upstream-repo.git"],
+      sourceRepoId: "upstream-owner/upstream-repo",
+    })
+
+    expect(result.success).toBe(true)
+    expect(logMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dir: "/root/upstream-owner/upstream-repo",
+        ref: "feature/nested-branch",
+      }),
+    )
   })
 })

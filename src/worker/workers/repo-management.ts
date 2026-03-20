@@ -608,13 +608,6 @@ export async function forkAndCloneRepo(
           {provider, owner, repo, forkName},
         )
       } catch (e: any) {
-        console.error("[forkAndCloneRepo] forkRepo failed", {
-          owner,
-          repo,
-          forkName,
-          error: e?.message,
-        })
-
         // Check if this is an error indicating source repo doesn't exist on target platform
         // or that we need to do a cross-platform fork
         // - 404: GitHub/GitLab repo not found
@@ -625,6 +618,19 @@ export async function forkAndCloneRepo(
           e?.message?.includes("422") && e?.message?.includes("Unable to access")
         const isGraspNotSupported =
           e?.message?.includes("GRASP") && e?.message?.includes("not supported")
+
+        if (isGraspNotSupported) {
+          console.info(
+            "[forkAndCloneRepo] GRASP forkRepo() unsupported in worker; using UI event flow",
+          )
+        } else {
+          console.error("[forkAndCloneRepo] forkRepo failed", {
+            owner,
+            repo,
+            forkName,
+            error: e?.message,
+          })
+        }
 
         if (is404 || isGitLabImportError || isGraspNotSupported) {
           if (sourceCloneUrls && sourceCloneUrls.length > 0) {
@@ -711,10 +717,11 @@ export async function forkAndCloneRepo(
           try {
             const cloneStartedAt = Date.now()
             console.log("[forkAndCloneRepo] Trying to clone from:", sourceUrl)
+            const cloneDepth = provider === "grasp" ? undefined : 50
             await cloneRemoteRepoUtil(git, cacheManager, {
               url: sourceUrl,
               dir: absoluteDir,
-              depth: 50,
+              ...(cloneDepth ? {depth: cloneDepth} : {}),
               token: undefined, // Source may not need auth or use different auth
               onProgress: (message: string, percentage?: number) => {
                 onProgress?.(message, 20 + (percentage || 0) * 0.3)
@@ -741,6 +748,209 @@ export async function forkAndCloneRepo(
 
       console.log("[forkAndCloneRepo] Using working directory:", workingDir)
 
+      const isMissingCommitObjectError = (error: unknown): boolean => {
+        const message = error instanceof Error ? error.message : String(error || "")
+        const lower = message.toLowerCase()
+        const code = (error as any)?.code
+        return (
+          code === "NotFoundError" ||
+          /could not find\s+[0-9a-f]{7,40}/i.test(message) ||
+          lower.includes("missing necessary objects") ||
+          lower.includes("object not found") ||
+          lower.includes("notfounderror")
+        )
+      }
+
+      const fetchFromSourceUrlsForGrasp = async (reason: string): Promise<boolean> => {
+        if (
+          !sourceCloneUrls ||
+          sourceCloneUrls.length === 0 ||
+          typeof (git as any).fetch !== "function"
+        ) {
+          return false
+        }
+
+        const corsProxy = resolveDefaultCorsProxy()
+        const dedupedUrls = [...new Set(sourceCloneUrls)]
+        console.log(`[forkAndCloneRepo] ${reason} - trying source URLs for GRASP:`, dedupedUrls)
+
+        for (const sourceUrl of dedupedUrls) {
+          try {
+            await runTimed(
+              `fetch full history for GRASP (${reason})`,
+              FORK_TIMEOUTS.fetchHistoryMs,
+              () =>
+                git.fetch({
+                  dir: workingDir,
+                  url: sourceUrl,
+                  tags: true,
+                  ...(corsProxy !== null ? {corsProxy} : {}),
+                }),
+              {url: sourceUrl},
+            )
+            console.log("[forkAndCloneRepo] GRASP full-history fetch succeeded from:", sourceUrl)
+            return true
+          } catch (fetchErr: any) {
+            console.warn(
+              "[forkAndCloneRepo] GRASP full-history fetch failed for:",
+              sourceUrl,
+              fetchErr?.message,
+            )
+          }
+        }
+
+        return false
+      }
+
+      const fetchFromOriginForGrasp = async (reason: string): Promise<boolean> => {
+        if (
+          typeof (git as any).listRemotes !== "function" ||
+          typeof (git as any).fetch !== "function"
+        ) {
+          return false
+        }
+
+        try {
+          const remotes = await git.listRemotes({dir: workingDir})
+          const originRemote = remotes.find((r: any) => r?.remote === "origin")
+          if (!originRemote?.url) return false
+
+          console.log(
+            `[forkAndCloneRepo] ${reason} - fetching full history for GRASP from origin:`,
+            originRemote.url,
+          )
+          await ensureOriginFetchRefspec(git, workingDir, originRemote.url)
+          const corsProxy = resolveDefaultCorsProxy()
+          await runTimed(
+            `fetch full history for GRASP from origin (${reason})`,
+            FORK_TIMEOUTS.fetchHistoryMs,
+            () =>
+              git.fetch({
+                dir: workingDir,
+                remote: "origin",
+                tags: true,
+                ...(corsProxy !== null ? {corsProxy} : {}),
+              }),
+            {remote: "origin", url: originRemote.url},
+          )
+          return true
+        } catch (originErr: any) {
+          console.warn(
+            "[forkAndCloneRepo] GRASP origin full-history fetch failed:",
+            originErr?.message,
+          )
+          return false
+        }
+      }
+
+      const hasIncompleteHistoryForGrasp = async (branchName: string): Promise<boolean> => {
+        if (typeof (git as any).log !== "function") {
+          return false
+        }
+
+        try {
+          const log = await git.log({dir: workingDir, depth: 100, ref: branchName})
+          if (!log || log.length === 0) return true
+          if (typeof (git as any).readCommit !== "function") return false
+
+          for (const commit of log) {
+            const parents: string[] = commit?.commit?.parent || []
+            for (const parentOid of parents) {
+              try {
+                await git.readCommit({dir: workingDir, oid: parentOid})
+              } catch (parentErr) {
+                if (isMissingCommitObjectError(parentErr)) {
+                  console.warn("[forkAndCloneRepo] GRASP missing parent commit:", parentOid)
+                  return true
+                }
+              }
+            }
+          }
+
+          return false
+        } catch (logErr: any) {
+          console.warn("[forkAndCloneRepo] GRASP history check failed:", logErr?.message)
+          return true
+        }
+      }
+
+      const ensureCompleteHistoryForGrasp = async (branchName: string): Promise<void> => {
+        const incompleteInitially = await hasIncompleteHistoryForGrasp(branchName)
+        if (!incompleteInitially) return
+
+        onProgress?.("Ensuring complete commit history for GRASP push...", 72)
+
+        const fullRecloneToDestinationForGrasp = async (): Promise<boolean> => {
+          if (!sourceCloneUrls || sourceCloneUrls.length === 0) return false
+
+          const fs = getProviderFs(git)
+          try {
+            if (workingDir === absoluteDir) {
+              await fs?.promises?.rm?.(absoluteDir, {recursive: true, force: true})
+              await fs?.promises?.rmdir?.(absoluteDir, {recursive: true}).catch?.(() => {})
+            }
+          } catch {
+            // pass
+          }
+
+          let recloneSuccess = false
+          for (const sourceUrl of sourceCloneUrls) {
+            try {
+              console.log("[forkAndCloneRepo] Re-cloning full history for GRASP from:", sourceUrl)
+              await cloneRemoteRepoUtil(git, cacheManager, {
+                url: sourceUrl,
+                dir: absoluteDir,
+                token: undefined,
+                onProgress: (message: string, percentage?: number) => {
+                  onProgress?.(message, 72 + (percentage || 0) * 0.2)
+                },
+              })
+              workingDir = absoluteDir
+              recloneSuccess = true
+              break
+            } catch (recloneErr: any) {
+              console.warn(
+                "[forkAndCloneRepo] GRASP full re-clone failed for:",
+                sourceUrl,
+                recloneErr?.message,
+              )
+            }
+          }
+
+          return recloneSuccess
+        }
+
+        let repaired = await fetchFromOriginForGrasp("missing objects")
+        if (!repaired) {
+          repaired = await fetchFromSourceUrlsForGrasp("missing objects")
+        }
+
+        if (!repaired) {
+          console.warn(
+            "[forkAndCloneRepo] Could not repair missing objects before GRASP push; continuing with best-effort state",
+          )
+          return
+        }
+
+        const incompleteAfterRepair = await hasIncompleteHistoryForGrasp(branchName)
+        if (incompleteAfterRepair) {
+          const recloned = await fullRecloneToDestinationForGrasp()
+          if (!recloned) {
+            console.warn(
+              "[forkAndCloneRepo] Missing objects remain after repair and full re-clone was unavailable; continuing",
+            )
+            return
+          }
+
+          const incompleteAfterReclone = await hasIncompleteHistoryForGrasp(branchName)
+          if (incompleteAfterReclone) {
+            console.warn(
+              "[forkAndCloneRepo] Missing objects still reported after full re-clone; continuing and deferring failure handling to push",
+            )
+          }
+        }
+      }
+
       // For GRASP as target, we don't create a repo via API or push via git
       // GRASP uses Nostr events - the UI layer will publish the repo announcement
       if (provider === "grasp") {
@@ -752,10 +962,17 @@ export async function forkAndCloneRepo(
         const ownerNpub = toNpub(token)
 
         // Get branch info for the result
+        const initialBranches = await git.listBranches({dir: workingDir})
+        let defaultBranch = initialBranches[0] || "main"
+        if (initialBranches.includes("main")) defaultBranch = "main"
+        else if (initialBranches.includes("master")) defaultBranch = "master"
+
+        await ensureCompleteHistoryForGrasp(defaultBranch)
+
         const branches = await git.listBranches({dir: workingDir})
-        let defaultBranch = branches[0] || "main"
         if (branches.includes("main")) defaultBranch = "main"
         else if (branches.includes("master")) defaultBranch = "master"
+        else if (!branches.includes(defaultBranch)) defaultBranch = branches[0] || "main"
 
         const branchCommits: Record<string, string> = {}
         for (const branch of branches) {
