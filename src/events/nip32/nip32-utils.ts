@@ -1,11 +1,20 @@
-import { GIT_LABEL, type LabelEvent, type Label, type NostrEvent } from "./nip32.js"
-import type { NostrTag } from "../nip34/nip34.js"
+import {GIT_LABEL, type LabelEvent, type Label, type NostrEvent} from "./nip32.js"
+import type {NostrTag} from "../nip34/nip34.js"
 
-export type LabelTag = ["L", string] | ["l", string] | ["l", string, string]
-export type TargetTag = ["e", string] | ["a", string] | ["p", string] | ["r", string] | ["t", string]
+export type LabelTag =
+  | ["L", string]
+  | ["l", string]
+  | ["l", string, string]
+  | ["l", string, string, "del"]
+export type TargetTag =
+  | ["e", string]
+  | ["a", string]
+  | ["p", string]
+  | ["r", string]
+  | ["t", string]
 export type LabelEventTag = LabelTag | TargetTag | NostrTag
 
-export function isLabelEvent(evt: { kind: number }): evt is LabelEvent {
+export function isLabelEvent(evt: {kind: number}): evt is LabelEvent {
   return evt?.kind === GIT_LABEL
 }
 
@@ -16,14 +25,16 @@ export interface RoleLabelEvent {
   people: string[]
   rootId?: string
   repoAddr?: string
-  author: { pubkey: string }
+  author: {pubkey: string}
   createdAt: string
   raw: LabelEvent
 }
 
 export function parseRoleLabelEvent(event: LabelEvent): RoleLabelEvent {
   const namespaces = getLabelNamespaces(event)
-  const roleTag = (event.tags as string[][]).find(t => t[0] === "l" && (!!t[2] || namespaces.length))
+  const roleTag = (event.tags as string[][]).find(
+    t => t[0] === "l" && (!!t[2] || namespaces.length),
+  )
   const role = roleTag?.[1]
   const ns = roleTag?.[2] || namespaces[0]
   const people = (event.tags as string[][]).filter(t => t[0] === "p").map(t => t[1])
@@ -36,7 +47,7 @@ export function parseRoleLabelEvent(event: LabelEvent): RoleLabelEvent {
     people,
     rootId: root,
     repoAddr,
-    author: { pubkey: (event as NostrEvent).pubkey },
+    author: {pubkey: (event as NostrEvent).pubkey},
     createdAt: new Date(event.created_at * 1000).toISOString(),
     raw: event,
   }
@@ -56,31 +67,31 @@ export function createRoleLabelEvent(opts: {
     content: opts.content ?? "",
     created_at: opts.created_at,
     namespaces: [ns],
-    labels: [{ namespace: ns, value: opts.role }],
+    labels: [{namespace: ns, value: opts.role}],
     e: [opts.rootId],
     a: opts.repoAddr ? [opts.repoAddr] : [],
     p: opts.pubkeys,
   })
 }
 
-export function getLabelNamespaces(event: { tags: string[][] }): string[] {
+export function getLabelNamespaces(event: {tags: string[][]}): string[] {
   return event.tags.filter(t => t[0] === "L").map(t => t[1])
 }
 
-export function getLabelValues(event: { tags: string[][] }): Label[] {
+export function getLabelValues(event: {tags: string[][]}): Label[] {
   const namespaces = getLabelNamespaces(event)
   const out: Label[] = []
   for (const tag of event.tags) {
     if (tag[0] !== "l") continue
-    const [_, value, mark] = tag as [string, string, string?]
+    const [_, value, mark, opTag] = tag as [string, string, string?, string?]
     const ns = mark && namespaces.includes(mark) ? mark : undefined
-    out.push({ namespace: ns, value, mark })
+    out.push({namespace: ns, value, mark, op: opTag === "del" ? "del" : "add"})
   }
   return out
 }
 
 export function createLabelEvent(opts: {
-  labels?: Array<{ namespace?: string; value: string }>
+  labels?: Array<{namespace?: string; value: string; op?: "add" | "del"}>
   namespaces?: string[]
   e?: string[]
   a?: string[]
@@ -98,7 +109,8 @@ export function createLabelEvent(opts: {
 
   // labels
   for (const l of opts.labels || []) {
-    if (l.namespace) tags.push(["l", l.value, l.namespace])
+    if (l.namespace && l.op === "del") tags.push(["l", l.value, l.namespace, "del"])
+    else if (l.namespace) tags.push(["l", l.value, l.namespace])
     else tags.push(["l", l.value])
   }
 
@@ -133,14 +145,20 @@ export interface ParsedLabelEvent {
     r: string[]
     t: string[]
   }
-  author: { pubkey: string }
+  author: {pubkey: string}
   createdAt: string
   raw: LabelEvent
 }
 
 export function parseLabelEvent(event: LabelEvent): ParsedLabelEvent {
   const labels = getLabelValues(event)
-  const targets = { e: [] as string[], a: [] as string[], p: [] as string[], r: [] as string[], t: [] as string[] }
+  const targets = {
+    e: [] as string[],
+    a: [] as string[],
+    p: [] as string[],
+    r: [] as string[],
+    t: [] as string[],
+  }
   for (const tag of event.tags as string[][]) {
     if (tag[0] === "e") targets.e.push(tag[1])
     else if (tag[0] === "a") targets.a.push(tag[1])
@@ -152,7 +170,7 @@ export function parseLabelEvent(event: LabelEvent): ParsedLabelEvent {
     id: (event as NostrEvent).id,
     labels,
     targets,
-    author: { pubkey: (event as NostrEvent).pubkey },
+    author: {pubkey: (event as NostrEvent).pubkey},
     createdAt: new Date(event.created_at * 1000).toISOString(),
     raw: event,
   }

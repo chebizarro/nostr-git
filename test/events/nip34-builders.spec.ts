@@ -4,6 +4,7 @@ import {
   createRepoStateEvent,
   createPatchEvent,
   createIssueEvent,
+  createCoverLetterEvent,
   createStatusEvent,
   createPullRequestEvent,
   createPullRequestUpdateEvent,
@@ -144,6 +145,35 @@ describe("NIP-34 builders", () => {
         .map((t: any) => t[1])
         .sort(),
     ).toEqual(["bug", "ui"].sort())
+  })
+
+  it("createCoverLetterEvent encodes root, references, and recipients", () => {
+    const evt = createCoverLetterEvent({
+      rootId: "issue-id-1",
+      repoAddr: "30617:pubkey:repo",
+      content: "Updated issue body",
+      references: [
+        {eventId: "ref-1"},
+        {eventId: "ref-2", relay: "wss://relay.example"},
+        {eventId: "ref-3", relay: "wss://relay.example", pubkey: "pk-ref"},
+      ],
+      recipients: ["pk1", "pk2"],
+      created_at: 1700000004,
+    })
+
+    expect(evt.kind).toBe(1624)
+    expect(evt.content).toBe("Updated issue body")
+    expect(getTagValue(evt as any, "e")).toBe("issue-id-1")
+    expect(getTagValue(evt as any, "a")).toBe("30617:pubkey:repo")
+    expect(evt.tags).toEqual(
+      expect.arrayContaining([
+        ["q", "ref-1"],
+        ["q", "ref-2", "wss://relay.example"],
+        ["q", "ref-3", "wss://relay.example", "pk-ref"],
+        ["p", "pk1"],
+        ["p", "pk2"],
+      ]),
+    )
   })
 
   it("createStatusEvent encodes root/reply, recipients, repo, relay, merged/applied commit metadata", () => {

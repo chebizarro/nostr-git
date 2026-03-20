@@ -26,6 +26,7 @@ export const GIT_CONFLICT_METADATA = 30412
 
 // Issue events
 export const GIT_ISSUE = 1621
+export const GIT_COVER_LETTER = 1624
 
 // Pull Request events
 export const GIT_PULL_REQUEST = 1618
@@ -165,6 +166,23 @@ export interface IssueEvent extends NostrEvent {
 }
 
 // -------------------
+// Cover Letter / Issue Edit Body (kind: 1624)
+// -------------------
+export type CoverLetterTag =
+  | ["e", string]
+  | ["a", string]
+  | ["q", string]
+  | ["q", string, string]
+  | ["q", string, string, string]
+  | ["p", string]
+
+export interface CoverLetterEvent extends NostrEvent {
+  kind: typeof GIT_COVER_LETTER
+  content: string // markdown text
+  tags: CoverLetterTag[]
+}
+
+// -------------------
 // Pull Request (kind: 1618)
 // -------------------
 export type PullRequestTag =
@@ -247,6 +265,7 @@ export type Nip34Event =
   | RepoStateEvent
   | PatchEvent
   | IssueEvent
+  | CoverLetterEvent
   | PullRequestEvent
   | PullRequestUpdateEvent
   | UserGraspListEvent

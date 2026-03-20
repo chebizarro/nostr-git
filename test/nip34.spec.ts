@@ -2,6 +2,7 @@ import {describe, it, expect} from "vitest"
 import {
   GIT_PULL_REQUEST,
   GIT_PULL_REQUEST_UPDATE,
+  GIT_COVER_LETTER,
   GIT_USER_GRASP_LIST,
   type PullRequestEvent,
   type PullRequestUpdateEvent,
@@ -30,6 +31,7 @@ describe("NIP-34 Pull Request Events", () => {
     it("should have correct kind values", () => {
       expect(GIT_PULL_REQUEST).toBe(1618)
       expect(GIT_PULL_REQUEST_UPDATE).toBe(1619)
+      expect(GIT_COVER_LETTER).toBe(1624)
       expect(GIT_USER_GRASP_LIST).toBe(10317)
     })
   })
@@ -374,6 +376,7 @@ describe("NIP-34 Pull Request Events", () => {
     it("should return correct labels for new kinds", () => {
       expect(getNostrKindLabel(GIT_PULL_REQUEST)).toBe("Pull Request")
       expect(getNostrKindLabel(GIT_PULL_REQUEST_UPDATE)).toBe("Pull Request Update")
+      expect(getNostrKindLabel(GIT_COVER_LETTER)).toBe("Cover Letter")
       expect(getNostrKindLabel(GIT_USER_GRASP_LIST)).toBe("User Grasp List")
     })
   })

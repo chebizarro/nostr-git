@@ -4,6 +4,7 @@ import {
   type RepoStateEvent,
   type PatchEvent,
   type IssueEvent,
+  type CoverLetterEvent,
   type StatusEvent,
   type PullRequestEvent,
   type PullRequestUpdateEvent,
@@ -13,6 +14,7 @@ import {
   type RepoStateTag,
   type PatchTag,
   type IssueTag,
+  type CoverLetterTag,
   type StatusTag,
   type PullRequestTag,
   type PullRequestUpdateTag,
@@ -24,6 +26,7 @@ import {
   type MergeMetadataEvent,
   type ConflictMetadataEvent,
   GIT_REPO_ANNOUNCEMENT,
+  GIT_COVER_LETTER,
   GIT_STACK,
   GIT_MERGE_METADATA,
   GIT_CONFLICT_METADATA,
@@ -39,6 +42,7 @@ type KnownTags =
   | RepoStateTag
   | PatchTag
   | IssueTag
+  | CoverLetterTag
   | StatusTag
   | PullRequestTag
   | PullRequestUpdateTag
@@ -158,6 +162,13 @@ export function isIssueEvent(event: Nip34Event): event is IssueEvent {
 }
 
 /**
+ * Type guard for CoverLetterEvent (kind: 1624)
+ */
+export function isCoverLetterEvent(event: Nip34Event): event is CoverLetterEvent {
+  return event.kind === 1624
+}
+
+/**
  * Type guard for StatusEvent (kinds: 1630, 1631, 1632, 1633)
  */
 export function isStatusEvent(event: Nip34Event): event is StatusEvent {
@@ -198,6 +209,8 @@ export function getNostrKindLabel(kind: number): string {
       return "Patch"
     case 1621:
       return "Issue"
+    case 1624:
+      return "Cover Letter"
     case 1618:
       return "Pull Request"
     case 1619:
@@ -472,6 +485,38 @@ export function createIssueEvent(opts: {
 }
 
 /**
+ * Create a cover letter / issue body update event (kind 1624)
+ */
+export function createCoverLetterEvent(opts: {
+  content: string
+  rootId: string
+  repoAddr?: string
+  references?: Array<{eventId: string; relay?: string; pubkey?: string}>
+  recipients?: string[]
+  tags?: CoverLetterTag[]
+  created_at?: number
+}): CoverLetterEvent {
+  const tags: CoverLetterTag[] = [["e", opts.rootId]]
+  if (opts.repoAddr) tags.push(["a", opts.repoAddr])
+  if (opts.references) {
+    for (const ref of opts.references) {
+      if (!ref?.eventId) continue
+      if (ref.relay && ref.pubkey) tags.push(["q", ref.eventId, ref.relay, ref.pubkey])
+      else if (ref.relay) tags.push(["q", ref.eventId, ref.relay])
+      else tags.push(["q", ref.eventId])
+    }
+  }
+  if (opts.recipients) opts.recipients.forEach(p => tags.push(["p", p]))
+  if (opts.tags) tags.push(...opts.tags)
+  return {
+    kind: GIT_COVER_LETTER,
+    content: opts.content,
+    tags,
+    created_at: opts.created_at ?? Math.floor(Date.now() / 1000),
+  } as CoverLetterEvent
+}
+
+/**
  * Create a pull request event (kind 1618)
  */
 export function createPullRequestEvent(opts: {
@@ -688,6 +733,46 @@ export function parseIssueEvent(event: IssueEvent): Issue {
     content: event.content,
     author: {pubkey: event.pubkey},
     labels: getAllTags("t"),
+    createdAt: new Date(event.created_at * 1000).toISOString(),
+    raw: event,
+  }
+}
+
+export interface CoverLetter {
+  id: string
+  rootId: string
+  repoAddr?: string
+  references: Array<{eventId: string; relay?: string; pubkey?: string}>
+  recipients: string[]
+  content: string
+  author: {pubkey: string}
+  createdAt: string
+  raw: CoverLetterEvent
+}
+
+export function parseCoverLetterEvent(event: CoverLetterEvent): CoverLetter {
+  const rootId = event.tags.find(t => t[0] === "e")?.[1] || ""
+  const repoAddr = event.tags.find(t => t[0] === "a")?.[1]
+  const references = event.tags
+    .filter(t => t[0] === "q")
+    .map(t => ({
+      eventId: t[1],
+      relay: t[2],
+      pubkey: t[3],
+    }))
+    .filter(ref => Boolean(ref.eventId))
+  const recipients = event.tags
+    .filter(t => t[0] === "p")
+    .map(t => t[1])
+    .filter(Boolean)
+  return {
+    id: event.id,
+    rootId,
+    repoAddr,
+    references,
+    recipients,
+    content: event.content,
+    author: {pubkey: event.pubkey},
     createdAt: new Date(event.created_at * 1000).toISOString(),
     raw: event,
   }

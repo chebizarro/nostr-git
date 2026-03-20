@@ -12,6 +12,7 @@ import {
   createRepoAnnouncementEvent,
   createRepoStateEvent,
   createIssueEvent,
+  createCoverLetterEvent,
   createPullRequestEvent,
   createPullRequestUpdateEvent,
   createStatusEvent,
@@ -19,6 +20,7 @@ import {
   parseRepoAnnouncementEvent,
   parseRepoStateEvent,
   parseIssueEvent,
+  parseCoverLetterEvent,
   parsePullRequestEvent,
   parsePullRequestUpdateEvent,
   parseStatusEvent,
@@ -234,6 +236,39 @@ describe("NIP-34 parsers (nip34-utils)", () => {
     expect(parsed.repoId).toBe("30617:pk:repo")
     expect(parsed.subject).toBe("")
     expect(parsed.labels).toEqual([])
+  })
+
+  it("parseCoverLetterEvent parses root, references, and recipients", () => {
+    const built = createCoverLetterEvent({
+      rootId: "issue-root-1",
+      repoAddr: "30617:pk:repo",
+      content: "Updated issue description",
+      references: [
+        {eventId: "ref-1"},
+        {eventId: "ref-2", relay: "wss://relay.example"},
+        {eventId: "ref-3", relay: "wss://relay.example", pubkey: "pk-ref"},
+      ],
+      recipients: ["pk1", "pk2"],
+      created_at: 1700000350,
+    })
+
+    const evt = withMeta(built as any, {
+      created_at: 1700000350,
+      pubkey: "author-pk",
+      id: "cover-1",
+    })
+
+    const parsed = parseCoverLetterEvent(evt as any)
+    expect(parsed.id).toBe("cover-1")
+    expect(parsed.rootId).toBe("issue-root-1")
+    expect(parsed.repoAddr).toBe("30617:pk:repo")
+    expect(parsed.content).toBe("Updated issue description")
+    expect(parsed.recipients).toEqual(["pk1", "pk2"])
+    expect(parsed.references).toEqual([
+      {eventId: "ref-1", relay: undefined, pubkey: undefined},
+      {eventId: "ref-2", relay: "wss://relay.example", pubkey: undefined},
+      {eventId: "ref-3", relay: "wss://relay.example", pubkey: "pk-ref"},
+    ])
   })
 
   it("parsePullRequestEvent parses tip commit, labels, branchName (target) and optional fields", () => {

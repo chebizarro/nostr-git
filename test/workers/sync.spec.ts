@@ -124,6 +124,45 @@ describe("worker/sync utils", () => {
     expect(((arg as any).branches as any[]).length).toBe(0)
   })
 
+  it("syncWithRemoteUtil: preserves slash-containing requested branch names", async () => {
+    const cache = cacheMgr()
+    const fetchSpy = vi.fn(async () => ({fetchHead: "remoteSlashHead"})) as any
+    const git = makeGit({
+      fetch: fetchSpy,
+      listRemotes: vi.fn(async () => [
+        {remote: "origin", url: "https://example.com/repo.git"},
+      ]) as any,
+      listBranches: vi.fn(async () => ["fix/ipk-builds"]) as any,
+      resolveRef: vi.fn(async ({ref}: any) => {
+        if (ref === "refs/remotes/origin/fix/ipk-builds") return "remoteSlashHead"
+        if (ref === "refs/heads/fix/ipk-builds") return "localSlashHead"
+        if (ref === "HEAD") return "localSlashHead"
+        return "localSlashHead"
+      }) as any,
+      checkout: vi.fn(async () => undefined) as any,
+      branch: vi.fn(async () => undefined) as any,
+    })
+
+    const res = await syncWithRemoteUtil(
+      git,
+      cache,
+      {
+        repoId: "Org/SlashBranch",
+        cloneUrls: ["https://example.com/repo.git"],
+        branch: "fix/ipk-builds",
+      },
+      {
+        ...depsBase,
+        isRepoCloned: async () => true,
+      },
+    )
+
+    expect(res.success).toBe(true)
+    expect((res as any).branch).toBe("fix/ipk-builds")
+    expect(fetchSpy).toHaveBeenCalled()
+    expect(fetchSpy.mock.calls[0][0]?.ref).toBe("fix/ipk-builds")
+  })
+
   it("syncWithRemoteUtil: CORS/network fetch error returns success with warning and synced=false", async () => {
     const cache = cacheMgr()
     const git = makeGit({

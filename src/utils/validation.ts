@@ -111,6 +111,17 @@ export const SubjectTag = z.tuple([z.literal("subject"), z.string()])
 export const IssueTagSchema = z.union([AddressRepoTag, PTag, SubjectTag, HashtagTag])
 export const IssueTagsSchema = z.array(IssueTagSchema)
 
+// Cover Letter tags (kind 1624)
+export const CoverLetterETag = z.tuple([z.literal("e"), z.string()])
+export const CoverLetterQTag = z.tuple([z.literal("q"), z.string()]).rest(z.string())
+export const CoverLetterTagSchema = z.union([
+  CoverLetterETag,
+  AddressRepoTag,
+  CoverLetterQTag,
+  PTag,
+])
+export const CoverLetterTagsSchema = z.array(CoverLetterTagSchema)
+
 // Status tags (kinds 1630..1633)
 export const ETagRoot = z.tuple([z.literal("e"), z.string(), z.literal(""), z.literal("root")])
 export const ETagReply = z.tuple([z.literal("e"), z.string(), z.literal(""), z.literal("reply")])
@@ -274,6 +285,18 @@ export const IssueEventSchema = NostrEventSchema.extend({
   }
 })
 
+export const CoverLetterEventSchema = NostrEventSchema.extend({
+  kind: z.literal(1624),
+  tags: CoverLetterTagsSchema,
+}).superRefine((evt: NostrEventLike, ctx: RefinementCtx) => {
+  if (!hasTagName(evt.tags as unknown[], "e")) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Cover letter must include an 'e' tag (target root event)",
+    })
+  }
+})
+
 export const StatusEventSchema = NostrEventSchema.extend({
   kind: z.union([z.literal(1630), z.literal(1631), z.literal(1632), z.literal(1633)]),
   tags: StatusTagsSchema,
@@ -395,6 +418,7 @@ export const validateRepoAnnouncementEvent = (evt: unknown) =>
 export const validateRepoStateEvent = (evt: unknown) => RepoStateEventSchema.safeParse(evt)
 export const validatePatchEvent = (evt: unknown) => PatchEventSchema.safeParse(evt)
 export const validateIssueEvent = (evt: unknown) => IssueEventSchema.safeParse(evt)
+export const validateCoverLetterEvent = (evt: unknown) => CoverLetterEventSchema.safeParse(evt)
 export const validateStatusEvent = (evt: unknown) => StatusEventSchema.safeParse(evt)
 
 // Convenience per-kind validators

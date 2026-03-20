@@ -5,6 +5,7 @@ export enum NostrGitKind {
   PullRequestUpdate = 1619,
   ConflictMetadata = 1622,
   Permalink = 1623,
+  CoverLetter = 1624,
   StatusOpen = 1630,
   StatusApplied = 1631,
   StatusClosed = 1632,

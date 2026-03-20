@@ -10,6 +10,7 @@ import {
   validateRepoStateEvent,
   validatePatchEvent,
   validateIssueEvent,
+  validateCoverLetterEvent,
   validateStatusEvent,
   validatePullRequestEvent,
   validatePullRequestUpdateEvent,
@@ -23,6 +24,7 @@ import {
   createRepoStateEvent,
   createPatchEvent,
   createIssueEvent,
+  createCoverLetterEvent,
   createStatusEvent,
   createPullRequestEvent,
   createPullRequestUpdateEvent,
@@ -99,6 +101,7 @@ describe("Zod event validators (src/utils/validation.ts)", () => {
     const st = createRepoStateEvent({repoId: "owner/repo", head: "main"})
     const patch = createPatchEvent({content: "patch", repoAddr: "30617:pk:repo"})
     const issue = createIssueEvent({content: "issue", repoAddr: "30617:pk:repo"})
+    const cover = createCoverLetterEvent({content: "cover", rootId: "issue-root"})
     const status = createStatusEvent({
       kind: 1630,
       content: "open",
@@ -134,6 +137,7 @@ describe("Zod event validators (src/utils/validation.ts)", () => {
     expect(validateRepoStateEvent(st).success).toBe(true)
     expect(validatePatchEvent(patch).success).toBe(true)
     expect(validateIssueEvent(issue).success).toBe(true)
+    expect(validateCoverLetterEvent(cover).success).toBe(true)
     expect(validateStatusEvent(status).success).toBe(true)
     expect(validatePullRequestEvent(pr).success).toBe(true)
     expect(validatePullRequestUpdateEvent(pru).success).toBe(true)
@@ -233,6 +237,21 @@ describe("Zod event validators (src/utils/validation.ts)", () => {
     if (!res.success) {
       // Both e and p are validated; message content may include either/both
       expect(res.error.message.toLowerCase()).toContain("status")
+    }
+  })
+
+  it("rejects cover letter events missing required e tag", () => {
+    const badCover: any = {
+      kind: 1624,
+      content: "updated description",
+      tags: [["p", "pk1"]],
+    }
+
+    const res = validateCoverLetterEvent(badCover)
+    expect(res.success).toBe(false)
+    if (!res.success) {
+      const msgs = res.error.issues.map(i => i.message).join("\n")
+      expect(msgs).toMatch(/Cover letter must include an 'e' tag/i)
     }
   })
 })
