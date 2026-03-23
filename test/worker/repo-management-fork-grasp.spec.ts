@@ -107,6 +107,10 @@ describe("worker/repo-management GRASP fork output", () => {
     const git = {
       listBranches: vi.fn(async () => ["main"]),
       listTags: vi.fn(async () => []),
+      listServerRefs: vi.fn(async () => [
+        {ref: "HEAD", target: "refs/heads/main", oid: "abc123"},
+        {ref: "refs/heads/main", oid: "abc123"},
+      ]),
       log: vi.fn(async () => [{oid: "c1", commit: {parent: ["p1"]}}]),
       readCommit: readCommitMock,
       listRemotes: vi.fn(async () => [{remote: "origin", url: "https://github.com/o/r.git"}]),
@@ -175,6 +179,10 @@ describe("worker/repo-management GRASP fork output", () => {
     const git = {
       listBranches: vi.fn(async () => ["main"]),
       listTags: vi.fn(async () => []),
+      listServerRefs: vi.fn(async () => [
+        {ref: "HEAD", target: "refs/heads/main", oid: "abc123"},
+        {ref: "refs/heads/main", oid: "abc123"},
+      ]),
       log: vi.fn(async () => [{oid: "c1", commit: {parent: ["p1"]}}]),
       readCommit: readCommitMock,
       listRemotes: vi.fn(async () => [{remote: "origin", url: "https://github.com/o/r.git"}]),
@@ -237,5 +245,56 @@ describe("worker/repo-management GRASP fork output", () => {
         ref: "feature/nested-branch",
       }),
     )
+  })
+
+  it("prefers advertised remote refs over stale local-only branches for GRASP push planning", async () => {
+    const tokenHex = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+    const fetchMock = vi.fn(async () => {})
+
+    const git = {
+      listServerRefs: vi.fn(async () => [
+        {ref: "refs/heads/master", oid: "1111111111111111111111111111111111111111"},
+        {ref: "refs/heads/maint", oid: "2222222222222222222222222222222222222222"},
+      ]),
+      listBranches: vi.fn(async ({remote}: {remote?: string}) => {
+        if (remote === "origin") return ["master", "maint"]
+        return ["add-logos", "master"]
+      }),
+      listTags: vi.fn(async () => []),
+      log: vi.fn(async () => [{oid: "c1", commit: {parent: []}}]),
+      readCommit: vi.fn(async () => ({commit: {}})),
+      listRemotes: vi.fn(async () => [{remote: "origin", url: "https://relay.ngit.dev/o/r.git"}]),
+      fetch: fetchMock,
+      resolveRef: vi.fn(async ({ref}: {ref: string}) => {
+        if (ref === "refs/heads/master" || ref === "refs/remotes/origin/master") {
+          return "1111111111111111111111111111111111111111"
+        }
+        if (ref === "refs/heads/maint" || ref === "refs/remotes/origin/maint") {
+          return "2222222222222222222222222222222222222222"
+        }
+        if (ref === "refs/heads/add-logos") {
+          return "3333333333333333333333333333333333333333"
+        }
+        return "1111111111111111111111111111111111111111"
+      }),
+    } as any
+
+    const result = await forkAndCloneRepo(git, {} as any, "/root", {
+      owner: "upstream-owner",
+      repo: "upstream-repo",
+      forkName: "forked-repo",
+      visibility: "public",
+      token: tokenHex,
+      dir: "forked-repo",
+      provider: "grasp",
+      baseUrl: "wss://relay.example",
+      sourceCloneUrls: ["https://relay.ngit.dev/upstream-owner/upstream-repo.git"],
+      sourceRepoId: "upstream-owner/upstream-repo",
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.branches).toEqual(["master", "maint"])
+    expect(result.branches).not.toContain("add-logos")
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.objectContaining({ref: "add-logos"}))
   })
 })

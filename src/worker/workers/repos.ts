@@ -12,6 +12,7 @@ import {
   updateUrlPreferenceCache,
   type ReadFallbackResult,
 } from "../../utils/clone-url-fallback.js"
+import {isGraspRepoHttpUrl} from "../../utils/grasp-url.js"
 
 // Import toPlain from worker (it's defined in the same directory)
 function toPlain<T>(val: T): T {
@@ -402,10 +403,7 @@ export async function initializeRepoUtil(
         const corsProxy = resolveDefaultCorsProxy()
 
         // Detect Nostr relay URLs - they need special handling with deeper clones
-        const isNostrRelay =
-          cloneUrl.includes("relay.ngit.dev") ||
-          cloneUrl.includes("gitnostr.com") ||
-          cloneUrl.includes("grasp")
+        const isNostrRelay = isGraspRepoHttpUrl(cloneUrl)
 
         // Nostr relays need deeper clones because shallow clones often fail to fetch commit objects
         const cloneDepth = isNostrRelay ? 10 : 1
@@ -868,10 +866,7 @@ export async function ensureFullCloneUtil(
         orderedUrls,
         async (cloneUrl: string) => {
           // Detect Nostr relay URLs - they may need special handling
-          const isNostrRelay =
-            cloneUrl.includes("relay.ngit.dev") ||
-            cloneUrl.includes("gitnostr.com") ||
-            cloneUrl.includes("grasp")
+          const isNostrRelay = isGraspRepoHttpUrl(cloneUrl)
 
           // For Nostr relays, ensure we fetch enough depth to get the commit objects
           const effectiveDepth = isNostrRelay ? Math.max(depth, 50) : Math.min(depth, 100)

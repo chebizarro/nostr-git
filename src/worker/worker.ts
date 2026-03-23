@@ -150,6 +150,7 @@ import {
   reorderUrlsByPreference,
   withUrlFallback,
 } from "../utils/clone-url-fallback.js"
+import {isGraspRepoHttpUrl} from "../utils/grasp-url.js"
 
 import type {AuthConfig} from "./workers/auth.js"
 import {getAuthCallback, getConfiguredAuthHosts, setAuthConfig} from "./workers/auth.js"
@@ -159,6 +160,7 @@ import {
   setGitConfig as setWorkerGitConfig,
   resolveDefaultCorsProxy,
 } from "./workers/git-config.js"
+import {createNip98HttpClient} from "../git/nip98-http-client.js"
 
 // Import event-based git operations
 import {
@@ -825,6 +827,8 @@ const api = {
     repoId: string
     remoteUrl: string
     branch?: string
+    ref?: string
+    refs?: string[]
     token?: string
     provider?: string
     blossomMirror?: boolean
@@ -833,10 +837,29 @@ const api = {
     /** @deprecated Use authHeaders instead */
     authHeader?: string
   }) {
-    const {repoId, remoteUrl, branch, token, provider, blossomMirror, authHeaders, authHeader} =
-      opts
+    const {
+      repoId,
+      remoteUrl,
+      branch,
+      ref,
+      refs,
+      token,
+      provider,
+      blossomMirror,
+      authHeaders,
+      authHeader,
+    } = opts
     const {key, dir} = repoKeyAndDir(repoId)
     const targetBranch = branch || "main"
+
+    const normalizePushRef = (value: string): string => {
+      const trimmed = String(value || "").trim()
+      if (!trimmed) return ""
+      return trimmed.startsWith("refs/") ? trimmed : `refs/heads/${trimmed}`
+    }
+
+    const normalizedRequestedRef = normalizePushRef(ref || "")
+    const normalizedRequestedRefs = (refs || []).map(normalizePushRef).filter(Boolean)
 
     try {
       console.log(`Pushing repository ${repoId} to remote: ${remoteUrl} (provider=${provider})`)
@@ -866,7 +889,12 @@ const api = {
           }
         }
 
-        console.log(`[GRASP] Pushing to ${pushUrl} (ref=refs/heads/${targetBranch})`)
+        const explicitRefs = [...normalizedRequestedRefs, normalizedRequestedRef].filter(Boolean)
+        const refsToPush = Array.from(
+          new Set(explicitRefs.length > 0 ? explicitRefs : [`refs/heads/${targetBranch}`]),
+        )
+
+        console.log(`[GRASP] Pushing to ${pushUrl} (refs=${refsToPush.join(", ")})`)
 
         const isMissingObjectsPushError = (error: any): boolean => {
           const message = [error?.message, error?.data?.prettyDetails]
@@ -876,14 +904,170 @@ const api = {
           return message.includes("missing necessary objects")
         }
 
-        const pushOnce = async () => {
+        const isEmptyReceivePackParseError = (error: any): boolean => {
+          const message = String(error?.message || "").toLowerCase()
+          return message.includes('expected "unpack ok"') && message.includes('received ""')
+        }
+
+        const isHeadlessRemoteFetchError = (error: unknown): boolean => {
+          const message = error instanceof Error ? error.message : String(error || "")
+          return /could not find\s+head/i.test(message)
+        }
+
+        const normalizeUrlForAuthMatch = (value: string): string => {
+          try {
+            const parsed = new URL(value)
+            return `${parsed.protocol}//${parsed.host}${parsed.pathname}${parsed.search}`.replace(
+              /\/+$/,
+              "",
+            )
+          } catch {
+            return String(value || "").replace(/\/+$/, "")
+          }
+        }
+
+        const providedAuthHeaders = authHeaders
+          ? Object.fromEntries(
+              Object.entries(authHeaders)
+                .filter(([url, header]) => Boolean(url && header))
+                .map(([url, header]) => [normalizeUrlForAuthMatch(url), header]),
+            )
+          : authHeader
+            ? {[normalizeUrlForAuthMatch(pushUrl)]: authHeader}
+            : null
+
+        const hasProvidedAuthHeaders = Boolean(
+          providedAuthHeaders && Object.keys(providedAuthHeaders).length > 0,
+        )
+
+        let lastGraspHttpDiagnostics: Array<{
+          url: string
+          statusCode?: number
+          statusMessage?: string
+          contentType?: string
+          error?: string
+        }> = []
+
+        const shouldTraceGraspPushRequest = (url: string): boolean => {
+          const value = String(url || "")
+          return (
+            value.includes("service=git-receive-pack") ||
+            value.includes("service=git-upload-pack") ||
+            value.includes("/git-receive-pack") ||
+            value.includes("/git-upload-pack")
+          )
+        }
+
+        const appendGraspHttpDiagnostic = (entry: {
+          url: string
+          statusCode?: number
+          statusMessage?: string
+          contentType?: string
+          error?: string
+        }) => {
+          lastGraspHttpDiagnostics = [...lastGraspHttpDiagnostics, entry].slice(-8)
+        }
+
+        const buildGraspHttpTraceSuffix = (): string => {
+          if (lastGraspHttpDiagnostics.length === 0) return ""
+          const compact = lastGraspHttpDiagnostics
+            .map(item => {
+              const status =
+                item.statusCode != null
+                  ? `${item.statusCode} ${item.statusMessage || ""}`.trim()
+                  : "ERR"
+              const ct = item.contentType ? ` ct=${item.contentType}` : ""
+              const err = item.error ? ` err=${item.error}` : ""
+              return `${item.url} -> ${status}${ct}${err}`
+            })
+            .join(" | ")
+          return ` [HTTP trace: ${compact}]`
+        }
+
+        const baseGraspHttpClient: any = hasProvidedAuthHeaders
+          ? {
+              async request(request: any): Promise<any> {
+                const reqUrl = normalizeUrlForAuthMatch(String(request?.url || ""))
+                const auth = providedAuthHeaders?.[reqUrl]
+                if (auth) {
+                  request.headers = {
+                    ...(request.headers || {}),
+                    Authorization: auth,
+                  }
+                }
+                return httpWeb.request(request)
+              },
+            }
+          : eventIO
+            ? createNip98HttpClient(httpWeb as any, eventIO)
+            : httpWeb
+
+        const graspHttpClient = {
+          async request(request: any): Promise<any> {
+            const url = String(request?.url || "")
+            try {
+              const response = await baseGraspHttpClient.request(request)
+              if (shouldTraceGraspPushRequest(url)) {
+                appendGraspHttpDiagnostic({
+                  url,
+                  statusCode: response?.statusCode,
+                  statusMessage: response?.statusMessage,
+                  contentType:
+                    response?.headers?.["content-type"] || response?.headers?.["Content-Type"],
+                })
+              }
+              return response
+            } catch (requestError: any) {
+              if (shouldTraceGraspPushRequest(url)) {
+                appendGraspHttpDiagnostic({
+                  url,
+                  error: requestError?.message || String(requestError || "request failed"),
+                })
+              }
+              throw requestError
+            }
+          },
+        }
+
+        const pushOnce = async (targetRef: string) => {
+          let sourceRef = targetRef
+
+          if (targetRef.startsWith("refs/heads/")) {
+            const shortName = targetRef.slice("refs/heads/".length)
+            try {
+              await git.resolveRef({dir, ref: targetRef})
+            } catch {
+              try {
+                const remoteTrackingRef = `refs/remotes/origin/${shortName}`
+                const remoteOid = await git.resolveRef({dir, ref: remoteTrackingRef})
+                if (remoteOid && typeof (git as any).writeRef === "function") {
+                  await git.writeRef({dir, ref: targetRef, value: remoteOid, force: true})
+                  console.log(
+                    `[GRASP] Materialized local branch ${targetRef} from ${remoteTrackingRef} @ ${remoteOid.slice(0, 8)}`,
+                  )
+                }
+              } catch {
+                // pass
+              }
+
+              try {
+                await git.resolveRef({dir, ref: targetRef})
+              } catch {
+                sourceRef = shortName
+                console.log(
+                  `[GRASP] Falling back to short source ref ${shortName} for push target ${targetRef}`,
+                )
+              }
+            }
+          }
+
           await git.push({
             dir,
             url: pushUrl,
             remote: "origin",
-            ref: `refs/heads/${targetBranch}`,
-            remoteRef: `refs/heads/${targetBranch}`,
-            http: httpWeb,
+            ref: sourceRef,
+            remoteRef: targetRef,
+            http: graspHttpClient,
             force: false,
             corsProxy: null,
             headers: {
@@ -892,57 +1076,331 @@ const api = {
           })
         }
 
-        // GRASP uses unauthenticated git smart HTTP - authorization is handled by
-        // the Nostr repo state events (kind 30617/30618), not HTTP headers.
-        // This matches ngit's behavior which uses UnauthHttps/UnauthHttp protocols.
-        // IMPORTANT: Must set User-Agent starting with "git/" for GRASP servers to accept the request
-        try {
-          console.log("[GRASP] Push params:", {
-            dir,
-            url: pushUrl,
-            ref: `refs/heads/${targetBranch}`,
-            remote: "origin",
-          })
-          await pushOnce()
-          console.log("[GRASP] Push successful (unauthenticated smart HTTP)")
-          return toPlain({success: true, repoId, remoteUrl, branch: targetBranch})
-        } catch (pushErr: any) {
-          if (isMissingObjectsPushError(pushErr)) {
-            console.warn(
-              "[GRASP] Push failed due to missing objects; attempting one repair fetch before retry",
-            )
-            try {
-              const remotes =
-                typeof (git as any).listRemotes === "function" ? await git.listRemotes({dir}) : []
-              const originRemote = (remotes || []).find((r: any) => r?.remote === "origin")
-              const corsProxy = resolveDefaultCorsProxy()
-
-              if (originRemote?.url && typeof (git as any).fetch === "function") {
-                await git.fetch({
-                  dir,
-                  remote: "origin",
-                  tags: true,
-                  ...(corsProxy !== null ? {corsProxy} : {}),
-                })
-                await pushOnce()
-                console.log("[GRASP] Push successful after repair fetch")
-                return toPlain({success: true, repoId, remoteUrl, branch: targetBranch})
+        const resolveLocalRefTip = async (targetRef: string): Promise<string | null> => {
+          try {
+            return await git.resolveRef({dir, ref: targetRef})
+          } catch {
+            if (targetRef.startsWith("refs/heads/")) {
+              const shortName = targetRef.slice("refs/heads/".length)
+              try {
+                return await git.resolveRef({dir, ref: shortName})
+              } catch {
+                return null
               }
-            } catch (retryErr: any) {
-              console.error("[GRASP] Repair fetch + retry push failed:", retryErr)
+            }
+            try {
+              return await git.resolveRef({dir, ref: targetRef})
+            } catch {
+              return null
+            }
+          }
+        }
+
+        const hasReadableLocalObjectForRef = async (targetRef: string): Promise<boolean> => {
+          const oid = await resolveLocalRefTip(targetRef)
+          if (!oid) return false
+
+          if (typeof (git as any).readObject !== "function") {
+            return true
+          }
+
+          try {
+            await git.readObject({dir, oid})
+            return true
+          } catch {
+            return false
+          }
+        }
+
+        const escapeRegex = (value: string): string =>
+          String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+        const toCorsProxyRequestUrl = (url: string, corsProxy: string): string =>
+          `${corsProxy}/${url.replace(/^https?:\/\//i, "")}`
+
+        const parseRefTipFromInfoRefs = (text: string, targetRef: string): string | null => {
+          const escapedRef = escapeRegex(targetRef)
+          const pattern = new RegExp(`^([0-9a-f]{40,64}) ${escapedRef}(?:\\x00|$)`, "i")
+
+          const lines = String(text || "").split(/\r?\n/)
+          for (const rawLine of lines) {
+            let line = rawLine.trim()
+            if (!line || line === "0000") continue
+            if (/^[0-9a-f]{4}/i.test(line)) {
+              line = line.slice(4)
+            }
+            if (!line || line.startsWith("# service=")) continue
+
+            const match = line.match(pattern)
+            if (match?.[1]) return match[1]
+          }
+
+          return null
+        }
+
+        const fetchInfoRefs = async (
+          service: "git-upload-pack" | "git-receive-pack",
+        ): Promise<string | null> => {
+          const probeUrl = `${pushUrl}/info/refs?service=${service}`
+
+          try {
+            const response = await fetch(probeUrl, {method: "GET"})
+            appendGraspHttpDiagnostic({
+              url: probeUrl,
+              statusCode: response.status,
+              statusMessage: response.statusText,
+              contentType: response.headers.get("content-type") || undefined,
+            })
+            if (!response.ok) return null
+            return await response.text()
+          } catch (error: any) {
+            appendGraspHttpDiagnostic({
+              url: probeUrl,
+              error: error?.message || String(error || "request failed"),
+            })
+          }
+
+          const corsProxy = resolveDefaultCorsProxy()
+          if (!corsProxy) return null
+
+          try {
+            const proxiedUrl = toCorsProxyRequestUrl(probeUrl, corsProxy)
+            const response = await fetch(proxiedUrl, {method: "GET"})
+            appendGraspHttpDiagnostic({
+              url: proxiedUrl,
+              statusCode: response.status,
+              statusMessage: response.statusText,
+              contentType: response.headers.get("content-type") || undefined,
+            })
+            if (!response.ok) return null
+            return await response.text()
+          } catch (error: any) {
+            appendGraspHttpDiagnostic({
+              url: `${corsProxy}/*`,
+              error: error?.message || String(error || "proxy request failed"),
+            })
+            return null
+          }
+        }
+
+        const getRemoteRefTip = async (targetRef: string): Promise<string | null> => {
+          try {
+            // Prefer upload-pack for branch tip verification because many servers
+            // advertise full refs there while receive-pack can omit them.
+            const infoRefsText =
+              (await fetchInfoRefs("git-upload-pack")) || (await fetchInfoRefs("git-receive-pack"))
+            if (!infoRefsText) return null
+
+            const refTip = parseRefTipFromInfoRefs(infoRefsText, targetRef)
+            if (refTip) return refTip
+
+            return null
+          } catch (error) {
+            console.warn("[GRASP] Failed to read remote ref tip for verification:", error)
+            return null
+          }
+        }
+
+        const isRemoteAlreadyAtLocalTip = async (targetRef: string): Promise<boolean> => {
+          const [localTip, remoteTip] = await Promise.all([
+            resolveLocalRefTip(targetRef),
+            getRemoteRefTip(targetRef),
+          ])
+          if (!localTip || !remoteTip) return false
+          return localTip === remoteTip
+        }
+
+        // IMPORTANT: Must set User-Agent starting with "git/" for GRASP servers to accept the request
+        console.log("[GRASP] Push params:", {
+          dir,
+          url: pushUrl,
+          refs: refsToPush,
+          remote: "origin",
+          authMode: hasProvidedAuthHeaders ? "pre-signed" : eventIO ? "eventio" : "none",
+        })
+
+        const retryDelaysMs = [1200, 3500, 7000]
+        const pushedRefs: string[] = []
+        const failedRefs: Array<{ref: string; error: string}> = []
+        const warnings: string[] = []
+
+        for (const targetRef of refsToPush) {
+          try {
+            if (await isRemoteAlreadyAtLocalTip(targetRef)) {
+              console.log(`[GRASP] ${targetRef} already matches remote tip; skipping push`)
+              pushedRefs.push(targetRef)
+              continue
+            }
+
+            await pushOnce(targetRef)
+          } catch (pushErr: any) {
+            let recovered = false
+
+            if (isEmptyReceivePackParseError(pushErr)) {
+              for (let attempt = 0; attempt < retryDelaysMs.length; attempt++) {
+                const delay = retryDelaysMs[attempt]
+                console.warn(
+                  `[GRASP] Empty receive-pack response for ${targetRef}; retrying (${attempt + 1}/${retryDelaysMs.length}) after ${delay}ms${buildGraspHttpTraceSuffix()}`,
+                )
+
+                try {
+                  await new Promise(resolve => setTimeout(resolve, delay))
+                  await pushOnce(targetRef)
+                  recovered = true
+                  break
+                } catch (retryErr: any) {
+                  console.warn(
+                    `[GRASP] Empty response retry (${attempt + 1}) for ${targetRef} failed${buildGraspHttpTraceSuffix()}:`,
+                    retryErr,
+                  )
+
+                  if (await isRemoteAlreadyAtLocalTip(targetRef)) {
+                    recovered = true
+                    warnings.push(
+                      `${targetRef}: receive-pack parse error but remote tip matches after retry`,
+                    )
+                    break
+                  }
+                }
+              }
+
+              // Do not treat 200 receive-pack-result with empty parse as success on its own.
+            }
+
+            if (!recovered && isMissingObjectsPushError(pushErr)) {
+              console.warn(
+                `[GRASP] ${targetRef} failed due to missing objects; attempting repair fetch before retry`,
+              )
+              try {
+                const remotes =
+                  typeof (git as any).listRemotes === "function" ? await git.listRemotes({dir}) : []
+                const originRemote = (remotes || []).find((r: any) => r?.remote === "origin")
+                const corsProxy = resolveDefaultCorsProxy()
+
+                if (originRemote?.url && typeof (git as any).fetch === "function") {
+                  // Fetch the specific branch being pushed rather than relying on HEAD.
+                  // Nostr relay remotes fail with "Could not find HEAD" when HEAD is missing
+                  // or points to a non-existent branch.
+                  const specificBranch = targetRef.startsWith("refs/heads/")
+                    ? targetRef.slice("refs/heads/".length)
+                    : targetRef.startsWith("refs/tags/")
+                      ? null
+                      : null
+                  const specificTag = targetRef.startsWith("refs/tags/")
+                    ? targetRef.slice("refs/tags/".length)
+                    : null
+
+                  if (specificBranch) {
+                    await git.fetch({
+                      dir,
+                      url: originRemote.url,
+                      ref: specificBranch,
+                      remoteRef: specificBranch,
+                      singleBranch: true,
+                      tags: false,
+                      depth: undefined,
+                      ...(corsProxy !== null ? {corsProxy} : {}),
+                    })
+                  } else if (specificTag) {
+                    await git.fetch({
+                      dir,
+                      url: originRemote.url,
+                      ref: specificTag,
+                      remoteRef: `refs/tags/${specificTag}`,
+                      singleBranch: true,
+                      tags: false,
+                      depth: undefined,
+                      ...(corsProxy !== null ? {corsProxy} : {}),
+                    })
+                  } else {
+                    // For unknown refs, fall back to generic fetch
+                    await git.fetch({
+                      dir,
+                      remote: "origin",
+                      tags: true,
+                      ...(corsProxy !== null ? {corsProxy} : {}),
+                    })
+                  }
+                  await pushOnce(targetRef)
+                  recovered = true
+                }
+              } catch (retryErr: any) {
+                if (isHeadlessRemoteFetchError(retryErr)) {
+                  try {
+                    const recoveredFromHeadless = await hasReadableLocalObjectForRef(targetRef)
+                    if (recoveredFromHeadless) {
+                      console.warn(
+                        `[GRASP] Repair fetch for ${targetRef} hit missing HEAD but local object exists; retrying push anyway`,
+                      )
+                      await pushOnce(targetRef)
+                      recovered = true
+                      continue
+                    }
+                  } catch {
+                    // pass
+                  }
+                }
+                console.error("[GRASP] Repair fetch + retry push failed:", retryErr)
+              }
+            }
+
+            if (!recovered) {
+              if (lastGraspHttpDiagnostics.length > 0) {
+                console.error("[GRASP] Push HTTP diagnostics:", lastGraspHttpDiagnostics)
+              }
+              throw pushErr
             }
           }
 
-          console.error("[GRASP] Push failed:", pushErr)
-          // Log more details for debugging
-          if (pushErr.data) {
-            console.error("[GRASP] Push error data:", pushErr.data)
+          const [localTip, remoteTip] = await Promise.all([
+            resolveLocalRefTip(targetRef),
+            getRemoteRefTip(targetRef),
+          ])
+
+          if (localTip && remoteTip && localTip === remoteTip) {
+            pushedRefs.push(targetRef)
+            continue
           }
-          if (pushErr.message) {
-            console.error("[GRASP] Push error message:", pushErr.message)
+
+          if (localTip && remoteTip && localTip !== remoteTip) {
+            failedRefs.push({
+              ref: targetRef,
+              error: `remote tip mismatch (local=${localTip.slice(0, 8)} remote=${remoteTip.slice(0, 8)})`,
+            })
+            continue
           }
-          throw pushErr
+
+          if (!remoteTip) {
+            failedRefs.push({ref: targetRef, error: "remote tip could not be verified"})
+            continue
+          }
+
+          failedRefs.push({ref: targetRef, error: "could not resolve local tip for verification"})
         }
+
+        if (pushedRefs.length === 0) {
+          return toPlain({
+            success: false,
+            repoId,
+            remoteUrl,
+            branch: targetBranch,
+            error: `Failed to push refs: ${failedRefs.map(item => `${item.ref} (${item.error})`).join("; ")}`,
+            details: {pushedRefs, failedRefs, warnings},
+          })
+        }
+
+        const partialSuccess = failedRefs.length > 0
+        return toPlain({
+          success: true,
+          repoId,
+          remoteUrl,
+          branch: targetBranch,
+          partialSuccess,
+          details: {pushedRefs, failedRefs, warnings},
+          message: partialSuccess
+            ? `Pushed ${pushedRefs.length}/${refsToPush.length} refs`
+            : `Pushed ${pushedRefs.length} refs successfully`,
+        })
       }
 
       // Standard providers or NostrGitProvider
@@ -951,20 +1409,18 @@ const api = {
           ? () => ({username: provider === "gitlab" ? "oauth2" : "token", password: token})
           : getAuthCallback(remoteUrl)
 
-      // Only use NostrGitProvider for Nostr-based URLs (relay.ngit.dev, gitnostr.com, etc.)
-      const isNostrUrl =
-        remoteUrl.includes("relay.ngit.dev") ||
-        remoteUrl.includes("gitnostr.com") ||
-        remoteUrl.startsWith("nostr://")
+      // Only use NostrGitProvider for nostr:// URLs or GRASP-style Smart HTTP paths.
+      const isNostrUrl = remoteUrl.startsWith("nostr://") || isGraspRepoHttpUrl(remoteUrl)
 
       // Check if NostrGitProvider is available before trying to use it
       if (isNostrUrl && hasNostrGitProvider()) {
         const nostrProvider = getNostrGitProvider()
+        const targetRef = normalizedRequestedRef || targetBranch
         const result = await nostrProvider.push({
           dir,
           fs: getProviderFs(git),
-          ref: targetBranch,
-          remoteRef: targetBranch,
+          ref: targetRef,
+          remoteRef: targetRef,
           url: remoteUrl,
           onAuth,
           blossomMirror: blossomMirror ?? Boolean(provider === "blossom"),
@@ -978,12 +1434,13 @@ const api = {
       }
 
       const corsProxy = resolveDefaultCorsProxy()
+      const targetRef = normalizedRequestedRef || targetBranch
 
       await (git as any).push({
         dir,
         url: remoteUrl,
-        ref: targetBranch,
-        remoteRef: targetBranch,
+        ref: targetRef,
+        remoteRef: targetRef,
         ...(corsProxy !== null ? {corsProxy} : {}),
         onAuth,
       })

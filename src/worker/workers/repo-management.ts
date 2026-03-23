@@ -16,6 +16,7 @@ import {resolveDefaultCorsProxy} from "./git-config.js"
 import {withTimeout} from "./timeout.js"
 import {parseRepoId} from "../../utils/repo-id.js"
 import {toNpub} from "../../utils/nostr-pubkey.js"
+import {isGraspRepoHttpUrl} from "../../utils/grasp-url.js"
 
 // Helper to generate canonical repo key from repoId
 function canonicalRepoKey(repoId: string): string {
@@ -761,7 +762,99 @@ export async function forkAndCloneRepo(
         )
       }
 
-      const fetchFromSourceUrlsForGrasp = async (reason: string): Promise<boolean> => {
+      let allowFullCloneRecoveryForGrasp = true
+
+      // Fetch a specific ref (branch or tag) from a URL without relying on HEAD.
+      // Nostr relay remotes frequently have HEAD pointing to non-existent branches,
+      // causing generic git.fetch() to fail with "Could not find HEAD".
+      const fetchRefFromUrl = async (
+        url: string,
+        refName: string,
+        reason: string,
+        corsProxy: string | null,
+      ): Promise<boolean> => {
+        const normalizedRef = String(refName || "").trim()
+        if (!normalizedRef) return false
+
+        const isTag = normalizedRef.startsWith("refs/tags/")
+        const shortName = normalizedRef.replace(/^refs\/heads\//, "").replace(/^refs\/tags\//, "")
+        const fullyQualifiedRemoteRef = isTag ? `refs/tags/${shortName}` : `refs/heads/${shortName}`
+        const remoteRefAttempts = isTag
+          ? [fullyQualifiedRemoteRef]
+          : [shortName, fullyQualifiedRemoteRef]
+        const isHeadlessRemoteError = (error: unknown): boolean => {
+          const message = error instanceof Error ? error.message : String(error || "")
+          return /could not find\s+head/i.test(message)
+        }
+        const hasResolvedLocalObjectForRef = async (): Promise<boolean> => {
+          const resolveCandidates = isTag
+            ? [`refs/tags/${shortName}`]
+            : [`refs/heads/${shortName}`, `refs/remotes/origin/${shortName}`, shortName]
+
+          for (const candidate of resolveCandidates) {
+            try {
+              const oid = await git.resolveRef({dir: workingDir, ref: candidate})
+              if (!oid) continue
+              if (typeof (git as any).readObject === "function") {
+                await git.readObject({dir: workingDir, oid})
+              }
+              return true
+            } catch {
+              // pass
+            }
+          }
+
+          return false
+        }
+
+        for (const remoteRef of remoteRefAttempts) {
+          try {
+            await runTimed(
+              `fetch ${refName} for GRASP (${reason})`,
+              FORK_TIMEOUTS.fetchHistoryMs,
+              () =>
+                git.fetch({
+                  dir: workingDir,
+                  url,
+                  ref: shortName,
+                  remoteRef,
+                  singleBranch: true,
+                  tags: false,
+                  depth: undefined,
+                  ...(corsProxy !== null ? {corsProxy} : {}),
+                }),
+              {url, ref: refName, remoteRef},
+            )
+            return true
+          } catch (fetchErr: any) {
+            console.warn(
+              `[forkAndCloneRepo] GRASP fetch ${refName} from ${url} failed (remoteRef=${remoteRef}):`,
+              fetchErr?.message,
+            )
+
+            if (isHeadlessRemoteError(fetchErr)) {
+              try {
+                const recovered = await hasResolvedLocalObjectForRef()
+                if (recovered) {
+                  console.warn(
+                    `[forkAndCloneRepo] GRASP fetch ${refName} hit missing HEAD but ref is locally available; continuing`,
+                  )
+                  return true
+                }
+              } catch {
+                // pass
+              }
+            }
+          }
+        }
+
+        return false
+      }
+
+      const fetchFromSourceUrlsForGrasp = async (
+        reason: string,
+        branchNames?: string[],
+      ): Promise<boolean> => {
         if (
           !sourceCloneUrls ||
           sourceCloneUrls.length === 0 ||
@@ -775,6 +868,28 @@ export async function forkAndCloneRepo(
         console.log(`[forkAndCloneRepo] ${reason} - trying source URLs for GRASP:`, dedupedUrls)
 
         for (const sourceUrl of dedupedUrls) {
+          // If we know which branches are needed, fetch each explicitly to avoid HEAD resolution
+          if (branchNames && branchNames.length > 0) {
+            let anySucceeded = false
+            for (const branch of branchNames) {
+              const ok = await fetchRefFromUrl(sourceUrl, branch, reason, corsProxy)
+              if (ok) anySucceeded = true
+            }
+            if (anySucceeded) {
+              console.log("[forkAndCloneRepo] GRASP per-branch fetch succeeded from:", sourceUrl)
+              return true
+            }
+
+            // Do not fall back to generic fetch for known refs.
+            // HEAD-less remotes can fail generic fetch with "Could not find HEAD".
+            console.warn(
+              "[forkAndCloneRepo] GRASP explicit ref fetch failed for source URL; skipping generic fetch:",
+              sourceUrl,
+            )
+            continue
+          }
+
+          // Fallback: generic fetch (may fail on HEAD-less remotes)
           try {
             await runTimed(
               `fetch full history for GRASP (${reason})`,
@@ -802,7 +917,10 @@ export async function forkAndCloneRepo(
         return false
       }
 
-      const fetchFromOriginForGrasp = async (reason: string): Promise<boolean> => {
+      const fetchFromOriginForGrasp = async (
+        reason: string,
+        branchNames?: string[],
+      ): Promise<boolean> => {
         if (
           typeof (git as any).listRemotes !== "function" ||
           typeof (git as any).fetch !== "function"
@@ -821,6 +939,27 @@ export async function forkAndCloneRepo(
           )
           await ensureOriginFetchRefspec(git, workingDir, originRemote.url)
           const corsProxy = resolveDefaultCorsProxy()
+
+          // Fetch each branch explicitly to avoid HEAD resolution issues on Nostr relay remotes.
+          // Generic git.fetch() fails with "Could not find HEAD" when the remote's HEAD symref
+          // points to a non-existent branch, which is common on Nostr relay servers.
+          if (branchNames && branchNames.length > 0) {
+            let anySucceeded = false
+            for (const branch of branchNames) {
+              const ok = await fetchRefFromUrl(originRemote.url, branch, reason, corsProxy)
+              if (ok) anySucceeded = true
+            }
+            if (anySucceeded) return true
+
+            // Do not fall back to generic fetch for known refs.
+            // HEAD-less remotes can fail generic fetch with "Could not find HEAD".
+            console.warn(
+              "[forkAndCloneRepo] GRASP explicit origin ref fetch failed; skipping generic fetch",
+            )
+            return false
+          }
+
+          // Fallback: generic fetch (may fail on HEAD-less remotes)
           await runTimed(
             `fetch full history for GRASP from origin (${reason})`,
             FORK_TIMEOUTS.fetchHistoryMs,
@@ -874,13 +1013,23 @@ export async function forkAndCloneRepo(
         }
       }
 
-      const ensureCompleteHistoryForGrasp = async (branchName: string): Promise<void> => {
+      const ensureCompleteHistoryForGrasp = async (
+        branchName: string,
+        knownBranches?: string[],
+      ): Promise<void> => {
         const incompleteInitially = await hasIncompleteHistoryForGrasp(branchName)
         if (!incompleteInitially) return
 
         onProgress?.("Ensuring complete commit history for GRASP push...", 72)
 
         const fullRecloneToDestinationForGrasp = async (): Promise<boolean> => {
+          if (!allowFullCloneRecoveryForGrasp) {
+            console.warn(
+              "[forkAndCloneRepo] Skipping full re-clone recovery for GRASP because source remote HEAD is unavailable",
+            )
+            return false
+          }
+
           if (!sourceCloneUrls || sourceCloneUrls.length === 0) return false
 
           const fs = getProviderFs(git)
@@ -920,15 +1069,28 @@ export async function forkAndCloneRepo(
           return recloneSuccess
         }
 
-        let repaired = await fetchFromOriginForGrasp("missing objects")
+        const branchesToFetch =
+          knownBranches && knownBranches.length > 0 ? knownBranches : [branchName]
+        let repaired = await fetchFromOriginForGrasp("missing objects", branchesToFetch)
         if (!repaired) {
-          repaired = await fetchFromSourceUrlsForGrasp("missing objects")
+          repaired = await fetchFromSourceUrlsForGrasp("missing objects", branchesToFetch)
         }
 
         if (!repaired) {
-          console.warn(
-            "[forkAndCloneRepo] Could not repair missing objects before GRASP push; continuing with best-effort state",
-          )
+          const recloned = await fullRecloneToDestinationForGrasp()
+          if (!recloned) {
+            console.warn(
+              "[forkAndCloneRepo] Could not repair missing objects before GRASP push; continuing with best-effort state",
+            )
+            return
+          }
+
+          const incompleteAfterReclone = await hasIncompleteHistoryForGrasp(branchName)
+          if (incompleteAfterReclone) {
+            console.warn(
+              "[forkAndCloneRepo] Missing objects still reported after full re-clone; continuing and deferring failure handling to push",
+            )
+          }
           return
         }
 
@@ -961,34 +1123,395 @@ export async function forkAndCloneRepo(
 
         const ownerNpub = toNpub(token)
 
+        const loadAdvertisedRefsForGrasp = async (): Promise<{
+          branches: string[]
+          tags: string[]
+          hasRemoteHead: boolean
+          headBranch: string | null
+          sourceUrl: string | null
+        }> => {
+          if (typeof (git as any).listServerRefs !== "function") {
+            return {
+              branches: [],
+              tags: [],
+              hasRemoteHead: false,
+              headBranch: null,
+              sourceUrl: null,
+            }
+          }
+
+          const urls: string[] = []
+
+          try {
+            if (typeof (git as any).listRemotes === "function") {
+              const remotes = await git.listRemotes({dir: workingDir})
+              const originRemote = (remotes || []).find((r: any) => r?.remote === "origin")
+              if (originRemote?.url) urls.push(originRemote.url)
+            }
+          } catch {
+            // pass
+          }
+
+          for (const sourceUrl of sourceCloneUrls || []) {
+            urls.push(sourceUrl)
+          }
+
+          const dedupedUrls = [...new Set(urls.filter(Boolean))]
+          if (dedupedUrls.length === 0) {
+            return {
+              branches: [],
+              tags: [],
+              hasRemoteHead: false,
+              headBranch: null,
+              sourceUrl: null,
+            }
+          }
+
+          const corsProxy = resolveDefaultCorsProxy()
+
+          const parseHeadBranch = (items: any[]): string | null => {
+            const headEntry = items.find((entry: any) => String(entry?.ref || "") === "HEAD")
+            const directCandidates = [headEntry?.target, headEntry?.symref, headEntry?.value]
+            for (const candidate of directCandidates) {
+              const raw = String(candidate || "")
+              const normalized = raw.startsWith("ref: ") ? raw.slice("ref: ".length) : raw
+              if (normalized.startsWith("refs/heads/")) {
+                return normalized.slice("refs/heads/".length)
+              }
+            }
+
+            const headOid = String(headEntry?.oid || "")
+            if (!headOid) return null
+
+            const matchingBranches = items
+              .filter((entry: any) => String(entry?.ref || "").startsWith("refs/heads/"))
+              .filter((entry: any) => String(entry?.oid || "") === headOid)
+              .map((entry: any) => String(entry.ref).slice("refs/heads/".length))
+
+            return matchingBranches.length === 1 ? matchingBranches[0] : null
+          }
+
+          for (const url of dedupedUrls) {
+            try {
+              const refs = await runTimed(
+                "list advertised refs for GRASP fork",
+                FORK_TIMEOUTS.fetchHistoryMs,
+                () =>
+                  git.listServerRefs({
+                    url,
+                    symrefs: true,
+                    ...(corsProxy !== null ? {corsProxy} : {}),
+                  }),
+                {url},
+              )
+
+              const advertisedRefItems = Array.isArray(refs) ? refs : []
+              const branches = Array.from(
+                new Set<string>(
+                  advertisedRefItems
+                    .map((entry: any) => String(entry?.ref || ""))
+                    .filter((ref: string) => ref.startsWith("refs/heads/"))
+                    .map((ref: string) => ref.slice("refs/heads/".length))
+                    .filter((name: string) => Boolean(name && name !== "HEAD")),
+                ),
+              )
+
+              const tags = Array.from(
+                new Set<string>(
+                  advertisedRefItems
+                    .map((entry: any) => String(entry?.ref || ""))
+                    .filter((ref: string) => ref.startsWith("refs/tags/"))
+                    .map((ref: string) => ref.slice("refs/tags/".length))
+                    .filter((name: string) => Boolean(name && !name.endsWith("^{}"))),
+                ),
+              )
+
+              const headBranch = parseHeadBranch(advertisedRefItems)
+              const hasRemoteHead = Boolean(headBranch)
+
+              if (branches.length > 0 || tags.length > 0) {
+                console.log(
+                  `[forkAndCloneRepo] Loaded advertised GRASP refs from ${url}: ${branches.length} branch(es), ${tags.length} tag(s), head=${headBranch || "missing"}`,
+                )
+                return {
+                  branches,
+                  tags,
+                  hasRemoteHead,
+                  headBranch,
+                  sourceUrl: url,
+                }
+              }
+            } catch (listErr: any) {
+              console.warn(
+                "[forkAndCloneRepo] Failed to list advertised refs for GRASP URL:",
+                url,
+                listErr?.message,
+              )
+            }
+          }
+
+          return {
+            branches: [],
+            tags: [],
+            hasRemoteHead: false,
+            headBranch: null,
+            sourceUrl: null,
+          }
+        }
+
+        const advertisedRefs = await loadAdvertisedRefsForGrasp()
+        allowFullCloneRecoveryForGrasp = advertisedRefs.hasRemoteHead
+
+        const getHydrationSourceUrls = async (): Promise<string[]> => {
+          const urls: string[] = []
+
+          if (advertisedRefs.sourceUrl) {
+            urls.push(advertisedRefs.sourceUrl)
+          }
+
+          try {
+            if (typeof (git as any).listRemotes === "function") {
+              const remotes = await git.listRemotes({dir: workingDir})
+              const originRemote = (remotes || []).find((r: any) => r?.remote === "origin")
+              if (originRemote?.url) {
+                urls.push(originRemote.url)
+              }
+            }
+          } catch {
+            // pass
+          }
+
+          for (const sourceUrl of sourceCloneUrls || []) {
+            urls.push(sourceUrl)
+          }
+
+          return [...new Set(urls.filter(Boolean))]
+        }
+
+        const hydrateFromFullCloneForGrasp = async (): Promise<boolean> => {
+          if (!advertisedRefs.hasRemoteHead) {
+            console.warn(
+              "[forkAndCloneRepo] Source remote has no HEAD; skipping full-clone hydration and using per-ref fallback",
+            )
+            return false
+          }
+
+          const hydrationUrls = await getHydrationSourceUrls()
+          if (hydrationUrls.length === 0) {
+            return false
+          }
+
+          const fs = getProviderFs(git)
+          try {
+            await fs?.promises?.rm?.(absoluteDir, {recursive: true, force: true})
+            await fs?.promises?.rmdir?.(absoluteDir, {recursive: true}).catch?.(() => {})
+          } catch {
+            // pass
+          }
+
+          for (const sourceUrl of hydrationUrls) {
+            try {
+              console.log(
+                "[forkAndCloneRepo] Using headful GRASP strategy: full clone hydration from",
+                sourceUrl,
+              )
+              await cloneRemoteRepoUtil(git, cacheManager, {
+                url: sourceUrl,
+                dir: absoluteDir,
+                token: undefined,
+                onProgress: (message: string, percentage?: number) => {
+                  onProgress?.(message, 68 + (percentage || 0) * 0.2)
+                },
+              })
+              workingDir = absoluteDir
+              return true
+            } catch (hydrateErr: any) {
+              console.warn(
+                "[forkAndCloneRepo] Full clone hydration failed for GRASP URL:",
+                sourceUrl,
+                hydrateErr?.message,
+              )
+            }
+          }
+
+          return false
+        }
+
+        await hydrateFromFullCloneForGrasp()
+
         // Get branch info for the result
-        const initialBranches = await git.listBranches({dir: workingDir})
+        const initialLocalBranches = await git
+          .listBranches({dir: workingDir})
+          .catch(() => [] as string[])
+        const initialBranches =
+          advertisedRefs.branches.length > 0 ? advertisedRefs.branches : initialLocalBranches
         let defaultBranch = initialBranches[0] || "main"
-        if (initialBranches.includes("main")) defaultBranch = "main"
+        if (advertisedRefs.headBranch && initialBranches.includes(advertisedRefs.headBranch)) {
+          defaultBranch = advertisedRefs.headBranch
+        } else if (initialBranches.includes("main")) defaultBranch = "main"
         else if (initialBranches.includes("master")) defaultBranch = "master"
 
-        await ensureCompleteHistoryForGrasp(defaultBranch)
+        // Collect all known local branches before the completeness check so we can
+        // fetch them by name (avoids HEAD resolution failures on Nostr relay remotes).
+        const localKnownBranches = await git
+          .listBranches({dir: workingDir})
+          .catch(() => [] as string[])
+        const remoteKnownBranches = await git
+          .listBranches({dir: workingDir, remote: "origin"})
+          .catch(() => [] as string[])
+        const fallbackKnownBranches =
+          remoteKnownBranches.length > 0 ? remoteKnownBranches : localKnownBranches
 
-        const branches = await git.listBranches({dir: workingDir})
-        if (branches.includes("main")) defaultBranch = "main"
+        const preFetchBranches = [
+          ...new Set([
+            ...(advertisedRefs.branches.length > 0
+              ? advertisedRefs.branches
+              : fallbackKnownBranches),
+            defaultBranch,
+          ]),
+        ].filter(b => Boolean(b && b !== "HEAD"))
+
+        await ensureCompleteHistoryForGrasp(
+          defaultBranch,
+          preFetchBranches.length > 0 ? preFetchBranches : [defaultBranch],
+        )
+
+        // Best-effort pass to pull all refs from origin before building GRASP state.
+        // Fetch per-branch to avoid HEAD resolution failures on Nostr relay remotes.
+        await fetchFromOriginForGrasp(
+          "collecting all refs",
+          preFetchBranches.length > 0 ? preFetchBranches : [defaultBranch],
+        )
+
+        const localBranches = await git.listBranches({dir: workingDir}).catch(() => [] as string[])
+        const remoteBranches = await git
+          .listBranches({dir: workingDir, remote: "origin"})
+          .catch(() => [] as string[])
+        const discoveredBranches: string[] =
+          remoteBranches.length > 0
+            ? remoteBranches
+            : [...new Set([...localBranches, ...remoteBranches])]
+        const branches: string[] = Array.from(
+          new Set<string>(
+            (advertisedRefs.branches.length > 0
+              ? advertisedRefs.branches
+              : discoveredBranches
+            ).filter(branch => branch !== "HEAD"),
+          ),
+        )
+        if (advertisedRefs.headBranch && branches.includes(advertisedRefs.headBranch)) {
+          defaultBranch = advertisedRefs.headBranch
+        } else if (branches.includes("main")) defaultBranch = "main"
         else if (branches.includes("master")) defaultBranch = "master"
         else if (!branches.includes(defaultBranch)) defaultBranch = branches[0] || "main"
 
         const branchCommits: Record<string, string> = {}
+        const isLocalObjectAvailable = async (oid: string): Promise<boolean> => {
+          if (!oid) return false
+          if (typeof (git as any).readObject !== "function") return true
+
+          try {
+            await git.readObject({dir: workingDir, oid})
+            return true
+          } catch {
+            return false
+          }
+        }
+
         for (const branch of branches) {
           try {
             const oid = await git.resolveRef({dir: workingDir, ref: `refs/heads/${branch}`})
             if (oid) branchCommits[branch] = oid
-          } catch {}
+          } catch {
+            try {
+              const remoteOid = await git.resolveRef({
+                dir: workingDir,
+                ref: `refs/remotes/origin/${branch}`,
+              })
+              if (remoteOid) {
+                branchCommits[branch] = remoteOid
+                if (typeof (git as any).writeRef === "function") {
+                  try {
+                    await git.writeRef({
+                      dir: workingDir,
+                      ref: `refs/heads/${branch}`,
+                      value: remoteOid,
+                      force: true,
+                    })
+                  } catch {
+                    // pass
+                  }
+                }
+              }
+            } catch {
+              // pass
+            }
+          }
         }
 
-        const tags = await git.listTags({dir: workingDir})
+        const pushableBranches: string[] = []
+        for (const branch of branches) {
+          const oid = branchCommits[branch]
+          if (!oid) continue
+
+          const hasTipObject = await isLocalObjectAvailable(oid)
+          if (!hasTipObject) {
+            console.warn(
+              `[forkAndCloneRepo] Skipping GRASP branch ${branch}: tip object ${oid.slice(0, 8)} missing locally`,
+            )
+            continue
+          }
+
+          const hasMissingHistory = await hasIncompleteHistoryForGrasp(branch)
+          if (hasMissingHistory) {
+            console.warn(
+              `[forkAndCloneRepo] Skipping GRASP branch ${branch}: incomplete local history`,
+            )
+            continue
+          }
+
+          pushableBranches.push(branch)
+        }
+
+        const localTags = await git.listTags({dir: workingDir}).catch(() => [] as string[])
+        const tags: string[] = Array.from(
+          new Set<string>(advertisedRefs.tags.length > 0 ? advertisedRefs.tags : localTags),
+        )
         const tagCommits: Record<string, string> = {}
         for (const tag of tags) {
           try {
             const oid = await git.resolveRef({dir: workingDir, ref: `refs/tags/${tag}`})
-            if (oid) tagCommits[tag] = oid
+            if (oid) {
+              const hasTagObject = await isLocalObjectAvailable(oid)
+              if (hasTagObject) {
+                tagCommits[tag] = oid
+              } else {
+                console.warn(
+                  `[forkAndCloneRepo] Skipping GRASP tag ${tag}: object ${oid.slice(0, 8)} missing locally`,
+                )
+              }
+            }
           } catch {}
+        }
+
+        const pushableTags = tags.filter(tag => Boolean(tagCommits[tag]))
+        const filteredBranches = pushableBranches
+
+        if (!filteredBranches.includes(defaultBranch)) {
+          defaultBranch = filteredBranches[0] || defaultBranch
+        }
+
+        if (defaultBranch && filteredBranches.includes(defaultBranch)) {
+          try {
+            await git.writeRef({
+              dir: workingDir,
+              ref: "HEAD",
+              value: `ref: refs/heads/${defaultBranch}`,
+              force: true,
+            })
+          } catch {
+            // pass
+          }
         }
 
         // For GRASP, the fork URL will be constructed by the UI using the relay URL
@@ -1010,8 +1533,8 @@ export async function forkAndCloneRepo(
           localRepoId,
           forkUrl: graspCloneUrl,
           defaultBranch,
-          branches,
-          tags,
+          branches: filteredBranches,
+          tags: pushableTags,
           branchCommits,
           tagCommits,
         }
@@ -1125,8 +1648,7 @@ export async function forkAndCloneRepo(
         }
       }
 
-      const isNostrRelayUrl = (url: string): boolean =>
-        /relay\.ngit\.dev|gitnostr\.com|grasp/i.test(url)
+      const isNostrRelayUrl = (url: string): boolean => isGraspRepoHttpUrl(url)
 
       const resolveSourceUrls = (reason: string): string[] => {
         if (!sourceCloneUrls || sourceCloneUrls.length === 0) return []
