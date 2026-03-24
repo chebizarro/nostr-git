@@ -2958,7 +2958,18 @@ const api = {
 
   // Fork and clone a repository
   async forkAndCloneRepo(opts: ForkAndCloneOptions) {
-    const result = await forkAndCloneRepo(git, cacheManager, rootDir, opts)
+    const progressRepoId = opts.dir || `${opts.owner}/${opts.forkName}`
+    const result = await forkAndCloneRepo(git, cacheManager, rootDir, {
+      ...opts,
+      onProgress: (stage: string, pct?: number) => {
+        postProgress({
+          type: "clone-progress",
+          repoId: progressRepoId,
+          phase: stage,
+          ...(typeof pct === "number" ? {progress: pct} : {}),
+        })
+      },
+    })
     return toPlain(result)
   },
 

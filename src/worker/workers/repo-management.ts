@@ -714,11 +714,35 @@ export async function forkAndCloneRepo(
         onProgress?.("Cloning source repository...", 20)
         let cloneSuccess = false
         let lastError: Error | null = null
+        const totalSourceUrls = sourceCloneUrls?.length || 0
 
-        for (const sourceUrl of sourceCloneUrls!) {
+        const formatSourceCloneUrlForProgress = (value: string): string => {
+          const raw = String(value || "").trim()
+          if (!raw) return "unknown URL"
+          try {
+            const parsed = new URL(raw)
+            const compactPath = parsed.pathname.replace(/\/+$/, "") || "/"
+            return `${parsed.host}${compactPath}`
+          } catch {
+            return raw
+          }
+        }
+
+        const formatCloneErrorForProgress = (error: unknown): string => {
+          const message = error instanceof Error ? error.message : String(error || "Unknown error")
+          return message.replace(/\s+/g, " ").trim().slice(0, 140)
+        }
+
+        for (const [sourceIndex, sourceUrl] of sourceCloneUrls!.entries()) {
+          const attemptNumber = sourceIndex + 1
+          const compactUrl = formatSourceCloneUrlForProgress(sourceUrl)
           try {
             const cloneStartedAt = Date.now()
             console.log("[forkAndCloneRepo] Trying to clone from:", sourceUrl)
+            onProgress?.(
+              `Trying source clone URL (${attemptNumber}/${totalSourceUrls}): ${compactUrl}`,
+              20,
+            )
             const cloneDepth = provider === "grasp" ? undefined : 50
             await cloneRemoteRepoUtil(git, cacheManager, {
               url: sourceUrl,
@@ -734,10 +758,19 @@ export async function forkAndCloneRepo(
               sourceUrl,
               `in ${Date.now() - cloneStartedAt}ms`,
             )
+            onProgress?.(
+              `Source clone succeeded (${attemptNumber}/${totalSourceUrls}): ${compactUrl}`,
+              28,
+            )
             cloneSuccess = true
             break
           } catch (cloneError: any) {
             console.warn("[forkAndCloneRepo] Clone failed for URL:", sourceUrl, cloneError?.message)
+            const compactError = formatCloneErrorForProgress(cloneError)
+            onProgress?.(
+              `Source clone failed (${attemptNumber}/${totalSourceUrls}): ${compactUrl} (${compactError})`,
+              20,
+            )
             lastError = cloneError
           }
         }
