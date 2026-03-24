@@ -1034,8 +1034,8 @@ export async function cloneRemoteRepoUtil(
     }
     if (depth && depth > 0) cloneOptions.depth = depth
 
-    // Add timeout to prevent clone from hanging indefinitely (2 minutes for clone)
-    const cloneWithTimeout = async (timeoutMs: number = 120000) => {
+    // Add timeout to prevent clone from hanging indefinitely (60 seconds per URL attempt)
+    const cloneWithTimeout = async (timeoutMs: number = 60000) => {
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(
           () => reject(new Error(`Timeout: clone operation took longer than ${timeoutMs / 1000}s`)),
@@ -1045,7 +1045,7 @@ export async function cloneRemoteRepoUtil(
       return Promise.race([git.clone(cloneOptions), timeoutPromise])
     }
 
-    await cloneWithTimeout(120000)
+    await cloneWithTimeout(60000)
 
     // Ensure origin remote is properly configured with fetch refspec
     // isomorphic-git's clone may not create the full config in all cases

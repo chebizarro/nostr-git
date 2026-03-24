@@ -68,6 +68,7 @@ const FORK_TIMEOUTS = {
   createRepoMs: 60_000,
   fetchHistoryMs: 120_000,
   pushMs: 180_000,
+  graspHydrationMs: 120_000,
 }
 
 // ============================================================================
@@ -1262,6 +1263,122 @@ export async function forkAndCloneRepo(
         const advertisedRefs = await loadAdvertisedRefsForGrasp()
         allowFullCloneRecoveryForGrasp = advertisedRefs.hasRemoteHead
 
+        const validateReusableCloneForGrasp = async (): Promise<boolean> => {
+          if (!foundExistingClone) {
+            return true
+          }
+
+          const expectedBranchCandidates =
+            advertisedRefs.branches.length > 0
+              ? advertisedRefs.branches
+              : await git.listBranches({dir: workingDir}).catch(() => [] as string[])
+
+          const expectedBranches: string[] = Array.from(
+            new Set<string>(
+              expectedBranchCandidates.filter(
+                (branch): branch is string =>
+                  typeof branch === "string" && branch.trim().length > 0,
+              ),
+            ),
+          )
+
+          if (expectedBranches.length === 0) {
+            return true
+          }
+
+          if (advertisedRefs.sourceUrl) {
+            await ensureOriginFetchRefspec(git, workingDir, advertisedRefs.sourceUrl)
+          }
+
+          const resolveBranchTip = async (branchName: string): Promise<string | null> => {
+            const candidates = [
+              `refs/heads/${branchName}`,
+              `refs/remotes/origin/${branchName}`,
+              branchName,
+            ]
+
+            for (const candidate of candidates) {
+              try {
+                const oid = await git.resolveRef({dir: workingDir, ref: candidate})
+                if (oid) return oid
+              } catch {
+                // pass
+              }
+            }
+
+            return null
+          }
+
+          const resolvedTips = await Promise.all(
+            expectedBranches.map(async branch => ({branch, oid: await resolveBranchTip(branch)})),
+          )
+          const resolvedCount = resolvedTips.filter(item => Boolean(item.oid)).length
+
+          if (resolvedCount === 0) {
+            console.warn(
+              "[forkAndCloneRepo] Existing clone integrity check failed: no advertised branches are resolved locally",
+            )
+            return false
+          }
+
+          const preferredValidationBranch =
+            (advertisedRefs.headBranch && expectedBranches.includes(advertisedRefs.headBranch)
+              ? advertisedRefs.headBranch
+              : expectedBranches.includes("main")
+                ? "main"
+                : expectedBranches.includes("master")
+                  ? "master"
+                  : expectedBranches[0]) || expectedBranches[0]
+
+          const validationTipEntry =
+            resolvedTips.find(item => item.branch === preferredValidationBranch && item.oid) ||
+            resolvedTips.find(item => item.oid)
+
+          if (!validationTipEntry?.oid) {
+            return false
+          }
+
+          if (typeof (git as any).readObject === "function") {
+            try {
+              await git.readObject({dir: workingDir, oid: validationTipEntry.oid})
+            } catch {
+              console.warn(
+                `[forkAndCloneRepo] Existing clone integrity check failed: cannot read tip object for ${validationTipEntry.branch}`,
+              )
+              return false
+            }
+          }
+
+          const historyIncomplete = await hasIncompleteHistoryForGrasp(validationTipEntry.branch)
+          if (historyIncomplete) {
+            console.warn(
+              `[forkAndCloneRepo] Existing clone integrity check failed: incomplete history for ${validationTipEntry.branch}`,
+            )
+            return false
+          }
+
+          return true
+        }
+
+        if (foundExistingClone) {
+          const reusable = await runTimed(
+            "validate existing GRASP clone integrity",
+            FORK_TIMEOUTS.fetchHistoryMs,
+            () => validateReusableCloneForGrasp(),
+            {workingDir},
+          )
+
+          if (!reusable) {
+            console.warn(
+              "[forkAndCloneRepo] Existing local clone failed integrity checks; switching to fresh hydration strategy",
+            )
+            onProgress?.("Existing clone is incomplete, rehydrating from source...", 66)
+            foundExistingClone = false
+          } else {
+            console.log("[forkAndCloneRepo] Existing local clone passed GRASP integrity checks")
+          }
+        }
+
         const getHydrationSourceUrls = async (): Promise<string[]> => {
           const urls: string[] = []
 
@@ -1289,6 +1406,13 @@ export async function forkAndCloneRepo(
         }
 
         const hydrateFromFullCloneForGrasp = async (): Promise<boolean> => {
+          if (foundExistingClone) {
+            console.log(
+              "[forkAndCloneRepo] Skipping headful GRASP hydration because an existing local clone is already in use",
+            )
+            return false
+          }
+
           if (!advertisedRefs.hasRemoteHead) {
             console.warn(
               "[forkAndCloneRepo] Source remote has no HEAD; skipping full-clone hydration and using per-ref fallback",
@@ -1337,7 +1461,21 @@ export async function forkAndCloneRepo(
           return false
         }
 
-        await hydrateFromFullCloneForGrasp()
+        let fullCloneHydrationApplied = false
+        try {
+          const hydrationApplied = await runTimed(
+            "headful GRASP full-clone hydration",
+            FORK_TIMEOUTS.graspHydrationMs,
+            () => hydrateFromFullCloneForGrasp(),
+          )
+          fullCloneHydrationApplied = Boolean(hydrationApplied)
+        } catch (hydrateErr: any) {
+          console.warn(
+            "[forkAndCloneRepo] Headful GRASP hydration timed out/failed; falling back to per-ref strategy:",
+            hydrateErr?.message,
+          )
+          onProgress?.("Headful hydration unavailable, using per-ref fallback...", 74)
+        }
 
         // Get branch info for the result
         const initialLocalBranches = await git
@@ -1376,12 +1514,85 @@ export async function forkAndCloneRepo(
           preFetchBranches.length > 0 ? preFetchBranches : [defaultBranch],
         )
 
-        // Best-effort pass to pull all refs from origin before building GRASP state.
-        // Fetch per-branch to avoid HEAD resolution failures on Nostr relay remotes.
-        await fetchFromOriginForGrasp(
-          "collecting all refs",
+        const isHydratedCloneCompleteForAdvertisedRefs = async (
+          branchNames: string[],
+        ): Promise<boolean> => {
+          if (!fullCloneHydrationApplied) {
+            return false
+          }
+
+          const targetBranches = branchNames.filter(Boolean)
+          if (targetBranches.length === 0) {
+            return false
+          }
+
+          for (const branchName of targetBranches) {
+            let branchOid: string | null = null
+
+            const resolveCandidates = [
+              `refs/heads/${branchName}`,
+              `refs/remotes/origin/${branchName}`,
+              branchName,
+            ]
+
+            for (const candidate of resolveCandidates) {
+              try {
+                const oid = await git.resolveRef({dir: workingDir, ref: candidate})
+                if (oid) {
+                  branchOid = oid
+                  break
+                }
+              } catch {
+                // pass
+              }
+            }
+
+            if (!branchOid) {
+              console.warn(
+                `[forkAndCloneRepo] Hydration completeness check failed: unresolved branch ${branchName}`,
+              )
+              return false
+            }
+
+            if (typeof (git as any).readObject === "function") {
+              try {
+                await git.readObject({dir: workingDir, oid: branchOid})
+              } catch {
+                console.warn(
+                  `[forkAndCloneRepo] Hydration completeness check failed: missing tip object for ${branchName}`,
+                )
+                return false
+              }
+            }
+
+            const branchIncomplete = await hasIncompleteHistoryForGrasp(branchName)
+            if (branchIncomplete) {
+              console.warn(
+                `[forkAndCloneRepo] Hydration completeness check failed: incomplete history for ${branchName}`,
+              )
+              return false
+            }
+          }
+
+          return true
+        }
+
+        const shouldSkipCollectAllFetch = await isHydratedCloneCompleteForAdvertisedRefs(
           preFetchBranches.length > 0 ? preFetchBranches : [defaultBranch],
         )
+
+        // Best-effort pass to pull all refs from origin before building GRASP state.
+        // Fetch per-branch to avoid HEAD resolution failures on Nostr relay remotes.
+        if (shouldSkipCollectAllFetch) {
+          console.log(
+            "[forkAndCloneRepo] Skipping collect-all-refs fetch because full clone hydration is already complete",
+          )
+        } else {
+          await fetchFromOriginForGrasp(
+            "collecting all refs",
+            preFetchBranches.length > 0 ? preFetchBranches : [defaultBranch],
+          )
+        }
 
         const localBranches = await git.listBranches({dir: workingDir}).catch(() => [] as string[])
         const remoteBranches = await git
