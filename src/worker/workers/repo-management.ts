@@ -1478,7 +1478,7 @@ export async function forkAndCloneRepo(
           const expectedBranches: string[] = Array.from(
             new Set<string>(
               expectedBranchCandidates.filter(
-                (branch): branch is string =>
+                (branch: unknown): branch is string =>
                   typeof branch === "string" && branch.trim().length > 0,
               ),
             ),
