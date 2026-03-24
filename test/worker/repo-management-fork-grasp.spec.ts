@@ -243,7 +243,7 @@ describe("worker/repo-management GRASP fork output", () => {
     expect(logMock).toHaveBeenCalledWith(
       expect.objectContaining({
         dir: "/root/upstream-owner/upstream-repo",
-        ref: "feature/nested-branch",
+        ref: "refs/heads/feature/nested-branch",
       }),
     )
   })

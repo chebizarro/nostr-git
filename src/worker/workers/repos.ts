@@ -986,11 +986,45 @@ export async function cloneRemoteRepoUtil(
       setAuthConfig({tokens: [{host: hostname, token}]})
     }
 
-    onProgress?.("Discovering remote references...", 10)
+    const isGraspHttpRemote = isGraspRepoHttpUrl(url)
+    const configuredCorsProxy = resolveDefaultCorsProxy()
+
+    interface CloneTransport {
+      name: "direct" | "proxy"
+      corsProxy: string | null
+    }
+
+    const cloneTransports: CloneTransport[] = isGraspHttpRemote
+      ? [
+          {name: "direct", corsProxy: null},
+          ...(configuredCorsProxy
+            ? [{name: "proxy" as const, corsProxy: configuredCorsProxy}]
+            : []),
+        ]
+      : [{name: configuredCorsProxy ? "proxy" : "direct", corsProxy: configuredCorsProxy ?? null}]
+
+    const describeTransport = (transport: CloneTransport): string =>
+      transport.name === "direct" ? "direct connection" : "configured CORS proxy"
+
+    const isLikelyCorsOrNetworkError = (error: unknown): boolean => {
+      const message = error instanceof Error ? error.message : String(error || "")
+      const lower = message.toLowerCase()
+      return (
+        lower.includes("cors") ||
+        lower.includes("access-control") ||
+        lower.includes("cross-origin") ||
+        lower.includes("network") ||
+        lower.includes("failed to fetch") ||
+        lower.includes("timeout") ||
+        lower.includes("econn") ||
+        lower.includes("enotfound") ||
+        lower.includes("unreachable") ||
+        lower.includes("abort")
+      )
+    }
 
     // Add timeout to prevent hanging on slow/unresponsive servers
-    const corsProxy = resolveDefaultCorsProxy()
-    const listRefsWithTimeout = async (timeoutMs: number = 30000) => {
+    const listRefsWithTimeout = async (transport: CloneTransport, timeoutMs: number = 30000) => {
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(
           () => reject(new Error(`Timeout: listServerRefs took longer than ${timeoutMs / 1000}s`)),
@@ -1000,52 +1034,130 @@ export async function cloneRemoteRepoUtil(
       return Promise.race([
         git.listServerRefs({
           url,
-          corsProxy,
+          corsProxy: transport.corsProxy,
           onAuth: getAuthCallback(url),
         }),
         timeoutPromise,
       ])
     }
 
-    const refs = await listRefsWithTimeout(30000)
+    onProgress?.("Discovering remote references...", 10)
+
+    let refs: Array<any> | null = null
+    let selectedTransport = cloneTransports[0]
+    let discoveryError: unknown = null
+
+    for (let i = 0; i < cloneTransports.length; i++) {
+      const transport = cloneTransports[i]
+      try {
+        if (isGraspHttpRemote) {
+          onProgress?.(`Discovering remote references (${describeTransport(transport)})...`, 10)
+        }
+        const fetchedRefs = await listRefsWithTimeout(transport, 30000)
+        if (!fetchedRefs || fetchedRefs.length === 0) {
+          throw new Error("Repository not found or no refs available")
+        }
+        refs = fetchedRefs
+        selectedTransport = transport
+        if (i > 0) {
+          console.warn(
+            `[cloneRemoteRepoUtil] Discovered refs via fallback transport (${transport.name}) for ${url}`,
+          )
+        }
+        break
+      } catch (error) {
+        discoveryError = error
+        const hasNextTransport = i < cloneTransports.length - 1
+        if (hasNextTransport && isLikelyCorsOrNetworkError(error)) {
+          console.warn(
+            `[cloneRemoteRepoUtil] Ref discovery failed via ${transport.name}, trying next transport:`,
+            error,
+          )
+          continue
+        }
+        throw error
+      }
+    }
 
     if (!refs || refs.length === 0) {
+      if (discoveryError) throw discoveryError
       throw new Error("Repository not found or no refs available")
     }
 
+    const cloneTransportsToTry: CloneTransport[] = isGraspHttpRemote
+      ? cloneTransports
+      : [selectedTransport, ...cloneTransports.filter(transport => transport !== selectedTransport)]
+
     onProgress?.("Cloning repository...", 20)
 
-    const cloneOptions: any = {
-      dir,
-      url,
-      corsProxy,
-      onAuth: getAuthCallback(url),
-      singleBranch: false,
-      noCheckout: false,
-      onProgress: (progress: any) => {
-        if (progress.phase === "Receiving objects") {
-          const pct = 20 + (progress.loaded / progress.total) * 60
-          onProgress?.(`Downloading objects (${progress.loaded}/${progress.total})...`, pct)
-        } else if (progress.phase === "Resolving deltas") {
-          const pct = 80 + (progress.loaded / progress.total) * 15
-          onProgress?.(`Resolving deltas (${progress.loaded}/${progress.total})...`, pct)
+    let cloneError: unknown = null
+    for (let i = 0; i < cloneTransportsToTry.length; i++) {
+      const transport = cloneTransportsToTry[i]
+
+      const cloneOptions: any = {
+        dir,
+        url,
+        corsProxy: transport.corsProxy,
+        onAuth: getAuthCallback(url),
+        singleBranch: false,
+        noCheckout: false,
+        onProgress: (progress: any) => {
+          if (progress.phase === "Receiving objects") {
+            const pct = 20 + (progress.loaded / progress.total) * 60
+            onProgress?.(`Downloading objects (${progress.loaded}/${progress.total})...`, pct)
+          } else if (progress.phase === "Resolving deltas") {
+            const pct = 80 + (progress.loaded / progress.total) * 15
+            onProgress?.(`Resolving deltas (${progress.loaded}/${progress.total})...`, pct)
+          }
+        },
+      }
+      if (depth && depth > 0) cloneOptions.depth = depth
+
+      // Add timeout to prevent clone from hanging indefinitely (90 seconds per URL attempt)
+      const cloneWithTimeout = async (timeoutMs: number = 90000) => {
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(
+            () =>
+              reject(new Error(`Timeout: clone operation took longer than ${timeoutMs / 1000}s`)),
+            timeoutMs,
+          )
+        })
+        return Promise.race([git.clone(cloneOptions), timeoutPromise])
+      }
+
+      try {
+        if (isGraspHttpRemote) {
+          onProgress?.(`Cloning repository (${describeTransport(transport)})...`, 20)
         }
-      },
+        await cloneWithTimeout(90000)
+        if (i > 0) {
+          console.warn(
+            `[cloneRemoteRepoUtil] Clone succeeded via fallback transport (${transport.name}) for ${url}`,
+          )
+        }
+        cloneError = null
+        break
+      } catch (error) {
+        cloneError = error
+        const hasNextTransport = i < cloneTransportsToTry.length - 1
+        if (hasNextTransport && isLikelyCorsOrNetworkError(error)) {
+          console.warn(
+            `[cloneRemoteRepoUtil] Clone failed via ${transport.name}, trying next transport:`,
+            error,
+          )
+          try {
+            const fs: any = getProviderFs(git)
+            await safeRmrf(fs, dir)
+          } catch {
+            // best effort cleanup before retrying
+          }
+          continue
+        }
+        throw error
+      }
     }
-    if (depth && depth > 0) cloneOptions.depth = depth
 
-    // Add timeout to prevent clone from hanging indefinitely (60 seconds per URL attempt)
-    const cloneWithTimeout = async (timeoutMs: number = 60000) => {
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(
-          () => reject(new Error(`Timeout: clone operation took longer than ${timeoutMs / 1000}s`)),
-          timeoutMs,
-        )
-      })
-      return Promise.race([git.clone(cloneOptions), timeoutPromise])
-    }
-
-    await cloneWithTimeout(60000)
+    if (cloneError) throw cloneError
 
     // Ensure origin remote is properly configured with fetch refspec
     // isomorphic-git's clone may not create the full config in all cases
