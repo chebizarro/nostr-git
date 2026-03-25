@@ -138,6 +138,7 @@ import {
 } from "../errors/index.js"
 
 import type {EventIO} from "../types/index.js"
+import type {BlossomPushSummary} from "../blossom/index.js"
 import {
   getNostrGitProvider,
   initializeNostrGitProvider,
@@ -1409,43 +1410,100 @@ const api = {
           ? () => ({username: provider === "gitlab" ? "oauth2" : "token", password: token})
           : getAuthCallback(remoteUrl)
 
+      const refsToPush = Array.from(
+        new Set(
+          [...normalizedRequestedRefs, normalizedRequestedRef].filter(Boolean).length > 0
+            ? [...normalizedRequestedRefs, normalizedRequestedRef].filter(Boolean)
+            : [normalizePushRef(targetBranch)],
+        ),
+      )
+
+      const materializeSourceRef = async (targetRef: string): Promise<string> => {
+        if (!targetRef.startsWith("refs/heads/")) {
+          return targetRef
+        }
+
+        const shortName = targetRef.slice("refs/heads/".length)
+        try {
+          await git.resolveRef({dir, ref: targetRef})
+          return targetRef
+        } catch {
+          try {
+            const remoteTrackingRef = `refs/remotes/origin/${shortName}`
+            const remoteOid = await git.resolveRef({dir, ref: remoteTrackingRef})
+            if (remoteOid && typeof (git as any).writeRef === "function") {
+              await git.writeRef({dir, ref: targetRef, value: remoteOid, force: true})
+            }
+          } catch {
+            // pass
+          }
+
+          try {
+            await git.resolveRef({dir, ref: targetRef})
+            return targetRef
+          } catch {
+            return shortName
+          }
+        }
+      }
+
       // Only use NostrGitProvider for nostr:// URLs or GRASP-style Smart HTTP paths.
       const isNostrUrl = remoteUrl.startsWith("nostr://") || isGraspRepoHttpUrl(remoteUrl)
 
       // Check if NostrGitProvider is available before trying to use it
       if (isNostrUrl && hasNostrGitProvider()) {
         const nostrProvider = getNostrGitProvider()
-        const targetRef = normalizedRequestedRef || targetBranch
-        const result = await nostrProvider.push({
-          dir,
-          fs: getProviderFs(git),
-          ref: targetRef,
-          remoteRef: targetRef,
-          url: remoteUrl,
-          onAuth,
-          blossomMirror: blossomMirror ?? Boolean(provider === "blossom"),
-        })
+        let blossomSummary: BlossomPushSummary | undefined
+        const pushedRefs: string[] = []
+
+        for (const targetRef of refsToPush) {
+          const sourceRef = await materializeSourceRef(targetRef)
+          const result = await nostrProvider.push({
+            dir,
+            fs: getProviderFs(git),
+            ref: sourceRef,
+            remoteRef: targetRef,
+            url: remoteUrl,
+            onAuth,
+            blossomMirror: blossomMirror ?? Boolean(provider === "blossom"),
+          })
+          if (!blossomSummary && result?.blossomSummary) {
+            blossomSummary = result.blossomSummary
+          }
+          pushedRefs.push(targetRef)
+        }
+
         return toPlain({
           success: true,
           branch: targetBranch,
           remoteUrl,
-          blossomSummary: result.blossomSummary,
+          blossomSummary,
+          details: {pushedRefs, failedRefs: [], warnings: []},
         })
       }
 
       const corsProxy = resolveDefaultCorsProxy()
-      const targetRef = normalizedRequestedRef || targetBranch
+      const pushedRefs: string[] = []
 
-      await (git as any).push({
-        dir,
-        url: remoteUrl,
-        ref: targetRef,
-        remoteRef: targetRef,
-        ...(corsProxy !== null ? {corsProxy} : {}),
-        onAuth,
+      for (const targetRef of refsToPush) {
+        const sourceRef = await materializeSourceRef(targetRef)
+        await (git as any).push({
+          dir,
+          url: remoteUrl,
+          ref: sourceRef,
+          remoteRef: targetRef,
+          ...(corsProxy !== null ? {corsProxy} : {}),
+          onAuth,
+        })
+        pushedRefs.push(targetRef)
+      }
+
+      return toPlain({
+        success: true,
+        branch: targetBranch,
+        remoteUrl,
+        details: {pushedRefs, failedRefs: [], warnings: []},
       })
-
-      return toPlain({success: true, branch: targetBranch, remoteUrl})
     } catch (error) {
       console.error(`Error pushing to remote:`, error)
       return toPlain({
@@ -2195,9 +2253,21 @@ const api = {
 
     const fs: any = getProviderFs(git)
 
+    const isNotFoundError = (error: any): boolean => {
+      const code = error?.code
+      const message = String(error?.message ?? error ?? "")
+      return code === "ENOENT" || message.includes("ENOENT") || message.includes("Not Found")
+    }
+
     const removeDirRecursive = async (path: string): Promise<void> => {
       if (fs?.promises?.rm) {
-        await fs.promises.rm(path, {recursive: true, force: true})
+        try {
+          await fs.promises.rm(path, {recursive: true, force: true})
+        } catch (error: any) {
+          if (!isNotFoundError(error)) {
+            throw error
+          }
+        }
         return
       }
 
@@ -2206,6 +2276,9 @@ const api = {
           await fs.promises.rmdir(path, {recursive: true})
           return
         } catch (error: any) {
+          if (isNotFoundError(error)) {
+            return
+          }
           if (error?.code !== "ENOTEMPTY") {
             throw error
           }
@@ -2216,19 +2289,48 @@ const api = {
         throw new Error("Filesystem does not support recursive deletion")
       }
 
-      const entries = await fs.promises.readdir(path)
+      let entries: string[] = []
+      try {
+        entries = await fs.promises.readdir(path)
+      } catch (error: any) {
+        if (isNotFoundError(error)) {
+          return
+        }
+        throw error
+      }
+
       for (const entry of entries) {
         const child = `${path}/${entry}`
-        const stat = await fs.promises.stat(child)
+        let stat: any
+        try {
+          stat = await fs.promises.stat(child)
+        } catch (error: any) {
+          if (isNotFoundError(error)) {
+            continue
+          }
+          throw error
+        }
         if (stat?.isDirectory?.()) {
           await removeDirRecursive(child)
         } else {
-          await fs.promises.unlink(child)
+          try {
+            await fs.promises.unlink(child)
+          } catch (error: any) {
+            if (!isNotFoundError(error)) {
+              throw error
+            }
+          }
         }
       }
 
       if (fs?.promises?.rmdir) {
-        await fs.promises.rmdir(path)
+        try {
+          await fs.promises.rmdir(path)
+        } catch (error: any) {
+          if (!isNotFoundError(error)) {
+            throw error
+          }
+        }
       }
     }
 

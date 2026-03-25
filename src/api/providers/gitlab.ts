@@ -1105,6 +1105,47 @@ export class GitLabApi implements GitServiceApi {
     }
   }
 
+  async upsertBranchRef(
+    owner: string,
+    repo: string,
+    branch: string,
+    sha: string,
+  ): Promise<{name: string; commit: {sha: string; url: string}; protected?: boolean}> {
+    const projectId = await this.getProjectId(owner, repo)
+    try {
+      const data = await this.request<any>(
+        `/projects/${projectId}/repository/branches?branch=${encodeURIComponent(branch)}&ref=${encodeURIComponent(sha)}`,
+        {method: "POST"},
+      )
+
+      return {
+        name: data.name,
+        commit: {
+          sha: data.commit?.id || sha,
+          url: data.commit?.web_url || "",
+        },
+        protected: data.protected,
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error || "")
+      const isAlreadyExists = /already exists/i.test(message) || /400/.test(message)
+      if (!isAlreadyExists) {
+        throw error
+      }
+
+      const existing = await this.getBranch(owner, repo, branch)
+      if (existing.commit.sha === sha) {
+        return {
+          name: existing.name,
+          commit: existing.commit,
+          protected: existing.protected,
+        }
+      }
+
+      throw error
+    }
+  }
+
   /**
    * Tag Operations
    */

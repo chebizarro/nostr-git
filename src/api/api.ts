@@ -406,6 +406,16 @@ export interface GitServiceApi {
     repo: string,
     branch: string,
   ): Promise<{name: string; commit: {sha: string; url: string}; protected: boolean}>
+  /**
+   * Create or update a branch ref to point at the provided commit SHA.
+   * Optional because not every provider exposes a compatible endpoint.
+   */
+  upsertBranchRef?(
+    owner: string,
+    repo: string,
+    branch: string,
+    sha: string,
+  ): Promise<{name: string; commit: {sha: string; url: string}; protected?: boolean}>
 
   /**
    * Tag Operations

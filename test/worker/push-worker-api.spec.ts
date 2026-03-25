@@ -119,6 +119,36 @@ describe("worker.pushToRemote API", () => {
     expect(res.blossomSummary).toBeUndefined()
   })
 
+  it("pushes all requested refs for standard providers", async () => {
+    const mod = await import("../../src/api/git-provider.js")
+    ;(mod as any).getNostrGitProvider = () => undefined
+
+    const res = await exposed.pushToRemote({
+      repoId: "owner/repo",
+      remoteUrl: "https://example.com/owner/repo.git",
+      branch: "main",
+      refs: ["refs/heads/main", "refs/heads/feature/recent"],
+    })
+
+    expect(res.success).toBe(true)
+    expect(res.details?.pushedRefs).toEqual(["refs/heads/main", "refs/heads/feature/recent"])
+    expect(pushMock).toHaveBeenCalledTimes(2)
+    expect(pushMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        ref: "refs/heads/main",
+        remoteRef: "refs/heads/main",
+      }),
+    )
+    expect(pushMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        ref: "refs/heads/feature/recent",
+        remoteRef: "refs/heads/feature/recent",
+      }),
+    )
+  })
+
   it("retries GRASP push once after missing-object repair fetch", async () => {
     const missingError = Object.assign(
       new Error("One or more branches were not updated: missing necessary objects"),

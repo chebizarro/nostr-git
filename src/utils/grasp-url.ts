@@ -53,3 +53,22 @@ export function parseGraspRepoHttpUrl(rawUrl: string): ParsedGraspRepoHttpUrl | 
 export function isGraspRepoHttpUrl(rawUrl: string): boolean {
   return parseGraspRepoHttpUrl(rawUrl) !== null
 }
+
+export function isLikelyGraspRemoteUrl(rawUrl: string): boolean {
+  if (!rawUrl) return false
+  if (isGraspRepoHttpUrl(rawUrl)) return true
+
+  let url: URL
+  try {
+    url = new URL(rawUrl)
+  } catch {
+    return false
+  }
+
+  if (url.protocol === "ws:" || url.protocol === "wss:") {
+    return true
+  }
+
+  const host = url.hostname.toLowerCase()
+  return host === "relay.ngit.dev" || host === "gitnostr.com" || host.includes("grasp")
+}

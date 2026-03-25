@@ -915,6 +915,50 @@ export class GiteaApi implements GitServiceApi {
     }
   }
 
+  async upsertBranchRef(
+    owner: string,
+    repo: string,
+    branch: string,
+    sha: string,
+  ): Promise<{name: string; commit: {sha: string; url: string}; protected?: boolean}> {
+    try {
+      const data = await this.request<any>(`/repos/${owner}/${repo}/branches`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          new_branch_name: branch,
+          old_ref_name: sha,
+        }),
+      })
+
+      return {
+        name: data.name,
+        commit: {
+          sha: data.commit?.id || sha,
+          url: data.commit?.url || "",
+        },
+        protected: data.protected,
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error || "")
+      const isAlreadyExists = /already exists/i.test(message) || /409/.test(message)
+      if (!isAlreadyExists) {
+        throw error
+      }
+
+      const existing = await this.getBranch(owner, repo, branch)
+      if (existing.commit.sha === sha) {
+        return {
+          name: existing.name,
+          commit: existing.commit,
+          protected: existing.protected,
+        }
+      }
+
+      throw error
+    }
+  }
+
   /**
    * Tag Operations
    */

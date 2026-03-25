@@ -4,7 +4,7 @@ import {MultiVendorGitProvider} from "../git/multi-vendor-git-provider.js"
 import {NostrGitProvider} from "./providers/nostr-git-provider.js"
 import {createNostrGitProviderFromEnv} from "./providers/nostr-git-factory.js"
 import type {EventIO} from "../types/index.js"
-import {isGraspRepoHttpUrl} from "../utils/grasp-url.js"
+import {isLikelyGraspRemoteUrl} from "../utils/grasp-url.js"
 
 // Create the multi-vendor GitProvider instance using git-wrapper factory
 let gitProvider: GitProvider = new MultiVendorGitProvider({
@@ -87,7 +87,7 @@ export function hasNostrGitProvider(): boolean {
  */
 export function getProviderForUrl(url: string): GitProvider {
   // Check if URL is Nostr-based
-  if (url.startsWith("nostr://") || isGraspRepoHttpUrl(url)) {
+  if (url.startsWith("nostr://") || isLikelyGraspRemoteUrl(url)) {
     if (!nostrGitProvider) {
       throw new Error("NostrGitProvider not initialized for Nostr-based repository")
     }

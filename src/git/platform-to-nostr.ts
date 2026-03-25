@@ -79,12 +79,14 @@ export function convertRepoToNostrEvent(
 export function convertRepoToStateEvent(
   repo: RepoMetadata,
   importTimestamp: number,
+  refs?: Array<{type: "heads" | "tags"; name: string; commit: string}>,
 ): Omit<NostrEvent, "id" | "sig" | "pubkey"> {
   const repoName = repo.fullName.split("/").pop() || repo.name
 
   const event = createRepoStateEvent({
     repoId: repoName,
     head: repo.defaultBranch,
+    refs,
     created_at: importTimestamp,
   })
 

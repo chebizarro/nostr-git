@@ -13,79 +13,85 @@ export interface ImportConfig {
    * Maximum number of retry attempts for failed operations
    * @default 3
    */
-  maxRetries: number;
+  maxRetries: number
 
   /**
    * Enable fine-grained progress updates
    * @default true
    */
-  enableProgressTracking: boolean;
+  enableProgressTracking: boolean
 
   /**
    * Filter to import only items created after this date
    * Undefined means import all items
    */
-  sinceDate?: Date;
+  sinceDate?: Date
 
   /**
    * Whether to fork the repository (if not owned)
    * @default false
    */
-  forkRepo: boolean;
+  forkRepo: boolean
 
   /**
    * Custom name for the fork (if forking is enabled)
    * If not provided, defaults to `imported-${repoName}`
    */
-  forkName?: string;
+  forkName?: string
 
   /**
    * Whether to mirror issues to Nostr
    * @default true
    */
-  mirrorIssues: boolean;
+  mirrorIssues: boolean
 
   /**
    * Whether to mirror pull requests to Nostr
    * @default true
    */
-  mirrorPullRequests: boolean;
+  mirrorPullRequests: boolean
 
   /**
    * Whether to mirror issue comments to Nostr
    * @default true
    */
-  mirrorComments: boolean;
+  mirrorComments: boolean
 
   /**
    * Number of events to publish in a single batch before waiting
    * @default 30
    */
-  relayBatchSize?: number;
+  relayBatchSize?: number
 
   /**
    * Delay between batches (ms) when publishing events in batches
    * @default 250
    */
-  relayBatchDelay?: number;
+  relayBatchDelay?: number
 
   /**
    * Nostr relays to publish events to
    * @default []
    */
-  relays?: string[];
+  relays?: string[]
 
   /**
    * Progress callback function
    * Called with message, optional current count, and optional total count
    */
-  onProgress?: (message: string, current?: number, total?: number) => void;
+  onProgress?: (message: string, current?: number, total?: number) => void
 
   /**
    * Abort check callback function
    * Returns true if the operation should be aborted
    */
-  onAbort?: () => boolean;
+  onAbort?: () => boolean
+
+  /**
+   * Explicit branch names selected for remote sync.
+   * Default branch should be included by caller.
+   */
+  selectedBranches?: string[]
 }
 
 /**
@@ -99,8 +105,8 @@ export const DEFAULT_IMPORT_CONFIG: ImportConfig = {
   mirrorPullRequests: true,
   mirrorComments: true,
   relayBatchSize: 30,
-  relayBatchDelay: 250
-};
+  relayBatchDelay: 250,
+}
 
 /**
  * Create an ImportConfig with default values, overridden by provided options
@@ -111,6 +117,6 @@ export const DEFAULT_IMPORT_CONFIG: ImportConfig = {
 export function createImportConfig(overrides?: Partial<ImportConfig>): ImportConfig {
   return {
     ...DEFAULT_IMPORT_CONFIG,
-    ...overrides
-  };
+    ...overrides,
+  }
 }

@@ -10,8 +10,9 @@
  * Provides a simple mechanism to signal and check for abort requests
  */
 export class ImportAbortController {
-  private aborted = false;
-  private reason?: string;
+  private aborted = false
+  private reason?: string
+  private controller = new AbortController()
 
   /**
    * Signal that the operation should be aborted
@@ -19,8 +20,11 @@ export class ImportAbortController {
    * @param reason - Optional reason for abort (for logging/debugging)
    */
   abort(reason?: string): void {
-    this.aborted = true;
-    this.reason = reason;
+    this.aborted = true
+    this.reason = reason
+    if (!this.controller.signal.aborted) {
+      this.controller.abort(reason)
+    }
   }
 
   /**
@@ -29,7 +33,7 @@ export class ImportAbortController {
    * @returns true if aborted, false otherwise
    */
   isAborted(): boolean {
-    return this.aborted;
+    return this.aborted
   }
 
   /**
@@ -38,7 +42,38 @@ export class ImportAbortController {
    * @returns reason string or undefined
    */
   getReason(): string | undefined {
-    return this.reason;
+    return this.reason
+  }
+
+  /**
+   * Native AbortSignal for APIs that support signal-based cancellation.
+   */
+  get signal(): AbortSignal {
+    return this.controller.signal
+  }
+
+  /**
+   * Returns a promise that rejects when abort is requested.
+   */
+  waitForAbort(): Promise<never> {
+    if (this.aborted || this.controller.signal.aborted) {
+      const message = this.reason
+        ? `Import operation aborted: ${this.reason}`
+        : "Import operation aborted"
+      return Promise.reject(new ImportAbortedError(message))
+    }
+
+    return new Promise((_, reject) => {
+      const onAbort = () => {
+        this.controller.signal.removeEventListener("abort", onAbort)
+        const message = this.reason
+          ? `Import operation aborted: ${this.reason}`
+          : "Import operation aborted"
+        reject(new ImportAbortedError(message))
+      }
+
+      this.controller.signal.addEventListener("abort", onAbort, {once: true})
+    })
   }
 
   /**
@@ -51,8 +86,8 @@ export class ImportAbortController {
     if (this.aborted) {
       const message = this.reason
         ? `Import operation aborted: ${this.reason}`
-        : 'Import operation aborted';
-      throw new ImportAbortedError(message);
+        : "Import operation aborted"
+      throw new ImportAbortedError(message)
     }
   }
 
@@ -60,8 +95,9 @@ export class ImportAbortController {
    * Reset the abort state (useful for retrying)
    */
   reset(): void {
-    this.aborted = false;
-    this.reason = undefined;
+    this.aborted = false
+    this.reason = undefined
+    this.controller = new AbortController()
   }
 }
 
@@ -70,7 +106,7 @@ export class ImportAbortController {
  */
 export class ImportAbortedError extends Error {
   constructor(message: string) {
-    super(message);
-    this.name = 'ImportAbortedError';
+    super(message)
+    this.name = "ImportAbortedError"
   }
 }

@@ -975,6 +975,50 @@ export class GitHubApi implements GitServiceApi {
     }
   }
 
+  async upsertBranchRef(
+    owner: string,
+    repo: string,
+    branch: string,
+    sha: string,
+  ): Promise<{name: string; commit: {sha: string; url: string}; protected?: boolean}> {
+    const branchRef = `refs/heads/${branch}`
+    try {
+      await this.request<any>(`/repos/${owner}/${repo}/git/refs`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ref: branchRef, sha}),
+      })
+      const created = await this.getBranch(owner, repo, branch)
+      return {
+        name: created.name,
+        commit: created.commit,
+        protected: created.protected,
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error || "")
+      const isAlreadyExists = /422/.test(message) || /already exists/i.test(message)
+      if (!isAlreadyExists) {
+        throw error
+      }
+
+      await this.request<any>(
+        `/repos/${owner}/${repo}/git/refs/heads/${encodeURIComponent(branch)}`,
+        {
+          method: "PATCH",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({sha, force: true}),
+        },
+      )
+
+      const updated = await this.getBranch(owner, repo, branch)
+      return {
+        name: updated.name,
+        commit: updated.commit,
+        protected: updated.protected,
+      }
+    }
+  }
+
   /**
    * Tag Operations
    */
