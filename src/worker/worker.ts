@@ -174,6 +174,7 @@ import {listBranchesFromEvent} from "../git/branches.js"
 import type {RepoAnnouncementEvent} from "../events/index.js"
 
 import {resolveBranchName as resolveRobustBranchUtil} from "./workers/branches.js"
+import {buildCommitHistoryRefsToTry} from "./workers/commit-history.js"
 import {getProviderFs, isRepoClonedFs} from "./workers/fs-utils.js"
 
 import type {RepoCache} from "./workers/cache.js"
@@ -1610,30 +1611,9 @@ const api = {
         }
       }
 
-      // Build list of refs to try: HEAD first (most reliable), then requested branch, then fallbacks
-      const branchesToTry = ["main", "master", "develop", "dev"]
-      const refsToTry: string[] = []
-
-      // Try HEAD first - it's the most reliable way to find the current branch
-      refsToTry.push("HEAD")
-
-      // Then try the requested branch and its variants
-      if (ref && ref !== "HEAD") {
-        refsToTry.push(ref)
-        refsToTry.push(`origin/${ref}`)
-        refsToTry.push(`refs/remotes/origin/${ref}`)
-        refsToTry.push(`refs/heads/${ref}`)
-      }
-
-      // Add fallback branches if different from requested
-      for (const fallback of branchesToTry) {
-        if (fallback !== ref && !refsToTry.includes(fallback)) {
-          refsToTry.push(fallback)
-          refsToTry.push(`origin/${fallback}`)
-          refsToTry.push(`refs/remotes/origin/${fallback}`)
-          refsToTry.push(`refs/heads/${fallback}`)
-        }
-      }
+      // Prefer the explicitly requested branch before HEAD.
+      // A detached or stale HEAD can expose a truncated history for the wrong ref.
+      const refsToTry = buildCommitHistoryRefsToTry(ref)
 
       // Strategy 1: Try to resolve ref to OID first, then use OID with git.log
       // This works better for Nostr repos where refs might not be in standard locations
