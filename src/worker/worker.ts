@@ -2379,6 +2379,56 @@ const api = {
       )
     }
 
+    const fetchAllRefsForMissingCommit = async (): Promise<boolean> => {
+      const urlsToTry: string[] = []
+
+      try {
+        const remotes = await git.listRemotes({dir})
+        const originRemote = remotes.find((r: any) => r.remote === "origin")
+        if (originRemote?.url) {
+          urlsToTry.push(originRemote.url)
+        }
+      } catch {
+        // ignore remote listing issues
+      }
+
+      try {
+        const cache = await cacheManager.getRepoCache(key)
+        for (const url of filterValidCloneUrls(cache?.cloneUrls || [])) {
+          if (!urlsToTry.includes(url)) {
+            urlsToTry.push(url)
+          }
+        }
+      } catch {
+        // ignore cache issues
+      }
+
+      const orderedUrls = reorderUrlsByPreference(filterValidCloneUrls(urlsToTry), key)
+      if (orderedUrls.length === 0) {
+        return false
+      }
+
+      const corsProxy = resolveDefaultCorsProxy()
+      const fetchResult = await withUrlFallback(
+        orderedUrls,
+        async (url: string) => {
+          const authCallback = getAuthCallback(url)
+          await git.fetch({
+            dir,
+            url,
+            singleBranch: false,
+            tags: true,
+            corsProxy,
+            ...(authCallback && {onAuth: authCallback}),
+          })
+          return true
+        },
+        {repoId: key, perUrlTimeoutMs: 20000},
+      )
+
+      return fetchResult.success
+    }
+
     try {
       // Optimization: Try to read commit locally first before triggering expensive fetch
       let commits: any[] = []
@@ -2391,8 +2441,26 @@ const api = {
 
       // Only fetch if commit wasn't found locally
       if (commits.length === 0) {
-        // Try to use REST API if available (GitHub, GitLab, Gitea, Bitbucket)
-        let usedRestApi = false
+        let restMeta:
+          | {
+              sha: string
+              author: string
+              email: string
+              date: number
+              message: string
+              parents: string[]
+            }
+          | undefined
+        let restStats:
+          | {
+              additions: number
+              deletions: number
+              total: number
+            }
+          | undefined
+
+        // Try REST metadata first (fast path), but DO NOT stop here.
+        // We still need git objects to compute a real diff.
         try {
           const cache = await cacheManager.getRepoCache(key)
           console.log(`[getCommitDetails] Cache lookup for ${key}:`, {
@@ -2416,49 +2484,51 @@ const api = {
               ordered: orderedUrls,
             })
 
-            // Find first REST API-capable URL
             for (const url of orderedUrls) {
               const hasApi = hasRestApiSupport(url)
               console.log(`[getCommitDetails] Checking URL ${url}: hasRestApi=${hasApi}`)
 
-              if (hasApi) {
-                try {
-                  console.log(`[getCommitDetails] Trying REST API for ${url}`)
-                  const parsed = parseRepoFromUrl(url)
-                  if (!parsed) {
-                    console.warn(`[getCommitDetails] Failed to parse repo URL: ${url}`)
-                    continue
-                  }
+              if (!hasApi) continue
 
-                  const {owner, repo, provider} = parsed
-                  console.log(
-                    `[getCommitDetails] Parsed: owner=${owner}, repo=${repo}, vendor=${provider.vendor}`,
-                  )
-
-                  // Use empty token for public repo access - authentication not required for reading commits
-                  const api = getGitServiceApi(provider.vendor, "")
-                  const commitData = await api.getCommit(owner, repo, opts.commitId)
-
-                  console.log(`[getCommitDetails] REST API success for commit ${opts.commitId}`)
-                  usedRestApi = true
-
-                  // Convert REST API response to our format
-                  return toPlain({
-                    success: true,
-                    meta: {
-                      sha: commitData.sha,
-                      author: commitData.author.name,
-                      email: commitData.author.email,
-                      date: new Date(commitData.author.date).getTime(),
-                      message: commitData.message,
-                      parents: commitData.parents?.map((p: any) => p.sha) || [],
-                    },
-                    changes: [], // REST API doesn't provide detailed file diffs in the same format
-                  })
-                } catch (apiError) {
-                  console.warn(`[getCommitDetails] REST API failed for ${url}:`, apiError)
-                  // Continue to next URL or fall back to clone
+              try {
+                console.log(`[getCommitDetails] Trying REST API for ${url}`)
+                const parsed = parseRepoFromUrl(url)
+                if (!parsed) {
+                  console.warn(`[getCommitDetails] Failed to parse repo URL: ${url}`)
+                  continue
                 }
+
+                const {owner, repo, provider} = parsed
+                console.log(
+                  `[getCommitDetails] Parsed: owner=${owner}, repo=${repo}, vendor=${provider.vendor}`,
+                )
+
+                const api = getGitServiceApi(provider.vendor, "")
+                const commitData = await api.getCommit(owner, repo, opts.commitId)
+
+                console.log(
+                  `[getCommitDetails] REST API metadata loaded for commit ${opts.commitId}`,
+                )
+
+                restMeta = {
+                  sha: commitData.sha,
+                  author: commitData.author.name,
+                  email: commitData.author.email,
+                  date: new Date(commitData.author.date).getTime(),
+                  message: commitData.message,
+                  parents: commitData.parents?.map((p: any) => p.sha) || [],
+                }
+
+                if (commitData.stats) {
+                  restStats = {
+                    additions: Number(commitData.stats.additions || 0),
+                    deletions: Number(commitData.stats.deletions || 0),
+                    total: Number(commitData.stats.total || 0),
+                  }
+                }
+                break
+              } catch (apiError) {
+                console.warn(`[getCommitDetails] REST API failed for ${url}:`, apiError)
               }
             }
           } else {
@@ -2468,11 +2538,11 @@ const api = {
           console.warn(`[getCommitDetails] Failed to check cache for REST API:`, cacheError)
         }
 
-        // Fall back to cloning if REST API didn't work
-        if (!usedRestApi) {
+        let cloneError: unknown
+        try {
           await ensureFullCloneUtil(
             git,
-            {repoId: opts.repoId, branch: opts.branch, depth: 100},
+            {repoId: opts.repoId, branch: opts.branch, depth: 1000},
             {
               rootDir,
               parseRepoId,
@@ -2487,6 +2557,39 @@ const api = {
           )
 
           commits = await (git as any).log({dir, depth: 1, ref: opts.commitId})
+
+          if (commits.length === 0) {
+            console.warn(
+              `[getCommitDetails] Commit ${opts.commitId} still missing after branch fetch, trying full ref fetch...`,
+            )
+            const recovered = await fetchAllRefsForMissingCommit()
+            if (recovered) {
+              commits = await (git as any).log({dir, depth: 1, ref: opts.commitId})
+            }
+          }
+        } catch (error) {
+          cloneError = error
+        }
+
+        if (commits.length === 0 && restMeta) {
+          const fallbackWarning =
+            cloneError instanceof Error
+              ? `Commit metadata loaded from REST API, but git diff could not be loaded: ${cloneError.message}`
+              : "Commit metadata loaded from REST API, but git diff could not be loaded."
+
+          return toPlain({
+            success: true,
+            meta: restMeta,
+            changes: [],
+            stats: restStats,
+            warning: fallbackWarning,
+            diffAvailable: false,
+            source: "rest-api",
+          })
+        }
+
+        if (cloneError) {
+          throw cloneError
         }
       }
       if (commits.length === 0) {
@@ -2732,7 +2835,14 @@ const api = {
         }
       }
 
-      return toPlain({success: true, meta, changes, warning})
+      return toPlain({
+        success: true,
+        meta,
+        changes,
+        warning,
+        diffAvailable: !warning,
+        source: "worker",
+      })
     } catch (error) {
       return toPlain({
         success: false,

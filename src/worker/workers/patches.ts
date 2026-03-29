@@ -554,6 +554,21 @@ export async function applyPatchAndPushUtil(
     }
 
     progress("Push complete", 100)
+    if (remotes.length > 0 && pushedRemotes.length === 0) {
+      const firstError = pushErrors[0]
+      const errorMessage = firstError
+        ? `Push to ${firstError.remote} failed: ${firstError.error}`
+        : "Push to all remotes failed"
+      return {
+        success: false,
+        error: errorMessage,
+        mergeCommitOid,
+        pushedRemotes,
+        skippedRemotes,
+        pushErrors: pushErrors.length ? pushErrors : undefined,
+      }
+    }
+
     // Aggregate warning if any fallback behavior occurred
     const hadFallback = (pushErrors || []).some(e => e.code === "FALLBACK_TOPIC_PUSH")
     const warning = hadFallback

@@ -17,6 +17,7 @@ import {withTimeout} from "./timeout.js"
 import {parseRepoId} from "../../utils/repo-id.js"
 import {toNpub} from "../../utils/nostr-pubkey.js"
 import {isGraspRepoHttpUrl} from "../../utils/grasp-url.js"
+import {filterValidCloneUrls, reorderUrlsByPreference} from "../../utils/clone-url-fallback.js"
 
 // Helper to generate canonical repo key from repoId
 function canonicalRepoKey(repoId: string): string {
@@ -530,6 +531,12 @@ export async function forkAndCloneRepo(
     onProgress,
   } = options
 
+  const sourceFallbackKey = sourceRepoId || `${owner}/${repo}`
+  const orderedSourceCloneUrls = reorderUrlsByPreference(
+    filterValidCloneUrls(sourceCloneUrls || []),
+    sourceFallbackKey,
+  )
+
   const forkContext = {
     operation: "forkAndCloneRepo",
     provider,
@@ -585,6 +592,7 @@ export async function forkAndCloneRepo(
       repo,
       forkName,
       sourceCloneUrls,
+      orderedSourceCloneUrls,
     })
 
     // Create remote fork using GitServiceApi
@@ -594,7 +602,7 @@ export async function forkAndCloneRepo(
     let isCrossPlatformFork = false
 
     const shouldUseCustomNameFallback =
-      provider === "github" && forkName !== repo && !!sourceCloneUrls?.length
+      provider === "github" && forkName !== repo && orderedSourceCloneUrls.length > 0
 
     if (shouldUseCustomNameFallback) {
       console.log(
@@ -638,7 +646,7 @@ export async function forkAndCloneRepo(
         }
 
         if (is404 || isGitLabImportError || isGraspNotSupported) {
-          if (sourceCloneUrls && sourceCloneUrls.length > 0) {
+          if (orderedSourceCloneUrls.length > 0) {
             console.log(
               "[forkAndCloneRepo] Source repo not found on target platform, attempting cross-platform fork",
             )
@@ -718,7 +726,7 @@ export async function forkAndCloneRepo(
         onProgress?.("Cloning source repository...", 20)
         let cloneSuccess = false
         let lastError: Error | null = null
-        const totalSourceUrls = sourceCloneUrls?.length || 0
+        const totalSourceUrls = orderedSourceCloneUrls.length
 
         const formatSourceCloneUrlForProgress = (value: string): string => {
           const raw = String(value || "").trim()
@@ -737,7 +745,7 @@ export async function forkAndCloneRepo(
           return message.replace(/\s+/g, " ").trim().slice(0, 140)
         }
 
-        for (const [sourceIndex, sourceUrl] of sourceCloneUrls!.entries()) {
+        for (const [sourceIndex, sourceUrl] of orderedSourceCloneUrls.entries()) {
           const attemptNumber = sourceIndex + 1
           const compactUrl = formatSourceCloneUrlForProgress(sourceUrl)
           try {
@@ -946,16 +954,12 @@ export async function forkAndCloneRepo(
         branchNames?: string[],
         deadlineAtMs?: number,
       ): Promise<boolean> => {
-        if (
-          !sourceCloneUrls ||
-          sourceCloneUrls.length === 0 ||
-          typeof (git as any).fetch !== "function"
-        ) {
+        if (orderedSourceCloneUrls.length === 0 || typeof (git as any).fetch !== "function") {
           return false
         }
 
         const corsProxy = resolveDefaultCorsProxy()
-        const dedupedUrls = [...new Set(sourceCloneUrls)]
+        const dedupedUrls = [...new Set(orderedSourceCloneUrls)]
         console.log(`[forkAndCloneRepo] ${reason} - trying source URLs for GRASP:`, dedupedUrls)
 
         let anySucceeded = false
@@ -1224,7 +1228,7 @@ export async function forkAndCloneRepo(
             return false
           }
 
-          if (!sourceCloneUrls || sourceCloneUrls.length === 0) return false
+          if (orderedSourceCloneUrls.length === 0) return false
 
           const fs = getProviderFs(git)
           try {
@@ -1237,7 +1241,7 @@ export async function forkAndCloneRepo(
           }
 
           let recloneSuccess = false
-          for (const sourceUrl of sourceCloneUrls) {
+          for (const sourceUrl of orderedSourceCloneUrls) {
             try {
               console.log("[forkAndCloneRepo] Re-cloning full history for GRASP from:", sourceUrl)
               await cloneRemoteRepoUtil(git, cacheManager, {
@@ -1355,7 +1359,7 @@ export async function forkAndCloneRepo(
             // pass
           }
 
-          for (const sourceUrl of sourceCloneUrls || []) {
+          for (const sourceUrl of orderedSourceCloneUrls) {
             urls.push(sourceUrl)
           }
 
@@ -1604,7 +1608,7 @@ export async function forkAndCloneRepo(
             // pass
           }
 
-          for (const sourceUrl of sourceCloneUrls || []) {
+          for (const sourceUrl of orderedSourceCloneUrls) {
             urls.push(sourceUrl)
           }
 
@@ -2086,10 +2090,10 @@ export async function forkAndCloneRepo(
       const isNostrRelayUrl = (url: string): boolean => isGraspRepoHttpUrl(url)
 
       const resolveSourceUrls = (reason: string): string[] => {
-        if (!sourceCloneUrls || sourceCloneUrls.length === 0) return []
+        if (orderedSourceCloneUrls.length === 0) return []
 
         const deduped: string[] = []
-        for (const url of sourceCloneUrls) {
+        for (const url of orderedSourceCloneUrls) {
           if (!deduped.includes(url)) deduped.push(url)
         }
 
