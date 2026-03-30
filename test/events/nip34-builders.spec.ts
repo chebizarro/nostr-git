@@ -79,7 +79,7 @@ describe("NIP-34 builders", () => {
     })
 
     expect(evt.kind).toBe(30618)
-    expect(getTagValue(evt as any, "d")).toBe("owner/name")
+    expect(getTagValue(evt as any, "d")).toBe("name")
 
     const mainRef = getTag(evt as any, "refs/heads/main")
     expect(mainRef).toEqual(["refs/heads/main", "c1"])

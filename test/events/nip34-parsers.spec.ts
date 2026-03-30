@@ -208,7 +208,7 @@ describe("NIP-34 parsers (nip34-utils)", () => {
 
     const parsed = parseRepoStateEvent(evt)
     expect(parsed.id).toBe("state-1")
-    expect(parsed.repoId).toBe("owner/name")
+    expect(parsed.repoId).toBe("name")
     expect(parsed.refs).toEqual(
       expect.arrayContaining([
         {ref: "refs/heads/main", commit: "c1", lineage: undefined},

@@ -361,7 +361,7 @@ export function createRepoStateEvent(opts: {
   head?: string
   created_at?: number
 }): RepoStateEvent {
-  const tags: RepoStateTag[] = [["d", opts.repoId]]
+  const tags: RepoStateTag[] = [["d", extractRepoName(opts.repoId)]]
 
   // Add refs (branches and tags) according to NIP-34
   if (opts.refs) {
