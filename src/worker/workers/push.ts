@@ -1,22 +1,22 @@
-import type { GitProvider } from '../../git/provider.js';
-import type { RepoCache, RepoCacheManager } from './cache.js';
-import { resolveBranchToOid } from '../../git/git.js';
-import type { GitVendor } from '../../git/vendor-providers.js';
-import type { BlossomPushSummary } from '../../blossom/index.js';
+import type {GitProvider} from "../../git/provider.js"
+import type {RepoCache, RepoCacheManager} from "./cache.js"
+import {resolveBranchToOid} from "../../git/git.js"
+import type {GitVendor} from "../../git/vendor-providers.js"
+import type {BlossomPushSummary} from "../../blossom/index.js"
 
 export interface SafePushOptions {
-  repoId: string;
-  remoteUrl: string;
-  branch?: string;
-  token?: string;
-  provider?: GitVendor;
-  allowForce?: boolean;
-  confirmDestructive?: boolean;
+  repoId: string
+  remoteUrl: string
+  branch?: string
+  token?: string
+  provider?: GitVendor
+  allowForce?: boolean
+  confirmDestructive?: boolean
   preflight?: {
-    blockIfUncommitted?: boolean;
-    requireUpToDate?: boolean;
-    blockIfShallow?: boolean;
-  };
+    blockIfUncommitted?: boolean
+    requireUpToDate?: boolean
+    blockIfShallow?: boolean
+  }
 }
 
 export async function safePushToRemoteUtil(
@@ -24,29 +24,36 @@ export async function safePushToRemoteUtil(
   cacheManager: RepoCacheManager,
   options: SafePushOptions,
   deps: {
-    rootDir: string;
-    parseRepoId: (id: string) => string;
-    isRepoCloned: (dir: string) => Promise<boolean>;
-    isShallowClone: (key: string) => Promise<boolean>;
-    resolveBranchName: (dir: string, requested?: string) => Promise<string>;
-    hasUncommittedChanges: (dir: string) => Promise<boolean>;
-    needsUpdate: (repoId: string, cloneUrls: string[], cache: RepoCache | null) => Promise<boolean>;
+    rootDir: string
+    parseRepoId: (id: string) => string
+    isRepoCloned: (dir: string) => Promise<boolean>
+    isShallowClone: (key: string) => Promise<boolean>
+    resolveBranchName: (dir: string, requested?: string) => Promise<string>
+    hasUncommittedChanges: (dir: string) => Promise<boolean>
+    needsUpdate: (
+      repoId: string,
+      cloneUrls: string[],
+      cache: RepoCache | null,
+      branch?: string,
+      localBranchCommit?: string,
+      repoDir?: string,
+    ) => Promise<boolean>
     pushToRemote: (args: {
-      repoId: string;
-      remoteUrl: string;
-      branch?: string;
-      token?: string;
-      provider?: GitVendor;
-    }) => Promise<{ success?: boolean; blossomSummary?: BlossomPushSummary }>;
-  }
+      repoId: string
+      remoteUrl: string
+      branch?: string
+      token?: string
+      provider?: GitVendor
+    }) => Promise<{success?: boolean; blossomSummary?: BlossomPushSummary}>
+  },
 ): Promise<{
-  success: boolean;
-  pushed?: boolean;
-  requiresConfirmation?: boolean;
-  reason?: string;
-  warning?: string;
-  error?: string;
-  blossomSummary?: BlossomPushSummary;
+  success: boolean
+  pushed?: boolean
+  requiresConfirmation?: boolean
+  reason?: string
+  warning?: string
+  error?: string
+  blossomSummary?: BlossomPushSummary
 }> {
   const {
     repoId,
@@ -56,8 +63,8 @@ export async function safePushToRemoteUtil(
     provider,
     allowForce = false,
     confirmDestructive = false,
-    preflight
-  } = options;
+    preflight,
+  } = options
   const {
     rootDir,
     parseRepoId,
@@ -66,56 +73,66 @@ export async function safePushToRemoteUtil(
     resolveBranchName,
     hasUncommittedChanges,
     needsUpdate,
-    pushToRemote
-  } = deps;
-  const key = parseRepoId(repoId);
-  const dir = `${rootDir}/${key}`;
+    pushToRemote,
+  } = deps
+  const key = parseRepoId(repoId)
+  const dir = `${rootDir}/${key}`
 
   const pf = {
     blockIfUncommitted: true,
     requireUpToDate: true,
     blockIfShallow: false,
-    ...(preflight || {})
-  };
+    ...(preflight || {}),
+  }
 
   try {
-    const cloned = await isRepoCloned(dir);
+    const cloned = await isRepoCloned(dir)
     if (!cloned)
-      return { success: false, error: 'Repository not cloned locally; clone before pushing.' };
+      return {success: false, error: "Repository not cloned locally; clone before pushing."}
 
-    const targetBranch = await resolveBranchName(dir, branch);
+    const targetBranch = await resolveBranchName(dir, branch)
 
     if (pf.blockIfUncommitted) {
-      const dirty = await hasUncommittedChanges(dir);
+      const dirty = await hasUncommittedChanges(dir)
       if (dirty)
         return {
           success: false,
-          reason: 'uncommitted_changes',
-          error: 'Working tree has uncommitted changes. Commit or stash before push.'
-        };
+          reason: "uncommitted_changes",
+          error: "Working tree has uncommitted changes. Commit or stash before push.",
+        }
     }
 
     if (pf.blockIfShallow) {
-      const shallow = await isShallowClone(key);
+      const shallow = await isShallowClone(key)
       if (shallow)
         return {
           success: false,
-          reason: 'shallow_clone',
-          error: 'Repository is a shallow/refs-only clone. Upgrade to full clone before pushing.'
-        };
+          reason: "shallow_clone",
+          error: "Repository is a shallow/refs-only clone. Upgrade to full clone before pushing.",
+        }
     }
 
     if (pf.requireUpToDate) {
-      const cache = await cacheManager.getRepoCache(key);
-      if (provider !== 'grasp') {
-        const remoteChanged = await needsUpdate(key, [remoteUrl], cache);
+      const cache = await cacheManager.getRepoCache(key)
+      if (provider !== "grasp") {
+        const localBranchCommit = await git
+          .resolveRef({dir, ref: `refs/heads/${targetBranch}`})
+          .catch(() => undefined)
+        const remoteChanged = await needsUpdate(
+          key,
+          [remoteUrl],
+          cache,
+          targetBranch,
+          localBranchCommit,
+          dir,
+        )
         if (remoteChanged)
           return {
             success: false,
-            reason: 'remote_ahead',
+            reason: "remote_ahead",
             error:
-              'Remote appears to have new commits. Sync with remote before pushing to avoid non-fast-forward.'
-          };
+              "Push was blocked during preflight because the selected remote branch changed. Refresh the selected remote and retry.",
+          }
       }
     }
 
@@ -123,9 +140,9 @@ export async function safePushToRemoteUtil(
       return {
         success: false,
         requiresConfirmation: true,
-        reason: 'force_push_requires_confirmation',
-        warning: 'Force push is potentially destructive. Confirmation required.'
-      };
+        reason: "force_push_requires_confirmation",
+        warning: "Force push is potentially destructive. Confirmation required.",
+      }
     }
 
     const pushRes = await pushToRemote({
@@ -133,31 +150,31 @@ export async function safePushToRemoteUtil(
       remoteUrl,
       branch: targetBranch,
       token,
-      provider
-    });
-    const ok = (pushRes as any)?.success;
+      provider,
+    })
+    const ok = (pushRes as any)?.success
     if (ok === undefined) {
-      return { success: false, error: 'Push operation returned invalid response (no success field)' };
+      return {success: false, error: "Push operation returned invalid response (no success field)"}
     }
     if (ok === false) {
-      const errorMessage = (pushRes as any)?.error || 'Push failed';
-      const hasWorkflowScopeIssue = /workflow|\.github\/workflows/i.test(errorMessage);
+      const errorMessage = (pushRes as any)?.error || "Push failed"
+      const hasWorkflowScopeIssue = /workflow|\.github\/workflows/i.test(errorMessage)
       const reason =
         (pushRes as any)?.reason ||
         (pushRes as any)?.code ||
-        (hasWorkflowScopeIssue ? 'workflow_scope_missing' : 'push_failed');
-      return { success: false, error: errorMessage, reason };
+        (hasWorkflowScopeIssue ? "workflow_scope_missing" : "push_failed")
+      return {success: false, error: errorMessage, reason}
     }
     const result: {
-      success: boolean;
-      pushed?: boolean;
-      blossomSummary?: BlossomPushSummary;
-    } = { success: !!ok, pushed: ok };
+      success: boolean
+      pushed?: boolean
+      blossomSummary?: BlossomPushSummary
+    } = {success: !!ok, pushed: ok}
     if ((pushRes as any)?.blossomSummary) {
-      result.blossomSummary = (pushRes as any).blossomSummary;
+      result.blossomSummary = (pushRes as any).blossomSummary
     }
-    return result;
+    return result
   } catch (error: any) {
-    return { success: false, error: error?.message || String(error) };
+    return {success: false, error: error?.message || String(error)}
   }
 }

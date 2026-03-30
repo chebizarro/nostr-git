@@ -784,6 +784,8 @@ async function detectConflictMarkers(file: any, currentContent: string): Promise
 export interface PRMergeAnalysisResult extends MergeAnalysisResult {
   /** Files changed between merge-base and tip commit (for PR diff display) */
   filesChanged?: string[] // TODO: remove this
+  /** Target clone URL used to refresh the base branch before analysis */
+  usedTargetCloneUrl?: string
   /** Clone URL that succeeded when using fallback (helps debug fetch failures) */
   usedCloneUrl?: string
   /** Commit metadata for display (oid, message, author) */
@@ -866,6 +868,8 @@ export async function analyzePRMergeability(
     errorMessage: msg,
   })
 
+  let usedTargetCloneUrl: string | undefined
+
   const validTargetUrls = filterValidCloneUrls(targetCloneUrls || [])
   if (strictTargetFresh && validTargetUrls.length === 0) {
     return errResult(
@@ -942,6 +946,8 @@ export async function analyzePRMergeability(
         `Failed to refresh target branch "${effectiveTargetBranch}" from remote: ${attempts}`,
       )
     }
+
+    usedTargetCloneUrl = targetFetchResult.usedUrl
   }
 
   // Use unique remote name per invocation to avoid race when multiple analyses run concurrently
@@ -1031,6 +1037,7 @@ export async function analyzePRMergeability(
             patchCommits,
             analysis: "up-to-date",
             filesChanged: [],
+            usedTargetCloneUrl,
             usedCloneUrl: url,
             prCommits: await getCommitMetadataForOids(git, repoDir, patchCommits),
           } as PRMergeAnalysisResult
@@ -1085,6 +1092,7 @@ export async function analyzePRMergeability(
             patchCommits: patchCommitOids.length > 0 ? patchCommitOids : patchCommits,
             analysis: "clean",
             filesChanged,
+            usedTargetCloneUrl,
             usedCloneUrl: url,
             prCommits: effectivePrCommits,
           } as PRMergeAnalysisResult
@@ -1130,6 +1138,7 @@ export async function analyzePRMergeability(
           patchCommits: patchCommitOids.length > 0 ? patchCommitOids : patchCommits,
           analysis: mergeResult.hasConflicts ? "conflicts" : "clean",
           filesChanged,
+          usedTargetCloneUrl,
           usedCloneUrl: url,
           prCommits: effectivePrCommits,
         } as PRMergeAnalysisResult

@@ -600,6 +600,7 @@ const api = {
     branch?: string
     requireRemoteSync?: boolean
     requireTrackingRef?: boolean
+    preferredUrl?: string
   }) {
     return toPlain(
       await syncWithRemoteUtil(git, cacheManager, opts, {
@@ -615,8 +616,13 @@ const api = {
     )
   },
 
-  async needsUpdate(opts: {repoId: string; cloneUrls: string[]; now?: number}): Promise<boolean> {
-    const {repoId, cloneUrls, now} = opts
+  async needsUpdate(opts: {
+    repoId: string
+    cloneUrls: string[]
+    branch?: string
+    now?: number
+  }): Promise<boolean> {
+    const {repoId, cloneUrls, branch, now} = opts
     const {key} = repoKeyAndDir(repoId)
     let cache: RepoCache | null = null
     try {
@@ -624,7 +630,7 @@ const api = {
     } catch {
       cache = null
     }
-    return await needsUpdateUtil(git, key, cloneUrls, cache, now ?? Date.now())
+    return await needsUpdateUtil(git, key, cloneUrls, cache, now ?? Date.now(), undefined, branch)
   },
 
   async listServerRefs(opts: {url: string; prefix?: string; symrefs?: boolean}) {
@@ -1530,8 +1536,25 @@ const api = {
         resolveBranchName: async (dir: string, requested?: string) =>
           resolveRobustBranchUtil(git, dir, requested),
         hasUncommittedChanges: async (dir: string) => hasUncommittedChanges(dir, git),
-        needsUpdate: async (repoId: string, cloneUrls: string[], cache: RepoCache | null) =>
-          needsUpdateUtil(git, repoId, cloneUrls, cache, Date.now()),
+        needsUpdate: async (
+          repoId: string,
+          cloneUrls: string[],
+          cache: RepoCache | null,
+          branch?: string,
+          localBranchCommit?: string,
+          repoDir?: string,
+        ) =>
+          needsUpdateUtil(
+            git,
+            repoId,
+            cloneUrls,
+            cache,
+            Date.now(),
+            undefined,
+            branch,
+            localBranchCommit,
+            repoDir,
+          ),
         pushToRemote: async (args: {
           repoId: string
           remoteUrl: string

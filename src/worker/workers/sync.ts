@@ -17,7 +17,31 @@ export async function needsUpdateUtil(
     url: string,
     auth: {username?: string; password?: string},
   ) => {username: string; password: string} | Promise<{username: string; password: string}> | void,
+  branch?: string,
+  localBranchCommit?: string,
+  repoDir?: string,
 ): Promise<boolean> {
+  const requestedBranch = String(branch || "")
+    .trim()
+    .replace(/^refs\/heads\//, "")
+
+  const getRequestedRemoteRef = (
+    refs: Array<{ref?: string; oid?: string}>,
+  ): {ref?: string; oid?: string} | undefined => {
+    if (requestedBranch) {
+      return refs.find((r: any) => r.ref === `refs/heads/${requestedBranch}`)
+    }
+
+    return refs.find((r: any) => r.ref === "refs/heads/main" || r.ref === "refs/heads/master")
+  }
+
+  const getCachedCommitForBranch = (): string | undefined => {
+    if (!cache) return undefined
+    if (!requestedBranch) return cache.headCommit
+
+    return cache.branches?.find(entry => entry.name === requestedBranch)?.commit || cache.headCommit
+  }
+
   // Filter and order URLs by preference
   const validUrls = filterValidCloneUrls(cloneUrls)
   const orderedUrls = reorderUrlsByPreference(validUrls, repoId)
@@ -40,12 +64,17 @@ export async function needsUpdateUtil(
         })
         // If there are no branch heads yet, treat as empty remote and allow initial push
         const heads = (refs || []).filter((r: any) => r?.ref?.startsWith("refs/heads/"))
-        return {hasHeads: heads && heads.length > 0}
+        const remoteBranch = getRequestedRemoteRef(refs || [])
+        return {hasHeads: heads && heads.length > 0, branchExists: !!remoteBranch}
       },
       {repoId},
     )
 
     if (result.success && result.result) {
+      if (requestedBranch) {
+        return result.result.branchExists
+      }
+
       return result.result.hasHeads
     }
 
@@ -66,13 +95,42 @@ export async function needsUpdateUtil(
         symrefs: true,
         onAuth,
       })
-      const mainBranch = refs.find(
-        (r: any) => r.ref === "refs/heads/main" || r.ref === "refs/heads/master",
-      )
-      if (!mainBranch) {
+      const remoteBranch = getRequestedRemoteRef(refs || [])
+      if (!remoteBranch) {
+        if (requestedBranch) {
+          return {needsUpdate: false}
+        }
+
         return {needsUpdate: refs && refs.length > 0}
       }
-      return {needsUpdate: mainBranch.oid !== cache.headCommit}
+
+      const localCommit = localBranchCommit || getCachedCommitForBranch()
+      if (!localCommit) {
+        return {needsUpdate: true}
+      }
+
+      if (remoteBranch.oid === localCommit) {
+        return {needsUpdate: false}
+      }
+
+      if (repoDir) {
+        try {
+          const localContainsRemote = await git.isDescendent({
+            dir: repoDir,
+            oid: localCommit,
+            ancestor: remoteBranch.oid,
+          })
+          if (localContainsRemote) {
+            return {needsUpdate: false}
+          }
+
+          return {needsUpdate: true}
+        } catch {
+          // Fall back to strict mismatch behavior if ancestry cannot be determined.
+        }
+      }
+
+      return {needsUpdate: true}
     },
     {repoId},
   )
@@ -94,6 +152,7 @@ export async function syncWithRemoteUtil(
     branch?: string
     requireRemoteSync?: boolean
     requireTrackingRef?: boolean
+    preferredUrl?: string
   },
   deps: {
     rootDir: string
@@ -105,7 +164,14 @@ export async function syncWithRemoteUtil(
     corsProxy?: string | null
   },
 ) {
-  const {repoId, cloneUrls, branch, requireRemoteSync = false, requireTrackingRef = false} = opts
+  const {
+    repoId,
+    cloneUrls,
+    branch,
+    requireRemoteSync = false,
+    requireTrackingRef = false,
+    preferredUrl,
+  } = opts
   const {
     rootDir,
     parseRepoId,
@@ -133,11 +199,17 @@ export async function syncWithRemoteUtil(
     // 2. Get remote URLs - prefer configured origin, then fall back to cloneUrls
     const remotes = await git.listRemotes({dir})
     const originRemote = remotes.find((r: any) => r.remote === "origin")
+    const preferredSyncUrl = filterValidCloneUrls([preferredUrl || ""])[0]
 
     // Build list of URLs to try: origin URL first (if available), then cloneUrls
     const urlsToTry: string[] = []
+    if (preferredSyncUrl) {
+      urlsToTry.push(preferredSyncUrl)
+    }
     if (originRemote?.url) {
-      urlsToTry.push(originRemote.url)
+      if (!urlsToTry.includes(originRemote.url)) {
+        urlsToTry.push(originRemote.url)
+      }
     }
     // Add cloneUrls that aren't already in the list
     const validCloneUrls = filterValidCloneUrls(cloneUrls)
@@ -148,7 +220,15 @@ export async function syncWithRemoteUtil(
     }
 
     // Reorder by preference (cached successful URL first)
-    const orderedUrls = reorderUrlsByPreference(urlsToTry, key)
+    const orderedUrls = preferredSyncUrl
+      ? [
+          preferredSyncUrl,
+          ...reorderUrlsByPreference(
+            urlsToTry.filter(url => url !== preferredSyncUrl),
+            key,
+          ),
+        ]
+      : reorderUrlsByPreference(urlsToTry, key)
 
     if (orderedUrls.length === 0) {
       throw new Error("No remote URL available for sync")
