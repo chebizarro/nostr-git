@@ -13,6 +13,10 @@ import {
   type ReadFallbackResult,
 } from "../../utils/clone-url-fallback.js"
 import {isGraspRepoHttpUrl} from "../../utils/grasp-url.js"
+import {
+  buildAdvertisedBranchCandidates,
+  discoverAdvertisedRefs,
+} from "../../utils/advertised-refs.js"
 
 // Import toPlain from worker (it's defined in the same directory)
 function toPlain<T>(val: T): T {
@@ -399,8 +403,26 @@ export async function initializeRepoUtil(
         const onProgress = (progress: {phase: string; loaded?: number; total?: number}) =>
           sendProgress(progress.phase, progress.loaded, progress.total)
         const authCallback = getAuthCallback(cloneUrl)
-        const refCandidates = ["HEAD", "main", "master", "develop", "dev"]
         const corsProxy = resolveDefaultCorsProxy()
+
+        let refCandidates: string[] = []
+        try {
+          const advertised = await discoverAdvertisedRefs(git, {
+            url: cloneUrl,
+            ...(authCallback ? {onAuth: authCallback} : {}),
+            corsProxy,
+          })
+          refCandidates = buildAdvertisedBranchCandidates({
+            headBranch: advertised.headBranch,
+            branches: advertised.branches,
+          })
+        } catch (error) {
+          console.warn(`[initializeRepo] Failed to inspect advertised refs for ${cloneUrl}:`, error)
+        }
+
+        if (refCandidates.length === 0) {
+          refCandidates = ["main", "master", "develop", "dev", "HEAD"]
+        }
 
         // Detect Nostr relay URLs - they need special handling with deeper clones
         const isNostrRelay = isGraspRepoHttpUrl(cloneUrl)
@@ -751,6 +773,26 @@ export async function ensureFullCloneUtil(
   const currentLevel = repoDataLevels.get(key)
   const corsProxy = resolveDefaultCorsProxy()
 
+  const resolveExistingBranchCommit = async (targetBranch: string): Promise<string | null> => {
+    const refsToCheck = [
+      targetBranch,
+      `refs/heads/${targetBranch}`,
+      `origin/${targetBranch}`,
+      `refs/remotes/origin/${targetBranch}`,
+    ]
+
+    for (const ref of refsToCheck) {
+      try {
+        const oid = await git.resolveRef({dir, ref})
+        if (oid) return oid
+      } catch {
+        // pass
+      }
+    }
+
+    return null
+  }
+
   // Deduplication: if there's already a pending full clone for this repo, wait for it
   const dedupeKey = `${key}:${branch || "default"}`
   const pendingClone = pendingFullClones.get(dedupeKey)
@@ -921,6 +963,21 @@ export async function ensureFullCloneUtil(
         console.warn(`[ensureFullClone] All ${fetchResult.attempts.length} URL(s) failed:`)
         for (const attempt of fetchResult.attempts) {
           console.warn(`  - ${attempt.url}: ${attempt.error} (${attempt.durationMs}ms)`)
+        }
+
+        const existingCommit = await resolveExistingBranchCommit(targetBranch)
+        if (existingCommit) {
+          console.warn(
+            `[ensureFullClone] Using existing local data for '${targetBranch}' after fetch failure: ${errorMessage}`,
+          )
+          return {
+            success: true,
+            repoId,
+            cached: true,
+            level: currentLevel || "refs",
+            localOnly: true,
+            warning: errorMessage,
+          }
         }
 
         return {success: false, repoId, error: errorMessage}
