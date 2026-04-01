@@ -106,6 +106,7 @@ export async function smartInitializeRepoUtil(
   opts: {
     repoId: string
     cloneUrls: string[]
+    branch?: string
     forceUpdate?: boolean
   },
   deps: {
@@ -118,7 +119,7 @@ export async function smartInitializeRepoUtil(
   },
   sendProgress: (phase: string, loaded?: number, total?: number) => void,
 ) {
-  const {repoId, cloneUrls, forceUpdate = false} = opts
+  const {repoId, cloneUrls, branch, forceUpdate = false} = opts
   const {rootDir, parseRepoId, repoDataLevels, clonedRepos, isRepoCloned, resolveBranchName} = deps
 
   try {
@@ -159,14 +160,18 @@ export async function smartInitializeRepoUtil(
             orderedUrls,
             async (cloneUrl: string) => {
               // Try singleBranch: true first (works better with non-GitHub servers like Forgejo)
+              const primaryFetchOpts: any = {
+                dir,
+                url: cloneUrl,
+                singleBranch: true,
+                depth: fetchDepth,
+                corsProxy,
+              }
+              if (branch) {
+                primaryFetchOpts.ref = branch
+              }
               try {
-                await git.fetch({
-                  dir,
-                  url: cloneUrl,
-                  singleBranch: true,
-                  depth: fetchDepth,
-                  corsProxy,
-                })
+                await git.fetch(primaryFetchOpts)
                 return {url: cloneUrl}
               } catch (singleBranchError: any) {
                 // If single branch fetch fails, try without specifying singleBranch
@@ -174,12 +179,17 @@ export async function smartInitializeRepoUtil(
                   `[smartInitializeRepo] Single branch fetch failed for ${cloneUrl}, trying default:`,
                   singleBranchError?.message,
                 )
-                await git.fetch({
+                const fallbackFetchOpts: any = {
                   dir,
                   url: cloneUrl,
                   depth: fetchDepth,
                   corsProxy,
-                })
+                }
+                if (branch) {
+                  fallbackFetchOpts.ref = branch
+                  fallbackFetchOpts.singleBranch = true
+                }
+                await git.fetch(fallbackFetchOpts)
                 return {url: cloneUrl}
               }
             },
@@ -230,7 +240,7 @@ export async function smartInitializeRepoUtil(
         let mainBranch: string
         try {
           sendProgress("Resolving repository branch")
-          mainBranch = await resolveBranchName(dir)
+          mainBranch = await resolveBranchName(dir, branch)
           sendProgress(`Found branch: ${mainBranch}`)
         } catch (branchError) {
           console.warn(
@@ -344,7 +354,7 @@ export async function smartInitializeRepoUtil(
     return await initializeRepoUtil(
       git,
       cacheManager,
-      {repoId, cloneUrls},
+      {repoId, cloneUrls, branch},
       {rootDir, parseRepoId, repoDataLevels, clonedRepos},
       sendProgress,
     )
@@ -361,7 +371,7 @@ export async function smartInitializeRepoUtil(
 export async function initializeRepoUtil(
   git: GitProvider,
   cacheManager: RepoCacheManager,
-  opts: {repoId: string; cloneUrls: string[]},
+  opts: {repoId: string; cloneUrls: string[]; branch?: string},
   deps: {
     rootDir: string
     parseRepoId: (id: string) => string
@@ -370,7 +380,7 @@ export async function initializeRepoUtil(
   },
   sendProgress: (phase: string, loaded?: number, total?: number) => void,
 ) {
-  const {repoId, cloneUrls} = opts
+  const {repoId, cloneUrls, branch} = opts
   const {rootDir, parseRepoId, repoDataLevels, clonedRepos} = deps
   try {
     const key = parseRepoId(repoId)
@@ -420,9 +430,17 @@ export async function initializeRepoUtil(
           console.warn(`[initializeRepo] Failed to inspect advertised refs for ${cloneUrl}:`, error)
         }
 
-        if (refCandidates.length === 0) {
-          refCandidates = ["main", "master", "develop", "dev", "HEAD"]
-        }
+        refCandidates = Array.from(
+          new Set([
+            ...(branch ? [branch] : []),
+            ...refCandidates,
+            "main",
+            "master",
+            "develop",
+            "dev",
+            "HEAD",
+          ]),
+        )
 
         // Detect Nostr relay URLs - they need special handling with deeper clones
         const isNostrRelay = isGraspRepoHttpUrl(cloneUrl)
@@ -515,7 +533,7 @@ export async function initializeRepoUtil(
     // After shallow clone, we need to create local branch refs from remote refs
     // because isomorphic-git's shallow clone with singleBranch doesn't create them
     let headCommit: string | undefined
-    let defaultBranch = "main"
+    let defaultBranch = branch || "main"
 
     // Try to get the HEAD commit and create local branch ref
     try {
@@ -526,7 +544,7 @@ export async function initializeRepoUtil(
 
       if (remoteBranches.length > 0) {
         // Use the first remote branch (usually the default)
-        const remoteBranch = remoteBranches[0]
+        const remoteBranch = branch && remoteBranches.includes(branch) ? branch : remoteBranches[0]
         defaultBranch = remoteBranch
         const remoteRef = `refs/remotes/origin/${remoteBranch}`
         headCommit = await git.resolveRef({dir, ref: remoteRef})

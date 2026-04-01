@@ -776,6 +776,77 @@ describe("repos utils (additional coverage)", () => {
     expect(git.writeRef as any).toHaveBeenCalled()
   })
 
+  it("smartInitializeRepoUtil: uses requested branch during refresh sync", async () => {
+    const repoId = "Org/Release"
+    const requestedBranch = "release"
+    const git = makeGitMock({
+      fetch: vi.fn(async () => undefined) as any,
+      listBranches: vi.fn(async (args?: any) =>
+        args?.remote ? [requestedBranch] : [requestedBranch],
+      ) as any,
+      resolveRef: vi.fn(async ({ref}: any) => {
+        if (ref === `refs/remotes/origin/${requestedBranch}`) return "release-oid"
+        if (ref === `refs/heads/${requestedBranch}` || ref === "HEAD") return "release-oid"
+        throw new Error(`missing ${ref}`)
+      }) as any,
+    })
+    const resolveBranchName = vi.fn(async (_dir: string, requested?: string) => requested || "main")
+
+    const res = await smartInitializeRepoUtil(
+      git,
+      cacheManager,
+      {repoId, cloneUrls: ["https://example.com/repo.git"], branch: requestedBranch},
+      {
+        rootDir,
+        parseRepoId,
+        repoDataLevels,
+        clonedRepos,
+        isRepoCloned: async () => true,
+        resolveBranchName,
+      },
+      () => {},
+    )
+
+    expect(res.success).toBe(true)
+    expect(resolveBranchName).toHaveBeenCalledWith(
+      `${rootDir}/${parseRepoId(repoId)}`,
+      requestedBranch,
+    )
+    expect(git.fetch as any).toHaveBeenCalledWith(
+      expect.objectContaining({ref: requestedBranch, singleBranch: true}),
+    )
+  })
+
+  it("initializeRepoUtil: prioritizes requested branch during force refresh clone", async () => {
+    const requestedBranch = "release"
+    const clone = vi.fn(async ({ref}: any) => {
+      if (ref !== requestedBranch) throw new Error(`unexpected ref ${ref}`)
+    })
+    const git = makeGitMock({
+      clone: clone as any,
+      listServerRefs: vi.fn(async () => [{ref: "refs/heads/main", oid: "main-oid"}]) as any,
+      listBranches: vi.fn(async (args?: any) =>
+        args?.remote ? [requestedBranch] : [requestedBranch],
+      ) as any,
+      resolveRef: vi.fn(async ({ref}: any) => {
+        if (ref === `refs/remotes/origin/${requestedBranch}`) return "release-oid"
+        if (ref === `refs/heads/${requestedBranch}` || ref === "HEAD") return "release-oid"
+        throw new Error(`missing ${ref}`)
+      }) as any,
+    })
+
+    const res = await initializeRepoUtil(
+      git,
+      makeCacheMock(),
+      {repoId: "o/r", cloneUrls: ["https://relay.ngit.dev/o/r.git"], branch: requestedBranch},
+      {rootDir, parseRepoId, repoDataLevels, clonedRepos},
+      () => {},
+    )
+
+    expect(res.success).toBe(true)
+    expect(clone).toHaveBeenCalledWith(expect.objectContaining({ref: requestedBranch}))
+  })
+
   it("ensureShallowCloneUtil: not initialized error path", async () => {
     const repoId = "X/Y"
     const res = await ensureShallowCloneUtil(

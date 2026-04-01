@@ -411,7 +411,12 @@ const api = {
     )
   },
 
-  async smartInitializeRepo(opts: {repoId: string; cloneUrls: string[]; forceUpdate?: boolean}) {
+  async smartInitializeRepo(opts: {
+    repoId: string
+    cloneUrls: string[]
+    branch?: string
+    forceUpdate?: boolean
+  }) {
     const {repoId} = opts
     const sendProgress = makeProgress(repoId, "clone-progress")
     return toPlain(
