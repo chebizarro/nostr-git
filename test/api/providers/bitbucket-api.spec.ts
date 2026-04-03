@@ -50,6 +50,14 @@ describe("BitbucketApi request/shape mapping", () => {
     expect(init.headers.Authorization).toBe(`Bearer ${token}`)
   })
 
+  it("omits auth header when token is empty for public reads", async () => {
+    globalThis.fetch = makeFetchOk(bbRepo) as any
+    const api = new BitbucketApi("")
+    await api.getRepo(owner, repo)
+    const init = (globalThis.fetch as any).mock.calls[0][1]
+    expect(init.headers.Authorization).toBeUndefined()
+  })
+
   it("listIssues maps fields including author/assignee and content", async () => {
     const payload = {
       values: [
@@ -345,6 +353,14 @@ describe("BitbucketApi request/shape mapping", () => {
     expect(res.content).toBe(Buffer.from("hello", "utf8").toString("base64"))
     const url = (globalThis.fetch as any).mock.calls[0][0]
     expect(url).toContain("/repositories/team/proj/src/feature%2Fwith-slash/README.md")
+  })
+
+  it("getFileContent omits auth header when token is empty", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ok: true, text: async () => "hello"}) as any
+    const api = new BitbucketApi("")
+    await api.getFileContent(owner, repo, "README.md", "main")
+    const init = (globalThis.fetch as any).mock.calls[0][1]
+    expect(init.headers.Authorization).toBeUndefined()
   })
 
   it("getFileContent propagates error text when response not ok", async () => {

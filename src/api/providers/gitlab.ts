@@ -43,13 +43,18 @@ export class GitLabApi implements GitServiceApi {
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`
 
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...((options.headers as Record<string, string>) || {}),
+    }
+
+    if (this.token && this.token.trim()) {
+      headers.Authorization = `Bearer ${this.token}`
+    }
+
     const response = await fetch(url, {
       ...options,
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
+      headers,
     })
 
     if (!response.ok) {
@@ -79,14 +84,7 @@ export class GitLabApi implements GitServiceApi {
     return project.id
   }
 
-  /**
-   * Repository Operations
-   */
-  async getRepo(owner: string, repo: string): Promise<RepoMetadata> {
-    const projectPath = `${owner}/${repo}`
-    const encodedPath = encodeURIComponent(projectPath)
-    const data = await this.request<any>(`/projects/${encodedPath}`)
-
+  private mapRepoMetadata(data: any): RepoMetadata {
     const projectAccess = data.permissions?.project_access?.access_level ?? 0
     const groupAccess = data.permissions?.group_access?.access_level ?? 0
     const accessLevel = Math.max(projectAccess, groupAccess)
@@ -120,6 +118,17 @@ export class GitLabApi implements GitServiceApi {
           }
         : undefined,
     }
+  }
+
+  /**
+   * Repository Operations
+   */
+  async getRepo(owner: string, repo: string): Promise<RepoMetadata> {
+    const projectPath = `${owner}/${repo}`
+    const encodedPath = encodeURIComponent(projectPath)
+    const data = await this.request<any>(`/projects/${encodedPath}`)
+
+    return this.mapRepoMetadata(data)
   }
 
   async createRepo(options: {
@@ -214,20 +223,7 @@ export class GitLabApi implements GitServiceApi {
         body: JSON.stringify(body),
       })
 
-      return {
-        id: data.id.toString(),
-        name: data.name,
-        fullName: data.path_with_namespace,
-        description: data.description,
-        defaultBranch: data.default_branch,
-        isPrivate: data.visibility === "private",
-        cloneUrl: data.http_url_to_repo,
-        htmlUrl: data.web_url,
-        owner: {
-          login: data.namespace.path,
-          type: data.namespace.kind === "user" ? "User" : "Organization",
-        },
-      }
+      return this.mapRepoMetadata(data)
     } catch (error: any) {
       // If project not found on GitLab, attempt cross-provider import from GitHub
       if (error.message?.includes("404") || error.message?.includes("Project Not Found")) {
@@ -235,6 +231,34 @@ export class GitLabApi implements GitServiceApi {
       }
       throw error
     }
+  }
+
+  async checkExistingFork(owner: string, repo: string): Promise<RepoMetadata | null> {
+    const projectId = await this.getProjectId(owner, repo)
+    const currentUser = await this.getCurrentUser()
+    const normalizedUser = currentUser.login.toLowerCase()
+
+    for (let page = 1; page <= 10; page++) {
+      const forks = await this.request<any[]>(
+        `/projects/${projectId}/forks?per_page=100&page=${page}`,
+      )
+      const existingFork = forks.find(candidate => {
+        const namespacePath = String(
+          candidate?.namespace?.full_path || candidate?.namespace?.path || "",
+        ).toLowerCase()
+        return namespacePath === normalizedUser
+      })
+
+      if (existingFork) {
+        return this.mapRepoMetadata(existingFork)
+      }
+
+      if (!Array.isArray(forks) || forks.length < 100) {
+        break
+      }
+    }
+
+    return null
   }
 
   /**

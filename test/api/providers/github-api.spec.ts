@@ -221,6 +221,46 @@ describe("GitHubApi request/shape mapping", () => {
     expect(init.headers.Accept).toContain("github")
   })
 
+  it("checkExistingFork finds an existing renamed fork for the authenticated user", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        {
+          ...sampleRepo,
+          name: "hello-fork",
+          full_name: `${owner}/hello-fork`,
+          clone_url: `https://github.com/${owner}/hello-fork.git`,
+          html_url: `https://github.com/${owner}/hello-fork`,
+          fork: true,
+          parent: {full_name: `${owner}/${repo}`},
+          source: {full_name: `${owner}/${repo}`},
+        },
+      ],
+      text: async () =>
+        JSON.stringify([
+          {
+            ...sampleRepo,
+            name: "hello-fork",
+            full_name: `${owner}/hello-fork`,
+            clone_url: `https://github.com/${owner}/hello-fork.git`,
+            html_url: `https://github.com/${owner}/hello-fork`,
+            fork: true,
+            parent: {full_name: `${owner}/${repo}`},
+            source: {full_name: `${owner}/${repo}`},
+          },
+        ]),
+    })
+    globalThis.fetch = fetchMock as any
+
+    const api = new GitHubApi(token)
+    const existingFork = await api.checkExistingFork(owner, repo)
+
+    expect(existingFork?.name).toBe("hello-fork")
+    expect((globalThis.fetch as any).mock.calls[0][0]).toMatch(
+      /\/user\/repos\?type=owner&per_page=100&page=1$/,
+    )
+  })
+
   it("respects baseUrl override", async () => {
     globalThis.fetch = makeFetchOk(sampleRepo) as any
     const api = new GitHubApi(token, "https://example.api")

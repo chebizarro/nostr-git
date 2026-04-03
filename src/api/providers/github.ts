@@ -75,12 +75,7 @@ export class GitHubApi implements GitServiceApi {
     return JSON.parse(text) as T
   }
 
-  /**
-   * Repository Operations
-   */
-  async getRepo(owner: string, repo: string): Promise<RepoMetadata> {
-    const data = await this.request<any>(`/repos/${owner}/${repo}`)
-
+  private mapRepoMetadata(data: any): RepoMetadata {
     return {
       id: data.id.toString(),
       name: data.name,
@@ -102,6 +97,15 @@ export class GitHubApi implements GitServiceApi {
           }
         : undefined,
     }
+  }
+
+  /**
+   * Repository Operations
+   */
+  async getRepo(owner: string, repo: string): Promise<RepoMetadata> {
+    const data = await this.request<any>(`/repos/${owner}/${repo}`)
+
+    return this.mapRepoMetadata(data)
   }
 
   async createRepo(options: {
@@ -189,20 +193,33 @@ export class GitHubApi implements GitServiceApi {
       body: JSON.stringify(body),
     })
 
-    return {
-      id: data.id.toString(),
-      name: data.name,
-      fullName: data.full_name,
-      description: data.description,
-      defaultBranch: data.default_branch,
-      isPrivate: data.private,
-      cloneUrl: data.clone_url,
-      htmlUrl: data.html_url,
-      owner: {
-        login: data.owner.login,
-        type: data.owner.type === "Organization" ? "Organization" : "User",
-      },
+    return this.mapRepoMetadata(data)
+  }
+
+  async checkExistingFork(owner: string, repo: string): Promise<RepoMetadata | null> {
+    const expectedFullName = `${owner}/${repo}`.toLowerCase()
+
+    for (let page = 1; page <= 10; page++) {
+      const repos = await this.request<any[]>(`/user/repos?type=owner&per_page=100&page=${page}`)
+      const existingFork = repos.find(candidate => {
+        if (!candidate?.fork) return false
+
+        const parentFullName = String(candidate?.parent?.full_name || "").toLowerCase()
+        const sourceFullName = String(candidate?.source?.full_name || "").toLowerCase()
+
+        return parentFullName === expectedFullName || sourceFullName === expectedFullName
+      })
+
+      if (existingFork) {
+        return this.mapRepoMetadata(existingFork)
+      }
+
+      if (!Array.isArray(repos) || repos.length < 100) {
+        break
+      }
     }
+
+    return null
   }
 
   /**

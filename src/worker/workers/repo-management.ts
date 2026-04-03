@@ -617,6 +617,45 @@ export async function forkAndCloneRepo(
           {provider, owner, repo, forkName},
         )
       } catch (e: any) {
+        const conflictMessage = String(e?.message || "")
+        const isLikelyExistingForkConflict =
+          /422/.test(conflictMessage) ||
+          /already have/i.test(conflictMessage) ||
+          /already exists/i.test(conflictMessage) ||
+          /fork/i.test(conflictMessage)
+
+        if (
+          isLikelyExistingForkConflict &&
+          typeof (gitServiceApi as any).checkExistingFork === "function"
+        ) {
+          try {
+            const existingFork = await (gitServiceApi as any).checkExistingFork(owner, repo)
+            if (existingFork?.htmlUrl) {
+              throw new Error(
+                `FORK_EXISTS: You already have a ${provider} fork named "${existingFork.name}". URL: ${existingFork.htmlUrl}`,
+              )
+            }
+          } catch (forkLookupError) {
+            if (
+              forkLookupError instanceof Error &&
+              forkLookupError.message.startsWith("FORK_EXISTS:")
+            ) {
+              throw forkLookupError
+            }
+
+            console.warn("[forkAndCloneRepo] Failed to resolve existing fork after conflict", {
+              provider,
+              owner,
+              repo,
+              forkName,
+              error:
+                forkLookupError instanceof Error
+                  ? forkLookupError.message
+                  : String(forkLookupError || "unknown error"),
+            })
+          }
+        }
+
         // Check if this is an error indicating source repo doesn't exist on target platform
         // or that we need to do a cross-platform fork
         // - 404: GitHub/GitLab repo not found

@@ -43,13 +43,18 @@ export class BitbucketApi implements GitServiceApi {
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`
 
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...((options.headers as Record<string, string>) || {}),
+    }
+
+    if (this.token && this.token.trim()) {
+      headers.Authorization = `Bearer ${this.token}`
+    }
+
     const response = await fetch(url, {
       ...options,
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
+      headers,
     })
 
     if (!response.ok) {
@@ -855,10 +860,13 @@ export class BitbucketApi implements GitServiceApi {
     const encodedBranch = encodeURIComponent(branch)
     const endpoint = `/repositories/${owner}/${repo}/src/${encodedBranch}/${path}`
 
+    const headers: Record<string, string> = {}
+    if (this.token && this.token.trim()) {
+      headers.Authorization = `Bearer ${this.token}`
+    }
+
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-      },
+      headers,
     })
 
     if (!response.ok) {

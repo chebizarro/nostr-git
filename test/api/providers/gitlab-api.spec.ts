@@ -49,6 +49,58 @@ describe("GitLabApi request/shape mapping", () => {
     expect(init.headers.Authorization).toBe(`Bearer ${token}`)
   })
 
+  it("checkExistingFork finds an existing renamed fork in the user namespace", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => project,
+        text: async () => JSON.stringify(project),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({id: 1, username: owner}),
+        text: async () => JSON.stringify({id: 1, username: owner}),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            ...project,
+            name: "app-fork",
+            path_with_namespace: `${owner}/app-fork`,
+            http_url_to_repo: `https://gitlab.com/${owner}/app-fork.git`,
+            web_url: `https://gitlab.com/${owner}/app-fork`,
+          },
+        ],
+        text: async () =>
+          JSON.stringify([
+            {
+              ...project,
+              name: "app-fork",
+              path_with_namespace: `${owner}/app-fork`,
+              http_url_to_repo: `https://gitlab.com/${owner}/app-fork.git`,
+              web_url: `https://gitlab.com/${owner}/app-fork`,
+            },
+          ]),
+      })
+    globalThis.fetch = fetchMock as any
+
+    const api = new GitLabApi(token)
+    const existingFork = await api.checkExistingFork(owner, repo)
+
+    expect(existingFork?.name).toBe("app-fork")
+    expect((globalThis.fetch as any).mock.calls[2][0]).toMatch(/\/forks\?per_page=100&page=1$/)
+  })
+
+  it("omits auth header when token is empty for public reads", async () => {
+    globalThis.fetch = makeFetchOk(project) as any
+    const api = new GitLabApi("")
+    await api.getRepo(owner, repo)
+    const init = (globalThis.fetch as any).mock.calls[0][1]
+    expect(init.headers.Authorization).toBeUndefined()
+  })
+
   it("propagates error text when response not ok", async () => {
     globalThis.fetch = makeFetchErr(500, "boom") as any
     const api = new GitLabApi(token)

@@ -51,6 +51,14 @@ describe("GiteaApi request/shape mapping", () => {
     expect(init.headers.Authorization).toBe(`token ${token}`)
   })
 
+  it("omits auth header when token is empty for public reads", async () => {
+    globalThis.fetch = makeFetchOk(meta) as any
+    const api = new GiteaApi("", "https://gitea.example/api/v1")
+    await api.getRepo(owner, repo)
+    const init = (globalThis.fetch as any).mock.calls[0][1]
+    expect(init.headers.Authorization).toBeUndefined()
+  })
+
   it("propagates error text when response not ok", async () => {
     globalThis.fetch = makeFetchErr(500, "fail") as any
     const api = new GiteaApi(token, "https://gitea.example/api/v1")

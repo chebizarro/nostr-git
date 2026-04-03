@@ -46,13 +46,18 @@ export class GiteaApi implements GitServiceApi {
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`
 
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...((options.headers as Record<string, string>) || {}),
+    }
+
+    if (this.token && this.token.trim()) {
+      headers.Authorization = `token ${this.token}`
+    }
+
     const response = await fetch(url, {
       ...options,
-      headers: {
-        Authorization: `token ${this.token}`,
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
+      headers,
     })
 
     if (!response.ok) {
