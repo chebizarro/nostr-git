@@ -92,6 +92,12 @@ export interface ImportConfig {
    * Default branch should be included by caller.
    */
   selectedBranches?: string[]
+
+  /**
+   * Destination repository name used for created targets and final Nostr repo metadata.
+   * Defaults to the source repository name when omitted.
+   */
+  destinationRepoName?: string
 }
 
 /**

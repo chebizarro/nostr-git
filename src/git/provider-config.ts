@@ -9,46 +9,46 @@ export interface ProviderCapabilities {
   /**
    * Whether the provider allows forking your own repository
    */
-  allowOwnRepoFork: boolean;
+  allowOwnRepoFork: boolean
 
   /**
    * Whether the provider allows multiple forks of the same repository
    */
-  allowMultipleForks: boolean;
+  allowMultipleForks: boolean
 
   /**
    * Human-readable description of namespace/fork restrictions
    */
-  namespaceRestriction: string | null;
+  namespaceRestriction: string | null
 
   /**
    * Whether the provider supports checking for existing forks
    */
-  supportsForkChecking: boolean;
+  supportsForkChecking: boolean
 
   /**
    * Whether the provider supports renaming repositories
    */
-  supportsRenaming: boolean;
+  supportsRenaming: boolean
 
   /**
    * Whether the provider supports removing fork relationships
    */
-  supportsForkRelationshipRemoval: boolean;
+  supportsForkRelationshipRemoval: boolean
 
   /**
    * URL pattern for repository settings/edit page (relative to repo URL)
    * Use {url} placeholder if the pattern needs the full URL, or just the path suffix
    * Example: "/settings" or "/-/edit" or "/-/settings"
    */
-  settingsUrlPattern: string | null;
+  settingsUrlPattern: string | null
 
   /**
    * URL pattern for fork settings page (relative to repo URL)
    * Use anchor/hash for specific sections if needed
    * Example: "/-/edit#js-project-fork-settings"
    */
-  forkSettingsUrlPattern: string | null;
+  forkSettingsUrlPattern: string | null
 }
 
 /**
@@ -59,32 +59,32 @@ export const PROVIDER_CAPABILITIES: Record<string, ProviderCapabilities> = {
   github: {
     allowOwnRepoFork: false,
     allowMultipleForks: false,
-    namespaceRestriction: 'GitHub allows only one fork per account',
+    namespaceRestriction: "GitHub allows only one fork per account",
     supportsForkChecking: true,
     supportsRenaming: true,
     supportsForkRelationshipRemoval: false,
-    settingsUrlPattern: '/settings',
-    forkSettingsUrlPattern: null
+    settingsUrlPattern: "/settings",
+    forkSettingsUrlPattern: null,
   },
   gitlab: {
     allowOwnRepoFork: true,
     allowMultipleForks: false,
-    namespaceRestriction: 'GitLab allows only one fork per namespace',
+    namespaceRestriction: "GitLab allows only one fork per namespace",
     supportsForkChecking: true,
     supportsRenaming: true,
     supportsForkRelationshipRemoval: true,
-    settingsUrlPattern: '/edit',
-    forkSettingsUrlPattern: '/edit#js-project-advanced-settings'
+    settingsUrlPattern: "/edit",
+    forkSettingsUrlPattern: "/edit#js-project-advanced-settings",
   },
   gitea: {
     allowOwnRepoFork: true,
     allowMultipleForks: false,
-    namespaceRestriction: 'Gitea allows only one fork per namespace',
+    namespaceRestriction: "Gitea allows only one fork per namespace",
     supportsForkChecking: false, // Not implemented yet
     supportsRenaming: true,
     supportsForkRelationshipRemoval: false,
-    settingsUrlPattern: '/settings',
-    forkSettingsUrlPattern: null
+    settingsUrlPattern: "/settings",
+    forkSettingsUrlPattern: null,
   },
   bitbucket: {
     allowOwnRepoFork: true,
@@ -93,8 +93,8 @@ export const PROVIDER_CAPABILITIES: Record<string, ProviderCapabilities> = {
     supportsForkChecking: false, // Not implemented yet
     supportsRenaming: true,
     supportsForkRelationshipRemoval: false,
-    settingsUrlPattern: '/admin',
-    forkSettingsUrlPattern: null
+    settingsUrlPattern: "/admin",
+    forkSettingsUrlPattern: null,
   },
   grasp: {
     allowOwnRepoFork: true,
@@ -104,7 +104,7 @@ export const PROVIDER_CAPABILITIES: Record<string, ProviderCapabilities> = {
     supportsRenaming: false, // Event-based system, different model
     supportsForkRelationshipRemoval: false,
     settingsUrlPattern: null,
-    forkSettingsUrlPattern: null
+    forkSettingsUrlPattern: null,
   },
   generic: {
     allowOwnRepoFork: true,
@@ -114,46 +114,52 @@ export const PROVIDER_CAPABILITIES: Record<string, ProviderCapabilities> = {
     supportsRenaming: false,
     supportsForkRelationshipRemoval: false,
     settingsUrlPattern: null,
-    forkSettingsUrlPattern: null
-  }
-};
+    forkSettingsUrlPattern: null,
+  },
+}
 
 /**
  * Get provider capabilities
  * Falls back to generic if provider not found
  */
 export function getProviderCapabilities(provider: string): ProviderCapabilities {
-  return PROVIDER_CAPABILITIES[provider] || PROVIDER_CAPABILITIES.generic;
+  return PROVIDER_CAPABILITIES[provider] || PROVIDER_CAPABILITIES.generic
 }
 
 /**
  * Map service host to provider name
  */
 export const SERVICE_TO_PROVIDER: Record<string, string> = {
-  'github.com': 'github',
-  'gitlab.com': 'gitlab',
-  'bitbucket.org': 'bitbucket',
-  grasp: 'grasp'
-};
+  "github.com": "github",
+  "gitlab.com": "gitlab",
+  "bitbucket.org": "bitbucket",
+  grasp: "grasp",
+}
 
 /**
  * Get provider name from service host
  */
 export function getProviderFromService(service: string): string {
-  return SERVICE_TO_PROVIDER[service] || 'generic';
+  return SERVICE_TO_PROVIDER[service] || "generic"
 }
 
 /**
  * Build a URL by appending a path pattern to a base URL
  * Handles trailing slashes and ensures proper URL construction
  */
-export function buildProviderUrl(baseUrl: string, pathPattern: string | null): string | null {
-  if (!pathPattern) return null;
-  
+export function buildProviderUrl(
+  baseUrl: string | null | undefined,
+  pathPattern: string | null,
+): string | null {
+  if (!baseUrl || !pathPattern) return null
+
+  const trimmedBaseUrl = baseUrl.trim()
+  if (!trimmedBaseUrl) return null
+
   // Remove trailing slash from base URL if present
-  const normalizedBase = baseUrl.replace(/\/$/, '');
+  const normalizedBase = trimmedBaseUrl.replace(/\/$/, "")
   // Ensure path pattern starts with /
-  const normalizedPath = pathPattern.startsWith('/') ? pathPattern : `/${pathPattern}`;
-  
-  return `${normalizedBase}${normalizedPath}`;
+  const normalizedPath = pathPattern.startsWith("/") ? pathPattern : `/${pathPattern}`
+
+  return `${normalizedBase}${normalizedPath}`
 }

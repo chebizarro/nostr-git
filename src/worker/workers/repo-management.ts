@@ -601,19 +601,15 @@ export async function forkAndCloneRepo(
     let forkResult
     let isCrossPlatformFork = false
 
-    const shouldUseCustomNameFallback =
-      provider === "github" && forkName !== repo && orderedSourceCloneUrls.length > 0
-
-    if (shouldUseCustomNameFallback) {
-      console.log(
-        "[forkAndCloneRepo] Using cross-platform path for custom GitHub fork name:",
-        forkName,
-      )
-      isCrossPlatformFork = true
-    }
-
     if (!isCrossPlatformFork) {
       try {
+        console.log("[forkAndCloneRepo] Attempting native provider fork", {
+          provider,
+          owner,
+          repo,
+          forkName,
+          hasCustomForkName: forkName !== repo,
+        })
         forkResult = await runTimed(
           "forkRepo",
           FORK_TIMEOUTS.forkRepoMs,
@@ -647,9 +643,16 @@ export async function forkAndCloneRepo(
 
         if (is404 || isGitLabImportError || isGraspNotSupported) {
           if (orderedSourceCloneUrls.length > 0) {
-            console.log(
-              "[forkAndCloneRepo] Source repo not found on target platform, attempting cross-platform fork",
-            )
+            console.log("[forkAndCloneRepo] Falling back to cross-platform fork path", {
+              provider,
+              owner,
+              repo,
+              forkName,
+              is404,
+              isGitLabImportError,
+              isGraspNotSupported,
+              sourceCloneUrlCount: orderedSourceCloneUrls.length,
+            })
             isCrossPlatformFork = true
           } else {
             throw new Error(
