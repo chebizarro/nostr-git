@@ -1589,6 +1589,16 @@ const api = {
     return toPlain(await (git as any).listBranches({dir}))
   },
 
+  async listTags(opts: {repoId: string}): Promise<string[]> {
+    const {dir} = repoKeyAndDir(opts.repoId)
+    return toPlain(await (git as any).listTags({dir}))
+  },
+
+  async resolveRef(opts: {repoId: string; ref: string}): Promise<string> {
+    const {dir} = repoKeyAndDir(opts.repoId)
+    return await (git as any).resolveRef({dir, ref: opts.ref})
+  },
+
   async listRemotes(opts: {repoId: string}): Promise<Array<{remote: string; url: string}>> {
     const {dir} = repoKeyAndDir(opts.repoId)
     const remotes = await (git as any).listRemotes({dir})
