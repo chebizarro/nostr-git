@@ -354,6 +354,93 @@ const repoDataLevels = new Map<string, DataLevel>()
 let eventIO: EventIO | null = null
 const WORKER_BUILD_ID = new Date().toISOString()
 
+async function hasCommitObject(dir: string, oid: string): Promise<boolean> {
+  if (!oid) return false
+
+  try {
+    const commits = await (git as any).log({dir, depth: 1, ref: oid})
+    return commits.length > 0
+  } catch {
+    return false
+  }
+}
+
+async function fetchRefsUntilOidsAvailable(opts: {
+  key: string
+  dir: string
+  requiredOids: string[]
+  cloneUrls?: string[]
+}): Promise<boolean> {
+  const {key, dir} = opts
+  const requiredOids = Array.from(new Set((opts.requiredOids || []).filter(Boolean)))
+  if (requiredOids.length === 0) return true
+
+  const urlsToTry: string[] = []
+  const addUrls = (urls: string[]) => {
+    for (const url of filterValidCloneUrls(urls)) {
+      if (!urlsToTry.includes(url)) {
+        urlsToTry.push(url)
+      }
+    }
+  }
+
+  addUrls(opts.cloneUrls || [])
+
+  try {
+    const remotes = await git.listRemotes({dir})
+    const originRemote = remotes.find((r: any) => r.remote === "origin")
+    if (originRemote?.url) {
+      addUrls([originRemote.url])
+    }
+  } catch {
+    // ignore remote listing issues
+  }
+
+  try {
+    const cache = await cacheManager.getRepoCache(key)
+    addUrls(cache?.cloneUrls || [])
+  } catch {
+    // ignore cache issues
+  }
+
+  const orderedUrls = reorderUrlsByPreference(urlsToTry, key)
+  if (orderedUrls.length === 0) {
+    return false
+  }
+
+  const corsProxy = resolveDefaultCorsProxy()
+  const fetchResult = await withUrlFallback(
+    orderedUrls,
+    async (url: string) => {
+      const authCallback = getAuthCallback(url)
+      await git.fetch({
+        dir,
+        url,
+        singleBranch: false,
+        tags: true,
+        corsProxy,
+        ...(authCallback && {onAuth: authCallback}),
+      })
+
+      const missingOids: string[] = []
+      for (const oid of requiredOids) {
+        if (!(await hasCommitObject(dir, oid))) {
+          missingOids.push(oid)
+        }
+      }
+
+      if (missingOids.length > 0) {
+        throw new Error(`Fetched refs but missing commit(s): ${missingOids.join(", ")}`)
+      }
+
+      return true
+    },
+    {repoId: key, perUrlTimeoutMs: 20000},
+  )
+
+  return fetchResult.success
+}
+
 // --- exposed Comlink API ---
 const api = {
   // Health check / handshake
@@ -2402,7 +2489,12 @@ const api = {
   },
 
   // Get detailed commit information including file changes
-  async getCommitDetails(opts: {repoId: string; commitId: string; branch?: string}) {
+  async getCommitDetails(opts: {
+    repoId: string
+    commitId: string
+    branch?: string
+    cloneUrls?: string[]
+  }) {
     const {key, dir} = repoKeyAndDir(opts.repoId)
 
     const isMissingCommitObjectError = (error: unknown) => {
@@ -2417,55 +2509,13 @@ const api = {
       )
     }
 
-    const fetchAllRefsForMissingCommit = async (): Promise<boolean> => {
-      const urlsToTry: string[] = []
-
-      try {
-        const remotes = await git.listRemotes({dir})
-        const originRemote = remotes.find((r: any) => r.remote === "origin")
-        if (originRemote?.url) {
-          urlsToTry.push(originRemote.url)
-        }
-      } catch {
-        // ignore remote listing issues
-      }
-
-      try {
-        const cache = await cacheManager.getRepoCache(key)
-        for (const url of filterValidCloneUrls(cache?.cloneUrls || [])) {
-          if (!urlsToTry.includes(url)) {
-            urlsToTry.push(url)
-          }
-        }
-      } catch {
-        // ignore cache issues
-      }
-
-      const orderedUrls = reorderUrlsByPreference(filterValidCloneUrls(urlsToTry), key)
-      if (orderedUrls.length === 0) {
-        return false
-      }
-
-      const corsProxy = resolveDefaultCorsProxy()
-      const fetchResult = await withUrlFallback(
-        orderedUrls,
-        async (url: string) => {
-          const authCallback = getAuthCallback(url)
-          await git.fetch({
-            dir,
-            url,
-            singleBranch: false,
-            tags: true,
-            corsProxy,
-            ...(authCallback && {onAuth: authCallback}),
-          })
-          return true
-        },
-        {repoId: key, perUrlTimeoutMs: 20000},
-      )
-
-      return fetchResult.success
-    }
+    const fetchAllRefsForMissingCommit = async (): Promise<boolean> =>
+      await fetchRefsUntilOidsAvailable({
+        key,
+        dir,
+        requiredOids: [opts.commitId],
+        cloneUrls: opts.cloneUrls,
+      })
 
     try {
       // Optimization: Try to read commit locally first before triggering expensive fetch
@@ -2580,7 +2630,7 @@ const api = {
         try {
           await ensureFullCloneUtil(
             git,
-            {repoId: opts.repoId, branch: opts.branch, depth: 1000},
+            {repoId: opts.repoId, branch: opts.branch, depth: 1000, cloneUrls: opts.cloneUrls},
             {
               rootDir,
               parseRepoId,
@@ -2898,7 +2948,12 @@ const api = {
    * Returns changes with diffHunks in the same format as getCommitDetails.
    * Used for PR diff display when base=merge-base and head=PR tip.
    */
-  async getDiffBetween(opts: {repoId: string; baseOid: string; headOid: string}): Promise<{
+  async getDiffBetween(opts: {
+    repoId: string
+    baseOid: string
+    headOid: string
+    cloneUrls?: string[]
+  }): Promise<{
     success: boolean
     changes?: Array<{
       path: string
@@ -2918,7 +2973,7 @@ const api = {
     try {
       await ensureFullCloneUtil(
         git,
-        {repoId: opts.repoId, depth: 100},
+        {repoId: opts.repoId, depth: 100, cloneUrls: opts.cloneUrls},
         {
           rootDir,
           parseRepoId,
@@ -2931,6 +2986,27 @@ const api = {
         },
         makeProgress(opts.repoId, "clone-progress"),
       )
+
+      const requiredOids = Array.from(new Set([opts.baseOid, opts.headOid].filter(Boolean)))
+      const missingOids: string[] = []
+      for (const oid of requiredOids) {
+        if (!(await hasCommitObject(dir, oid))) {
+          missingOids.push(oid)
+        }
+      }
+
+      if (missingOids.length > 0) {
+        const recovered = await fetchRefsUntilOidsAvailable({
+          key,
+          dir,
+          requiredOids,
+          cloneUrls: opts.cloneUrls,
+        })
+
+        if (!recovered) {
+          throw new Error(`Could not find ${missingOids.join(", ")}.`)
+        }
+      }
 
       const changes: Array<{
         path: string

@@ -3,6 +3,7 @@ import parseDiff from "parse-diff"
 import type {Patch} from "../types/index.js"
 import {createMergeMetadataEvent, createConflictMetadataEvent} from "../events/index.js"
 import {createInvalidInputError, wrapError, type GitErrorContext} from "../errors/index.js"
+import {fetchPrSourceTip} from "./pr-source-fetch.js"
 
 export interface SimplifiedPatch {
   id: string
@@ -950,6 +951,35 @@ export async function analyzePRMergeability(
     usedTargetCloneUrl = targetFetchResult.usedUrl
   }
 
+  let resolvedBranch: string
+  try {
+    resolvedBranch = await resolveRobustBranchInMergeAnalysis(git, repoDir, effectiveTargetBranch)
+  } catch (error) {
+    return errResult(error instanceof Error ? error.message : String(error))
+  }
+
+  if (effectiveTargetBranch && resolvedBranch !== effectiveTargetBranch) {
+    return errResult(
+      `Target branch '${effectiveTargetBranch}' not found after sync (resolved '${resolvedBranch}' instead)`,
+    )
+  }
+
+  let targetCommit: string
+  try {
+    targetCommit = await git.resolveRef({
+      dir: repoDir,
+      ref: `refs/heads/${resolvedBranch}`,
+    })
+  } catch (error) {
+    return errResult(
+      `Target branch '${effectiveTargetBranch}' could not be resolved locally after sync: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+
+  console.log(
+    `[analyzePRMergeability] Target branch ${resolvedBranch} @ ${targetCommit?.substring(0, 8)}`,
+  )
+
   // Use unique remote name per invocation to avoid race when multiple analyses run concurrently
   const prRemote = `pr-source-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`
 
@@ -958,62 +988,21 @@ export async function analyzePRMergeability(
     async (url: string) => {
       try {
         await git.addRemote({dir: repoDir, remote: prRemote, url})
-        // isomorphic-git requires a fetch refspec; addRemote alone does not set it
-        try {
-          await git.setConfig({
-            dir: repoDir,
-            path: `remote.${prRemote}.fetch`,
-            value: `+refs/heads/*:refs/remotes/${prRemote}/*`,
-          })
-        } catch (configErr) {
-          console.warn(
-            `[analyzePRMergeability] Could not set fetch refspec for ${prRemote}:`,
-            configErr,
-          )
-        }
-        console.log(`[analyzePRMergeability] Fetching from ${url} (all refs)`)
-
-        const sourceFetchOptions: any = {
+        const onAuth = getAuthCallback ? getAuthCallback(url) : undefined
+        const sourceFetch = await fetchPrSourceTip(git, {
           dir: repoDir,
           remote: prRemote,
           url,
-          singleBranch: false,
+          tipCommitOid,
           depth: 100,
-          prune: true,
-          tags: false,
-        }
-        if (corsProxy !== undefined) {
-          sourceFetchOptions.corsProxy = corsProxy
-        }
-        if (getAuthCallback) {
-          sourceFetchOptions.onAuth = getAuthCallback(url)
-        }
-
-        await git.fetch(sourceFetchOptions)
-
-        if (strictTargetFresh) {
-          await git.resolveRef({dir: repoDir, ref: `refs/heads/${effectiveTargetBranch}`})
-        }
-
-        const tipOid = tipCommitOid
-
-        const resolvedBranch = await resolveRobustBranchInMergeAnalysis(
-          git,
-          repoDir,
-          effectiveTargetBranch,
-        )
-        if (effectiveTargetBranch && resolvedBranch !== effectiveTargetBranch) {
-          return errResult(
-            `Target branch '${effectiveTargetBranch}' not found after sync (resolved '${resolvedBranch}' instead)`,
-          )
-        }
-        const targetCommit = await git.resolveRef({
-          dir: repoDir,
-          ref: `refs/heads/${resolvedBranch}`,
+          ...(corsProxy !== undefined ? {corsProxy} : {}),
+          ...(onAuth ? {onAuth} : {}),
         })
         console.log(
-          `[analyzePRMergeability] Target branch ${resolvedBranch} @ ${targetCommit?.substring(0, 8)}`,
+          `[analyzePRMergeability] PR source ready via ${sourceFetch.strategy} from ${url}`,
         )
+
+        const tipOid = sourceFetch.tipOid
 
         const prTipRef = tipOid
         const prTipOid = tipOid

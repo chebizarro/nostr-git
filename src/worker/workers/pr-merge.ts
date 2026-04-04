@@ -2,6 +2,7 @@ import type {GitProvider} from "../../git/provider.js"
 import type {GitMergeResult} from "../../git/provider.js"
 import type {PRMergeAnalysisResult} from "../../git/merge-analysis.js"
 import {analyzePRMergeability} from "../../git/merge-analysis.js"
+import {fetchPrSourceTip} from "../../git/pr-source-fetch.js"
 import {withUrlFallback, filterValidCloneUrls} from "../../utils/clone-url-fallback.js"
 import {isLikelyGraspRemoteUrl} from "../../utils/grasp-url.js"
 
@@ -17,6 +18,8 @@ export interface AnalyzePRMergeOptions {
 export interface MergePRAndPushOptions {
   repoId: string
   cloneUrls: string[]
+  /** Clone URLs from repo (base) - for fetching target branch before merge */
+  targetCloneUrls?: string[]
   tipCommitOid: string
   targetBranch?: string
   mergeCommitMessage?: string
@@ -115,6 +118,7 @@ export async function mergePRAndPushUtil(
   const {
     repoId,
     cloneUrls,
+    targetCloneUrls,
     tipCommitOid,
     targetBranch,
     mergeCommitMessage,
@@ -129,6 +133,7 @@ export async function mergePRAndPushUtil(
     parseRepoId,
     resolveBranchName,
     ensureFullClone,
+    getAuthCallback,
     pushToRemote,
     safePushToRemote,
     getTokensForRemote,
@@ -141,9 +146,14 @@ export async function mergePRAndPushUtil(
   try {
     onProgress("Resolving target branch...", 5)
     const effectiveTargetBranch = await resolveBranchName(dir, targetBranch || "main")
+    const validTargetCloneUrls = filterValidCloneUrls(targetCloneUrls || [])
 
     onProgress("Ensuring repository is ready...", 10)
-    await ensureFullClone({repoId, branch: effectiveTargetBranch})
+    await ensureFullClone({
+      repoId,
+      branch: effectiveTargetBranch,
+      ...(validTargetCloneUrls.length > 0 ? {cloneUrls: validTargetCloneUrls} : {}),
+    })
 
     const validUrls = filterValidCloneUrls(cloneUrls)
     if (validUrls.length === 0) {
@@ -160,27 +170,21 @@ export async function mergePRAndPushUtil(
       async (url: string) => {
         try {
           await git.addRemote({dir, remote: prRemote, url})
-          try {
-            await git.setConfig({
-              dir,
-              path: `remote.${prRemote}.fetch`,
-              value: `+refs/heads/*:refs/remotes/${prRemote}/*`,
-            })
-          } catch {
-            /* ignore */
-          }
+          onProgress("Fetching PR tip...", 20)
+          const onAuth = getAuthCallback(url)
 
-          onProgress("Fetching PR branch...", 20)
-          await git.fetch({
+          const sourceFetch = await fetchPrSourceTip(git, {
             dir,
             remote: prRemote,
             url,
-            singleBranch: false,
+            tipCommitOid,
             depth: 100,
+            ...(onAuth ? {onAuth} : {}),
           })
 
-          const tipOid = tipCommitOid
-          return {prTipRef: undefined, tipOid}
+          console.log(`[mergePRAndPush] PR source ready via ${sourceFetch.strategy} from ${url}`)
+
+          return {tipOid: sourceFetch.tipOid}
         } finally {
           try {
             await git.deleteRemote({dir, remote: prRemote})
@@ -199,14 +203,11 @@ export async function mergePRAndPushUtil(
       return {success: false, error: errMsg}
     }
 
-    const {prTipRef: fetchedPrTipRef, tipOid} = fetchResult.result
-    // When we fetched all (no source branch), write tip to temp ref for merge
-    usedTempRef = !fetchedPrTipRef
-    prTipRef = fetchedPrTipRef ?? `refs/pr-tip-merge-${Date.now()}`
-    if (usedTempRef) {
-      await git.writeRef({dir, ref: prTipRef, value: tipOid, force: true})
-      console.log(`[mergePRAndPush] Created temp ref ${prTipRef} -> ${tipOid.substring(0, 8)}`)
-    }
+    const {tipOid} = fetchResult.result
+    usedTempRef = true
+    prTipRef = `refs/pr-tip-merge-${Date.now()}`
+    await git.writeRef({dir, ref: prTipRef, value: tipOid, force: true})
+    console.log(`[mergePRAndPush] Created temp ref ${prTipRef} -> ${tipOid.substring(0, 8)}`)
 
     onProgress("Checking out target branch...", 40)
     await git.checkout({dir, ref: effectiveTargetBranch})

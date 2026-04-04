@@ -59,11 +59,24 @@ describe("pr-merge", () => {
   })
 
   describe("mergePRAndPushUtil", () => {
+    let fetchedTipOid = false
+
     const mockGit: GitProvider = {
       addRemote: vi.fn().mockResolvedValue(undefined),
       deleteRemote: vi.fn().mockResolvedValue(undefined),
       setConfig: vi.fn().mockResolvedValue(undefined),
-      fetch: vi.fn().mockResolvedValue(undefined),
+      fetch: vi.fn().mockImplementation(async ({ref, singleBranch}) => {
+        if (ref === "tip-oid-456" && singleBranch === true) {
+          fetchedTipOid = true
+        }
+      }),
+      readCommit: vi.fn().mockImplementation(async ({oid}) => {
+        if (oid === "tip-oid-456" && fetchedTipOid) {
+          return {oid, commit: {message: "tip"}}
+        }
+
+        throw new Error(`Missing commit ${oid}`)
+      }),
       writeRef: vi.fn().mockResolvedValue(undefined),
       checkout: vi.fn().mockResolvedValue(undefined),
       resolveRef: vi.fn().mockImplementation(({ref}) => {
@@ -89,6 +102,7 @@ describe("pr-merge", () => {
 
     beforeEach(() => {
       vi.clearAllMocks()
+      fetchedTipOid = false
     })
 
     it("returns error when no valid clone URLs after filtering", async () => {
@@ -165,17 +179,121 @@ describe("pr-merge", () => {
         "develop",
       )
     })
+
+    it("uses target clone URLs when preparing the target branch", async () => {
+      await mergePRAndPushUtil(
+        mockGit,
+        {
+          repoId: "test-repo",
+          cloneUrls: ["https://github.com/user/fork.git"],
+          targetCloneUrls: ["https://github.com/upstream/repo.git"],
+          tipCommitOid: "tip-oid",
+          targetBranch: "develop",
+          skipPush: true,
+        } as MergePRAndPushOptions,
+        baseDeps as any,
+      )
+
+      expect(baseDeps.ensureFullClone).toHaveBeenCalledWith(
+        expect.objectContaining({
+          repoId: "test-repo",
+          cloneUrls: ["https://github.com/upstream/repo.git"],
+        }),
+      )
+    })
+
+    it("fetches the PR tip by commit oid before falling back to branch refs", async () => {
+      await mergePRAndPushUtil(
+        mockGit,
+        {
+          repoId: "test-repo",
+          cloneUrls: ["https://github.com/user/fork.git"],
+          tipCommitOid: "tip-oid-456",
+          targetBranch: "main",
+          skipPush: true,
+        } as MergePRAndPushOptions,
+        baseDeps as any,
+      )
+
+      expect(mockGit.fetch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ref: "tip-oid-456",
+          singleBranch: true,
+        }),
+      )
+      expect(mockGit.setConfig).not.toHaveBeenCalledWith(
+        expect.objectContaining({path: expect.stringContaining("remote.pr-source")}),
+      )
+    })
+
+    it("falls back to all refs when tip-oid fetch does not make the commit available", async () => {
+      const gitWithFallback = {
+        ...mockGit,
+        fetch: vi
+          .fn()
+          .mockImplementationOnce(async () => {
+            // tip-oid fetch fails to materialize the commit
+          })
+          .mockImplementationOnce(async () => {
+            fetchedTipOid = true
+          }),
+      } as any
+
+      await mergePRAndPushUtil(
+        gitWithFallback,
+        {
+          repoId: "test-repo",
+          cloneUrls: ["https://github.com/user/fork.git"],
+          tipCommitOid: "tip-oid-456",
+          targetBranch: "main",
+          skipPush: true,
+        } as MergePRAndPushOptions,
+        baseDeps as any,
+      )
+
+      expect(gitWithFallback.fetch).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          ref: "tip-oid-456",
+          singleBranch: true,
+        }),
+      )
+      expect(gitWithFallback.fetch).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          singleBranch: false,
+        }),
+      )
+    })
   })
 
   describe("analyzePRMergeUtil", () => {
+    let fetchedAnalysisTip = false
+
     const mockGit: GitProvider = {
       addRemote: vi.fn().mockResolvedValue(undefined),
       deleteRemote: vi.fn().mockResolvedValue(undefined),
       setConfig: vi.fn().mockResolvedValue(undefined),
-      fetch: vi.fn().mockResolvedValue(undefined),
+      fetch: vi.fn().mockImplementation(async ({ref, singleBranch}) => {
+        if (ref === "tip-oid" && singleBranch === true) {
+          fetchedAnalysisTip = true
+        }
+      }),
+      readCommit: vi.fn().mockImplementation(async ({oid}) => {
+        if (oid === "tip-oid" && fetchedAnalysisTip) {
+          return {oid, commit: {message: "tip"}}
+        }
+
+        throw new Error(`Missing commit ${oid}`)
+      }),
+      writeRef: vi.fn().mockResolvedValue(undefined),
+      checkout: vi.fn().mockResolvedValue(undefined),
+      branch: vi.fn().mockResolvedValue(undefined),
+      deleteBranch: vi.fn().mockResolvedValue(undefined),
+      deleteRef: vi.fn().mockResolvedValue(undefined),
+      log: vi.fn().mockResolvedValue([]),
       resolveRef: vi.fn().mockImplementation(({ref}) => {
         if (ref === "refs/heads/main") return Promise.resolve("target-oid")
-        if (ref?.includes("pr-source")) return Promise.resolve("tip-oid")
         return Promise.resolve("some-oid")
       }),
       merge: vi.fn().mockResolvedValue({oid: "merge-oid"}),
@@ -192,6 +310,7 @@ describe("pr-merge", () => {
 
     beforeEach(() => {
       vi.clearAllMocks()
+      fetchedAnalysisTip = false
     })
 
     it("delegates to analyzePRMergeability and returns result shape", async () => {
@@ -224,6 +343,27 @@ describe("pr-merge", () => {
       )
       expect(result.analysis).toBe("error")
       expect(result.errorMessage).toContain("No valid clone URLs")
+    })
+
+    it("fetches the PR source by tip commit oid during analysis", async () => {
+      await analyzePRMergeUtil(
+        mockGit,
+        {
+          repoId: "repo",
+          prCloneUrls: ["https://github.com/user/fork.git"],
+          targetCloneUrls: ["https://github.com/upstream/repo.git"],
+          tipCommitOid: "tip-oid",
+          targetBranch: "main",
+        } as AnalyzePRMergeOptions,
+        baseDeps as any,
+      )
+
+      expect(mockGit.fetch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ref: "tip-oid",
+          singleBranch: true,
+        }),
+      )
     })
   })
 })
