@@ -7,7 +7,6 @@ import type {
 import {detectVendorFromUrl, extractHostname} from "./vendor-providers.js"
 import type {GitForkOptions, RepoMetadata} from "../api/api.js"
 import {getGitServiceApi} from "./provider-factory.js"
-import {createAuthRequiredError, type GitErrorContext} from "../errors/index.js"
 import {toNpub} from "../utils/nostr-pubkey.js"
 
 // Registry of vendor providers
@@ -47,17 +46,12 @@ class RestVendorProvider implements VendorProvider {
     }
   }
 
-  private createApi(token: string) {
+  private createApi(token: string = "") {
     const baseUrl = this.baseUrl()
     return getGitServiceApi(this.vendor, token, baseUrl)
   }
 
   getRepoMetadata(owner: string, repo: string, token?: string): Promise<RepoMetadata> {
-    if (!token) {
-      throw createAuthRequiredError(
-        this.buildContext({remote: this.originalUrl, operation: "getRepoMetadata"}),
-      )
-    }
     return this.createApi(token).getRepo(owner, repo)
   }
 
@@ -142,12 +136,6 @@ class RestVendorProvider implements VendorProvider {
 
   getTokenKey(): string {
     return `${this.vendor}:${this.hostname}`
-  }
-
-  private buildContext(context: GitErrorContext): GitErrorContext {
-    return {
-      ...context,
-    }
   }
 
   getAuthHeaders(token: string): Record<string, string> {
