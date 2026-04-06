@@ -72,3 +72,14 @@ export function isLikelyGraspRemoteUrl(rawUrl: string): boolean {
   const host = url.hostname.toLowerCase()
   return host === "relay.ngit.dev" || host === "gitnostr.com" || host.includes("grasp")
 }
+
+export function resolveCorsProxyForUrl(
+  rawUrl: string,
+  fallback?: string | null,
+): string | null | undefined {
+  if (isLikelyGraspRemoteUrl(rawUrl)) {
+    return null
+  }
+
+  return fallback
+}

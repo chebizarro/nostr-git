@@ -15,8 +15,9 @@ import {resolveBranchName as resolveRobustBranch} from "./branches.js"
 import {resolveDefaultCorsProxy} from "./git-config.js"
 import {withTimeout} from "./timeout.js"
 import {parseRepoId} from "../../utils/repo-id.js"
+import {listAdvertisedServerRefs} from "../../utils/advertised-refs.js"
 import {toNpub} from "../../utils/nostr-pubkey.js"
-import {isGraspRepoHttpUrl} from "../../utils/grasp-url.js"
+import {isGraspRepoHttpUrl, resolveCorsProxyForUrl} from "../../utils/grasp-url.js"
 import {filterValidCloneUrls, reorderUrlsByPreference} from "../../utils/clone-url-fallback.js"
 
 // Helper to generate canonical repo key from repoId
@@ -1416,8 +1417,6 @@ export async function forkAndCloneRepo(
             }
           }
 
-          const corsProxy = resolveDefaultCorsProxy()
-
           const parseHeadBranch = (items: any[]): string | null => {
             const headEntry = items.find((entry: any) => String(entry?.ref || "") === "HEAD")
             const directCandidates = [headEntry?.target, headEntry?.symref, headEntry?.value]
@@ -1442,14 +1441,15 @@ export async function forkAndCloneRepo(
 
           for (const url of dedupedUrls) {
             try {
+              const corsProxy = resolveCorsProxyForUrl(url, resolveDefaultCorsProxy())
               const refs = await runTimed(
                 "list advertised refs for GRASP fork",
                 FORK_TIMEOUTS.fetchHistoryMs,
                 () =>
-                  git.listServerRefs({
+                  listAdvertisedServerRefs(git, {
                     url,
                     symrefs: true,
-                    ...(corsProxy !== null ? {corsProxy} : {}),
+                    corsProxy,
                   }),
                 {url},
               )

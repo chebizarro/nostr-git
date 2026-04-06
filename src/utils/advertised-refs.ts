@@ -1,3 +1,5 @@
+import {isLikelyGraspRemoteUrl, resolveCorsProxyForUrl} from "./grasp-url.js"
+
 export type AdvertisedServerRef = {
   ref?: string
   oid?: string
@@ -92,20 +94,136 @@ export const buildAdvertisedBranchCandidates = ({
     ),
   )
 
+const parsePktLines = (text: string): string[] => {
+  const packets: string[] = []
+  let offset = 0
+
+  while (offset + 4 <= text.length) {
+    const lengthHex = text.slice(offset, offset + 4)
+    const length = Number.parseInt(lengthHex, 16)
+    if (Number.isNaN(length)) break
+    offset += 4
+
+    if (length === 0) continue
+    if (length < 4) break
+
+    const payloadLength = length - 4
+    packets.push(text.slice(offset, offset + payloadLength))
+    offset += payloadLength
+  }
+
+  return packets
+}
+
+const parseGitUploadPackAdvertisement = (text: string): AdvertisedServerRef[] => {
+  const refs: AdvertisedServerRef[] = []
+  const symrefs = new Map<string, string>()
+
+  for (const packet of parsePktLines(text)) {
+    if (!packet || packet.startsWith("# service=")) continue
+
+    const [record, capabilitySegment = ""] = packet.split("\0", 2)
+    const trimmedRecord = record.replace(/\n$/, "")
+    const separatorIndex = trimmedRecord.indexOf(" ")
+    if (separatorIndex <= 0) continue
+
+    const oid = trimmedRecord.slice(0, separatorIndex)
+    const ref = trimmedRecord.slice(separatorIndex + 1).trim()
+    if (!ref) continue
+
+    refs.push({ref, oid})
+
+    for (const capability of capabilitySegment.trim().split(/\s+/).filter(Boolean)) {
+      if (!capability.startsWith("symref=")) continue
+      const mapping = capability.slice("symref=".length)
+      const separator = mapping.indexOf(":")
+      if (separator <= 0) continue
+      symrefs.set(mapping.slice(0, separator), mapping.slice(separator + 1))
+    }
+  }
+
+  for (const [from, to] of symrefs.entries()) {
+    const target = refs.find(ref => ref.ref === to)
+    const existing = refs.find(ref => ref.ref === from)
+    const next = {
+      ref: from,
+      oid: existing?.oid || target?.oid,
+      symref: to,
+      target: to,
+      value: `ref: ${to}`,
+    }
+
+    if (existing) {
+      Object.assign(existing, next)
+    } else {
+      refs.unshift(next)
+    }
+  }
+
+  return refs
+}
+
+const buildInfoRefsUrl = (url: string): string =>
+  `${String(url || "").replace(/\/+$/, "")}/info/refs?service=git-upload-pack`
+
+const filterAdvertisedRefs = (
+  refs: AdvertisedServerRef[],
+  opts: {prefix?: string; symrefs?: boolean},
+): AdvertisedServerRef[] =>
+  refs.filter(ref => {
+    const refName = String(ref?.ref || "")
+    if (!refName) return false
+    if (refName === "HEAD") return Boolean(opts.symrefs)
+    if (!opts.prefix) return true
+    return refName.startsWith(opts.prefix)
+  })
+
+export async function listAdvertisedServerRefs(
+  git: any,
+  opts: {url: string; prefix?: string; symrefs?: boolean; onAuth?: any; corsProxy?: string | null},
+): Promise<AdvertisedServerRef[]> {
+  if (isLikelyGraspRemoteUrl(opts.url)) {
+    const response = await fetch(buildInfoRefsUrl(opts.url), {
+      method: "GET",
+      mode: "cors",
+      credentials: "omit",
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch advertised refs: ${response.status} ${response.statusText}`)
+    }
+
+    const body = await response.text()
+    return filterAdvertisedRefs(parseGitUploadPackAdvertisement(body), opts)
+  }
+
+  if (typeof git?.listServerRefs !== "function") {
+    return []
+  }
+
+  const corsProxy = resolveCorsProxyForUrl(opts.url, opts.corsProxy)
+
+  const refs = await git.listServerRefs({
+    url: opts.url,
+    prefix: opts.prefix,
+    symrefs: opts.symrefs,
+    ...(opts.onAuth ? {onAuth: opts.onAuth} : {}),
+    ...(corsProxy !== undefined ? {corsProxy} : {}),
+  })
+
+  return Array.isArray(refs) ? refs : []
+}
+
 export async function discoverAdvertisedRefs(
   git: any,
   opts: {url: string; onAuth?: any; corsProxy?: string | null},
 ): Promise<AdvertisedRefsSummary> {
-  if (typeof git?.listServerRefs !== "function") {
-    return summarizeAdvertisedRefs([])
-  }
-
-  const refs = await git.listServerRefs({
+  const refs = await listAdvertisedServerRefs(git, {
     url: opts.url,
     symrefs: true,
-    ...(opts.onAuth ? {onAuth: opts.onAuth} : {}),
-    ...(opts.corsProxy !== undefined ? {corsProxy: opts.corsProxy} : {}),
+    onAuth: opts.onAuth,
+    corsProxy: opts.corsProxy,
   })
 
-  return summarizeAdvertisedRefs(Array.isArray(refs) ? refs : [])
+  return summarizeAdvertisedRefs(refs)
 }

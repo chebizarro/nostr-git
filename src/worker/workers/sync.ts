@@ -1,6 +1,7 @@
 import type {GitProvider} from "../../git/provider.js"
 import type {RepoCache, RepoCacheManager} from "./cache.js"
 import {resolveBranchToOid} from "../../git/git.js"
+import {listAdvertisedServerRefs} from "../../utils/advertised-refs.js"
 import {
   withUrlFallback,
   filterValidCloneUrls,
@@ -56,7 +57,7 @@ export async function needsUpdateUtil(
     const result = await withUrlFallback(
       orderedUrls,
       async (cloneUrl: string) => {
-        const refs = await git.listServerRefs({
+        const refs = await listAdvertisedServerRefs(git, {
           url: cloneUrl,
           prefix: "refs/heads/",
           symrefs: true,
@@ -89,7 +90,7 @@ export async function needsUpdateUtil(
   const result = await withUrlFallback(
     orderedUrls,
     async (cloneUrl: string) => {
-      const refs = await git.listServerRefs({
+      const refs = await listAdvertisedServerRefs(git, {
         url: cloneUrl,
         prefix: "refs/heads/",
         symrefs: true,

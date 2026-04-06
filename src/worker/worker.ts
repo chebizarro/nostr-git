@@ -146,6 +146,7 @@ import {
 } from "../api/git-provider.js"
 
 import {parseRepoId} from "../utils/repo-id.js"
+import {listAdvertisedServerRefs} from "../utils/advertised-refs.js"
 import {
   filterValidCloneUrls,
   reorderUrlsByPreference,
@@ -200,6 +201,11 @@ import {analyzePRMergeUtil, mergePRAndPushUtil} from "./workers/pr-merge.js"
 
 import type {SafePushOptions} from "./workers/push.js"
 import {safePushToRemoteUtil} from "./workers/push.js"
+import {
+  discoverRemoteBackfillUtil,
+  executeRemoteBackfillUtil,
+  prepareRemoteBackfillUtil,
+} from "./workers/remote-backfill.js"
 
 import {
   getGitignoreTemplate,
@@ -727,11 +733,12 @@ const api = {
 
   async listServerRefs(opts: {url: string; prefix?: string; symrefs?: boolean}) {
     try {
-      const refs = await git.listServerRefs({
+      const refs = await listAdvertisedServerRefs(git, {
         url: opts.url,
         prefix: opts.prefix,
         symrefs: opts.symrefs ?? true,
         onAuth: getAuthCallback(opts.url),
+        corsProxy: resolveDefaultCorsProxy(),
       })
       return toPlain(refs)
     } catch (error: any) {
@@ -743,6 +750,61 @@ const api = {
       }
       throw error
     }
+  },
+
+  async discoverRemoteBackfill(opts: {repoId: string; cloneUrls: string[]}) {
+    return toPlain(
+      await discoverRemoteBackfillUtil(git, opts, {
+        rootDir,
+        parseRepoId,
+      }),
+    )
+  },
+
+  async prepareRemoteBackfill(opts: {
+    repoId: string
+    targets: Array<{
+      remoteUrl: string
+      refs: Array<{
+        ref: string
+        name: string
+        type: "heads" | "tags"
+        effectiveOid: string
+        currentOid?: string
+        sourceUrls: string[]
+      }>
+    }>
+  }) {
+    return toPlain(
+      await prepareRemoteBackfillUtil(git, opts, {
+        rootDir,
+        parseRepoId,
+      }),
+    )
+  },
+
+  async executeRemoteBackfill(opts: {
+    repoId: string
+    targets: Array<{
+      remoteUrl: string
+      refs: Array<{
+        ref: string
+        name: string
+        type: "heads" | "tags"
+        effectiveOid: string
+        currentOid?: string
+        sourceUrls: string[]
+      }>
+    }>
+    userPubkey?: string
+  }) {
+    return toPlain(
+      await executeRemoteBackfillUtil(git, opts, {
+        rootDir,
+        parseRepoId,
+        pushToRemote: async params => await api.pushToRemote(params),
+      }),
+    )
   },
 
   /**
@@ -760,11 +822,12 @@ const api = {
     const failures: string[] = []
     for (const url of ordered) {
       try {
-        const refs = await git.listServerRefs({
+        const refs = await listAdvertisedServerRefs(git, {
           url,
           prefix: "refs/heads/",
           symrefs: false,
           onAuth: getAuthCallback(url),
+          corsProxy: resolveDefaultCorsProxy(),
         })
         const branches = (refs || [])
           .filter((r: any) => r?.ref?.startsWith("refs/heads/"))
