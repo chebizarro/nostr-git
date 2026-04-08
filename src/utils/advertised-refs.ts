@@ -1,4 +1,4 @@
-import {isLikelyGraspRemoteUrl, resolveCorsProxyForUrl} from "./grasp-url.js"
+import {isGraspRepoHttpUrl, resolveCorsProxyForUrl} from "./grasp-url.js"
 
 export type AdvertisedServerRef = {
   ref?: string
@@ -182,7 +182,7 @@ export async function listAdvertisedServerRefs(
   git: any,
   opts: {url: string; prefix?: string; symrefs?: boolean; onAuth?: any; corsProxy?: string | null},
 ): Promise<AdvertisedServerRef[]> {
-  if (isLikelyGraspRemoteUrl(opts.url)) {
+  if (isGraspRepoHttpUrl(opts.url)) {
     const response = await fetch(buildInfoRefsUrl(opts.url), {
       method: "GET",
       mode: "cors",

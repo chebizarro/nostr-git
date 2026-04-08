@@ -1004,10 +1004,7 @@ export async function executeRemoteBackfillUtil(
         continue
       }
 
-      const isGraspRemote =
-        target.remoteUrl.startsWith("ws://") ||
-        target.remoteUrl.startsWith("wss://") ||
-        isGraspRepoHttpUrl(target.remoteUrl)
+      const isGraspRemote = isGraspRepoHttpUrl(target.remoteUrl)
 
       const pushResult = await deps.pushToRemote({
         repoId: stage.repoId,

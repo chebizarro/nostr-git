@@ -125,7 +125,7 @@ describe("git core helpers (strict behavior)", () => {
       deleteRef: vi.fn(async () => undefined),
     })
 
-    const repoEvent: any = {repoId: "owner/repo", clone: ["https://relay.ngit.dev/owner/repo.git"]}
+    const repoEvent: any = {repoId: "owner/repo", clone: ["https://example.com/owner/repo.git"]}
 
     await ensureRepoFromEvent({repoEvent})
 

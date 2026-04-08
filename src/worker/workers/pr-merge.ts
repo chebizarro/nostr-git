@@ -4,7 +4,7 @@ import type {PRMergeAnalysisResult} from "../../git/merge-analysis.js"
 import {analyzePRMergeability} from "../../git/merge-analysis.js"
 import {fetchPrSourceTip} from "../../git/pr-source-fetch.js"
 import {withUrlFallback, filterValidCloneUrls} from "../../utils/clone-url-fallback.js"
-import {isLikelyGraspRemoteUrl} from "../../utils/grasp-url.js"
+import {isGraspRepoHttpUrl} from "../../utils/grasp-url.js"
 
 export interface AnalyzePRMergeOptions {
   repoId: string
@@ -81,7 +81,7 @@ export type SafePushToRemoteFn = (opts: {
 /** Infer provider from remote URL (github.com, gitlab.com, relay.ngit.dev, etc.) */
 export function inferProviderFromUrl(url: string): string | undefined {
   try {
-    if (isLikelyGraspRemoteUrl(url)) return "grasp"
+    if (isGraspRepoHttpUrl(url)) return "grasp"
     const host = new URL(url).hostname.toLowerCase()
     if (host === "github.com" || host.endsWith(".github.com")) return "github"
     if (host === "gitlab.com" || host.endsWith(".gitlab.com") || host.includes("gitlab."))

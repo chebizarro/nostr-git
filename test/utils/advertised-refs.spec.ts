@@ -90,4 +90,19 @@ describe("advertised-refs utilities", () => {
     })
     expect(refs).toEqual([{ref: "refs/heads/main", oid: "abc"}])
   })
+
+  it("does not use the GRASP fast path for host-only lookalikes", async () => {
+    const git = {
+      listServerRefs: vi.fn(async () => [{ref: "refs/heads/main", oid: "abc"}]),
+    }
+
+    const refs = await listAdvertisedServerRefs(git, {
+      url: "https://gitnostr.com/owner/repo.git",
+      prefix: "refs/heads/",
+      symrefs: true,
+    })
+
+    expect(git.listServerRefs).toHaveBeenCalledTimes(1)
+    expect(refs).toEqual([{ref: "refs/heads/main", oid: "abc"}])
+  })
 })

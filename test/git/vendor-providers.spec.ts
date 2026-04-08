@@ -8,11 +8,16 @@ import {
 } from "../../src/git/vendor-providers.js"
 
 describe("vendor-providers utilities", () => {
-  it("detectVendorFromUrl covers github, gitlab subdomain, gitea subdomain, bitbucket subdomain, grasp ws://, and generic fallback", () => {
+  it("detectVendorFromUrl covers hosted vendors, strict GRASP URLs, relay URLs, and generic fallback", () => {
     expect(detectVendorFromUrl("https://github.com/a/b")).toBe("github")
     expect(detectVendorFromUrl("https://gitlab.example.com/a/b")).toBe("gitlab")
     expect(detectVendorFromUrl("https://gitea.example.org/a/b")).toBe("gitea")
     expect(detectVendorFromUrl("https://bitbucket.example.net/a/b")).toBe("bitbucket")
+    expect(
+      detectVendorFromUrl(
+        "https://pyramid.fiatjaf.com/npub1elta7cneng3w8p9y4dw633qzdjr4kyvaparuyuttyrx6e8xp7xnq32cume/societybuilder.git",
+      ),
+    ).toBe("grasp-rest")
     expect(detectVendorFromUrl("wss://relay.example")).toBe("grasp-rest")
     expect(detectVendorFromUrl("https://unknown.example/a/b")).toBe("generic")
   })

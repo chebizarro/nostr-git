@@ -111,7 +111,7 @@ describe("repos utils (additional coverage)", () => {
     const res = await initializeRepoUtil(
       git,
       makeCacheMock(),
-      {repoId: "o/r", cloneUrls: ["https://relay.ngit.dev/owner/repo.git"]},
+      {repoId: "o/r", cloneUrls: ["https://example.com/owner/repo.git"]},
       {rootDir, parseRepoId, repoDataLevels, clonedRepos},
       () => {},
     )
@@ -838,7 +838,7 @@ describe("repos utils (additional coverage)", () => {
     const res = await initializeRepoUtil(
       git,
       makeCacheMock(),
-      {repoId: "o/r", cloneUrls: ["https://relay.ngit.dev/o/r.git"], branch: requestedBranch},
+      {repoId: "o/r", cloneUrls: ["https://example.com/o/r.git"], branch: requestedBranch},
       {rootDir, parseRepoId, repoDataLevels, clonedRepos},
       () => {},
     )

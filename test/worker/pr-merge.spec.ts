@@ -9,17 +9,12 @@ import {
 import type {GitProvider} from "../../src/git/provider.js"
 
 describe("pr-merge", () => {
+  const graspRepoUrl =
+    "https://pyramid.fiatjaf.com/npub1elta7cneng3w8p9y4dw633qzdjr4kyvaparuyuttyrx6e8xp7xnq32cume/societybuilder.git"
+
   describe("inferProviderFromUrl", () => {
-    it("returns grasp for relay.ngit.dev", () => {
-      expect(inferProviderFromUrl("https://relay.ngit.dev/npub123/repo")).toBe("grasp")
-    })
-
-    it("returns grasp for gitnostr.com", () => {
-      expect(inferProviderFromUrl("https://gitnostr.com/npub123/repo")).toBe("grasp")
-    })
-
-    it("returns grasp for hosts containing grasp", () => {
-      expect(inferProviderFromUrl("https://grasp.example.com/repo")).toBe("grasp")
+    it("returns grasp for strict GRASP clone URLs", () => {
+      expect(inferProviderFromUrl(graspRepoUrl)).toBe("grasp")
     })
 
     it("returns github for github.com", () => {
@@ -40,6 +35,7 @@ describe("pr-merge", () => {
 
     it("returns undefined for unknown hosts", () => {
       expect(inferProviderFromUrl("https://bitbucket.org/user/repo")).toBeUndefined()
+      expect(inferProviderFromUrl("https://relay.ngit.dev/owner/repo.git")).toBeUndefined()
       expect(inferProviderFromUrl("https://sourcehut.org/user/repo")).toBeUndefined()
     })
 

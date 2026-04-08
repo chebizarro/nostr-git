@@ -1,7 +1,16 @@
 // Multi-vendor Git provider system
 // Supports GitHub, GitLab, Gitea, Bitbucket and generic Git providers
 
-export type GitVendor = "github" | "gitlab" | "gitea" | "bitbucket" | "generic" | "grasp" | "grasp-rest"
+import {isGraspRelayUrl, isGraspRepoHttpUrl} from "../utils/grasp-url.js"
+
+export type GitVendor =
+  | "github"
+  | "gitlab"
+  | "gitea"
+  | "bitbucket"
+  | "generic"
+  | "grasp"
+  | "grasp-rest"
 
 export interface RepoMetadata {
   id: string
@@ -79,7 +88,9 @@ export interface UpdateRepoOptions {
 export function detectVendorFromUrl(url: string): GitVendor {
   const normalizedUrl = url.toLowerCase()
 
-  if (normalizedUrl.includes("github.com")) {
+  if (isGraspRepoHttpUrl(url) || isGraspRelayUrl(url)) {
+    return "grasp-rest"
+  } else if (normalizedUrl.includes("github.com")) {
     return "github"
   } else if (normalizedUrl.includes("gitlab.com") || normalizedUrl.includes("gitlab.")) {
     return "gitlab"
@@ -87,10 +98,6 @@ export function detectVendorFromUrl(url: string): GitVendor {
     return "gitea"
   } else if (normalizedUrl.includes("bitbucket.org") || normalizedUrl.includes("bitbucket.")) {
     return "bitbucket"
-  } else if (normalizedUrl.startsWith("ws://") || normalizedUrl.startsWith("wss://")) {
-    // GRASP URLs start with ws:// or wss:// protocols
-    // Default to grasp-rest for REST API support
-    return "grasp-rest"
   }
 
   return "generic"

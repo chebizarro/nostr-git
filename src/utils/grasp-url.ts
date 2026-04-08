@@ -5,6 +5,14 @@ export interface ParsedGraspRepoHttpUrl {
   identifier: string
 }
 
+function parseUrl(rawUrl: string): URL | null {
+  try {
+    return new URL(rawUrl)
+  } catch {
+    return null
+  }
+}
+
 function isValidNpub(value: string): boolean {
   try {
     const decoded = nip19.decode(value)
@@ -17,12 +25,8 @@ function isValidNpub(value: string): boolean {
 export function parseGraspRepoHttpUrl(rawUrl: string): ParsedGraspRepoHttpUrl | null {
   if (!rawUrl) return null
 
-  let url: URL
-  try {
-    url = new URL(rawUrl)
-  } catch {
-    return null
-  }
+  const url = parseUrl(rawUrl)
+  if (!url) return null
 
   if (url.protocol !== "https:" && url.protocol !== "http:") {
     return null
@@ -54,30 +58,22 @@ export function isGraspRepoHttpUrl(rawUrl: string): boolean {
   return parseGraspRepoHttpUrl(rawUrl) !== null
 }
 
-export function isLikelyGraspRemoteUrl(rawUrl: string): boolean {
+export function isGraspRelayUrl(rawUrl: string): boolean {
   if (!rawUrl) return false
-  if (isGraspRepoHttpUrl(rawUrl)) return true
+  const url = parseUrl(rawUrl)
+  if (!url) return false
 
-  let url: URL
-  try {
-    url = new URL(rawUrl)
-  } catch {
-    return false
-  }
-
-  if (url.protocol === "ws:" || url.protocol === "wss:") {
-    return true
-  }
-
-  const host = url.hostname.toLowerCase()
-  return host === "relay.ngit.dev" || host === "gitnostr.com" || host.includes("grasp")
+  return (
+    (url.protocol === "ws:" || url.protocol === "wss:") &&
+    (url.pathname === "" || url.pathname === "/")
+  )
 }
 
 export function resolveCorsProxyForUrl(
   rawUrl: string,
   fallback?: string | null,
 ): string | null | undefined {
-  if (isLikelyGraspRemoteUrl(rawUrl)) {
+  if (isGraspRepoHttpUrl(rawUrl)) {
     return null
   }
 

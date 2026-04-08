@@ -23,6 +23,10 @@ vi.mock("../../src/worker/workers/repos.js", () => ({
 
 import {forkAndCloneRepo} from "../../src/worker/workers/repo-management.js"
 
+const GRASP_OWNER_NPUB = "npub16p8v7varqwjes5hak6q7mz6pygqm4pwc6gve4mrned3xs8tz42gq7kfhdw"
+const GRASP_FORK_REMOTE_URL = `https://relay.ngit.dev/${GRASP_OWNER_NPUB}/upstream-repo.git`
+const GRASP_ORIGIN_URL = `https://relay.ngit.dev/${GRASP_OWNER_NPUB}/r.git`
+
 describe("worker/repo-management GRASP fork output", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -264,7 +268,7 @@ describe("worker/repo-management GRASP fork output", () => {
       listTags: vi.fn(async () => []),
       log: vi.fn(async () => [{oid: "c1", commit: {parent: []}}]),
       readCommit: vi.fn(async () => ({commit: {}})),
-      listRemotes: vi.fn(async () => [{remote: "origin", url: "https://relay.ngit.dev/o/r.git"}]),
+      listRemotes: vi.fn(async () => [{remote: "origin", url: GRASP_ORIGIN_URL}]),
       fetch: fetchMock,
       resolveRef: vi.fn(async ({ref}: {ref: string}) => {
         if (ref === "refs/heads/master" || ref === "refs/remotes/origin/master") {
@@ -289,7 +293,7 @@ describe("worker/repo-management GRASP fork output", () => {
       dir: "forked-repo",
       provider: "grasp",
       baseUrl: "wss://relay.example",
-      sourceCloneUrls: ["https://relay.ngit.dev/upstream-owner/upstream-repo.git"],
+      sourceCloneUrls: [GRASP_FORK_REMOTE_URL],
       sourceRepoId: "upstream-owner/upstream-repo",
     })
 

@@ -14,6 +14,9 @@ const httpFetchMock = vi.fn(async () => ({
   text: async () => "",
 }))
 
+const GRASP_REMOTE_URL =
+  "https://relay.ngit.dev/npub16p8v7varqwjes5hak6q7mz6pygqm4pwc6gve4mrned3xs8tz42gq7kfhdw/repo.git"
+
 ;(globalThis as any).fetch = httpFetchMock
 
 // Capture the exposed API from the worker via comlink.expose
@@ -189,7 +192,7 @@ describe("worker.pushToRemote API", () => {
 
     const res = await exposed.pushToRemote({
       repoId: "owner/repo",
-      remoteUrl: "https://relay.ngit.dev/owner/repo.git",
+      remoteUrl: GRASP_REMOTE_URL,
       branch: "main",
       token: "deadbeef",
       provider: "grasp",
@@ -239,7 +242,7 @@ describe("worker.pushToRemote API", () => {
 
     const res = await exposed.pushToRemote({
       repoId: "owner/repo",
-      remoteUrl: "https://relay.ngit.dev/owner/repo.git",
+      remoteUrl: GRASP_REMOTE_URL,
       branch: "main",
       token: "deadbeef",
       provider: "grasp",
@@ -261,7 +264,7 @@ describe("worker.pushToRemote API", () => {
 
     const res = await exposed.pushToRemote({
       repoId: "owner/repo",
-      remoteUrl: "https://relay.ngit.dev/owner/repo.git",
+      remoteUrl: GRASP_REMOTE_URL,
       branch: "main",
       token: "deadbeef",
       provider: "grasp",
@@ -310,7 +313,7 @@ describe("worker.pushToRemote API", () => {
 
     const res = await exposed.pushToRemote({
       repoId: "owner/repo",
-      remoteUrl: "https://relay.ngit.dev/owner/repo.git",
+      remoteUrl: GRASP_REMOTE_URL,
       branch: "main",
       token: "deadbeef",
       provider: "grasp",
@@ -323,8 +326,8 @@ describe("worker.pushToRemote API", () => {
   })
 
   it("injects matching pre-signed auth header for GRASP HTTP requests", async () => {
-    const infoRefsUrl = "https://relay.ngit.dev/owner/repo.git/info/refs?service=git-receive-pack"
-    const receivePackUrl = "https://relay.ngit.dev/owner/repo.git/git-receive-pack"
+    const infoRefsUrl = `${GRASP_REMOTE_URL}/info/refs?service=git-receive-pack`
+    const receivePackUrl = `${GRASP_REMOTE_URL}/git-receive-pack`
 
     const notFoundResponse = {
       ok: false,
@@ -362,7 +365,7 @@ describe("worker.pushToRemote API", () => {
 
     const res = await exposed.pushToRemote({
       repoId: "owner/repo",
-      remoteUrl: "https://relay.ngit.dev/owner/repo.git",
+      remoteUrl: GRASP_REMOTE_URL,
       branch: "main",
       token: "deadbeef",
       provider: "grasp",

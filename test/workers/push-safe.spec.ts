@@ -10,6 +10,9 @@ import {createRemoteRegistry} from "../utils/remote-registry.js"
 import {createTestGitProvider} from "../utils/provider-harness.js"
 import {initRepo, commitFile} from "../utils/git-harness.js"
 
+const GRASP_REMOTE_URL =
+  "https://relay.ngit.dev/npub16p8v7varqwjes5hak6q7mz6pygqm4pwc6gve4mrned3xs8tz42gq7kfhdw/repo.git"
+
 class MemCacheManager implements Partial<RepoCacheManager> {
   private map = new Map<string, any>()
 
@@ -306,7 +309,7 @@ describe("worker/push: safePushToRemoteUtil", () => {
       cacheManager as any,
       {
         repoId,
-        remoteUrl: "https://relay.ngit.dev/owner/repo.git",
+        remoteUrl: GRASP_REMOTE_URL,
         branch: "main",
         provider: "grasp" as any,
         preflight: {requireUpToDate: true, blockIfUncommitted: false},
