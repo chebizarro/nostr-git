@@ -6,6 +6,7 @@ import type {
 } from "./vendor-providers.js"
 import {detectVendorFromUrl, extractHostname} from "./vendor-providers.js"
 import type {GitForkOptions, RepoMetadata} from "../api/api.js"
+import {normalizeHttpOrigin} from "../api/providers/grasp-capabilities.js"
 import {getGitServiceApi} from "./provider-factory.js"
 import {toNpub} from "../utils/nostr-pubkey.js"
 
@@ -40,7 +41,7 @@ class RestVendorProvider implements VendorProvider {
       case "grasp":
         return this.originalUrl.startsWith("ws") ? this.originalUrl : `wss://${this.hostname}`
       case "grasp-rest":
-        return this.originalUrl.startsWith("ws") ? this.originalUrl : `wss://${this.hostname}`
+        return normalizeHttpOrigin(this.originalUrl)
       default:
         return undefined
     }
@@ -92,7 +93,7 @@ class RestVendorProvider implements VendorProvider {
 
   getCloneUrl(owner: string, repo: string): string {
     if (this.vendor === "grasp" || this.vendor === "grasp-rest") {
-      const base = this.originalUrl.replace(/\/$/, "")
+      const base = normalizeHttpOrigin(this.originalUrl).replace(/\/$/, "")
       const ownerSegment = (() => {
         try {
           return toNpub(owner)

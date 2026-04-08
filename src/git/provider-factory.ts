@@ -15,6 +15,7 @@ import {GitLabApi} from "../api/providers/gitlab.js"
 import {GiteaApi} from "../api/providers/gitea.js"
 import {BitbucketApi} from "../api/providers/bitbucket.js"
 import {GraspApiProvider} from "../api/providers/grasp.js"
+import {normalizeHttpOrigin} from "../api/providers/grasp-capabilities.js"
 import {GraspRestApiProvider} from "../api/providers/grasp-rest.js"
 import {createInvalidInputError, type GitErrorContext} from "../errors/index.js"
 import {isGraspRelayUrl, isGraspRepoHttpUrl} from "../utils/grasp-url.js"
@@ -76,7 +77,7 @@ export function getGitServiceApi(
         )
       }
       // GRASP REST API provider uses the git-natural-api approach for querying repos
-      return new GraspRestApiProvider(baseUrl, token)
+      return new GraspRestApiProvider(normalizeHttpOrigin(baseUrl), token)
 
     case "generic":
       throw createInvalidInputError(
