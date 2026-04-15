@@ -5,6 +5,7 @@ export default [
   {
     ignores: [
       "**/dist/**",
+      "dist/**",
       "**/out/**",
       "**/.svelte-kit/**",
       "**/tools/**",

@@ -31,14 +31,18 @@ describe('worker/branches resolveBranchName', () => {
 
   it('falls back to main when requested branch does not exist', async () => {
     // When requested branch doesn't exist but main does, use main (non-strict mode)
-    const git = makeGit({ resolveRefError: new Set(['feat']) });
+    const git = makeGit({ resolveRefError: new Set(['feat', 'refs/heads/feat', 'origin/feat', 'refs/remotes/origin/feat']) });
     const res = await resolveBranchName(git, '/repo', 'feat');
     expect(res).toBe('main');
   });
 
   it('falls back to known names when none requested', async () => {
     const git = makeGit({
-      resolveRefError: new Set(['main', 'master', 'develop']),
+      resolveRefError: new Set([
+        'main', 'refs/heads/main', 'origin/main', 'refs/remotes/origin/main',
+        'master', 'refs/heads/master', 'origin/master', 'refs/remotes/origin/master',
+        'develop', 'refs/heads/develop', 'origin/develop', 'refs/remotes/origin/develop'
+      ]),
       refs: { dev: 'abc' },
     });
     const res = await resolveBranchName(git, '/repo');
@@ -47,7 +51,12 @@ describe('worker/branches resolveBranchName', () => {
 
   it('uses first available from listBranches when specific fallbacks fail', async () => {
     const git = makeGit({
-      resolveRefError: new Set(['main', 'master', 'develop', 'dev']),
+      resolveRefError: new Set([
+        'main', 'refs/heads/main', 'origin/main', 'refs/remotes/origin/main',
+        'master', 'refs/heads/master', 'origin/master', 'refs/remotes/origin/master',
+        'develop', 'refs/heads/develop', 'origin/develop', 'refs/remotes/origin/develop',
+        'dev', 'refs/heads/dev', 'origin/dev', 'refs/remotes/origin/dev'
+      ]),
       branchList: ['trunk', 'release'],
     });
     const res = await resolveBranchName(git, '/repo');

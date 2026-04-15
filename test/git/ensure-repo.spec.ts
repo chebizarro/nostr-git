@@ -180,12 +180,15 @@ describe.sequential(
           await baseGit.clone(args)
           // Simulate ngit relay behavior: delete local branch refs but keep remote tracking refs
           const dir = args.dir
-          const pfs = (localFs as any).promises
           try {
-            // Remove the local branch ref to simulate ngit relay behavior
-            await pfs.unlink(`${dir}/.git/refs/heads/master`)
-          } catch {
-            // Ignore if file doesn't exist
+            // Get the OID before deleting the local branch
+            const masterOid = await baseGit.resolveRef({dir, ref: 'refs/heads/master'})
+            // Create remote tracking ref using git API (simulate what a real ngit clone might leave)
+            await baseGit.writeRef({dir, ref: 'refs/remotes/origin/master', value: masterOid, force: true})
+            // Delete the local branch ref to simulate ngit relay behavior
+            await baseGit.deleteRef({dir, ref: 'refs/heads/master'})
+          } catch (err) {
+            console.error('Error in mock clone:', err)
           }
         },
         // Forward all other methods to baseGit

@@ -24,7 +24,14 @@ function makeCache() {
 function makeGit(overrides: any = {}) {
   return {
     async listBranches() { return overrides.branches ?? ['main']; },
-    async resolveRef({ ref }: any) { return overrides.refs?.[ref] ?? 'deadbeef'.padEnd(40, '0'); },
+    async resolveRef({ ref }: any) { 
+      if (overrides.refs !== undefined) {
+        const oid = overrides.refs[ref];
+        if (oid === undefined) throw new Error(`Could not find ${ref}`);
+        return oid;
+      }
+      return 'deadbeef'.padEnd(40, '0'); 
+    },
     async listRemotes() { return overrides.remotes ?? [{ remote: 'origin', url: 'https://example.com/x/y.git' }]; },
     async fetch() { if (overrides.fetchErr) throw new Error(overrides.fetchErr); },
     async clone() { if (overrides.cloneErr) throw new Error(overrides.cloneErr); },
@@ -44,7 +51,10 @@ describe('worker/repos quick tests', () => {
   });
 
   it('ensureFullCloneUtil returns error when fetch fails', async () => {
-    const git = makeGit({ fetchErr: 'network fail' });
+    const git = makeGit({ 
+      fetchErr: 'network fail',
+      refs: {} // No refs available, so resolveExistingBranchCommit will return null
+    });
     const repoDataLevels = new Map<string, any>([['owner:name', 'refs']]);
     const res = await ensureFullCloneUtil(
       git,

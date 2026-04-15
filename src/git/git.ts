@@ -157,6 +157,7 @@ export async function resolveBranchToOid(
     .filter(Boolean) as string[]
 
   for (const branchName of branchesToTry) {
+    let branchResolved = false
     for (const refCandidate of buildBranchRefCandidates(branchName)) {
       try {
         const oid = await git.resolveRef({dir, ref: refCandidate})
@@ -165,17 +166,16 @@ export async function resolveBranchToOid(
         )
         return oid
       } catch (branchError: any) {
-        // Call the callback if provided for better error handling
-        if (options?.onBranchNotFound) {
-          options.onBranchNotFound(refCandidate, branchError)
-        } else {
-          console.log(
-            `Failed to resolve branch '${branchName}' via '${refCandidate}':`,
-            branchError.message || String(branchError),
-          )
-        }
+        console.log(
+          `Failed to resolve branch '${branchName}' via '${refCandidate}':`,
+          branchError.message || String(branchError),
+        )
         lastError = branchError
       }
+    }
+    // Call the callback once per branch name if none of the ref candidates worked
+    if (!branchResolved && options?.onBranchNotFound) {
+      options.onBranchNotFound(branchName, lastError)
     }
   }
 
@@ -452,6 +452,8 @@ export async function ensureRepoFromEvent(
                 `[ensureRepoFromEvent] Created branch '${remoteBranch}' from remote tracking ref, oid: ${oid.substring(0, 8)}`,
               )
               createdBranch = true
+            } else {
+              console.log("[ensureRepoFromEvent] listBranches returned empty array for remote origin")
             }
           } catch (remoteRefErr: any) {
             console.log(

@@ -34,7 +34,7 @@
     "watch": "node scripts/dev.mjs",
     "dev": "pnpm run build && node scripts/dev.mjs",
     "typecheck": "tsc -p tsconfig.base.json --noEmit",
-    "lint": "eslint .",
+    "lint": "eslint . --ignore-pattern 'dist/**'",
     "test": "vitest run",
     "prepare": "pnpm build",
     "prepublishOnly": "pnpm run typecheck && pnpm run lint && pnpm run test",
