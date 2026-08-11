@@ -16,6 +16,7 @@ import {
   createRepoAnnouncementEvent,
   createRepoStateEvent,
   createCommentEvent,
+  GIT_ISSUE,
   GIT_STATUS_OPEN,
   GIT_STATUS_CLOSED,
 } from "../events/index.js"
@@ -238,6 +239,11 @@ export interface ConvertedComment {
   platformCommentId: number
 }
 
+export interface CommentConversionContext {
+  rootKind?: number
+  repoAddr?: string
+}
+
 /**
  * Convert platform comments to Nostr CommentEvent array
  *
@@ -252,6 +258,7 @@ export interface ConvertedComment {
  * @param commentEventMap - Map to track platform comment ID -> Nostr event ID (updated after signing)
  * @param importTimestamp - Unix timestamp (seconds) when import occurred
  * @param startTimestamp - Starting timestamp for fake chronological ordering
+ * @param context - Optional root kind and repository context
  * @returns Array of converted comments with platform IDs for mapping after signing
  */
 export function convertCommentsToNostrEvents(
@@ -262,9 +269,11 @@ export function convertCommentsToNostrEvents(
   commentEventMap: CommentEventMap,
   importTimestamp: number,
   startTimestamp: number,
+  context: CommentConversionContext = {},
 ): ConvertedComment[] {
   const result: ConvertedComment[] = []
   let currentTimestamp = startTimestamp
+  const rootKind = context.rootKind ?? GIT_ISSUE
 
   const sortedComments = [...comments].sort((a, b) => {
     return Date.parse(a.createdAt) - Date.parse(b.createdAt)
@@ -303,12 +312,12 @@ export function convertCommentsToNostrEvents(
       root: {
         type: "E",
         value: rootEventId,
-        kind: "1621",
+        kind: String(rootKind),
       },
       parent: parentRef,
       authorPubkey: profile.pubkey,
       created_at: currentTimestamp,
-      extraTags: [],
+      extraTags: context.repoAddr ? [["q", context.repoAddr]] : [],
     })
 
     const tags: string[][] = [
