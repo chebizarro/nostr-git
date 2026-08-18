@@ -60,19 +60,31 @@ type FirstValueOf<T extends string> =
   TagFor<T> extends [any, infer V extends string, ...any[]] ? V : undefined
 
 export const REPO_COMMUNITY_TAG = "h"
+export const REPO_COMMUNITY_ADDRESS_TAG = "a"
+const REPO_COMMUNITY_DEFINITION_KIND = 32222
 
 export interface RepoCommunityBinding {
-  pubkey: string
+  address: string
+  communityId: string
   relay?: string
 }
 
-const normalizeRepoCommunityPubkey = (value?: string): string | undefined => {
+const normalizeRepoCommunityId = (value?: string): string | undefined => {
   if (!value) return undefined
   try {
     return toHexPubkey(value)
   } catch {
     return undefined
   }
+}
+
+const normalizeRepoCommunityAddress = (value?: string): string | undefined => {
+  if (!value) return undefined
+  const [kind, controllerPubkey, communityId, ...extra] = value.split(":")
+  if (extra.length > 0 || Number(kind) !== REPO_COMMUNITY_DEFINITION_KIND) return undefined
+  const controller = normalizeRepoCommunityId(controllerPubkey)
+  const id = normalizeRepoCommunityId(communityId)
+  return controller && id ? `${REPO_COMMUNITY_DEFINITION_KIND}:${controller}:${id}` : undefined
 }
 
 const isTagArray = (
@@ -83,13 +95,19 @@ export function parseRepoCommunityBinding(
   eventOrTags: {tags?: readonly string[][]} | readonly string[][],
 ): RepoCommunityBinding | undefined {
   const tags = isTagArray(eventOrTags) ? eventOrTags : (eventOrTags.tags ?? [])
+  const addresses = tags
+    .filter(tag => tag[0] === REPO_COMMUNITY_ADDRESS_TAG)
+    .map(tag => normalizeRepoCommunityAddress(tag[1]))
+    .filter((address): address is string => Boolean(address))
 
   for (const tag of tags) {
     if (tag[0] !== REPO_COMMUNITY_TAG) continue
-    const pubkey = normalizeRepoCommunityPubkey(tag[1])
-    if (!pubkey) continue
+    const communityId = normalizeRepoCommunityId(tag[1])
+    if (!communityId) continue
+    const address = addresses.find(candidate => candidate.endsWith(`:${communityId}`))
+    if (!address) continue
     const relay = tag[2] ? sanitizeRelays([tag[2]])[0] : undefined
-    return relay ? {pubkey, relay} : {pubkey}
+    return relay ? {address, communityId, relay} : {address, communityId}
   }
 
   return undefined
@@ -99,12 +117,18 @@ export function withRepoCommunityBinding<T extends {tags?: string[][]}>(
   event: T,
   community?: RepoCommunityBinding,
 ): T {
-  const tags = (event.tags || []).filter(tag => tag[0] !== REPO_COMMUNITY_TAG)
-  const pubkey = normalizeRepoCommunityPubkey(community?.pubkey)
+  const tags = (event.tags || []).filter(
+    tag =>
+      tag[0] !== REPO_COMMUNITY_TAG &&
+      !(tag[0] === REPO_COMMUNITY_ADDRESS_TAG && normalizeRepoCommunityAddress(tag[1])),
+  )
+  const address = normalizeRepoCommunityAddress(community?.address)
+  const communityId = normalizeRepoCommunityId(community?.communityId)
 
-  if (pubkey) {
+  if (address && communityId && address.endsWith(`:${communityId}`)) {
     const relay = community?.relay ? sanitizeRelays([community.relay])[0] : undefined
-    tags.push(relay ? [REPO_COMMUNITY_TAG, pubkey, relay] : [REPO_COMMUNITY_TAG, pubkey])
+    tags.push(relay ? [REPO_COMMUNITY_TAG, communityId, relay] : [REPO_COMMUNITY_TAG, communityId])
+    tags.push(relay ? [REPO_COMMUNITY_ADDRESS_TAG, address, relay] : [REPO_COMMUNITY_ADDRESS_TAG, address])
   }
 
   return {...event, tags}
@@ -381,10 +405,20 @@ export function createRepoAnnouncementEvent(opts: {
   ]
   if (opts.name) tags.push(["name", opts.name])
   if (opts.community) {
-    const pubkey = normalizeRepoCommunityPubkey(opts.community.pubkey)
-    if (pubkey) {
+    const address = normalizeRepoCommunityAddress(opts.community.address)
+    const communityId = normalizeRepoCommunityId(opts.community.communityId)
+    if (address && communityId && address.endsWith(`:${communityId}`)) {
       const relay = opts.community.relay ? sanitizeRelays([opts.community.relay])[0] : undefined
-      tags.push(relay ? [REPO_COMMUNITY_TAG, pubkey, relay] : [REPO_COMMUNITY_TAG, pubkey])
+      tags.push(
+        relay
+          ? [REPO_COMMUNITY_TAG, communityId, relay]
+          : [REPO_COMMUNITY_TAG, communityId],
+      )
+      tags.push(
+        relay
+          ? [REPO_COMMUNITY_ADDRESS_TAG, address, relay]
+          : [REPO_COMMUNITY_ADDRESS_TAG, address],
+      )
     }
   }
   if (opts.description) tags.push(["description", opts.description])

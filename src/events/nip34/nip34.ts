@@ -45,6 +45,8 @@ export type RepoAnnouncementTag =
   | ["d", string] // repo-id
   | ["h", string]
   | ["h", string, string]
+  | ["a", string]
+  | ["a", string, string]
   | ["name", string]
   | ["description", string]
   | ["web", ...string[]]

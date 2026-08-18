@@ -8,20 +8,27 @@ import {
 
 const author = "a".repeat(64)
 const community = "b".repeat(64)
+const communityAddress = `32222:${author}:${community}`
 
 describe("repo community binding", () => {
   it("writes and parses direct repo community metadata", () => {
     const event = createRepoAnnouncementEvent({
       repoId: "demo",
       name: "Demo",
-      community: {pubkey: community, relay: "wss://relay.example.com/"},
+      community: {
+        address: communityAddress,
+        communityId: community,
+        relay: "wss://relay.example.com/",
+      },
     }) as any
     event.id = "event-id"
     event.pubkey = author
 
     expect(event.tags).toContainEqual(["h", community, "wss://relay.example.com"])
+    expect(event.tags).toContainEqual(["a", communityAddress, "wss://relay.example.com"])
     expect(parseRepoAnnouncementEvent(event).community).toEqual({
-      pubkey: community,
+      address: communityAddress,
+      communityId: community,
       relay: "wss://relay.example.com",
     })
   })
@@ -30,6 +37,7 @@ describe("repo community binding", () => {
     expect(
       parseRepoCommunityBinding([
         ["h", "targeting-id-not-a-pubkey"],
+        ["a", communityAddress],
         ["name", "Demo"],
       ]),
     ).toBeUndefined()
@@ -44,17 +52,20 @@ describe("repo community binding", () => {
           ["h", community],
         ],
       },
-      {pubkey: author},
+      {address: `32222:${community}:${author}`, communityId: author},
     )
 
     expect(updated.tags).toEqual([
       ["d", "demo"],
       ["h", author],
+      ["a", `32222:${community}:${author}`],
     ])
   })
 
   it("removes community binding on demand", () => {
-    const updated = withRepoCommunityBinding({tags: [["d", "demo"], ["h", community]]})
+    const updated = withRepoCommunityBinding({
+      tags: [["d", "demo"], ["h", community], ["a", communityAddress]],
+    })
 
     expect(updated.tags).toEqual([["d", "demo"]])
   })
