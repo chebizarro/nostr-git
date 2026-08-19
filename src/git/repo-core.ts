@@ -37,8 +37,8 @@ export type RepoContext = {
   userGraspLists?: UserGraspListEvent[]
 }
 
-// EffectiveLabelsV2 used for compatibility, simplified placeholder
-export type EffectiveLabelsV2 = {
+// EffectiveLabels used for compatibility, simplified placeholder
+export type EffectiveLabels = {
   byNamespace: Record<string, Set<string>>
   flat: Set<string>
   legacyT: Set<string>
@@ -123,7 +123,8 @@ export class RepoCore {
     }
 
     for (const ref of refs) {
-      const fullRef: string = ref.ref ?? (ref.type && ref.name ? `refs/${ref.type}/${ref.name}` : "")
+      const fullRef: string =
+        ref.ref ?? (ref.type && ref.name ? `refs/${ref.type}/${ref.name}` : "")
       if (!fullRef) continue
       const match = /^refs\/(heads|tags)\/(.+)$/.exec(fullRef)
       if (!match) continue
@@ -175,8 +176,9 @@ export class RepoCore {
     const rootAuthor = root?.pubkey || ""
     const rootIsIssue = root?.kind === 1621
 
-    const events = allStatus
-      .filter(ev => (ev.tags || []).some((t: string[]) => t[0] === "e" && t[1] === rootId))
+    const events = allStatus.filter(ev =>
+      (ev.tags || []).some((t: string[]) => t[0] === "e" && t[1] === rootId),
+    )
     const {final, state: resolvedState} = resolveStatusState({
       statuses: events as any,
       rootAuthor,
@@ -226,7 +228,7 @@ export class RepoCore {
   static getEffectiveLabelsFor(
     ctx: RepoContext,
     target: {id?: string; address?: string; euc?: string},
-  ): EffectiveLabelsV2 {
+  ): EffectiveLabels {
     const legacyT = new Set<string>()
     const byNamespace: Record<string, Set<string>> = {}
     const flat = new Set<string>()
@@ -340,16 +342,16 @@ export class RepoCore {
     return {byNamespace, flat, legacyT}
   }
 
-  static getRepoLabels(ctx: RepoContext): EffectiveLabelsV2 {
+  static getRepoLabels(ctx: RepoContext): EffectiveLabels {
     const address = ctx.repoEvent ? `30617:${getOwnerPubkey(ctx)}:${ctx.repo?.name || ""}` : ""
     return RepoCore.getEffectiveLabelsFor(ctx, {address})
   }
 
-  static getIssueLabels(ctx: RepoContext, rootId: string): EffectiveLabelsV2 {
+  static getIssueLabels(ctx: RepoContext, rootId: string): EffectiveLabels {
     return RepoCore.getEffectiveLabelsFor(ctx, {id: rootId})
   }
 
-  static getPullRequestLabels(ctx: RepoContext, rootId: string): EffectiveLabelsV2 {
+  static getPullRequestLabels(ctx: RepoContext, rootId: string): EffectiveLabels {
     return RepoCore.getEffectiveLabelsFor(ctx, {id: rootId})
   }
 

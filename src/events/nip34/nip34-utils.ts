@@ -80,9 +80,9 @@ const normalizeRepoCommunityId = (value?: string): string | undefined => {
 
 const normalizeRepoCommunityAddress = (value?: string): string | undefined => {
   if (!value) return undefined
-  const [kind, controllerPubkey, communityId, ...extra] = value.split(":")
+  const [kind, ownerPubkey, communityId, ...extra] = value.split(":")
   if (extra.length > 0 || Number(kind) !== REPO_COMMUNITY_DEFINITION_KIND) return undefined
-  const controller = normalizeRepoCommunityId(controllerPubkey)
+  const controller = normalizeRepoCommunityId(ownerPubkey)
   const id = normalizeRepoCommunityId(communityId)
   return controller && id ? `${REPO_COMMUNITY_DEFINITION_KIND}:${controller}:${id}` : undefined
 }
