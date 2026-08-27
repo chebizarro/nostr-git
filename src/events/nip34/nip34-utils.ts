@@ -30,7 +30,7 @@ import {
   GIT_CONFLICT_METADATA,
 } from "./nip34.js"
 import type {CommentEvent} from "../nip22/nip22.js"
-import {sanitizeRelays} from "../../utils/sanitize-relays.js"
+import {normalizeRelayUrl, sanitizeRelays} from "../../utils/sanitize-relays.js"
 import {toHexPubkey} from "../../utils/nostr-pubkey.js"
 
 // Stronger typing for tag helpers: map known tag names to their tuple types
@@ -128,7 +128,9 @@ export function withRepoCommunityBinding<T extends {tags?: string[][]}>(
   if (address && communityId && address.endsWith(`:${communityId}`)) {
     const relay = community?.relay ? sanitizeRelays([community.relay])[0] : undefined
     tags.push(relay ? [REPO_COMMUNITY_TAG, communityId, relay] : [REPO_COMMUNITY_TAG, communityId])
-    tags.push(relay ? [REPO_COMMUNITY_ADDRESS_TAG, address, relay] : [REPO_COMMUNITY_ADDRESS_TAG, address])
+    tags.push(
+      relay ? [REPO_COMMUNITY_ADDRESS_TAG, address, relay] : [REPO_COMMUNITY_ADDRESS_TAG, address],
+    )
   }
 
   return {...event, tags}
@@ -310,7 +312,9 @@ export function isCommentEvent(event: {kind: number}): event is CommentEvent {
 }
 
 const getRepoAddressTags = (repoAddr?: string, repoAddrs: string[] = []) => {
-  const addresses = Array.from(new Set([repoAddr, ...repoAddrs].map(value => String(value || "").trim()).filter(Boolean)))
+  const addresses = Array.from(
+    new Set([repoAddr, ...repoAddrs].map(value => String(value || "").trim()).filter(Boolean)),
+  )
   return addresses.map(address => ["a", address] as ["a", string])
 }
 
@@ -410,9 +414,7 @@ export function createRepoAnnouncementEvent(opts: {
     if (address && communityId && address.endsWith(`:${communityId}`)) {
       const relay = opts.community.relay ? sanitizeRelays([opts.community.relay])[0] : undefined
       tags.push(
-        relay
-          ? [REPO_COMMUNITY_TAG, communityId, relay]
-          : [REPO_COMMUNITY_TAG, communityId],
+        relay ? [REPO_COMMUNITY_TAG, communityId, relay] : [REPO_COMMUNITY_TAG, communityId],
       )
       tags.push(
         relay
@@ -596,7 +598,10 @@ export function createPullRequestEvent(opts: {
   tags?: PullRequestTag[]
   created_at?: number
 }): PullRequestEvent {
-  const tags: PullRequestTag[] = getRepoAddressTags(opts.repoAddr, opts.repoAddrs) as PullRequestTag[]
+  const tags: PullRequestTag[] = getRepoAddressTags(
+    opts.repoAddr,
+    opts.repoAddrs,
+  ) as PullRequestTag[]
   if (opts.recipients) opts.recipients.forEach(p => tags.push(["p", p]))
   if (opts.subject) tags.push(["subject", opts.subject])
   if (opts.labels) opts.labels.forEach(l => tags.push(["t", l]))
@@ -629,7 +634,10 @@ export function createPullRequestUpdateEvent(opts: {
   tags?: PullRequestUpdateTag[]
   created_at?: number
 }): PullRequestUpdateEvent {
-  const tags: PullRequestUpdateTag[] = getRepoAddressTags(opts.repoAddr, opts.repoAddrs) as PullRequestUpdateTag[]
+  const tags: PullRequestUpdateTag[] = getRepoAddressTags(
+    opts.repoAddr,
+    opts.repoAddrs,
+  ) as PullRequestUpdateTag[]
   tags.push(["E", opts.pullRequestEventId])
   tags.push(["P", opts.pullRequestAuthorPubkey])
   if (opts.recipients) opts.recipients.forEach(p => tags.push(["p", p]))
@@ -662,15 +670,16 @@ export function createUserGraspListEvent(opts: {
 }
 
 export function normalizeUserGraspServerUrl(url: string): string {
-  return String(url || "")
-    .trim()
-    .replace(/\/+$/, "")
+  try {
+    return normalizeRelayUrl(String(url || "").trim())
+  } catch {
+    return ""
+  }
 }
 
 export function isValidUserGraspServerUrl(url: string): boolean {
   try {
-    const parsed = new URL(url)
-    return parsed.protocol === "ws:" || parsed.protocol === "wss:"
+    return normalizeRelayUrl(url) === url
   } catch {
     return false
   }

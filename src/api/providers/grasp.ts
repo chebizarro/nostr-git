@@ -27,7 +27,7 @@ import {nip19, SimplePool} from "nostr-tools"
 import {toNpub, toHexPubkey} from "../../utils/nostr-pubkey.js"
 import type {NostrFilter, EventIO, PublishResult} from "../../types/index.js"
 import {createRepoStateEvent, getTagValue, getTags} from "../../events/index.js"
-import {sanitizeRelays} from "../../utils/sanitize-relays.js"
+import {normalizeRelayUrl, sanitizeRelays} from "../../utils/sanitize-relays.js"
 import {
   fetchRelayInfo,
   graspCapabilities as detectCapabilities,
@@ -69,19 +69,11 @@ export class GraspApiProvider implements GitServiceApi {
   }
 
   constructor(relayUrl: string, pubkey: string, io?: EventIO) {
-    // Normalize to base ws(s) origin with no path
-    let normalized = relayUrl.replace(/\/$/, "")
-    try {
-      const u = new URL(relayUrl)
-      const origin = `${u.protocol}//${u.host}`
-      normalized = origin.replace(/^http:\/\//, "ws://").replace(/^https:\/\//, "wss://")
-    } catch {
-      normalized = relayUrl
-        .replace(/^http:\/\//, "ws://")
-        .replace(/^https:\/\//, "wss://")
-        .replace(/(ws[s]?:\/\/[^/]+).*/, "$1")
-    }
-    this.relayUrl = normalized
+    const transportUrl = relayUrl
+      .trim()
+      .replace(/^http:/i, "ws:")
+      .replace(/^https:/i, "wss:")
+    this.relayUrl = normalizeRelayUrl(transportUrl)
     this.pubkey = pubkey
     this.eventIO = io
   }
@@ -397,7 +389,8 @@ export class GraspApiProvider implements GitServiceApi {
       if (branches.length > 0) {
         const resolvedHead = await git.resolveRef({fs, dir, ref: "HEAD"})
         headBranch = this.resolveHeadBranch(resolvedHead, refs)
-        if (!headBranch) throw new Error("Could not resolve repository HEAD to an advertised branch")
+        if (!headBranch)
+          throw new Error("Could not resolve repository HEAD to an advertised branch")
       }
 
       event = createRepoStateEvent({

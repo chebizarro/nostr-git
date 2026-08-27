@@ -16,11 +16,15 @@ const isValidNostrRelayUrl = (url: string): boolean => {
 
 function isKnownGitPlatformHost(host: string): boolean {
   const normalized = String(host || "").toLowerCase()
-  return normalized === "github.com" || normalized === "gitlab.com" || normalized === "bitbucket.org"
+  return (
+    normalized === "github.com" || normalized === "gitlab.com" || normalized === "bitbucket.org"
+  )
 }
 
 function isLikelyGitRemotePath(pathname: string): boolean {
-  const segments = String(pathname || "").split("/").filter(Boolean)
+  const segments = String(pathname || "")
+    .split("/")
+    .filter(Boolean)
   const lastSegment = segments[segments.length - 1] || ""
   return segments.length >= 2 && /\.git$/i.test(lastSegment)
 }
@@ -47,86 +51,37 @@ function isOnionHost(host: string | null | undefined): boolean {
   return h.endsWith(".onion") || h.includes(".onion:")
 }
 
-function pickPrefix(input: string, host: string | null): "ws://" | "wss://" {
-  if (/^wss:\/\//i.test(input)) return "wss://"
-  if (/^ws:\/\//i.test(input)) return "ws://"
-  return isOnionHost(host) ? "ws://" : "wss://"
-}
-
-function collapsePathSlashes(pathname: string): string {
-  // Keep leading slash, collapse duplicates elsewhere
-  if (!pathname) return ""
-  // Ensure leading slash if pathname exists and doesn't start with it
-  const withLeading = pathname.startsWith("/") ? pathname : `/${pathname}`
-  return withLeading.replace(/\/{2,}/g, "/")
-}
-
 export function normalizeRelayUrl(input: string): string {
-  if (!input) return ""
+  if (typeof input !== "string" || !input) throw new TypeError("Invalid relay URL")
 
-  // Trim whitespace early
-  const raw = input.trim()
+  const schemeMatch = input.match(/^([a-z][a-z\d+.-]*):\/\//i)
+  const candidate = schemeMatch
+    ? input
+    : `${isOnionHost(input.toLowerCase()) ? "ws" : "wss"}://${input}`
+  const parsed = new URL(candidate)
 
-  // For parsing via URL(), ensure we have a scheme. Use http as a temporary base.
-  // We'll enforce ws/wss later.
-  let tempForParse = raw
-  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(tempForParse)) {
-    // If host looks like .onion, prefer ws as base to avoid defaulting to https
-    tempForParse = (isOnionHost(tempForParse) ? "ws://" : "https://") + tempForParse
+  if (
+    !/^wss?:$/.test(parsed.protocol) ||
+    !parsed.hostname ||
+    (!parsed.hostname.includes(".") && parsed.hostname !== "localhost") ||
+    parsed.username ||
+    parsed.password
+  ) {
+    throw new TypeError("Invalid relay URL")
   }
 
-  let u: URL
-  try {
-    u = new URL(tempForParse)
-  } catch {
-    // As a last resort, try with https:// prefix
-    try {
-      u = new URL("https://" + raw)
-    } catch {
-      return ""
-    }
-  }
+  // Keep this compatibility implementation aligned with Welshman: only the
+  // authority is canonicalized; path and query bytes remain endpoint identity.
+  const rawAfterScheme = candidate.slice(candidate.indexOf("://") + 3)
+  const suffixStart = rawAfterScheme.search(/[/?#]/)
+  const rawSuffix = suffixStart === -1 ? "" : rawAfterScheme.slice(suffixStart)
+  const suffixWithoutFragment = rawSuffix.split("#", 1)[0]
+  const pathAndQuery =
+    !suffixWithoutFragment || suffixWithoutFragment.startsWith("?")
+      ? `/${suffixWithoutFragment}`
+      : suffixWithoutFragment
 
-  // Decide final ws/wss prefix
-  const prefix = pickPrefix(raw, u.hostname)
-
-  // Lowercase host
-  const host = u.hostname.toLowerCase()
-
-  // Preserve userinfo (welshman keeps authentication)
-  const userinfo =
-    u.username || u.password
-      ? `${encodeURIComponent(u.username)}${u.password ? ":" + encodeURIComponent(u.password) : ""}@`
-      : ""
-
-  // Normalize port: remove default ports (80 for ws, 443 for wss)
-  const isSecure = prefix === "wss://"
-  const port =
-    u.port && !((!isSecure && u.port === "80") || (isSecure && u.port === "443"))
-      ? `:${u.port}`
-      : ""
-
-  // Normalize pathname: collapse duplicate slashes and remove trailing slashes
-  // - If no pathname or just "/" -> empty string (no trailing slash)
-  // - If pathname exists -> keep as-is (collapsed), remove trailing slash
-  let pathname = collapsePathSlashes(u.pathname || "")
-  if (pathname === "" || pathname === "/") {
-    pathname = ""
-  } else if (pathname.endsWith("/")) {
-    pathname = pathname.slice(0, -1)
-  }
-
-  // Strip hash, keep query
-  const query = u.search || ""
-
-  // Rebuild without original scheme
-  // Note: For IPv6 hosts, URL preserves brackets in hostname internally; just use host as parsed (no brackets).
-  // userinfo@host:port/path?query
-  const authority = `${userinfo}${host}${port}`
-  const out = `${prefix}${authority}${pathname}${query}`
-
-  // Final small cleanup: no double slashes after authority (already handled by collapsePathSlashes)
-  return out
+  return `${parsed.protocol}//${parsed.host}${pathAndQuery}`
 }
 
 export const sanitizeRelays = (urls: string[]): string[] => {

@@ -28,14 +28,14 @@ describe('NIP-51 utils', () => {
     const evt = createGraspServersEvent({ pubkey: 'pk', urls: ['https://a.com/', 'https://a.com', 'ws://b.com'] });
     expect(evt.kind).toBe(GRASP_SET_KIND);
     const urls = JSON.parse(evt.content).urls as string[];
-    expect(urls).toEqual(['https://a.com','ws://b.com']);
+    expect(urls).toEqual(['https://a.com','ws://b.com/']);
     // tag d present
     expect(evt.tags.find((t: any) => t[0] === 'd')).toBeTruthy();
   });
 
   it('parseGraspServersEvent parses and filters invalid urls', () => {
     const good = mkEvt({ urls: ['https://ok.com/', 'ftp://no.com', 'ws://relay.com', 'https://github.com/Pleb5/repo.git'] });
-    expect(parseGraspServersEvent(good as any)).toEqual(['https://ok.com','ws://relay.com']);
+    expect(parseGraspServersEvent(good as any)).toEqual(['https://ok.com','ws://relay.com/']);
 
     const bad = mkEvt({ urls: 'not-array' });
     expect(parseGraspServersEvent(bad as any)).toEqual([]);

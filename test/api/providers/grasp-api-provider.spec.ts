@@ -9,7 +9,7 @@ function setPriv<T extends object>(obj: T, key: string, value: any) {
 }
 
 describe('GraspApiProvider basic behavior', () => {
-  const relay = 'wss://relay.example';
+  const relay = 'wss://relay.example/';
   const ownerHex = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
 
   beforeEach(() => {

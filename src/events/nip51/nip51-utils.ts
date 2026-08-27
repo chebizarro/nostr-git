@@ -1,4 +1,5 @@
 import type { Event as NostrEvent } from "nostr-tools"
+import { normalizeRelayUrl } from "../../utils/sanitize-relays.js"
 import {
     DEFAULT_GRASP_SET_ID,
     GRASP_SET_KIND,
@@ -32,8 +33,17 @@ export function validateGraspServerUrl(url: string): boolean {
 }
 
 export function normalizeGraspServerUrl(url: string): string {
-    // trim and remove trailing slashes
-    return url.trim().replace(/\/$/, '');
+    const trimmed = url.trim();
+    if (/^wss?:\/\//i.test(trimmed)) {
+        try {
+            return normalizeRelayUrl(trimmed);
+        } catch {
+            return '';
+        }
+    }
+
+    // HTTP service bases are not relay transport identities.
+    return trimmed.replace(/\/$/, '');
 }
 
 export function createGraspServersEvent(opts: {
