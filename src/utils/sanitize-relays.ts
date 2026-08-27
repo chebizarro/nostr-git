@@ -47,8 +47,11 @@ function isLikelyNonRelayInput(input: string): boolean {
 
 function isOnionHost(host: string | null | undefined): boolean {
   if (!host) return false
-  const h = host.toLowerCase()
-  return h.endsWith(".onion") || h.includes(".onion:")
+  const authority = host.toLowerCase().split(/[/?#]/, 1)[0]
+  const hostname = authority.startsWith("[")
+    ? authority.slice(0, authority.indexOf("]") + 1)
+    : authority.split(":", 1)[0]
+  return hostname.endsWith(".onion")
 }
 
 export function normalizeRelayUrl(input: string): string {

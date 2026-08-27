@@ -24,7 +24,7 @@ describe("grasp-url utilities", () => {
       isGraspRepoHttpUrl(
         "https://relay.ngit.dev/npub16p8v7varqwjes5hak6q7mz6pygqm4pwc6gve4mrned3xs8tz42gq7kfhdw/repo.git?tenant=a",
       ),
-    ).toBe(false)
+    ).toBe(true)
     expect(
       isGraspRepoHttpUrl(
         "https://relay.ngit.dev/npub16p8v7varqwjes5hak6q7mz6pygqm4pwc6gve4mrned3xs8tz42gq7kfhdw/group%2Frepo.git",
@@ -51,10 +51,13 @@ describe("grasp-url utilities", () => {
 
   it("normalizes service bases while preserving deployment paths", () => {
     expect(normalizeGraspServiceHttpBase("wss://Relay.Example/git/")).toBe(
-      "https://relay.example/git",
+      "https://relay.example/git/",
     )
     expect(normalizeGraspServiceRelayUrl("https://Relay.Example/git/")).toBe(
-      "wss://relay.example/git",
+      "wss://relay.example/git/",
+    )
+    expect(normalizeGraspServiceRelayUrl("wss://Relay.Example/GRASP?tenant=One%2FTwo")).toBe(
+      "wss://relay.example/GRASP?tenant=One%2FTwo",
     )
   })
 

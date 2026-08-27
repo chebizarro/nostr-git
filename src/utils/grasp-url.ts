@@ -1,4 +1,5 @@
 import {nip19} from "nostr-tools"
+import {normalizeRelayUrl} from "./sanitize-relays.js"
 
 export interface ParsedGraspRepoHttpUrl {
   ownerNpub: string
@@ -44,25 +45,32 @@ function normalizePubkey(value: string): string {
 }
 
 export function normalizeGraspServiceHttpBase(rawUrl: string): string {
-  const url = parseUrl(rawUrl)
-  if (!url) return ""
-  if (url.protocol === "ws:") url.protocol = "http:"
-  else if (url.protocol === "wss:") url.protocol = "https:"
-  else if (url.protocol !== "http:" && url.protocol !== "https:") return ""
-  if (url.username || url.password || url.search || url.hash) return ""
-  const path = url.pathname === "/" ? "" : url.pathname.replace(/\/+$/, "")
-  return `${url.protocol}//${url.host}${path}`
+  const relayUrl = normalizeGraspServiceRelayUrl(rawUrl)
+  return relayUrl.replace(/^ws:/, "http:").replace(/^wss:/, "https:")
 }
 
 export function normalizeGraspServiceRelayUrl(rawUrl: string): string {
-  const url = parseUrl(rawUrl)
-  if (!url) return ""
-  if (url.protocol === "http:") url.protocol = "ws:"
-  else if (url.protocol === "https:") url.protocol = "wss:"
-  else if (url.protocol !== "ws:" && url.protocol !== "wss:") return ""
-  if (url.username || url.password || url.search || url.hash) return ""
-  const path = url.pathname === "/" ? "" : url.pathname.replace(/\/+$/, "")
-  return `${url.protocol}//${url.host}${path}`
+  try {
+    return normalizeRelayUrl(
+      rawUrl
+        .trim()
+        .replace(/^http:/i, "ws:")
+        .replace(/^https:/i, "wss:"),
+    )
+  } catch {
+    return ""
+  }
+}
+
+export function appendGraspHttpPath(baseUrl: string, path: string): string {
+  const queryStart = baseUrl.indexOf("?")
+  const endpoint = queryStart === -1 ? baseUrl : baseUrl.slice(0, queryStart)
+  const baseQuery = queryStart === -1 ? "" : baseUrl.slice(queryStart + 1)
+  const pathQueryStart = path.indexOf("?")
+  const pathname = pathQueryStart === -1 ? path : path.slice(0, pathQueryStart)
+  const pathQuery = pathQueryStart === -1 ? "" : path.slice(pathQueryStart + 1)
+  const query = [baseQuery, pathQuery].filter(Boolean).join("&")
+  return `${endpoint.replace(/\/+$/, "")}/${pathname.replace(/^\/+/, "")}${query ? `?${query}` : ""}`
 }
 
 export function parseGraspRepoHttpUrl(rawUrl: string): ParsedGraspRepoHttpUrl | null {
@@ -74,7 +82,7 @@ export function parseGraspRepoHttpUrl(rawUrl: string): ParsedGraspRepoHttpUrl | 
   if (url.protocol !== "https:" && url.protocol !== "http:") {
     return null
   }
-  if (url.search || url.hash) return null
+  if (url.hash) return null
 
   const segments = url.pathname.split("/").filter(Boolean)
   if (segments.length < 2) return null
@@ -104,7 +112,7 @@ export function parseGraspRepoHttpUrl(rawUrl: string): ParsedGraspRepoHttpUrl | 
   }
 
   const prefix = segments.slice(0, -2).join("/")
-  const httpBase = `${url.origin}${prefix ? `/${prefix}` : ""}`
+  const httpBase = `${url.origin}${prefix ? `/${prefix}` : "/"}${url.search}`
 
   return {
     ownerNpub: ownerSegment,

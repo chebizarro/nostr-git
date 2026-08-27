@@ -147,15 +147,15 @@ describe("GRASP Full Cycle Integration Tests", () => {
     })
 
     it("normalizes WebSocket URLs correctly", () => {
-      expect(normalizeWsOrigin("https://relay.test.com/path")).toBe("wss://relay.test.com")
-      expect(normalizeWsOrigin("http://relay.test.com/path")).toBe("ws://relay.test.com")
-      expect(normalizeWsOrigin("wss://relay.test.com/foo")).toBe("wss://relay.test.com")
+      expect(normalizeWsOrigin("https://relay.test.com/path")).toBe("wss://relay.test.com/path")
+      expect(normalizeWsOrigin("http://relay.test.com/path")).toBe("ws://relay.test.com/path")
+      expect(normalizeWsOrigin("wss://relay.test.com/foo")).toBe("wss://relay.test.com/foo")
     })
 
     it("normalizes HTTP URLs correctly", () => {
-      expect(normalizeHttpOrigin("wss://relay.test.com/path")).toBe("https://relay.test.com")
-      expect(normalizeHttpOrigin("ws://relay.test.com/path")).toBe("http://relay.test.com")
-      expect(normalizeHttpOrigin("https://relay.test.com/foo")).toBe("https://relay.test.com")
+      expect(normalizeHttpOrigin("wss://relay.test.com/path")).toBe("https://relay.test.com/path")
+      expect(normalizeHttpOrigin("ws://relay.test.com/path")).toBe("http://relay.test.com/path")
+      expect(normalizeHttpOrigin("https://relay.test.com/foo")).toBe("https://relay.test.com/foo")
     })
   })
 
@@ -167,7 +167,7 @@ describe("GRASP Full Cycle Integration Tests", () => {
       const provider = new GraspApiProvider(testRelayUrl, testPubkeyHex)
 
       // Provider should normalize relay URL
-      expect((provider as any).relayUrl).toBe("wss://relay.test.com")
+      expect((provider as any).relayUrl).toBe("wss://relay.test.com/")
       expect((provider as any).pubkey).toBe(testPubkeyHex)
     })
 
@@ -361,7 +361,7 @@ describe("GRASP Full Cycle Integration Tests", () => {
 
       const state = await api.getStateFromRelays(testPubkeyHex, "test-repo", [testRelayUrl])
 
-      expect(poolQuery).toHaveBeenCalledWith([testRelayUrl], {
+      expect(poolQuery).toHaveBeenCalledWith([`${testRelayUrl}/`], {
         kinds: [30618],
         authors: [testPubkeyHex],
         "#d": ["test-repo"],
@@ -380,7 +380,7 @@ describe("GRASP Full Cycle Integration Tests", () => {
       vi.spyOn(api, "checkRelayCapabilities").mockResolvedValue(true)
 
       const capable = await api.getCapableRelays([testRelayUrl])
-      expect(capable).toContain(testRelayUrl)
+      expect(capable).toContain(`${testRelayUrl}/`)
     })
   })
 
@@ -635,7 +635,7 @@ describe("GraspApi Extended Tests", () => {
       "wss://capable2.relay",
     ])
 
-    expect(capable).toEqual(["wss://capable.relay", "wss://capable2.relay"])
+    expect(capable).toEqual(["wss://capable.relay/", "wss://capable2.relay/"])
   })
 
   it("rejects an empty relay list before capability checks", async () => {

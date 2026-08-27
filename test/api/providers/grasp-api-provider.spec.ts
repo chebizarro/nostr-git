@@ -18,16 +18,28 @@ describe('GraspApiProvider basic behavior', () => {
 
   it('getFileContent rejects with stable message on blob/read error', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
     vi.spyOn(git as any, 'fetch').mockResolvedValue(undefined);
     vi.spyOn(git as any, 'readBlob').mockRejectedValue(new Error('no blob'));
-    await expect(api.getFileContent(ownerHex, 'repo', 'missing.txt', 'main')).rejects.toThrow(/GRASP getFileContent failed:/);
+    await expect(api.getFileContent(ownerHex, 'repo', 'missing.txt', 'main')).rejects.toThrow(
+      /GRASP getFileContent failed:/,
+    );
   });
 
   it('listBranches rejects with stable message on fetch error', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
     vi.spyOn(git as any, 'fetch').mockRejectedValue(new Error('network'));
     await expect(api.listBranches(ownerHex, 'repo')).rejects.toThrow(/GRASP listBranches failed:/);
@@ -35,7 +47,12 @@ describe('GraspApiProvider basic behavior', () => {
 
   it('getBranch rejects with stable message on fetch error', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
     vi.spyOn(git as any, 'fetch').mockRejectedValue(new Error('network'));
     await expect(api.getBranch(ownerHex, 'repo', 'main')).rejects.toThrow(/GRASP getBranch failed:/);
@@ -43,7 +60,12 @@ describe('GraspApiProvider basic behavior', () => {
 
   it('listTags rejects with stable message on fetch error', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
     vi.spyOn(git as any, 'fetch').mockRejectedValue(new Error('network'));
     await expect(api.listTags(ownerHex, 'repo')).rejects.toThrow(/GRASP listTags failed:/);
@@ -51,7 +73,12 @@ describe('GraspApiProvider basic behavior', () => {
 
   it('getTag rejects with stable message when tag is missing', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
     vi.spyOn(git as any, 'fetch').mockResolvedValue(undefined);
     vi.spyOn(git as any, 'resolveRef').mockRejectedValue(new Error('missing'));
@@ -60,7 +87,12 @@ describe('GraspApiProvider basic behavior', () => {
 
   it('listCommits works with a tag ref (e.g., v1)', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
     const fetchSpy = vi.spyOn(git as any, 'fetch').mockResolvedValue(undefined);
     const now = Math.floor(Date.now() / 1000);
@@ -71,9 +103,9 @@ describe('GraspApiProvider basic behavior', () => {
           message: 'tag msg',
           author: { name: 'A', email: 'a@e', timestamp: now },
           committer: { name: 'C', email: 'c@e', timestamp: now },
-          parent: []
-        }
-      }
+          parent: [],
+        },
+      },
     ]);
     const out = await api.listCommits(ownerHex, 'repo', { sha: 'v1', per_page: 1 });
     expect(out.length).toBe(1);
@@ -86,19 +118,24 @@ describe('GraspApiProvider basic behavior', () => {
     const baseRelay = 'wss://relay.example:7447';
     const api = new GraspApiProvider(baseRelay, ownerHex as any);
     // Seed capabilities/httpBase to bypass ensureCapabilities network
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [baseRelay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [baseRelay],
+    };
     (api as any).httpBase = 'https://relay.example';
     const spy = vi.spyOn(api as any, 'isValidNostrRelayUrl');
 
     await api.createRepo({ name: 'alias-test' } as any);
 
     // Expect it was called for base relay
-    const calls = spy.mock.calls.map((c) => String(c[0]));
-    expect(calls.some((u) => u.startsWith(baseRelay))).toBe(true);
+    const calls = spy.mock.calls.map(c => String(c[0]));
+    expect(calls.some(u => u.startsWith(baseRelay))).toBe(true);
 
     // Validate outcomes: base relay should be valid
     const results = spy.mock.results;
-    const baseIdx = calls.findIndex((u) => u.startsWith(baseRelay));
+    const baseIdx = calls.findIndex(u => u.startsWith(baseRelay));
     expect(results[baseIdx]?.value).toBe(true);
 
     spy.mockRestore();
@@ -107,7 +144,12 @@ describe('GraspApiProvider basic behavior', () => {
   it('listCommits returns mapped commits when sha is provided', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
     // Seed capabilities/httpBase
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
     const fetchSpy = vi.spyOn(git as any, 'fetch').mockResolvedValue(undefined);
     const now = Math.floor(Date.now() / 1000);
@@ -118,9 +160,9 @@ describe('GraspApiProvider basic behavior', () => {
           message: 'msg',
           author: { name: 'A', email: 'a@e', timestamp: now },
           committer: { name: 'C', email: 'c@e', timestamp: now },
-          parent: ['abc123']
-        }
-      }
+          parent: ['abc123'],
+        },
+      },
     ]);
     const out = await api.listCommits(ownerHex, 'repo', { sha: 'main', per_page: 1 });
     expect(out.length).toBe(1);
@@ -133,19 +175,33 @@ describe('GraspApiProvider basic behavior', () => {
   it('publishStateFromLocal propagates EventIO rejection instead of returning unsigned', async () => {
     const failingIO = { publishEvent: vi.fn().mockRejectedValue(new Error('pub fail')) } as any;
     const api = new GraspApiProvider(relay, ownerHex as any, failingIO);
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
     vi.spyOn(git as any, 'fetch').mockResolvedValue(undefined);
     vi.spyOn(git as any, 'listBranches').mockResolvedValue(['main']);
     vi.spyOn(git as any, 'resolveRef').mockResolvedValue('refs/heads/main');
-    await expect(api.publishStateFromLocal(ownerHex, 'repo')).rejects.toThrow(/Failed to publish state event: Error: pub fail/);
+    await expect(api.publishStateFromLocal(ownerHex, 'repo')).rejects.toThrow(
+      /Failed to publish state event: Error: pub fail/,
+    );
     expect(failingIO.publishEvent).toHaveBeenCalled();
   });
 
   it('publishStateFromLocal rejects resolved ok:false instead of returning unsigned', async () => {
-    const failingIO = { publishEvent: vi.fn().mockResolvedValue({ ok: false, error: 'denied', relays: [relay] }) } as any;
+    const failingIO = {
+      publishEvent: vi.fn().mockResolvedValue({ ok: false, error: 'denied', relays: [relay] }),
+    } as any;
     const api = new GraspApiProvider(relay, ownerHex as any, failingIO);
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
     vi.spyOn(git as any, 'fetch').mockResolvedValue(undefined);
     vi.spyOn(git as any, 'listBranches').mockResolvedValue(['main']);
@@ -157,7 +213,12 @@ describe('GraspApiProvider basic behavior', () => {
   it('publishStateFromLocal requires a nonempty accepted relay result', async () => {
     const eventIO = { publishEvent: vi.fn().mockResolvedValue({ ok: true, relays: [] }) } as any;
     const api = new GraspApiProvider(relay, ownerHex as any, eventIO);
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
     vi.spyOn(git as any, 'fetch').mockResolvedValue(undefined);
     vi.spyOn(git as any, 'listBranches').mockResolvedValue(['main']);
@@ -169,19 +230,32 @@ describe('GraspApiProvider basic behavior', () => {
   it('publishStateFromLocal returns the accepted publication result when EventIO succeeds', async () => {
     const eventIO = { publishEvent: vi.fn().mockResolvedValue({ ok: true, relays: [relay] }) } as any;
     const api = new GraspApiProvider(relay, ownerHex as any, eventIO);
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
     vi.spyOn(git as any, 'fetch').mockResolvedValue(undefined);
     vi.spyOn(git as any, 'listBranches').mockResolvedValue(['main']);
     vi.spyOn(git as any, 'resolveRef').mockResolvedValue('abc123');
 
-    await expect(api.publishStateFromLocal(ownerHex, 'repo')).resolves.toEqual({ ok: true, relays: [relay] });
+    await expect(api.publishStateFromLocal(ownerHex, 'repo')).resolves.toEqual({
+      ok: true,
+      relays: [relay],
+    });
   });
 
   it('publishStateFromLocal builds event with HEAD tag and refs when GRASP-01 supported', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
     // Enable GRASP-01 and set httpBase
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
 
     const fetchSpy = vi.spyOn(git as any, 'fetch').mockResolvedValue(undefined);
@@ -213,7 +287,12 @@ describe('GraspApiProvider basic behavior', () => {
 
   it('publishStateFromLocal maps a resolved HEAD commit back to a branch name', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
 
     const mainCommit = 'a'.repeat(40);
@@ -242,13 +321,22 @@ describe('GraspApiProvider basic behavior', () => {
         id: 'newer-wrong-repo',
         kind: 30618,
         created_at: 3,
-        tags: [['d', 'other'], ['HEAD', 'ref: refs/heads/other'], ['refs/heads/other', 'wrong']],
+        tags: [
+          ['d', 'other'],
+          ['HEAD', 'ref: refs/heads/other'],
+          ['refs/heads/other', 'wrong'],
+        ],
       },
       {
         id: 'older',
         kind: 30618,
         created_at: 1,
-        tags: [['d', 'repo'], ['HEAD', 'ref: refs/heads/old'], ['refs/heads/old', 'oldsha'], ['ref', 'legacy', 'legacysha']],
+        tags: [
+          ['d', 'repo'],
+          ['HEAD', 'ref: refs/heads/old'],
+          ['refs/heads/old', 'oldsha'],
+          ['ref', 'legacy', 'legacysha'],
+        ],
       },
       {
         id: 'newer',
@@ -266,9 +354,7 @@ describe('GraspApiProvider basic behavior', () => {
 
     const state = await (api as any).fetchLatestState(ownerHex, 'repo');
 
-    expect(querySpy).toHaveBeenCalledWith([
-      { kinds: [30618], authors: [ownerHex], '#d': ['repo'], limit: 20 },
-    ]);
+    expect(querySpy).toHaveBeenCalledWith([{ kinds: [30618], authors: [ownerHex], '#d': ['repo'], limit: 20 }]);
     expect(state).toEqual({
       head: 'ref: refs/heads/main',
       refs: {
@@ -292,25 +378,53 @@ describe('GraspApiProvider basic behavior', () => {
   it('createRepo uses httpBase to construct htmlUrl and cloneUrl', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
     // Seed capabilities/httpBase to bypass ensureCapabilities network
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example/git'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example/git'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example/git';
     const res = await api.createRepo({ name: 'myrepo', description: 'd', private: false } as any);
     expect(res.htmlUrl).toMatch(/^https:\/\/relay\.example\/git\//);
     expect(res.cloneUrl).toBe(`${res.htmlUrl}.git`);
   });
 
+  it('creates repository URLs below a query-bearing Smart HTTP base', async () => {
+    const api = new GraspApiProvider('wss://relay.example/GRASP?tenant=One', ownerHex as any);
+    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: [], nostrRelays: [] };
+    (api as any).httpBase = 'https://relay.example/GRASP?tenant=One';
+
+    const res = await api.createRepo({ name: 'myrepo' } as any);
+
+    expect(res.htmlUrl).toMatch(/^https:\/\/relay\.example\/GRASP\/npub1[^/]+\/myrepo\?tenant=One$/);
+    expect(res.cloneUrl).toMatch(/^https:\/\/relay\.example\/GRASP\/npub1[^/]+\/myrepo\.git\?tenant=One$/);
+  });
+
   it('publishStateFromLocal rejects when relay does not support GRASP-01', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
     // Seed capabilities to grasp01=false
-    (api as any).capabilities = { grasp01: false, grasp05: true, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: false,
+      grasp05: true,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
-    await expect(api.publishStateFromLocal(ownerHex, 'repo')).rejects.toThrow('Relay does not advertise GRASP-01 support');
+    await expect(api.publishStateFromLocal(ownerHex, 'repo')).rejects.toThrow(
+      'Relay does not advertise GRASP-01 support',
+    );
   });
 
   it('publishStateFromLocal wraps git fetch failure in a stable error message', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
     // Enable GRASP-01 and provide httpBase
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
     const spy = vi.spyOn(git as any, 'fetch').mockRejectedValue(new Error('network exploded'));
     await expect(api.publishStateFromLocal(ownerHex, 'repo')).rejects.toThrow(/Failed to build state event: /);
@@ -325,7 +439,12 @@ describe('GraspApiProvider basic behavior', () => {
   it('getRepo with announcement error and missing state yields empty or defaulted defaultBranch', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
     // Seed capabilities/httpBase to avoid network in ensureCapabilities
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
     // Force announcement query to error and state to be null
     (vi.spyOn(api as any, 'queryEvents') as any).mockRejectedValueOnce(new Error('ann fail'));
@@ -337,7 +456,12 @@ describe('GraspApiProvider basic behavior', () => {
 
   it('listCommits rejects when no sha is provided and no HEAD exists in repo state', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
     (vi.spyOn(api as any, 'fetchLatestState') as any).mockResolvedValueOnce(null);
     await expect(api.listCommits(ownerHex, 'r', {})).rejects.toThrow(/No ref provided/);
@@ -349,7 +473,7 @@ describe('GraspApiProvider basic behavior', () => {
       querySync: vi
         .fn()
         .mockResolvedValueOnce([{ id: '1' }, { id: '2' }])
-        .mockResolvedValueOnce([{ id: '2' }, { id: '3' }])
+        .mockResolvedValueOnce([{ id: '2' }, { id: '3' }]),
     } as any;
     (api as any).pool = poolMock;
 
@@ -366,9 +490,10 @@ describe('GraspApiProvider basic behavior', () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
     const err = new Error('boom');
     const poolMock = {
-      querySync: vi.fn()
+      querySync: vi
+        .fn()
         .mockRejectedValueOnce(err)
-        .mockResolvedValueOnce([{ id: 'a' }])
+        .mockResolvedValueOnce([{ id: 'a' }]),
     } as any;
     (api as any).pool = poolMock;
 
@@ -383,7 +508,7 @@ describe('GraspApiProvider basic behavior', () => {
     const spy = vi.spyOn(mod, 'fetchRelayInfo');
     spy.mockResolvedValue({
       supported_grasps: ['GRASP-01'],
-      smart_http: ['https://relay.example.com']
+      smart_http: ['https://relay.example.com'],
     } as any);
 
     const api = new GraspApiProvider('wss://relay.example.com', ownerHex as any);
@@ -420,19 +545,32 @@ describe('GraspApiProvider basic behavior', () => {
 
   it('getRepo sets description undefined when announcement missing or unparsable', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
-    setPriv(api, 'capabilities', { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] });
+    setPriv(api, 'capabilities', {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    });
     setPriv(api, 'httpBase', 'https://relay.example');
     // queryEvents returns no announcement
     (vi.spyOn(api as any, 'queryEvents') as any).mockResolvedValueOnce([]);
     // fetchLatestState returns a valid head
-    (vi.spyOn(api as any, 'fetchLatestState') as any).mockResolvedValueOnce({ head: 'ref: refs/heads/main', refs: {} });
+    (vi.spyOn(api as any, 'fetchLatestState') as any).mockResolvedValueOnce({
+      head: 'ref: refs/heads/main',
+      refs: {},
+    });
     const repo = await api.getRepo(ownerHex, 'repo');
     expect(repo.description).toBeUndefined();
   });
 
   it('getRepo leaves defaultBranch empty when no state event HEAD is available', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
-    setPriv(api, 'capabilities', { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] });
+    setPriv(api, 'capabilities', {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    });
     setPriv(api, 'httpBase', 'https://relay.example');
     // announcement present but irrelevant
     const ann = { content: JSON.stringify({}) };
@@ -446,16 +584,28 @@ describe('GraspApiProvider basic behavior', () => {
   it('getRepo builds metadata from relay/httpBase and event state', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
     // Pretend capabilities are loaded with a specific httpBase
-    setPriv(api, 'capabilities', { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] });
+    setPriv(api, 'capabilities', {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    });
     setPriv(api, 'httpBase', 'https://relay.example');
 
     // Mock announcement and state returns via queryEvents
     const ann = { content: JSON.stringify({ description: 'test repo' }), tags: [] };
-    const st = { kind: 30618, created_at: 1, tags: [['d', 'myrepo'], ['HEAD', 'ref: refs/heads/main']] };
+    const st = {
+      kind: 30618,
+      created_at: 1,
+      tags: [
+        ['d', 'myrepo'],
+        ['HEAD', 'ref: refs/heads/main'],
+      ],
+    };
     (vi.spyOn(api as any, 'queryEvents') as any).mockImplementation(async (filters: any[]) => {
       const kinds = filters?.[0]?.kinds || [];
       if (kinds.includes(30617)) return [ann as any]; // announcement
-      if (kinds.includes(30618)) return [st as any];  // state
+      if (kinds.includes(30618)) return [st as any]; // state
       return [];
     });
 
@@ -476,7 +626,12 @@ describe('GraspApiProvider basic behavior', () => {
   it('getCommit propagates error with stable message', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
     // Seed capabilities/httpBase to avoid ensureCapabilities network work
-    setPriv(api, 'capabilities', { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] });
+    setPriv(api, 'capabilities', {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    });
     setPriv(api, 'httpBase', 'https://relay.example');
     // Avoid fetch dependency; mock readCommit to reject
     const spy = vi.spyOn(git as any, 'readCommit').mockRejectedValue(new Error('nope'));
@@ -486,7 +641,12 @@ describe('GraspApiProvider basic behavior', () => {
 
   it('getFileContent fetches blob and returns base64 content', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
     vi.spyOn(git as any, 'fetch').mockResolvedValue(undefined);
     const buf = new Uint8Array([104, 105]); // 'hi'
@@ -499,7 +659,12 @@ describe('GraspApiProvider basic behavior', () => {
 
   it('listBranches returns mapped branches with commit sha/url', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
     vi.spyOn(git as any, 'fetch').mockResolvedValue(undefined);
     vi.spyOn(git as any, 'listBranches').mockResolvedValue(['main']);
@@ -511,7 +676,12 @@ describe('GraspApiProvider basic behavior', () => {
 
   it('getBranch returns branch with resolved sha', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
     vi.spyOn(git as any, 'fetch').mockResolvedValue(undefined);
     vi.spyOn(git as any, 'resolveRef').mockResolvedValue('cafebabe');
@@ -522,7 +692,12 @@ describe('GraspApiProvider basic behavior', () => {
 
   it('listTags returns mapped tags with commit sha/url', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
     vi.spyOn(git as any, 'fetch').mockResolvedValue(undefined);
     vi.spyOn(git as any, 'listTags').mockResolvedValue(['v1']);
@@ -534,7 +709,12 @@ describe('GraspApiProvider basic behavior', () => {
 
   it('getTag returns tag metadata with archive URLs and commit', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
     vi.spyOn(git as any, 'fetch').mockResolvedValue(undefined);
     vi.spyOn(git as any, 'resolveRef').mockResolvedValue('feedfeed');
@@ -579,14 +759,21 @@ describe('GraspApiProvider basic behavior', () => {
 
   it('gitRequest builds URL with httpBase and sets CORS options without forbidden headers', async () => {
     const api = new GraspApiProvider(relay, ownerHex as any);
-    (api as any).capabilities = { grasp01: true, grasp05: false, httpOrigins: ['https://relay.example'], nostrRelays: [relay] };
+    (api as any).capabilities = {
+      grasp01: true,
+      grasp05: false,
+      httpOrigins: ['https://relay.example'],
+      nostrRelays: [relay],
+    };
     (api as any).httpBase = 'https://relay.example';
     const fetchMock = vi.fn().mockResolvedValue({ ok: true } as any);
     const orig = globalThis.fetch as any;
     // @ts-ignore
     globalThis.fetch = fetchMock;
     try {
-      await (api as any).gitRequest('npub1xyz', 'repo', '/info/refs?service=git-upload-pack', { headers: { 'X-Test': '1' } });
+      await (api as any).gitRequest('npub1xyz', 'repo', '/info/refs?service=git-upload-pack', {
+        headers: { 'X-Test': '1' },
+      });
       expect(fetchMock).toHaveBeenCalledTimes(1);
       const [url, init] = (fetchMock as any).mock.calls[0];
       expect(url).toBe('https://relay.example/npub1xyz/repo.git/info/refs?service=git-upload-pack');
@@ -630,7 +817,7 @@ describe('GraspApiProvider basic behavior', () => {
     const spy = vi.spyOn(mod, 'fetchRelayInfo');
     spy.mockResolvedValue({
       supported_grasps: ['GRASP-01'],
-      smart_http: ['https://relay.example', 'https://relay.example/git']
+      smart_http: ['https://relay.example', 'https://relay.example/git'],
     } as any);
 
     const api = new GraspApiProvider('wss://relay.example', ownerHex as any);

@@ -3,7 +3,11 @@ import type {RepoCache, RepoCacheManager} from "./cache.js"
 import {resolveBranchToOid} from "../../git/git.js"
 import type {GitVendor} from "../../git/vendor-providers.js"
 import type {BlossomPushSummary} from "../../blossom/index.js"
-import {normalizeGraspServiceRelayUrl, parseGraspRepoHttpUrl} from "../../utils/grasp-url.js"
+import {
+  appendGraspHttpPath,
+  normalizeGraspServiceRelayUrl,
+  parseGraspRepoHttpUrl,
+} from "../../utils/grasp-url.js"
 import {toHexPubkey} from "../../utils/nostr-pubkey.js"
 import {sanitizeRelays} from "../../utils/sanitize-relays.js"
 
@@ -38,7 +42,10 @@ export function validateExplicitGraspPush(options: {
   if (url.username || url.password) {
     throw new Error("GRASP repository URL must not contain credentials")
   }
-  const canonicalPushUrl = `${parsed.httpBase}/${parsed.ownerNpub}/${encodeURIComponent(parsed.identifier)}.git`
+  const canonicalPushUrl = appendGraspHttpPath(
+    parsed.httpBase,
+    `${parsed.ownerNpub}/${encodeURIComponent(parsed.identifier)}.git`,
+  )
   if (url.toString() !== new URL(canonicalPushUrl).toString()) {
     throw new Error("GRASP repository URL must use its canonical service path")
   }
@@ -56,7 +63,6 @@ export function validateExplicitGraspPush(options: {
       (parsedRelay.protocol !== "ws:" && parsedRelay.protocol !== "wss:") ||
       parsedRelay.username ||
       parsedRelay.password ||
-      parsedRelay.search ||
       parsedRelay.hash
     ) {
       throw new Error("GRASP repository relay scope must contain literal WS/WSS URLs")

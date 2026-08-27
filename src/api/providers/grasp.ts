@@ -35,6 +35,7 @@ import {
   type GraspCapabilities,
   type RelayInfo,
 } from "./grasp-capabilities.js"
+import {appendGraspHttpPath} from "../../utils/grasp-url.js"
 import {encodeRepoAddress, getDefaultBranchFromHead} from "./grasp-state.js"
 import {createMemFs} from "./grasp-fs.js"
 import * as git from "isomorphic-git"
@@ -88,48 +89,15 @@ export class GraspApiProvider implements GitServiceApi {
       // Mirrors ngit client.rs: uses NIP-11 to get relay info and advertise smart_http endpoints
       const info = await fetchRelayInfo(this.relayUrl)
       this.capabilities = detectCapabilities(info, this.relayUrl)
-      // Prefer spec root origin (no path) first; use pathful as fallback only
       const origins = this.capabilities.httpOrigins || []
-      const root = origins.find(o => {
-        try {
-          const u = new URL(o)
-          return !u.pathname || u.pathname === "/"
-        } catch {
-          return false
-        }
-      })
-      const pathful = origins.find(o => {
-        try {
-          const u = new URL(o)
-          return u.pathname && u.pathname !== "/"
-        } catch {
-          return false
-        }
-      })
-      this.httpBase = root || pathful || origins[0] || normalizeHttpOrigin(this.relayUrl)
+      this.httpBase = origins[0] || normalizeHttpOrigin(this.relayUrl)
       this.relayInfo = info
     } catch (err) {
       console.warn("Failed to ensure capabilities:", err)
       // Fallback: derive capabilities heuristically from relay URL
       this.capabilities = detectCapabilities({} as any, this.relayUrl)
       const origins = this.capabilities.httpOrigins || []
-      const root = origins.find(o => {
-        try {
-          const u = new URL(o)
-          return !u.pathname || u.pathname === "/"
-        } catch {
-          return false
-        }
-      })
-      const pathful = origins.find(o => {
-        try {
-          const u = new URL(o)
-          return u.pathname && u.pathname !== "/"
-        } catch {
-          return false
-        }
-      })
-      this.httpBase = root || pathful || origins[0] || normalizeHttpOrigin(this.relayUrl)
+      this.httpBase = origins[0] || normalizeHttpOrigin(this.relayUrl)
     }
   }
 
@@ -167,7 +135,7 @@ export class GraspApiProvider implements GitServiceApi {
   ): Promise<Response> {
     await this.ensureCapabilities()
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl)
-    const gitUrl = `${httpOrigin}/${npub}/${repo}.git${endpoint}`
+    const gitUrl = appendGraspHttpPath(httpOrigin, `${npub}/${repo}.git${endpoint}`)
 
     return fetch(gitUrl, {
       ...options,
@@ -313,8 +281,8 @@ export class GraspApiProvider implements GitServiceApi {
     await this.ensureCapabilities()
     const npub = toNpub(owner)
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl)
-    const webUrl = `${httpOrigin}/${npub}/${repo}`
-    const cloneUrl = `${webUrl}.git`
+    const webUrl = appendGraspHttpPath(httpOrigin, `${npub}/${repo}`)
+    const cloneUrl = appendGraspHttpPath(httpOrigin, `${npub}/${repo}.git`)
 
     // Fetch announcement and state in parallel
     const [ann, st] = await Promise.all([
@@ -367,7 +335,7 @@ export class GraspApiProvider implements GitServiceApi {
     }
     const npub = toNpub(owner)
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl)
-    const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`
+    const remoteUrl = appendGraspHttpPath(httpOrigin, `${npub}/${repo}.git`)
     let event: ReturnType<typeof createRepoStateEvent>
     try {
       // Mirrors ngit repo_state.rs::build - collect refs and HEAD
@@ -453,12 +421,9 @@ export class GraspApiProvider implements GitServiceApi {
 
     // Use derived Smart HTTP base from NIP-11 (may include path like /git). Mirrors ngit client.rs discovery
     const httpBase = this.httpBase || normalizeHttpOrigin(this.relayUrl)
-    console.log("[GraspApiProvider] createRepo - httpBase:", httpBase)
 
-    const webUrl = `${httpBase}/${npub}/${options.name}` // no .git
-    const cloneUrl = `${webUrl}.git`
-    console.log("[GraspApiProvider] createRepo - webUrl:", webUrl)
-    console.log("[GraspApiProvider] createRepo - cloneUrl:", cloneUrl)
+    const webUrl = appendGraspHttpPath(httpBase, `${npub}/${options.name}`)
+    const cloneUrl = appendGraspHttpPath(httpBase, `${npub}/${options.name}.git`)
     // Gather relay aliases: base relay plus optional configured aliases
     const aliases: string[] = []
     // base ws(s) relay
@@ -521,7 +486,7 @@ export class GraspApiProvider implements GitServiceApi {
     await this.ensureCapabilities()
     const npub = toNpub(owner)
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl)
-    const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`
+    const remoteUrl = appendGraspHttpPath(httpOrigin, `${npub}/${repo}.git`)
     // Mirrors ngit git/mod.rs::get_main_or_master_branch + traversal
     let ref = options?.sha
     if (!ref) {
@@ -589,7 +554,7 @@ export class GraspApiProvider implements GitServiceApi {
     await this.ensureCapabilities()
     const npub = toNpub(owner)
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl)
-    const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`
+    const remoteUrl = appendGraspHttpPath(httpOrigin, `${npub}/${repo}.git`)
     try {
       const fs = createMemFs()
       const dir = "/grasp"
@@ -967,7 +932,7 @@ export class GraspApiProvider implements GitServiceApi {
     await this.ensureCapabilities()
     const npub = toNpub(owner)
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl)
-    const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`
+    const remoteUrl = appendGraspHttpPath(httpOrigin, `${npub}/${repo}.git`)
     try {
       const fs = createMemFs()
       const dir = "/grasp"
@@ -1013,7 +978,7 @@ export class GraspApiProvider implements GitServiceApi {
     await this.ensureCapabilities()
     const npub = toNpub(owner)
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl)
-    const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`
+    const remoteUrl = appendGraspHttpPath(httpOrigin, `${npub}/${repo}.git`)
     try {
       const fs = createMemFs()
       const dir = "/grasp"
@@ -1042,7 +1007,7 @@ export class GraspApiProvider implements GitServiceApi {
     await this.ensureCapabilities()
     const npub = toNpub(owner)
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl)
-    const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`
+    const remoteUrl = appendGraspHttpPath(httpOrigin, `${npub}/${repo}.git`)
     try {
       const fs = createMemFs()
       const dir = "/grasp"
@@ -1068,7 +1033,7 @@ export class GraspApiProvider implements GitServiceApi {
     await this.ensureCapabilities()
     const npub = toNpub(owner)
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl)
-    const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`
+    const remoteUrl = appendGraspHttpPath(httpOrigin, `${npub}/${repo}.git`)
     try {
       const fs = createMemFs()
       const dir = "/grasp"
@@ -1108,8 +1073,8 @@ export class GraspApiProvider implements GitServiceApi {
     await this.ensureCapabilities()
     const npub = toNpub(owner)
     const httpOrigin = this.httpBase || normalizeHttpOrigin(this.relayUrl)
-    const remoteUrl = `${httpOrigin}/${npub}/${repo}.git`
-    const webUrl = `${httpOrigin}/${npub}/${repo}`
+    const remoteUrl = appendGraspHttpPath(httpOrigin, `${npub}/${repo}.git`)
+    const webUrl = appendGraspHttpPath(httpOrigin, `${npub}/${repo}`)
     try {
       const fs = createMemFs()
       const dir = "/grasp"

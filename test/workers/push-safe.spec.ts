@@ -3,7 +3,7 @@ import "fake-indexeddb/auto"
 
 import type {GitProvider} from "../../src/git/provider.js"
 import type {RepoCacheManager} from "../../src/worker/workers/cache.js"
-import {safePushToRemoteUtil} from "../../src/worker/workers/push.js"
+import {safePushToRemoteUtil, validateExplicitGraspPush} from "../../src/worker/workers/push.js"
 import {toHexPubkey} from "../../src/utils/nostr-pubkey.js"
 
 import {createTestFs, mkdirp, writeText} from "../utils/lightningfs.js"
@@ -17,6 +17,19 @@ const GRASP_OWNER_PUBKEY = toHexPubkey(
   "npub16p8v7varqwjes5hak6q7mz6pygqm4pwc6gve4mrned3xs8tz42gq7kfhdw",
 )
 const GRASP_RELAY = "wss://relay.ngit.dev"
+
+it("preserves query-bearing GRASP identity during explicit push validation", () => {
+  const remoteUrl = `${GRASP_REMOTE_URL}?tenant=One%2FTwo`
+  const targetRelay = `${GRASP_RELAY}/?tenant=One%2FTwo`
+
+  expect(
+    validateExplicitGraspPush({
+      remoteUrl,
+      token: GRASP_OWNER_PUBKEY,
+      repoRelays: [targetRelay],
+    }),
+  ).toEqual({pushUrl: remoteUrl, repoRelays: [targetRelay], targetRelay})
+})
 
 class MemCacheManager implements Partial<RepoCacheManager> {
   private map = new Map<string, any>()

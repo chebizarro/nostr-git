@@ -11,6 +11,9 @@
  * - Provides fallback behavior for GRASP-05 archive-only mode
  */
 
+import { normalizeRelayUrl } from '../../utils/sanitize-relays.js';
+import { appendGraspHttpPath } from '../../utils/grasp-url.js';
+
 export interface RelayInfo {
   name?: string;
   description?: string;
@@ -24,13 +27,11 @@ export interface RelayInfo {
   smart_http?: string | string[];
 }
 
-export type RelayInfoResult =
-  | { ok: true; info: RelayInfo }
-  | { ok: false; info: RelayInfo; error: string };
+export type RelayInfoResult = { ok: true; info: RelayInfo } | { ok: false; info: RelayInfo; error: string };
 
 export interface GraspCapabilities {
-  grasp01: boolean;   // Full GRASP-01 support (state + Smart HTTP)
-  grasp05: boolean;   // Archive-only GRASP-05 fallback support
+  grasp01: boolean; // Full GRASP-01 support (state + Smart HTTP)
+  grasp05: boolean; // Archive-only GRASP-05 fallback support
   httpOrigins: string[];
   nostrRelays: string[];
   software?: string;
@@ -38,23 +39,12 @@ export interface GraspCapabilities {
 }
 
 /**
- * Normalize a WebSocket relay URL such as http(s):// -> ws(s):// and strip any trailing path.
+ * Convert an HTTP endpoint to WebSocket transport without changing endpoint identity.
  *
  * Based on ngit's URL normalization patterns in relay.rs
  */
 export function normalizeWsOrigin(relayUrl: string): string {
-  try {
-    const u = new URL(relayUrl);
-    const origin = `${u.protocol}//${u.host}`;
-    if (origin.startsWith("http://")) return origin.replace(/^http:\/\//, "ws://");
-    if (origin.startsWith("https://")) return origin.replace(/^https:\/\//, "wss://");
-    return origin;
-  } catch {
-    return relayUrl
-      .replace(/^http:\/\//, "ws://")
-      .replace(/^https:\/\//, "wss://")
-      .replace(/(ws[s]?:\/\/[^/]+).*/, "$1");
-  }
+  return normalizeRelayUrl(convertEndpointProtocol(relayUrl, 'ws'));
 }
 
 /**
@@ -64,32 +54,33 @@ export function normalizeWsOrigin(relayUrl: string): string {
  * Based on ngit's WebSocket URL handling in relay.rs
  */
 export function normalizeHttpOrigin(relayUrl: string): string {
+  return convertEndpointProtocol(relayUrl, 'http');
+}
+
+function convertEndpointProtocol(relayUrl: string, target: 'http' | 'ws'): string {
   try {
-    const u = new URL(relayUrl);
-    const origin = `${u.protocol}//${u.host}`;
-    if (origin.startsWith("ws://")) return origin.replace(/^ws:\/\//, "http://");
-    if (origin.startsWith("wss://")) return origin.replace(/^wss:\/\//, "https://");
-    return origin;
+    const input = relayUrl.trim();
+    const url = new URL(input);
+    if (url.username || url.password) throw new TypeError('Endpoint credentials are not supported');
+    const secure = url.protocol === 'wss:' || url.protocol === 'https:';
+    if (!['ws:', 'wss:', 'http:', 'https:'].includes(url.protocol)) {
+      throw new TypeError('Unsupported endpoint protocol');
+    }
+
+    const protocol = target === 'http' ? (secure ? 'https:' : 'http:') : secure ? 'wss:' : 'ws:';
+    const rawAfterScheme = input.slice(input.indexOf('://') + 3);
+    const suffixStart = rawAfterScheme.search(/[/?#]/);
+    const rawSuffix = suffixStart === -1 ? '' : rawAfterScheme.slice(suffixStart);
+    const suffixWithoutFragment = rawSuffix.split('#', 1)[0];
+    const pathAndQuery = suffixWithoutFragment.startsWith('?') ? `/${suffixWithoutFragment}` : suffixWithoutFragment;
+    return `${protocol}//${url.host}${pathAndQuery}`;
   } catch {
-    return relayUrl
-      .replace(/^ws:\/\//, "http://")
-      .replace(/^wss:\/\//, "https://")
-      .replace(/(http[s]?:\/\/[^/]+).*/, "$1");
+    return relayUrl;
   }
 }
 
 export function normalizeHttpEndpoint(relayUrl: string): string {
-  try {
-    const url = new URL(relayUrl);
-    if (url.protocol === "ws:") url.protocol = "http:";
-    else if (url.protocol === "wss:") url.protocol = "https:";
-    url.search = "";
-    url.hash = "";
-    const path = url.pathname === "/" ? "" : url.pathname.replace(/\/+$/, "");
-    return `${url.protocol}//${url.host}${path}`;
-  } catch {
-    return normalizeHttpOrigin(relayUrl);
-  }
+  return normalizeHttpOrigin(relayUrl);
 }
 
 /**
@@ -106,21 +97,23 @@ export function deriveHttpOrigins(relayWsUrl: string, info?: RelayInfo): string[
       if (Array.isArray(field)) origins.push(...field);
       else origins.push(field);
     };
-    enrich(info.http);
     enrich(info.smart_http);
+    enrich(info.http);
   }
 
-  if (!origins.includes(primary)) origins.push(primary);
+  const normalizedOrigins = origins.map(normalizeHttpEndpoint);
+
+  if (!normalizedOrigins.includes(primary)) normalizedOrigins.push(primary);
 
   // Heuristic fallbacks when NIP-11 doesn't advertise smart_http or is unreachable.
   // Many Smart HTTP frontends (e.g., Gitea) expose Git endpoints under '/git'.
   // Mirrors the resilience in ngit where multiple candidates are tried.
-  const withGitPath = `${primary.replace(/\/$/, '')}/git`;
-  if (!origins.includes(withGitPath)) origins.push(withGitPath);
+  const withGitPath = appendGraspHttpPath(primary, 'git');
+  if (!normalizedOrigins.includes(withGitPath)) normalizedOrigins.push(withGitPath);
 
   // Deduplicate
   const seen = new Set<string>();
-  const unique = origins.filter((o) => {
+  const unique = normalizedOrigins.filter(o => {
     if (seen.has(o)) return false;
     seen.add(o);
     return true;
@@ -144,7 +137,7 @@ export async function fetchRelayInfoResult(relayWsUrl: string): Promise<RelayInf
   const httpUrl = normalizeHttpEndpoint(relayWsUrl);
   try {
     const res = await fetch(httpUrl, {
-      headers: { Accept: "application/nostr+json" },
+      headers: { Accept: 'application/nostr+json' },
       signal: AbortSignal.timeout(8_000),
     });
     if (res.ok) {
@@ -153,11 +146,11 @@ export async function fetchRelayInfoResult(relayWsUrl: string): Promise<RelayInf
     }
     return { ok: false, info: {}, error: `NIP-11 returned HTTP ${res.status}` };
   } catch (e) {
-    console.warn("fetchRelayInfo: failed to fetch or parse NIP-11", e);
+    console.warn('fetchRelayInfo: failed to fetch or parse NIP-11', e);
     return {
       ok: false,
       info: {},
-      error: e instanceof Error ? e.message : "NIP-11 request failed",
+      error: e instanceof Error ? e.message : 'NIP-11 request failed',
     };
   }
 }
@@ -171,12 +164,8 @@ export async function fetchRelayInfoResult(relayWsUrl: string): Promise<RelayInf
  * - Provides fallback behavior for archive-only mode
  */
 export function graspCapabilities(info: RelayInfo, relayWsUrl: string): GraspCapabilities {
-  const grasp01 = Array.isArray(info.supported_grasps)
-    ? info.supported_grasps.includes("GRASP-01")
-    : false;
-  const grasp05 = Array.isArray(info.supported_grasps)
-    ? info.supported_grasps.includes("GRASP-05")
-    : false;
+  const grasp01 = Array.isArray(info.supported_grasps) ? info.supported_grasps.includes('GRASP-01') : false;
+  const grasp05 = Array.isArray(info.supported_grasps) ? info.supported_grasps.includes('GRASP-05') : false;
   const httpOrigins = deriveHttpOrigins(relayWsUrl, info);
   const nostrRelays = [normalizeWsOrigin(relayWsUrl)];
 
