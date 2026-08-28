@@ -25,7 +25,7 @@ describe("getRepoActivityRelays", () => {
         ]),
         {pubkey, identifier: "repo"},
       ),
-    ).toEqual(["wss://repo.example"])
+    ).toEqual(["wss://repo.example/"])
   })
 
   it("rejects malformed announcements", () => {
@@ -80,8 +80,8 @@ describe("resolveRepoRelayPolicy", () => {
     })
 
     expect(policy.isGrasp).toBe(true)
-    expect(policy.repoRelays).toEqual(["wss://repo-relay.example"])
-    expect(policy.naddrRelays).toEqual(["wss://repo-relay.example"])
+    expect(policy.repoRelays).toEqual(["wss://repo-relay.example/"])
+    expect(policy.naddrRelays).toEqual(["wss://repo-relay.example/"])
   })
 
   it("keeps publication fallback relays separate from activity scope", () => {
@@ -101,8 +101,24 @@ describe("resolveRepoRelayPolicy", () => {
     })
 
     expect(policy.isGrasp).toBe(false)
-    expect(policy.repoRelays).toEqual(["wss://repo-relay.example", "wss://fallback.example"])
-    expect(policy.activityRelays).toEqual(["wss://repo-relay.example"])
+    expect(policy.repoRelays).toEqual(["wss://repo-relay.example/", "wss://fallback.example/"])
+    expect(policy.activityRelays).toEqual(["wss://repo-relay.example/"])
+  })
+
+  it("uses only explicit authority for repository state publication scope", () => {
+    const policy = resolveRepoRelayPolicy({
+      event: {
+        kind: 30618,
+        tags: [
+          ["d", "repo"],
+          ["relays", "wss://state-controlled.example"],
+        ],
+      },
+      fallbackRepoRelays: ["wss://accepted.example"],
+    })
+
+    expect(policy.repoRelays).toEqual(["wss://accepted.example/"])
+    expect(policy.taggedRelays).toEqual(["wss://state-controlled.example/"])
   })
 
   it("keeps fallback relays out of naddr hints when a relays tag exists", () => {
@@ -120,7 +136,7 @@ describe("resolveRepoRelayPolicy", () => {
       fallbackRepoRelays: ["wss://fallback.example"],
     })
 
-    expect(policy.naddrRelays).toEqual(["wss://repo-relay.example"])
+    expect(policy.naddrRelays).toEqual(["wss://repo-relay.example/"])
   })
 
   it("falls back to caller repo relays for naddr hints when no relays tag exists", () => {
@@ -137,7 +153,7 @@ describe("resolveRepoRelayPolicy", () => {
       fallbackRepoRelays: ["wss://fallback.example"],
     })
 
-    expect(policy.naddrRelays).toEqual(["wss://fallback.example"])
+    expect(policy.naddrRelays).toEqual(["wss://fallback.example/"])
   })
 
   it("drops local relays from naddr hints", () => {
@@ -152,7 +168,7 @@ describe("resolveRepoRelayPolicy", () => {
 
     const policy = resolveRepoRelayPolicy({event})
 
-    expect(policy.naddrRelays).toEqual(["wss://repo-relay.example"])
+    expect(policy.naddrRelays).toEqual(["wss://repo-relay.example/"])
   })
 })
 
@@ -176,7 +192,7 @@ describe("buildRepoNaddrFromEvent", () => {
       kind: 30617,
       pubkey,
       identifier: "repo",
-      relays: ["wss://repo-relay.example"],
+      relays: ["wss://repo-relay.example/"],
     })
   })
 })

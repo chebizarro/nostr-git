@@ -100,11 +100,15 @@ export const resolveRepoRelayPolicy = ({
 }: RepoRelayPolicyInput): RepoRelayPolicyResult => {
   const taggedRelays = getTaggedRelaysFromRepoEvent(event)
   const fallbackRelays = sanitizeRelays(toStringArray(fallbackRepoRelays))
+  const kind = Number(event?.kind)
 
   const isGrasp = isLikelyGraspRepoEvent(event)
-  const repoRelays = isGrasp
-    ? sanitizeRelays(taggedRelays)
-    : sanitizeRelays([...taggedRelays, ...fallbackRelays])
+  const repoRelays =
+    kind === GIT_REPO_STATE
+      ? fallbackRelays
+      : isGrasp
+        ? sanitizeRelays(taggedRelays)
+        : sanitizeRelays([...taggedRelays, ...fallbackRelays])
 
   // Relay hints embedded in shared entities (naddr) must reflect where the
   // repo's events canonically live: the announcement's relays tag. This is
