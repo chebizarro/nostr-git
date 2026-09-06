@@ -1,27 +1,23 @@
-# Nostr-Git Architecture (Pre-Release Skeleton)
+# Architecture (working notes)
 
-This document is a short, working skeleton for the current architecture during pre-release hardening. See the root `ARCHITECTURE.md` for the detailed version and diagrams.
+For the full architecture, see the root [ARCHITECTURE.md](../ARCHITECTURE.md).
+This file holds pre-release hardening notes specific to `@nostr-git/core`.
 
-- Core packages
-  - `@nostr-git/shared-types`: Cross-package TypeScript contracts for NIP-34/22/51 and provider abstractions.
-  - `@nostr-git/core`: Git + Nostr orchestration with provider interface and safety guardrails.
-  - `@nostr-git/ui`: Svelte 5 component library consuming the ergonomic core APIs.
-  - `@nostr-git/git-wrapper`: Thin glue around the git engine, aligned with core provider abstractions.
-- Runtime targets
-  - Browser and mobile. Node-only dependencies are kept out of public entrypoints; fallbacks where required.
-- NIPs in scope for v1
-  - NIP-34 (git repo events), NIP-22 (reactions/related), NIP-51 (lists). Optional future: NIP-78 with NIP-44 payloads.
-- Git engine
-  - Targeting fork `chebizarro/isomorphic-git` for lazy object fetch, blob range requests, better shallow ops.
-- Safety guardrails
-  - Force-push blocked by default (explicit opt-in + consent callback required).
-  - HEAD parity checks before any push.
-  - Explicit user consent for destructive/remote-altering operations.
-- Providers
-  - Gitea, GitHub, GitLab, Bitbucket, GRASP via unified `GitProvider` interface.
-- Caching (opt-in)
-  - IndexedDB-backed cache for the isomorphic-git fork; repo/session configurable.
-- Logging policy
-  - Errors and warnings only; warnings suppressed in production.
-
-For the full design, see `ARCHITECTURE.md` at the repo root. This file will be expanded in Phase 7 with final diagrams and links to API docs.
+- **Package**: single npm package `@nostr-git/core` with subpath exports
+  (`./events`, `./git`, `./api`, `./worker`, `./blossom`, `./errors`,
+  `./utils`, `./types`). The former `@nostr-git/ui`, `@nostr-git/shared-types`,
+  and `@nostr-git/git-wrapper` packages now live in separate repositories.
+- **Runtime targets**: browser and mobile as well as Node; Node-only
+  dependencies are kept out of public entrypoints.
+- **NIPs in scope**: NIP-34 (git repo events), NIP-22, NIP-32 (labels),
+  NIP-51 (lists).
+- **Git engine**: `isomorphic-git` (with lazy object fetch / shallow ops),
+  plus the natural-read subsystem over `@fiatjaf/git-natural-api`.
+- **Providers**: GitHub, GitLab, Gitea, and GRASP (relay-native + REST) via the
+  unified `GitProvider` / `GitServiceApi` interfaces; Bitbucket and direct-Nostr
+  git are disabled by `provider-policy.ts`.
+- **Safety guardrails**: HEAD-parity checks before push; explicit consent for
+  destructive/remote-altering ops; relay-identity hardening (path/query bytes
+  are endpoint identity).
+- **Caching**: opt-in IndexedDB-backed caches for repositories and natural-read.
+- **Logging**: errors and warnings only; warnings suppressed in production.

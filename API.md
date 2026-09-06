@@ -1,22 +1,22 @@
 # API Documentation
 
-This document describes the APIs provided by the Nostr-Git project, including the core library APIs, Git service APIs, and extension interfaces.
+This document describes the public APIs of `@nostr-git/core`: the event layer, Git service APIs, the Git provider/repo helpers, and the worker client.
 
 See also: [Git Stacking and Merge Metadata](docs/nostr-git-stacking.md)
 
 ## Canonical Tag Helpers (Required)
 
-Always access Nostr event tags via helpers from `@nostr-git/shared-types`:
+Always access Nostr event tags via helpers from `@nostr-git/core/events`:
 
 ```ts
-import {getTag, getTags, getTagValue} from "@nostr-git/shared-types"
+import {getTag, getTags, getTagValue} from "@nostr-git/core/events"
 
 const firstCommitter = getTag(event, "committer")
 const cloneTags = getTags(announcement, "clone")
 const repoUrl = getTagValue(announcement, "r")
 ```
 
-Do not use `event.tags.find` or `event.tags.filter` directly. ESLint enforces this repo-wide; exceptions only apply within `packages/shared-types/src/` where helpers are implemented.
+Do not use `event.tags.find` or `event.tags.filter` directly. ESLint enforces this repo-wide; exceptions only apply within the `events` module (`src/events/`) where helpers are implemented.
 
 ## Core Library API (@nostr-git/core)
 
@@ -103,7 +103,7 @@ worker.terminate()
 
 ## Runtime Validation Guards (Feature-Flagged)
 
-To protect against malformed Nostr events at runtime, Nostr-Git provides optional validation guards backed by Zod schemas from `@nostr-git/shared-types`.
+To protect against malformed Nostr events at runtime, Nostr-Git provides optional validation: `assert*` guards from `@nostr-git/core/events` and `validate*` helpers from `@nostr-git/core/utils`, backed by Zod schemas.
 
 - Default: enabled in development, disabled in production.
 - Toggle via environment variable: `NOSTR_GIT_VALIDATE_EVENTS`.
@@ -127,9 +127,9 @@ function ingestState(evt: unknown) {
 }
 ```
 
-#### Git-Wrapper Subscription Paths
+#### Subscription paths
 
-`@nostr-git/git-wrapper` applies validation at ingress:
+Validation is applied at ingress:
 
 - Repo discovery ignores invalid repo announcements.
 - Repo state subscription rejects invalid state events.
@@ -137,16 +137,16 @@ function ingestState(evt: unknown) {
 
 Behavior is controlled by the same `NOSTR_GIT_VALIDATE_EVENTS` flag.
 
-#### Extension Fetch/Publish Paths
+#### Host fetch/publish paths
 
-`@nostr-git/extension` applies validation to:
+Hosts that wire in `EventIO` should validate at the boundary:
 
-- `fetchRepoEvent()`: filters out invalid announcements from relays.
-- `publishEvent()`: preflight validates outgoing repo announcement, repo state, and issue events before signing/publishing.
+- On fetch: filter out invalid announcements from relays.
+- On publish: preflight-validate outgoing repo announcement, repo state, and issue events before signing/publishing.
 
 ```ts
 // Example: ensure a repo announcement is valid before signing/publishing
-import {validateRepoAnnouncementEvent} from "@nostr-git/shared-types"
+import {validateRepoAnnouncementEvent} from "@nostr-git/core/utils"
 
 const res = validateRepoAnnouncementEvent(unsignedAnnouncement)
 if (!res.success) throw new Error(res.error.message)
@@ -221,69 +221,6 @@ console.log(
 // Get file content
 const content = await api.getFileContent("user", "repo", "README.md")
 console.log("README content:", content.text)
-```
-
-## Extension APIs
-
-### Browser Extension API
-
-The browser extension provides APIs for integrating with web-based Git platforms.
-
-#### UX and Settings (v0.2.0)
-
-- Viewer base URL: The popup setting `viewerBase` controls where nevent links open. Defaults to `https://njump.me/`. Input is normalized to always include scheme and trailing slash.
-- Confirmation dialogs: Before publishing repo announcements and permalinks (including context menu actions), a native confirm dialog is shown. Canceling shows a gentle cancel snackbar.
-- Snackbars: Persistent until user dismisses; auto-dismiss after 5s (success/error) or 3s (cancel). Animated fade/slide and respects `prefers-reduced-motion`. Permalink/snippet snackbars include a full clickable URL+nevent that does not dismiss on click.
-- Compile-time debug toggle: Release builds can hide the "Debug: console-only" option via `NOSTR_GIT_SHOW_DEBUG=false`.
-
-#### Content Script API
-
-```typescript
-// Inject Nostr publishing buttons into GitHub pages
-interface ContentScriptAPI {
-  injectNostrButtons(): void
-  publishRepoEvent(repoData: GitRepository): Promise<void>
-  publishIssueEvent(issueData: GitIssue): Promise<void>
-}
-```
-
-#### Background Script API
-
-```typescript
-// Handle Nostr operations in background
-interface BackgroundAPI {
-  signEvent(event: UnsignedEvent): Promise<NostrEvent>
-  publishEvent(event: NostrEvent, relays: string[]): Promise<void>
-  subscribeToEvents(filter: EventFilter): Promise<NostrEvent[]>
-}
-```
-
-#### Commands
-
-```typescript
-// Available VSCode commands
-interface VSCodeCommands {
-  "nostr-git.publishRepo": () => Promise<void>
-  "nostr-git.createPullRequest": () => Promise<void>
-  "nostr-git.subscribeToRepo": (repoUrl: string) => Promise<void>
-  "nostr-git.viewNostrEvents": () => Promise<void>
-}
-```
-
-#### Usage in VSCode
-
-```typescript
-// Register command handler
-vscode.commands.registerCommand("nostr-git.publishRepo", async () => {
-  const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
-  if (!workspaceFolder) return
-
-  const repoInfo = await getRepositoryInfo(workspaceFolder.uri.fsPath)
-  const event = createRepoEvent(repoInfo)
-
-  // Sign and publish event
-  await publishToNostr(event)
-})
 ```
 
 ## Error Handling
@@ -410,162 +347,56 @@ export default {
 This API documentation provides comprehensive coverage of all public APIs in the Nostr-Git project, with practical examples and error handling patterns.
 
 ---
+## Git provider & repository helpers
 
-## Git Wrapper API (@nostr-git/git-wrapper)
+This single package includes the Git provider and NIP-34 orchestration that
+previously lived in `@nostr-git/git-wrapper`. There are no separate
+`git-wrapper` split entry points or `prefs-store` adapters.
 
-The Git Wrapper bridges a concrete Git backend with Nostr NIP-34 collaboration events, implementing the ngit architecture in TypeScript.
-
-### Importing
+### Getting a provider
 
 ```ts
-import {NostrGitProvider} from "@nostr-git/git-wrapper/src/nostr-git-provider.js"
-import {makeRepoAddr} from "@nostr-git/git-wrapper/src/repo-addr.js"
-import {FileProtocolPrefs} from "@nostr-git/git-wrapper/src/prefs-store.js"
+import { getGitProvider, initializeNostrGitProvider } from "@nostr-git/core"
+
+const git = getGitProvider() // isomorphic-git-backed GitProvider
 ```
 
-#### Split entry points (browser vs node)
-
-`@nostr-git/git-wrapper` ships split entry points to avoid bundling Node-only modules in the browser:
-
-- Browser: `dist/index.web.js` (LightningFS + `isomorphic-git/http/web`)
-- Node/SSR: `dist/index.node.js` (Node `fs` + `isomorphic-git/http/node`)
-
-The package `exports` map selects the correct entry automatically for most bundlers. Typical usage:
+For Nostr-native orchestration (repo discovery/state via injected `EventIO`):
 
 ```ts
-import {getGitProvider} from "@nostr-git/git-wrapper"
+import { NostrGitProvider } from "@nostr-git/core/api"
+// See src/api/providers/nostr-git-provider.ts
 ```
 
-When you need to be explicit:
+Select a service API from a vendor id or URL (gated by provider policy):
 
 ```ts
-// Browser explicit
-import {getGitProvider} from "@nostr-git/git-wrapper/dist/index.web.js"
-
-// Node explicit
-import {getGitProvider} from "@nostr-git/git-wrapper/dist/index.node.js"
+import { getGitServiceApi, getGitServiceApiFromUrl } from "@nostr-git/core"
 ```
 
-### Construction
+### Repo address helpers
+
+Always construct repo addresses via the helpers:
 
 ```ts
-const git /*: GitProvider*/ = /* your isomorphic-git based provider */;
-const nostr /*: NostrClient*/ = /* your nostr client (publish/subscribe/signing) */;
-const provider = new NostrGitProvider(git, nostr);
+import { makeRepoAddr, isRepoAddr } from "@nostr-git/core/utils"
+// See src/utils/repo-addr.ts
 
-// Optional: persist preferred clone/push URL per repoId
-import fs from 'node:fs';
-provider.configureProtocolPrefsStore(new FileProtocolPrefs(fs, `${process.cwd()}/.ngit/prefs.json`));
-```
-
-### Repo Address Helpers
-
-```ts
-const ownerPubkey = "f".repeat(64)
-const repoAddr = makeRepoAddr(ownerPubkey, "my-repo") // e.g. "kind:pubkey:identifier"
-```
-
-### Discovery
-
-```ts
-const discovered = await provider.discoverRepo("my-repo", {timeoutMs: 2000})
-// discovered.urls (clone URLs), discovered.branches, discovered.tags
-```
-
-### Clone with Protocol Preference and SSH Heuristic
-
-```ts
-await provider.clone({dir: "/tmp/repo", repoId: "my-repo", timeoutMs: 2500})
-// If url omitted: prefers stored preference else SSH if present, then others.
-```
-
-### Push Partitioning and PR Events
-
-```ts
-await provider.push({
-  dir: "/tmp/repo",
-  fs, // enables unified diff in default PR content
-  refspecs: ["refs/heads/pr/feature-x"],
-  repoId: "my-repo",
-  repoAddr,
-  baseBranch: "refs/heads/main",
-  // Optional content controls
-  // patchContent: 'Custom content',
-  // getPatchContent: async (ctx) => '...'
-})
-```
-
-Behavior:
-
-- PR refs publish NIP-34 pull request events with repository, branch, tip, and recipient tags.
-- Legacy patch-event publishing is disabled.
-
-### Normal Push with Optional Status Emission
-
-```ts
-await provider.push({
-  dir: "/tmp/repo",
-  refspecs: ["refs/heads/main"],
-  repoId: "my-repo",
-  nostrStatus: {
-    repoAddr,
-    rootId: "root-event-id",
-    content: "Push applied to main",
-    close: false, // set true to emit GIT_STATUS_CLOSED
-  },
-})
-```
-
-Resilience:
-
-- On server push failure, provider discovers alternate URLs, retries once with a different URL, and updates preference on success.
-
-### Merge with Status Events
-
-```ts
-await provider.merge({
-  dir: "/tmp/repo",
-  ours: "refs/heads/main",
-  theirs: "refs/heads/feature-x",
-  nostrStatus: {repoAddr, rootId: "root-event-id", content: "Merged feature-x", close: true},
-})
-```
-
-Emits `GIT_STATUS_APPLIED` (and `GIT_STATUS_CLOSED` when `close: true`) with enriched participants.
-
-### Subscriptions
-
-```ts
-const subId = provider.subscribeToCollaborationEvents("my-repo", evt => {
-  console.log("Collab evt", evt.kind, evt.id)
-})
-```
-
-### Default Unified Diff Helper
-
-```ts
-import {generateUnifiedDiff} from "@nostr-git/git-wrapper/src/git-diff-content.js"
-const diff = await generateUnifiedDiff({
-  fs,
-  dir: "/tmp/repo",
-  baseRef: "refs/heads/main",
-  headRef: "refs/heads/feature-x",
-})
+const repoAddr = makeRepoAddr(ownerPubkey, repoId)
+console.assert(isRepoAddr(repoAddr))
 ```
 
 ### Examples
 
-- Normal push with fallback and status: `packages/git-wrapper/examples/push-normal.ts`
-- PR push emitting NIP-34 pull request events: `packages/git-wrapper/examples/push-pr.ts`
-- Clone-and-PR with real commits and unified diff: `packages/git-wrapper/examples/clone-and-pr.ts`
-- Basic clone + status with factory: `packages/git-wrapper/examples/basic-clone-status.ts`
+Runnable examples live in `examples/`:
 
-Run examples from repo root:
+- `examples/push-normal.ts` — normal push with clone-URL fallback and status
+- `examples/push-pr.ts` — PR push emitting NIP-34 pull-request events
+- `examples/clone-and-pr.ts` — clone-and-PR with real commits and unified diff
+- `examples/basic-clone-status.ts` — clone + status via the factory
+- `examples/worker-usage.ts` — worker client with `EventIO`
 
 ```bash
-pnpm -w --filter @nostr-git/git-wrapper build
-node packages/git-wrapper/examples/push-normal.ts
-node packages/git-wrapper/examples/push-pr.ts
-node packages/git-wrapper/examples/clone-and-pr.ts
-node packages/git-wrapper/examples/basic-clone-status.ts
+pnpm build
+node examples/push-normal.ts
 ```

@@ -63,7 +63,7 @@ Pull requests may advertise revision lineage using tags:
 Include kinds [1618, 1619, 30410, 30411, 30412] with tag filters (#a, #e) alongside repo events.
 
 ## Builders and Validation
-Use @nostr-git/shared-types builders and validators:
+Use `@nostr-git/core/events` builders and validators:
 - createStackEvent, createMergeMetadataEvent, createConflictMetadataEvent
 - validateStackEvent, validateMergeMetadataEvent, validateConflictMetadataEvent
 

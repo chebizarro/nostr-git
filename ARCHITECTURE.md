@@ -1,216 +1,114 @@
-# Architecture Guide
+# Architecture — `@nostr-git/core`
 
-## System Overview
+`@nostr-git/core` is a **single TypeScript package** that bridges Git version
+control with the Nostr protocol (NIP-34 and related NIPs). It targets browsers
+and mobile as well as Node, so public entrypoints avoid Node-only APIs.
 
-The Nostr-Git platform is designed as a modular monorepo that bridges Git version control with the Nostr protocol, enabling decentralized code collaboration through NIP-34 events.
+> This is no longer a monorepo. The Svelte UI, shared types, and git-wrapper
+> that older revisions describe now live in separate repositories.
 
-See also: [Git Stacking and Merge Metadata](docs/nostr-git-stacking.md)
+See also: [AGENTS.md](AGENTS.md) (contributor rules) and
+[Git Stacking and Merge Metadata](docs/nostr-git-stacking.md).
 
-## High-Level Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Nostr-Git Platform                       │
-├─────────────────────────────────────────────────────────────┤
-│  Applications & Extensions                                  │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐            │
-│  │   Browser   │ │  Web IDE    │ │   CLI       │            │
-│  │  Extension  │ │  Editor     │ │  Tooling    │            │
-│  └─────────────┘ └─────────────┘ └─────────────┘            │
-├─────────────────────────────────────────────────────────────┤
-│  UI Layer                                                   │
-│  ┌─────────────────────────────────────────────────────────┐│
-│  │              @nostr-git/ui                              ││
-│  │         Svelte 5 + TailwindCSS Components               ││
-│  └─────────────────────────────────────────────────────────┘│
-├─────────────────────────────────────────────────────────────┤
-│  Core Libraries                                             │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐            │
-│  │    Core     │ │ Git Wrapper │ │ Shared Types│            │
-│  │   Library   │ │             │ │             │            │
-│  └─────────────┘ └─────────────┘ └─────────────┘            │
-├─────────────────────────────────────────────────────────────┤
-│  External Dependencies                                      │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐            │
-│  │ Nostr Tools │ │ Git (isogit)│ │   Node.js   │            │
-│  └─────────────┘ └─────────────┘ └─────────────┘            │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## Package Architecture
-
-### Core Package (@nostr-git/core)
-
-**Purpose**: Central library for Git-Nostr event operations
-
-**Key Components**:
-
-- `event.js` - Nostr event creation and parsing
-- `git.js` - Git operations and repository management
-- `repo.js` - Repository state management
-- `merge-analysis.ts` - Pull request merge analysis and diff summaries
-- `workers/git-worker.js` - Background Git operations
-- `merge.js` - Merge conflict resolution
-
-**Dependencies**: nostr-tools, isogit, diff
-
-### Shared Types Package (@nostr-git/shared-types)
-
-**Purpose**: TypeScript definitions and constants
-
-**Key Components**:
-
-- `nip34.ts` - NIP-34 event type definitions
-- `utils.ts` - Utility types and helpers
-- Event kind constants (30617, 30618, 1618, 1619, 1621)
-
-### Git Wrapper Package (@nostr-git/git-wrapper)
-
-**Purpose**: Abstraction layer for Git operations
-
-**Key Components**:
-
-- `provider.ts` - Git provider interface
-- Git operation wrappers with Nostr integration
-
-### UI Package (@nostr-git/ui)
-
-**Purpose**: Reusable Svelte components
-
-**Key Components**:
-
-- Svelte 5 components with runes
-- TailwindCSS styling with custom preset
-- Component library for Git/Nostr interfaces
-
-## Data Flow
-
-### Event Publishing Flow
+## Layered view
 
 ```
-Git Operation → Core Library → Nostr Event → Relay Network
-     ↓              ↓              ↓             ↓
-  Repository → Event Creation → Signing → Broadcasting
+┌──────────────────────────────────────────────────────────────┐
+│ Consumers: host apps, extensions, workers (inject EventIO)    │
+├──────────────────────────────────────────────────────────────┤
+│ Convenience + namespaced barrel  (src/index.ts)               │
+├───────────────┬───────────────┬───────────────┬──────────────┤
+│  events/      │  git/         │  api/         │  worker/     │
+│  NIP-34/22/   │  engine +     │  service API  │  Comlink     │
+│  32/51 build  │  providers +  │  clients      │  client +    │
+│  + parse +    │  natural-read │  (GitHub/Lab/ │  operations  │
+│  tag helpers  │  + import     │  Gitea/GRASP) │  + progress  │
+├───────────────┴───────────────┴───────────────┴──────────────┤
+│  Cross-cutting: types (EventIO), errors, utils, blossom       │
+├──────────────────────────────────────────────────────────────┤
+│  External: nostr-tools · isomorphic-git · comlink · zod       │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-### Event Consumption Flow
+## Modules
 
-```
-Relay Network → Event Parsing → UI Components → User Interface
-     ↓              ↓              ↓             ↓
-   Subscribe → Event Handling → State Update → Rendering
-```
+### `events/` — Nostr event layer
+Builders and parsers for NIP-34 (repo announcements/state, issues, pull
+requests, statuses, permalinks, cover letters), plus NIP-22, NIP-32 (labels),
+and NIP-51 (lists). Event-kind constants are in `kinds.ts`. The canonical tag
+helpers (`getTag`/`getTags`/`getTagValue`) live in `nip34/nip34-utils.ts` and
+are the **only** supported way to read tags. Optional Zod validation is in
+`nip34/validation.ts`.
 
-## Technology Choices & Rationale
+### `git/` — Git engine and providers
+Git operations run through `isomorphic-git` behind a `GitProvider` interface
+(`provider.ts`, `isomorphic-git-provider.ts`, `multi-vendor-git-provider.ts`).
+`provider-factory.ts` / `vendor-provider-factory.ts` select a provider from a
+URL or vendor id, gated by `provider-policy.ts` (Bitbucket and direct-Nostr git
+are currently disabled). The **natural-read** subsystem
+(`natural-read-*.ts`) provides a cached, indexed read API over repositories
+(`@fiatjaf/git-natural-api`), with layered caches (in-memory, IndexedDB,
+observed) and a PR-review adapter. `import-config.ts` and platform adapters
+convert external repos/issues/PRs into Nostr events.
 
-### TypeScript
+### `api/` — Git service API clients
+REST/relay clients implementing `GitServiceApi` for GitHub, GitLab, Gitea, and
+**GRASP**. GRASP has two paths: `grasp.ts`/`grasp-api.ts` (relay-native, with
+`grasp-capabilities.ts` NIP-11 capability negotiation and `grasp-state.ts`) and
+`grasp-rest.ts` (smart-HTTP). `nostr-git-provider.ts` orchestrates discovery of
+repo announcements/state through the injected `EventIO`.
 
-- **Why**: Type safety for complex event structures and Git operations
-- **Benefits**: Better IDE support, compile-time error detection, self-documenting APIs
+### `worker/` — background execution
+A Comlink worker isolates heavy Git work from the UI thread. `client.ts`
+(`getGitWorker`, `configureWorkerEventIO`) is the entrypoint; `operations.ts`
+tracks long-running mutations with terminal-state semantics; `progress.ts`
+emits typed progress; `workers/` holds the operation implementations (clone,
+push, PR merge, repo management, sync, remote backfill) plus per-repo locking
+(`repo-operation-lock.ts`) and caching (`cache.ts`).
 
-### Svelte 5
+### Cross-cutting
+- **`types/`** — the `EventIO` abstraction (relay-scoped fetch/publish/sign,
+  no signer passing) and shared Nostr types.
+- **`errors/`** — structured `GitError` model: `GitErrorCategory`,
+  `GitErrorCode`, context, and `create*Error` factories.
+- **`utils/`** — relay sanitization/canonicalization (Welshman-aligned),
+  clone-URL fallback ordering, and repo relay policy.
+- **`blossom/`** — Blossom blob storage integration.
 
-- **Why**: Modern reactive framework with excellent performance
-- **Benefits**: Smaller bundle sizes, intuitive reactivity, great TypeScript support
+## Data flow
 
-### pnpm Workspaces
+**Publish** — a Git operation produces an unsigned event, which core hands to
+`EventIO.publishEvent(event, { relays })`; the host signs and broadcasts to the
+explicit relay scope.
 
-- **Why**: Efficient monorepo management with shared dependencies
-- **Benefits**: Faster installs, better dependency resolution, workspace linking
+**Consume** — core calls `EventIO.fetchEvents(filters, { relays })` against a
+scoped relay set, parses events with the `events/` helpers, and resolves
+repository state/status.
 
-### TailwindCSS
+Every relay interaction is **scoped** to an explicit relay list — core never
+uses an ambient global pool.
 
-- **Why**: Utility-first CSS framework for rapid UI development
-- **Benefits**: Consistent design system, small production bundles, excellent DX
+## Safety guardrails
 
-### nostr-tools
+- Provider policy disables Bitbucket and direct-Nostr git providers.
+- Relay identity is hardened: URLs are canonicalized without dropping
+  path/query bytes, which are treated as endpoint identity.
+- Push paths validate GRASP repository/relay identity before mutating.
+- Optional feature-flagged runtime validation of events (Zod).
 
-- **Why**: Standard library for Nostr protocol operations
-- **Benefits**: Well-tested, community-maintained, comprehensive API
+## Technology choices
 
-## Performance Considerations
+- **isomorphic-git** — pure-JS Git for browser/mobile.
+- **nostr-tools** — Nostr primitives (events, keys, relay URL normalization).
+- **comlink** — ergonomic typed worker RPC.
+- **zod** — optional runtime event validation.
+- **@fiatjaf/git-natural-api** — natural-read repository access.
+- **fflate / @noble/hashes / file-type / diff** — compression, hashing, MIME
+  sniffing, and diffing.
 
-### Bundle Size Optimization
+## Distribution
 
-- Tree-shaking enabled for all packages
-- Separate entry points for different use cases
-- Dynamic imports for heavy operations
-
-### Memory Management
-
-- Web Workers for Git operations to prevent UI blocking
-- Streaming for large file operations
-- Efficient event caching strategies
-
-### Network Optimization
-
-- Relay connection pooling
-- Event deduplication
-- Optimistic UI updates
-
-## Scalability Notes
-
-### Horizontal Scaling
-
-- Stateless core library design
-- Relay-based event distribution
-- Independent package deployments
-
-### Vertical Scaling
-
-- Worker threads for CPU-intensive operations
-- Streaming APIs for large repositories
-- Incremental loading strategies
-
-## Security Architecture
-
-### Event Signing
-
-- Private key management in extensions
-- Secure key storage patterns
-- Event verification workflows
-
-### Git Operations
-
-- Sandboxed Git operations
-- Input validation and sanitization
-- Safe file system operations
-
-## Extension Points
-
-### Custom Git Providers
-
-- Provider interface for different Git backends
-- Plugin architecture for custom operations
-
-### Custom UI Components
-
-- Component composition patterns
-- Theme customization support
-- Event handler extensibility
-
-### Custom Relays
-
-- Relay adapter pattern
-- Custom event filtering
-- Backup relay strategies
-
-## Development Patterns
-
-### Monorepo Organization
-
-- Each package is independently buildable
-- Shared configuration files at root
-- Cross-package type sharing
-
-### Event-Driven Architecture
-
-- Nostr events as the primary data exchange format
-- Reactive UI updates based on event streams
-- Decoupled component communication
-
-### Worker Pattern
-
-- Background processing for heavy operations
-- Message passing between main thread and workers
-- Graceful error handling and recovery
+One package with subpath exports (`./events`, `./git`, `./api`, `./worker`,
+`./blossom`, `./errors`, `./utils`, `./types`) plus the worker bundle
+(`./worker/worker.js`). Build = `clean → tsc → bundle worker`. See
+[DEPLOYMENT.md](DEPLOYMENT.md) and [API.md](API.md).

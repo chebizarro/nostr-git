@@ -68,7 +68,7 @@ class EventHandler {
 ```
 git-worker.ts
 merge-analysis.ts
-shared-types/
+nip34-utils.ts
 ```
 
 ### Import/Export Standards
@@ -84,7 +84,7 @@ shared-types/
 // ✅ Good
 import {readFile} from "fs/promises"
 import {Event} from "nostr-tools"
-import type {GitRepository} from "@nostr-git/shared-types"
+import type {GitRepository} from "@nostr-git/core/events"
 import {logger} from "../utils/logger.js"
 import type {LocalConfig} from "./types.js"
 ```
@@ -193,7 +193,7 @@ async function safeOperation() {
 
 <script lang="ts">
   // 1. Imports
-  import type {NostrEvent} from "@nostr-git/shared-types"
+  import type {NostrEvent} from "@nostr-git/core/events"
   import {Button} from "$lib/components"
 
   // 2. Props interface
@@ -407,7 +407,7 @@ fix(ui): resolve component rendering issue in Safari
 
 docs(readme): update installation instructions
 
-refactor(git-wrapper): simplify provider interface
+refactor(git): simplify provider interface
 ```
 
 ### Pull Request Guidelines

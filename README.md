@@ -65,10 +65,12 @@ Nostr-Git ships a worker bundle export and a Comlink client.
 import { getGitWorker, configureWorkerEventIO } from "@nostr-git/core"
 import type { EventIO } from "@nostr-git/core"
  
+// Every relay call is scoped to an explicit relay list — never an ambient pool.
 const eventIO: EventIO = {
-  fetchEvents: async () => [],
-  publishEvent: async (event) => ({ ok: true, relays: [] }),
-  publishEvents: async (events) => Promise.all(events.map((e) => eventIO.publishEvent(e))),
+  fetchEvents: async (filters, scope) => [],
+  publishEvent: async (event, scope) => ({ ok: true, relays: [] }),
+  publishEvents: async (events, scope) =>
+    Promise.all(events.map((e) => eventIO.publishEvent(e, scope))),
   getCurrentPubkey: () => "f".repeat(64),
 }
  
@@ -81,7 +83,9 @@ await configureWorkerEventIO(api, eventIO)
 worker.terminate()
 ```
  
-See `examples/worker-usage.ts` for a fuller example.
+See `examples/worker-usage.ts` for a fuller example. Other runnable examples:
+`examples/basic-clone-status.ts`, `examples/push-normal.ts`, `examples/push-pr.ts`,
+`examples/clone-and-pr.ts`.
  
 ## Runtime validation (feature-flagged)
  
@@ -113,10 +117,12 @@ For watch mode (tsc + worker bundle), see `pnpm watch` and `scripts/dev.mjs`.
  
 ## Documentation
  
+- [AGENTS.md](AGENTS.md) — contributor/agent orientation (read this first)
 - [API](API.md)
 - [Development Guide](DEVELOPMENT.md)
 - [Architecture](ARCHITECTURE.md)
 - [Deployment](DEPLOYMENT.md)
+- [Release Notes](RELEASE.md)
 - [Subscription Cookbook](docs/subscription-cookbook.md)
  
 ## License
