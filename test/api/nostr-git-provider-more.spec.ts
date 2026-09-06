@@ -54,10 +54,10 @@ describe("API/NostrGitProvider additional paths", () => {
     expect((res?.urls || []).length).toBeGreaterThan(0)
     expect(res?.state).toBeUndefined()
     expect(io.__calls.fetchEvents).toEqual([
-      expect.objectContaining({scope: {relays: ["wss://discovery.example.com"]}}),
+      expect.objectContaining({scope: {relays: ["wss://discovery.example.com/"]}}),
       expect.objectContaining({
         filters: [expect.objectContaining({authors: [owner]})],
-        scope: {relays: ["wss://relay.example.com"]},
+        scope: {relays: ["wss://relay.example.com/"]},
       }),
     ])
   })

@@ -20,15 +20,17 @@ const GRASP_RELAY = "wss://relay.ngit.dev"
 
 it("preserves query-bearing GRASP identity during explicit push validation", () => {
   const remoteUrl = `${GRASP_REMOTE_URL}?tenant=One%2FTwo`
-  const targetRelay = `${GRASP_RELAY}/?tenant=One%2FTwo`
+  // Service relays are canonicalized without a root slash before the query
+  // (see normalizeServiceRelay in workers/push.ts).
+  const canonicalRelay = `${GRASP_RELAY}?tenant=One%2FTwo`
 
   expect(
     validateExplicitGraspPush({
       remoteUrl,
       token: GRASP_OWNER_PUBKEY,
-      repoRelays: [targetRelay],
+      repoRelays: [`${GRASP_RELAY}/?tenant=One%2FTwo`],
     }),
-  ).toEqual({pushUrl: remoteUrl, repoRelays: [targetRelay], targetRelay})
+  ).toEqual({pushUrl: remoteUrl, repoRelays: [canonicalRelay], targetRelay: canonicalRelay})
 })
 
 class MemCacheManager implements Partial<RepoCacheManager> {

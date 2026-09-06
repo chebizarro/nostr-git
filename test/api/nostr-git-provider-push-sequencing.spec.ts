@@ -129,7 +129,7 @@ describe("NostrGitProvider state publication sequencing", () => {
 
     expect(gitProvider.push).not.toHaveBeenCalled()
     expect(grasp.publishStateFromLocal).toHaveBeenCalledWith("owner", "repo", {
-      relays: ["wss://relay.example"],
+      relays: ["wss://relay.example/"],
     })
   })
 

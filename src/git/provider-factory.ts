@@ -18,7 +18,7 @@ import {GraspApiProvider} from "../api/providers/grasp.js"
 import {normalizeHttpOrigin} from "../api/providers/grasp-capabilities.js"
 import {GraspRestApiProvider} from "../api/providers/grasp-rest.js"
 import {createInvalidInputError, type GitErrorContext} from "../errors/index.js"
-import {isGraspRelayUrl, isGraspRepoHttpUrl} from "../utils/grasp-url.js"
+import {isGraspRelayUrl, isGraspRepoHttpUrl, parseGraspRepoHttpUrl} from "../utils/grasp-url.js"
 import {
   ENABLE_BITBUCKET_PROVIDER,
   assertGitVendorEnabled,
@@ -151,7 +151,12 @@ export function getGitServiceApiFromUrl(url: string, token: string): GitServiceA
   } else if (normalizedUrl.includes("bitbucket.org") || normalizedUrl.includes("bitbucket.")) {
     provider = "bitbucket"
     baseUrl = "https://api.bitbucket.org/2.0"
-  } else if (isGraspRepoHttpUrl(url) || isGraspRelayUrl(url)) {
+  } else if (isGraspRepoHttpUrl(url)) {
+    provider = "grasp-rest"
+    // Use the GRASP service base (tenant prefix and query preserved), not the
+    // full repository URL, so REST endpoints resolve against the service root.
+    baseUrl = parseGraspRepoHttpUrl(url)!.httpBase.replace(/\/+(?=\?|$)/, "")
+  } else if (isGraspRelayUrl(url)) {
     provider = "grasp-rest"
     baseUrl = url
   } else {

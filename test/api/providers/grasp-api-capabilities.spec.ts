@@ -18,6 +18,6 @@ describe("GraspApi relay capabilities", () => {
       "wss://b.example",
       "wss://c.example",
     ])
-    expect(capable).toEqual(["wss://a.example", "wss://c.example"])
+    expect(capable).toEqual(["wss://a.example/", "wss://c.example/"])
   })
 })

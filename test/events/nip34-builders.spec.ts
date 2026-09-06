@@ -17,6 +17,7 @@ import {
   parseUserGraspListServerUrls,
 } from "../../src/events/nip34/nip34-utils.js"
 import type {CoverLetterTag, IssueTag, PullRequestTag} from "../../src/events/nip34/nip34.js"
+import {normalizeRelayUrl} from "../../src/utils/sanitize-relays.js"
 
 describe("NIP-34 builders", () => {
   it("createRepoAnnouncementEvent encodes all tag variants and sanitizes relays", () => {
@@ -53,7 +54,8 @@ describe("NIP-34 builders", () => {
     expect(relays).toBeTruthy()
     const relayVals = (relays as any).slice(1) as string[]
     expect(relayVals.length).toBeGreaterThan(0)
-    expect(relayVals.every(r => !r.endsWith("/"))).toBe(true)
+    // Canonical relay form is Welshman-aligned: bare origins carry a root slash.
+    expect(relayVals.every(r => normalizeRelayUrl(r) === r)).toBe(true)
     expect(new Set(relayVals).size).toBe(relayVals.length)
 
     const maint = getTag(evt as any, "maintainers")
@@ -394,7 +396,7 @@ describe("NIP-34 builders", () => {
       services: ["wss://one.example/", "https://not-websocket.example", "wss://one.example"],
     })
 
-    expect(parseUserGraspListServerUrls(evt)).toEqual(["wss://one.example"])
+    expect(parseUserGraspListServerUrls(evt)).toEqual(["wss://one.example/"])
   })
 
   it("createStackEvent encodes stack membership and order", () => {

@@ -44,6 +44,6 @@ describe("API/NostrGitProvider malformed announcement handling", () => {
 
     expect(res).toBeNull()
     expect(io.__calls.fetchEvents).toHaveLength(1)
-    expect(io.__calls.fetchEvents[0].scope.relays).toEqual(["wss://discovery.example.com"])
+    expect(io.__calls.fetchEvents[0].scope.relays).toEqual(["wss://discovery.example.com/"])
   })
 })

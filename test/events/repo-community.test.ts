@@ -24,12 +24,12 @@ describe("repo community binding", () => {
     event.id = "event-id"
     event.pubkey = author
 
-    expect(event.tags).toContainEqual(["h", community, "wss://relay.example.com"])
-    expect(event.tags).toContainEqual(["a", communityAddress, "wss://relay.example.com"])
+    expect(event.tags).toContainEqual(["h", community, "wss://relay.example.com/"])
+    expect(event.tags).toContainEqual(["a", communityAddress, "wss://relay.example.com/"])
     expect(parseRepoAnnouncementEvent(event).community).toEqual({
       address: communityAddress,
       communityId: community,
-      relay: "wss://relay.example.com",
+      relay: "wss://relay.example.com/",
     })
   })
 

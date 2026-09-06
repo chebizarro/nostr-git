@@ -52,14 +52,15 @@ describe("api/providers: GraspApiProvider (additional coverage)", () => {
     vi.resetModules()
   })
 
-  it("ensureCapabilities selects root-origin http base for getRepo URLs", async () => {
+  it("ensureCapabilities selects the first advertised http origin for getRepo URLs", async () => {
     const provider = new GraspApiProvider("wss://relay.example/anything", "pub")
     // Prevent network event queries
     ;(provider as any).queryEvents = vi.fn().mockResolvedValue([])
     const repo = await provider.getRepo(ownerPubkey, "repo")
-    // Current implementation may produce double slash; adjust expectation to match
-    expect(repo.cloneUrl).toBe("https://host.example//npub1xyz/repo.git")
-    expect(repo.htmlUrl).toBe("https://host.example//npub1xyz/repo")
+    // The provider uses httpOrigins[0] as its base; origin paths are preserved
+    // because path bytes are part of endpoint identity.
+    expect(repo.cloneUrl).toBe("https://host.example/path/npub1xyz/repo.git")
+    expect(repo.htmlUrl).toBe("https://host.example/path/npub1xyz/repo")
   })
 
   it("publishStateFromLocal rejects when relay lacks GRASP-01", async () => {
