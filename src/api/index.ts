@@ -4,6 +4,7 @@ export * from "./git-provider.js";
 // Providers (explicit list of intentionally public modules)
 export * from "./providers/nostr-git-provider.js";
 export * from "./providers/nostr-git-factory.js";
+export * from "./provider-selector.js";
 export * from "./providers/grasp.js";
 
 // Vendor REST adapters (present in repo; exported for completeness)

@@ -12,7 +12,6 @@ import type {NostrEvent} from "nostr-tools"
 import {loadConfig} from "../../git/config.js"
 import {createGitProvider} from "../../git/factory.js"
 import httpWeb from "isomorphic-git/http/web"
-import {isGraspRepoHttpUrl} from "../../utils/grasp-url.js"
 import {
   ENABLE_DIRECT_NOSTR_GIT_PROVIDER,
   assertDirectNostrGitProviderEnabled,
@@ -20,6 +19,7 @@ import {
 
 import {NostrGitProvider, type NostrGitConfig} from "./nostr-git-provider.js"
 import {GraspApi, type GraspApiConfig} from "./grasp-api.js"
+import {selectProvider} from "../provider-selector.js"
 
 /**
  * Factory configuration options
@@ -164,40 +164,8 @@ export async function createNostrGitProviderFromGitConfig(options: {
   })
 }
 
-/**
- * Provider selection logic
- *
- * Determines which provider to use based on repository URL and configuration.
- * Supports both traditional Git providers and Nostr-based providers.
- */
-export function selectProvider(
-  url: string,
-  options: {
-    preferNostr?: boolean
-    enableGrasp?: boolean
-  } = {},
-): "nostr" | "traditional" {
-  const {preferNostr = false, enableGrasp = true} = options
-
-  // Check if URL is a nostr:// URL
-  if (/^nostr:(?:\/\/)?/i.test(url)) {
-    assertDirectNostrGitProviderEnabled("URL selection")
-    return "nostr"
-  }
-
-  // Check if URL matches GRASP Smart HTTP path shape
-  if (enableGrasp && isGraspRepoHttpUrl(url)) {
-    return ENABLE_DIRECT_NOSTR_GIT_PROVIDER ? "nostr" : "traditional"
-  }
-
-  // Use preference or default to traditional
-  if (preferNostr) {
-    assertDirectNostrGitProviderEnabled("preferred provider selection")
-    return "nostr"
-  }
-
-  return "traditional"
-}
+// selectProvider is now in ../provider-selector.ts — re-export for backward compat
+export {selectProvider}
 
 /**
  * Create provider based on URL analysis
